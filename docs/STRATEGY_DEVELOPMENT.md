@@ -77,11 +77,11 @@ the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` th
 re-exports is discovered by name (`tournament_lib`), so it joins round-robins and the bench as
 `<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
-- `_friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
+- `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
   near-tie or unreadable state, where a sticky picker keeps its previous split.
-- `_carrier_first(game, free)` / `_clearer_first(game, ordered)` — robot order for a slot that
+- `carrier_first(game, free)` / `clearer_first(game, ordered)` — robot order for a slot that
   must take the ball: the carrier (or the kicker at a still ball) first, else the nearest.
-- `_fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `split_shape.py`) — the
+- `fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `split_shape.py`) — the
   two common split shapes.
 
 Then add it to `_CONFIGS` in `tests/engine/test_all_strategy_configs.py` (builds it and runs it

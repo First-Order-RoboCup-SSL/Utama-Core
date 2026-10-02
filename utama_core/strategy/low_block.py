@@ -5,7 +5,7 @@ from __future__ import annotations
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.pickers import _fixed_ratio_picker
+from utama_core.strategy.pickers import fixed_ratio_picker
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.pass_and_shoot import PassAndShootTactic
 
@@ -29,7 +29,7 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
         ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={"attack": PassAndShootTactic(), "defense": DefenseTactic()},
-            partitioner=_fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
+            partitioner=fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )

@@ -10,10 +10,10 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
@@ -48,7 +48,7 @@ def _high_line_zone_picker(
       `_zone_flow_picker` uses — the switch has already done its job of
       breaking the defense's shape open by this point.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -56,7 +56,7 @@ def _high_line_zone_picker(
     switch_ok = "switch" in available_tactic_ids
     overload_ok = "overload" in available_tactic_ids
 
-    # Sticky possession edge: a plain `_friendly_closer_to_ball` re-read every
+    # Sticky possession edge: a plain `friendly_closer_to_ball` re-read every
     # tick flips constantly in a genuinely contested 50/50 (measured: switch
     # assigned and released again within single-digit ticks, over and over,
     # for the first ~10s of a live match against tiki_taka) — `switch`'s
@@ -70,7 +70,7 @@ def _high_line_zone_picker(
     # `SwitchOfPlayTactic`'s own internal weak-side hysteresis, one level up.
     prev_partition = prev_partition or {}
     currently_attacking = bool(prev_partition.get("switch")) or bool(prev_partition.get("overload"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False  # only give up the ball on a clear loss, not just "unknown"
     else:
@@ -78,22 +78,22 @@ def _high_line_zone_picker(
 
     if losing:
         if block_ok:
-            return _allocate_ordered(ordered, "block", len(ordered))
+            return allocate_ordered(ordered, "block", len(ordered))
         if switch_ok:
-            return _allocate_ordered(ordered, "switch", len(ordered))
+            return allocate_ordered(ordered, "switch", len(ordered))
         if overload_ok:
-            return _allocate_ordered(ordered, "overload", len(ordered))
+            return allocate_ordered(ordered, "overload", len(ordered))
         return {}
 
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
     if switch_ok:
-        return _allocate_ordered(ordered, "switch", 3, "block" if block_ok else None)
+        return allocate_ordered(ordered, "switch", 3, "block" if block_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if block_ok:
-        return _allocate_ordered(ordered, "block", len(ordered))
+        return allocate_ordered(ordered, "block", len(ordered))
     return {}
 
 

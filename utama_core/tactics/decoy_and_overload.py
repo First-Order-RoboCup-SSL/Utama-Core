@@ -277,7 +277,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             # No marker to drag *and* nobody to feed — degrade to a plain
             # ball chase rather than crash; a single-robot allocation to an
             # ATTACK-tagged, two-role tactic is a Partitioner misconfiguration
-            # (see `_fixed_ratio_picker`'s `min_attack` handling of the same
+            # (see `fixed_ratio_picker`'s `min_attack` handling of the same
             # class of problem for `PassAndShootTactic`), not something
             # this tactic should silently invent a role split for.
             robot_id = robot_ids[0]

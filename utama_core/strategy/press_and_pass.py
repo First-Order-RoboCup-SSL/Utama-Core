@@ -10,7 +10,7 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.pickers import _carrier_first
+from utama_core.strategy.pickers import carrier_first
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
@@ -32,7 +32,7 @@ def _press_and_pass_split_picker(
     game-theoretic reason — a sensible default, not just a way to dodge the
     kernel's applicability check.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 

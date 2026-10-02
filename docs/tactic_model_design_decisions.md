@@ -122,7 +122,7 @@ Tactic or config gets its own test.
 - A scheduler-level priority cascade (or tunable allocator) for splitting robots across
   concurrent slots — each config's `Partitioner` decides its own split (§11, §16).
 - Per-Tactic `min_robots`/`max_robots` declarations. Real gap:
-  `PassAndShootTactic` reads `robot_ids[1]`, worked around by `_fixed_ratio_picker`'s
+  `PassAndShootTactic` reads `robot_ids[1]`, worked around by `fixed_ratio_picker`'s
   `min_attack` (guarded by
   `test_fixed_ratio_picker_low_block_split_respects_min_attack_floor`).
 - A pluggable/generic selection mechanism over `applicable()` results — revisit around

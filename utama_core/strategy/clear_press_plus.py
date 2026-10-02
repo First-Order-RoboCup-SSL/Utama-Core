@@ -10,11 +10,11 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _clearer_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    clearer_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.clear_ball import ClearBallTactic
@@ -52,7 +52,7 @@ def _clear_press_plus_picker(
     the losing-possession press/block branches are unchanged from
     `_clear_danger_picker`.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -66,11 +66,11 @@ def _clear_press_plus_picker(
     if clear_ok:
         if len(ordered) == 1 or not block_ok:
             return {"clear": frozenset(ordered)}
-        clearer_order = _clearer_first(game, ordered)
+        clearer_order = clearer_first(game, ordered)
         return {"clear": frozenset(clearer_order[:1]), "block": frozenset(clearer_order[1:])}
 
     currently_attacking = bool(prev_partition.get("attack")) or bool(prev_partition.get("overload"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False
     else:
@@ -78,20 +78,20 @@ def _clear_press_plus_picker(
 
     if losing:
         if press_ok:
-            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+            return allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
         if block_ok:
             return {"block": frozenset(ordered)}
         if attack_ok:
             return {"attack": frozenset(ordered)}
         return {}
 
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "block" if block_ok else None)
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
+        return allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if block_ok:
         return {"block": frozenset(ordered)}
     return {}

@@ -148,7 +148,7 @@ def run_match(
     "Known open bugs"): `FORCE_START` releases both teams at the ball
     simultaneously from a mirror-symmetric formation, and sub-millimetre rsim
     physics noise then decides who's "closer to the ball" via
-    `_friendly_closer_to_ball`'s bare `<` comparison, cascading into a
+    `friendly_closer_to_ball`'s bare `<` comparison, cascading into a
     different match from a coin flip. A real kickoff ceremony (the prepare
     wait plus the kicker's walk to the centre circle) avoids that race.
 

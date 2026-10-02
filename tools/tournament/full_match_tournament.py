@@ -58,7 +58,7 @@ date started with both teams' full pickers already live and racing for a
 ball sitting exactly on the centre line, with mirror-symmetric formations.
 rsim's physics does not resolve that mirror-symmetric setup with perfect
 left/right symmetry (traced: ~0.1-0.3mm off a true mirror after 1 tick), and
-`_friendly_closer_to_ball`'s bare `<` comparison (no tie margin) turns that
+`friendly_closer_to_ball`'s bare `<` comparison (no tie margin) turns that
 noise into a hard, match-shaping tactical branch (attack-heavy vs
 press-heavy split) that both `counter_flow` and `tiki_taka`'s pickers commit
 to immediately and never revisit. This module (via `tournament_lib.run_match`)
@@ -69,9 +69,9 @@ trace to remove the tick-1 coin flip (the edge now agrees between mirrored
 sides through the whole approach phase). This alone does *not* fully
 eliminate the underlying tie — first ball touch is still a near-zero-distance
 moment either way, so the same sub-millimetre rsim noise can still flip
-`_friendly_closer_to_ball` right at contact. `strategy/pickers.py`'s
-`_CLOSER_TO_BALL_MARGIN = 0.05` (added the same session) is the second half
-of the fix — a real hysteresis margin on `_friendly_closer_to_ball` itself,
+`friendly_closer_to_ball` right at contact. `strategy/pickers.py`'s
+`CLOSER_TO_BALL_MARGIN = 0.05` (added the same session) is the second half
+of the fix — a real hysteresis margin on `friendly_closer_to_ball` itself,
 not just the kickoff-ceremony timing — and together both are a real, verified
 improvement over a simultaneous release, though not a total elimination of
 the tie: two independent physics runs converging on a moving threshold can

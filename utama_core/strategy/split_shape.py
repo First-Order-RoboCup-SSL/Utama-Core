@@ -10,7 +10,7 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.pickers import _carrier_first
+from utama_core.strategy.pickers import carrier_first
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
@@ -40,7 +40,7 @@ def _possession_split_picker(
     and a present-but-empty entry for a tactic committed and pinned
     elsewhere would collide with that pin.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 

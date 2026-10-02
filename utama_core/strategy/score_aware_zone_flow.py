@@ -10,12 +10,12 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _friendly_closer_to_ball,
-    _friendly_score_diff,
-    _is_late_in_half,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    friendly_closer_to_ball,
+    friendly_score_diff,
+    is_late_in_half,
 )
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -56,11 +56,11 @@ def _score_aware_zone_flow_picker(
     two-role duet by design, see `_zone_flow_picker`) — only the
     own/mid-third give-and-go split size reacts to the scoreline.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing_possession = friendly_edge is not True
 
     defense_ok = "defense" in available_tactic_ids
@@ -69,30 +69,30 @@ def _score_aware_zone_flow_picker(
 
     if losing_possession:
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if givego_ok:
-            return _allocate_ordered(ordered, "givego", len(ordered))
+            return allocate_ordered(ordered, "givego", len(ordered))
         if overload_ok:
-            return _allocate_ordered(ordered, "overload", len(ordered))
+            return allocate_ordered(ordered, "overload", len(ordered))
         return {}
 
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
 
     if givego_ok:
         attackers = 3
-        if _is_late_in_half(game):
-            score_diff = _friendly_score_diff(game)
+        if is_late_in_half(game):
+            score_diff = friendly_score_diff(game)
             if score_diff is not None and score_diff > 0:
                 attackers = 2
             elif score_diff is not None and score_diff < 0:
                 attackers = 4
-        return _allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

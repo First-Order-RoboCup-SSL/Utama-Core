@@ -10,9 +10,9 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 from utama_core.tactics.switch_of_play import SwitchOfPlayTactic
@@ -58,13 +58,13 @@ def _shadow_switch_picker(
     give it in a contested match. `prev_partition` ("did we hold switch last
     tick") is the memory; require a clear possession loss to drop it.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
     prev_partition = prev_partition or {}
     currently_attacking = bool(prev_partition.get("switch"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False
     else:
@@ -75,15 +75,15 @@ def _shadow_switch_picker(
 
     if losing:
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if switch_ok:
-            return _allocate_ordered(ordered, "switch", len(ordered))
+            return allocate_ordered(ordered, "switch", len(ordered))
         return {}
 
     if switch_ok:
-        return _allocate_ordered(ordered, "switch", 3, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "switch", 3, "defense" if defense_ok else None)
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

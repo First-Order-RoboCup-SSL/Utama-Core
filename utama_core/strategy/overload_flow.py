@@ -10,10 +10,10 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -31,7 +31,7 @@ from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 # give-and-go trio already builds patiently through the middle thirds --
 # committing a 4th attacker the instant the edge flips, before that
 # possession is actually secure, risks overextending into exactly the kind
-# of single-tick noise `_CLOSER_TO_BALL_MARGIN` and every sticky-edge picker
+# of single-tick noise `CLOSER_TO_BALL_MARGIN` and every sticky-edge picker
 # (`counter_flow`, `high_line_zone`, `shadow_switch`) already had to guard
 # against elsewhere. Only commit the extra body once the edge has held for a
 # real, sustained window.
@@ -78,11 +78,11 @@ def _overload_flow_picker(
     count).
     """
     global _possession_streak
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing = friendly_edge is not True
     _possession_streak = 0 if losing else min(_possession_streak + 1, _POSSESSION_STREAK_TICKS)
     streak = _possession_streak
@@ -93,23 +93,23 @@ def _overload_flow_picker(
 
     if losing:
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if givego_ok:
-            return _allocate_ordered(ordered, "givego", len(ordered))
+            return allocate_ordered(ordered, "givego", len(ordered))
         if overload_ok:
-            return _allocate_ordered(ordered, "overload", len(ordered))
+            return allocate_ordered(ordered, "overload", len(ordered))
         return {}
 
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
     if givego_ok:
         attackers = 4 if streak >= _POSSESSION_STREAK_TICKS else 3
-        return _allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "givego", attackers, "defense" if defense_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

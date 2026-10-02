@@ -10,9 +10,9 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
@@ -37,11 +37,11 @@ def _counter_press_picker(
       (carrier/pivot/runner), so 4 robots attack through the weak side while
       1 keeps the screen shape as insurance on the counter.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing = friendly_edge is not True
 
     press_ok = "press" in available_tactic_ids
@@ -50,16 +50,16 @@ def _counter_press_picker(
 
     if losing:
         if press_ok:
-            return _allocate_ordered(ordered, "press", len(ordered))
+            return allocate_ordered(ordered, "press", len(ordered))
         if block_ok:
-            return _allocate_ordered(ordered, "block", len(ordered))
+            return allocate_ordered(ordered, "block", len(ordered))
         if attack_ok:
-            return _allocate_ordered(ordered, "attack", len(ordered))
+            return allocate_ordered(ordered, "attack", len(ordered))
         return {}
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 4, "block" if block_ok else None)
+        return allocate_ordered(ordered, "attack", 4, "block" if block_ok else None)
     if block_ok:
-        return _allocate_ordered(ordered, "block", len(ordered))
+        return allocate_ordered(ordered, "block", len(ordered))
     return {}
 
 

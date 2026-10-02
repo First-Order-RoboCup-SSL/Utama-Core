@@ -10,10 +10,10 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -80,11 +80,11 @@ def _tiki_taka_plus_picker(
     the ball is lost (or all-shadow/all-press if only one of those slots is
     available), 3 attack + 2 cover in the own/mid thirds.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing = friendly_edge is not True  # enemy closer, or unknown -> conservative
 
     press_ok = "press" in available_tactic_ids
@@ -94,26 +94,26 @@ def _tiki_taka_plus_picker(
 
     if losing and press_ok:
         if defense_ok:
-            return _allocate_ordered(ordered, "press", 3, "defense")
-        return _allocate_ordered(ordered, "press", len(ordered))
+            return allocate_ordered(ordered, "press", 3, "defense")
+        return allocate_ordered(ordered, "press", len(ordered))
     if losing:
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if attack_ok:
-            return _allocate_ordered(ordered, "attack", len(ordered))
+            return allocate_ordered(ordered, "attack", len(ordered))
         return {}
 
     # We have the ball: final third hands off to the overload duet, else the
     # give-and-go trio builds up, both keeping a covering pair behind them.
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 3, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "attack", 3, "defense" if defense_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

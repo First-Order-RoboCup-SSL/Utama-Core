@@ -50,7 +50,7 @@ _PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressi
 # 2026-09-01: a yellow robot already touching the ball turned toward it,
 # then away, then back, several times a second, until the unstable contact
 # knocked the ball out of bounds — mirrors the same "sticky edge" fix
-# `_friendly_closer_to_ball`-consuming pickers already needed, see
+# `friendly_closer_to_ball`-consuming pickers already needed, see
 # `counter_flow.py`'s `_counter_flow_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
 # Require the *opposite* classification to hold for this many consecutive
 # ticks before actually switching mode.

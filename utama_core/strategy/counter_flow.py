@@ -10,9 +10,9 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -61,7 +61,7 @@ def _counter_flow_picker(
       forward with no ball-side trigger.
 
     Sticky possession edge, same fix `_high_line_zone_picker` needed: a
-    plain re-read of `_friendly_closer_to_ball` every tick flips constantly
+    plain re-read of `friendly_closer_to_ball` every tick flips constantly
     in a genuinely contested match (measured on the first real run against
     tiki_taka: attack/press alternated every 1-3 s for the entire first
     7 s, `GiveAndGoTactic`'s hop-cycle reset before a single hop completed,
@@ -70,13 +70,13 @@ def _counter_flow_picker(
     tick" as memory and require a clear loss (not just "not clearly ahead")
     before giving it up — mirrors `_high_line_zone_picker`'s identical fix.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
     prev_partition = prev_partition or {}
     currently_attacking = bool(prev_partition.get("attack"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False
     else:
@@ -88,17 +88,17 @@ def _counter_flow_picker(
 
     if losing:
         if press_ok:
-            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+            return allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
         if block_ok:
-            return _allocate_ordered(ordered, "block", len(ordered))
+            return allocate_ordered(ordered, "block", len(ordered))
         if attack_ok:
-            return _allocate_ordered(ordered, "attack", len(ordered))
+            return allocate_ordered(ordered, "attack", len(ordered))
         return {}
 
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
+        return allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
     if block_ok:
-        return _allocate_ordered(ordered, "block", len(ordered))
+        return allocate_ordered(ordered, "block", len(ordered))
     return {}
 
 

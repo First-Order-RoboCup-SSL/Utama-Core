@@ -15,7 +15,7 @@ adapter/blackboard wiring itself, via `build_default_kernel_strategy` as one
 convenient example config — not "does this config's partition behave
 correctly") or `test_kernel_strategy_debug_status.py` (tests `debug_status()`
 mechanics specifically). Picker-level unit tests that don't need rsim at all
-(e.g. `_fixed_ratio_picker`'s exact split ratios, `_three_way_picker`'s slot
+(e.g. `fixed_ratio_picker`'s exact split ratios, `_three_way_picker`'s slot
 allocation) also stay separate, below, since they're cheap, precise, and
 don't belong in a `StrategyRunner`-driven table.
 """
@@ -34,7 +34,6 @@ from utama_core.strategy.kernel_strategy import (
     _clear_press_plus_picker,
     _counter_flow_picker,
     _counter_press_picker,
-    _fixed_ratio_picker,
     _three_way_picker,
     _tiki_taka_picker,
     _zone_flow_picker,
@@ -49,6 +48,7 @@ from utama_core.strategy.kernel_strategy import (
     build_three_slot_kernel_strategy,
     build_tiki_taka_kernel_strategy,
     build_zone_fluid_kernel_strategy,
+    fixed_ratio_picker,
 )
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
@@ -118,7 +118,7 @@ _NOBODY_ON_BALL = SimpleNamespace(friendly_robots={})
 
 
 def test_fixed_ratio_picker_high_press_split():
-    picker = _fixed_ratio_picker("attack", "defense", attack_fraction=0.8)
+    picker = fixed_ratio_picker("attack", "defense", attack_fraction=0.8)
     partition = picker(
         game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3, 4, 5}),
@@ -134,7 +134,7 @@ def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
     hard-requires >=2 (it unconditionally reads robot_ids[1]) — min_attack=2
     floors the split rather than letting `build_low_block_kernel_strategy`
     crash the tactic it wires (the exact regression this test guards)."""
-    picker = _fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2)
+    picker = fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2)
     partition = picker(
         game=_NOBODY_ON_BALL,
         free_robots=frozenset({1, 2, 3, 4, 5}),
@@ -496,7 +496,7 @@ def test_clear_press_plus_valve_goes_to_the_robot_nearest_the_ball():
 
 
 def test_clear_valve_keeps_the_carrier_even_when_another_robot_is_nearer():
-    # Robot 2 holds the ball (so it is first from `_carrier_first`); robot 4 happens to
+    # Robot 2 holds the ball (so it is first from `carrier_first`); robot 4 happens to
     # be nearer the ball's reported position. The carrier keeps the clearance.
     game = _clear_game(_SPREAD, carrier=2)
     assert _clear_danger_picker(game, _FIVE, None, _CLEAR_ALL)["clear"] == frozenset({2})
@@ -515,9 +515,9 @@ _COUNTER_FLOW_ALL = frozenset({"attack", "press", "block"})
 
 
 def test_counter_flow_keeps_attack_through_a_near_tie_for_the_ball():
-    """Friendly 3 cm behind the nearest enemy is inside `_CLOSER_TO_BALL_MARGIN`:
+    """Friendly 3 cm behind the nearest enemy is inside `CLOSER_TO_BALL_MARGIN`:
     undecided, so a side that held attack last tick keeps it (the documented
-    hysteresis). `_friendly_closer_to_ball` used to return False here, which
+    hysteresis). `friendly_closer_to_ball` used to return False here, which
     dropped attack on noise-level gaps."""
     prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
     partition = _counter_flow_picker(

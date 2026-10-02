@@ -10,10 +10,10 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _ball_zone,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    ball_zone,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.decoy_and_overload import DecoyOverloadTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -37,11 +37,11 @@ def _zone_flow_picker(
       lures the last line out of position (2 robots — that tactic is a
       two-role duet by design) while the other 3 hold the defensive shape.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing = friendly_edge is not True
 
     defense_ok = "defense" in available_tactic_ids
@@ -50,22 +50,22 @@ def _zone_flow_picker(
 
     if losing:
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if givego_ok:
-            return _allocate_ordered(ordered, "givego", len(ordered))
+            return allocate_ordered(ordered, "givego", len(ordered))
         if overload_ok:
-            return _allocate_ordered(ordered, "overload", len(ordered))
+            return allocate_ordered(ordered, "overload", len(ordered))
         return {}
 
-    zone = _ball_zone(game)
+    zone = ball_zone(game)
     if zone == "final" and overload_ok:
-        return _allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "overload", 2, "defense" if defense_ok else None)
     if givego_ok:
-        return _allocate_ordered(ordered, "givego", 3, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "givego", 3, "defense" if defense_ok else None)
     if overload_ok:
-        return _allocate_ordered(ordered, "overload", len(ordered))
+        return allocate_ordered(ordered, "overload", len(ordered))
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

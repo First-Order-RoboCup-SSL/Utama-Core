@@ -10,11 +10,11 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _friendly_closer_to_ball,
-    _friendly_score_diff,
-    _is_late_in_half,
+    allocate_ordered,
+    carrier_first,
+    friendly_closer_to_ball,
+    friendly_score_diff,
+    is_late_in_half,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
@@ -58,13 +58,13 @@ def _score_aware_counter_flow_picker(
     committing fewer/more pressers, only by out-scoring once it regains the
     ball, which the attack branch already covers.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
     prev_partition = prev_partition or {}
     currently_attacking = bool(prev_partition.get("attack"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False
     else:
@@ -76,24 +76,24 @@ def _score_aware_counter_flow_picker(
 
     if losing:
         if press_ok:
-            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+            return allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
         if block_ok:
-            return _allocate_ordered(ordered, "block", len(ordered))
+            return allocate_ordered(ordered, "block", len(ordered))
         if attack_ok:
-            return _allocate_ordered(ordered, "attack", len(ordered))
+            return allocate_ordered(ordered, "attack", len(ordered))
         return {}
 
     if attack_ok:
         attackers = 3
-        if _is_late_in_half(game):
-            score_diff = _friendly_score_diff(game)
+        if is_late_in_half(game):
+            score_diff = friendly_score_diff(game)
             if score_diff is not None and score_diff > 0:
                 attackers = 2
             elif score_diff is not None and score_diff < 0:
                 attackers = 4
-        return _allocate_ordered(ordered, "attack", attackers, "block" if block_ok else None)
+        return allocate_ordered(ordered, "attack", attackers, "block" if block_ok else None)
     if block_ok:
-        return _allocate_ordered(ordered, "block", len(ordered))
+        return allocate_ordered(ordered, "block", len(ordered))
     return {}
 
 

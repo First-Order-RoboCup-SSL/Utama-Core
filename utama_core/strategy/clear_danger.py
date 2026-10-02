@@ -10,10 +10,10 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _clearer_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    carrier_first,
+    clearer_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.block_shape import BlockShapeTactic
 from utama_core.tactics.clear_ball import ClearBallTactic
@@ -49,12 +49,12 @@ def _clear_danger_picker(
     the valve rides on top of it.
 
     Sticky possession edge, same fix `_counter_flow_picker`/`_high_line_zone_picker`
-    needed: re-reading `_friendly_closer_to_ball` every tick flips constantly in
+    needed: re-reading `friendly_closer_to_ball` every tick flips constantly in
     a genuinely contested match and resets `GiveAndGoTactic`'s hop cycle before
     a single hop completes. `prev_partition` ("did we hold attack last tick") is
     the memory; require a clear possession loss to drop it.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
@@ -71,11 +71,11 @@ def _clear_danger_picker(
         # somewhere.
         if len(ordered) == 1 or not block_ok:
             return {"clear": frozenset(ordered)}
-        clearer_order = _clearer_first(game, ordered)
+        clearer_order = clearer_first(game, ordered)
         return {"clear": frozenset(clearer_order[:1]), "block": frozenset(clearer_order[1:])}
 
     currently_attacking = bool(prev_partition.get("attack"))
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     if currently_attacking:
         losing = friendly_edge is False
     else:
@@ -83,7 +83,7 @@ def _clear_danger_picker(
 
     if losing:
         if press_ok:
-            return _allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
+            return allocate_ordered(ordered, "press", 3, "block" if block_ok else None)
         if block_ok:
             return {"block": frozenset(ordered)}
         if attack_ok:
@@ -91,7 +91,7 @@ def _clear_danger_picker(
         return {}
 
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
+        return allocate_ordered(ordered, "attack", 3, "block" if block_ok else None)
     if block_ok:
         return {"block": frozenset(ordered)}
     return {}

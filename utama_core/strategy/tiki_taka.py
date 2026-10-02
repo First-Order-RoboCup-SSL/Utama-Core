@@ -10,9 +10,9 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.strategy.pickers import (
-    _allocate_ordered,
-    _carrier_first,
-    _friendly_closer_to_ball,
+    allocate_ordered,
+    carrier_first,
+    friendly_closer_to_ball,
 )
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
@@ -38,11 +38,11 @@ def _tiki_taka_picker(
       its share folded into the other non-pinned attacker/defender slot, so
       every free robot always lands somewhere.
     """
-    ordered = _carrier_first(game, free_robots)
+    ordered = carrier_first(game, free_robots)
     if not ordered:
         return {}
 
-    friendly_edge = _friendly_closer_to_ball(game)
+    friendly_edge = friendly_closer_to_ball(game)
     losing = friendly_edge is not True  # enemy closer, or unknown -> conservative
 
     press_ok = "press" in available_tactic_ids
@@ -53,21 +53,21 @@ def _tiki_taka_picker(
         # Press with the ball-side group, shadow with the rest; if there is
         # nothing to shadow behind (no defense slot), press with everyone.
         if defense_ok:
-            return _allocate_ordered(ordered, "press", 3, "defense")
-        return _allocate_ordered(ordered, "press", len(ordered))
+            return allocate_ordered(ordered, "press", 3, "defense")
+        return allocate_ordered(ordered, "press", len(ordered))
     if losing:
         # No press available: everyone shadows/marks.
         if defense_ok:
-            return _allocate_ordered(ordered, "defense", len(ordered))
+            return allocate_ordered(ordered, "defense", len(ordered))
         if attack_ok:
-            return _allocate_ordered(ordered, "attack", len(ordered))
+            return allocate_ordered(ordered, "attack", len(ordered))
         return {}
 
     # We have the ball: attack with the forward group, keep a covering pair.
     if attack_ok:
-        return _allocate_ordered(ordered, "attack", 3, "defense" if defense_ok else None)
+        return allocate_ordered(ordered, "attack", 3, "defense" if defense_ok else None)
     if defense_ok:
-        return _allocate_ordered(ordered, "defense", len(ordered))
+        return allocate_ordered(ordered, "defense", len(ordered))
     return {}
 
 

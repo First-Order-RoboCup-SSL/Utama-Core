@@ -11,7 +11,7 @@ from utama_core.entities.game import Game
 from utama_core.entities.referee.stage import Stage
 
 
-def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, min_attack: int = 0):
+def fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, min_attack: int = 0):
     """Builds a `Partitioner` that ignores game state entirely and splits the
     free pool by a constant fraction — the simplest possible allocation rule,
     useful as a deliberately non-reactive baseline/contrast to the
@@ -37,7 +37,7 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
         prev_partition: Optional[dict[str, frozenset[RobotId]]],
         available_tactic_ids: frozenset[str],
     ) -> dict[str, frozenset[RobotId]]:
-        ordered = _carrier_first(game, free_robots)
+        ordered = carrier_first(game, free_robots)
         if not ordered:
             return {}
 
@@ -73,7 +73,7 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
 # ---------------------------------------------------------------------------
 
 
-# Deadzone for `_friendly_closer_to_ball`'s distance comparison. Root-caused
+# Deadzone for `friendly_closer_to_ball`'s distance comparison. Root-caused
 # 2026-08-23: at a genuine tie (mirror-symmetric formations, ball equidistant
 # — the normal case at kickoff, and possible any time both teams race a loose
 # ball to a near-identical distance), rsim's physics does not resolve the two
@@ -82,17 +82,17 @@ def _fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float,
 # turns that sub-millimetre noise into a hard, match-shaping tactical branch
 # (every caller below picks a materially different attack/press allocation
 # based on this one boolean, and none of them revisit the choice once
-# committed). `_CLOSER_TO_BALL_MARGIN` is chosen well above that noise floor
+# committed). `CLOSER_TO_BALL_MARGIN` is chosen well above that noise floor
 # (500-1500x) but well below `ROBOT_RADIUS` (0.09m, the smallest physically
 # meaningful separation between two robots converging on the same ball), so a
 # real contest between two robots that are genuinely almost equidistant still
 # resolves by real distance, not by which one the deadzone happens to favour.
-_CLOSER_TO_BALL_MARGIN = 0.05  # metres
+CLOSER_TO_BALL_MARGIN = 0.05  # metres
 
 
-def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
+def friendly_closer_to_ball(game: Game) -> Optional[bool]:
     """True if a friendly robot is closer to the ball than every enemy by more
-    than `_CLOSER_TO_BALL_MARGIN`; False if an enemy is closer by more than
+    than `CLOSER_TO_BALL_MARGIN`; False if an enemy is closer by more than
     that margin; None when the gap is inside the margin (undecided).
 
     Inside the margin is a genuine near-tie, so the pickers that keep
@@ -122,14 +122,14 @@ def _friendly_closer_to_ball(game: Game) -> Optional[bool]:
     # lookup returns numpy floats, so a raw comparison is np.bool_, whose
     # `is True` is False — a caller checking `edge is True` would read it as
     # "unknown/losing" forever.
-    if friendly_dist < enemy_dist - _CLOSER_TO_BALL_MARGIN:
+    if friendly_dist < enemy_dist - CLOSER_TO_BALL_MARGIN:
         return True
-    if friendly_dist > enemy_dist + _CLOSER_TO_BALL_MARGIN:
+    if friendly_dist > enemy_dist + CLOSER_TO_BALL_MARGIN:
         return False
     return None
 
 
-def _ball_zone(game: Game) -> str:
+def ball_zone(game: Game) -> str:
     """Where the ball sits along our attacking axis: 'own', 'mid', or 'final'.
 
     "Final" means the third of the pitch nearest the enemy goal we attack;
@@ -150,10 +150,10 @@ def _ball_zone(game: Game) -> str:
     return "final"
 
 
-def _carrier_first(game: Game, free_robots: frozenset[RobotId]) -> list[RobotId]:
+def carrier_first(game: Game, free_robots: frozenset[RobotId]) -> list[RobotId]:
     """`free_robots` in id order, except a robot holding the ball goes first.
 
-    `_allocate_ordered` hands the first `primary_n` robots to the ball-side slot;
+    `allocate_ordered` hands the first `primary_n` robots to the ball-side slot;
     by id alone the carrier could land in the off-ball slot instead, holding the
     ball still (clear_press_plus_vs_zone_fluid, 2026-09-28: carrier 4 in "block"
     while "overload" took robots 1 and 2 and waited on it, frozen for 38 s).
@@ -198,8 +198,8 @@ def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
     return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
 
 
-def _clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:
-    """`ordered` (from `_carrier_first`) with the robot that should clear first.
+def clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:
+    """`ordered` (from `carrier_first`) with the robot that should clear first.
 
     The valve gives its one-robot slot to `ordered[0]`. By id alone that was the
     lowest id wherever nobody held the ball, however far from it; the clearer
@@ -221,7 +221,7 @@ def _clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:
     return [nearest] + [rid for rid in ordered if rid != nearest]
 
 
-def _allocate_ordered(
+def allocate_ordered(
     ordered: list[RobotId],
     primary: str,
     primary_n: int,
@@ -248,11 +248,11 @@ def _allocate_ordered(
     return out
 
 
-def _friendly_score_diff(game: Game) -> Optional[int]:
+def friendly_score_diff(game: Game) -> Optional[int]:
     """Friendly score minus enemy score, or None if no referee data is present
     (e.g. a match run without a `CustomReferee`/real referee feed) — callers
     should fall back to their score-blind posture in that case, the same
-    pattern `_friendly_closer_to_ball` uses for an unreadable ball side.
+    pattern `friendly_closer_to_ball` uses for an unreadable ball side.
     """
     referee = game.referee
     if referee is None:
@@ -265,7 +265,7 @@ def _friendly_score_diff(game: Game) -> Optional[int]:
 _LATE_GAME_THRESHOLD_SECONDS = 60.0
 
 
-def _is_late_in_half(game: Game) -> bool:
+def is_late_in_half(game: Game) -> bool:
     """True once `stage_time_left` is inside the last `_LATE_GAME_THRESHOLD_SECONDS`
     of a live playing half. False (not late) for stoppages, breaks, or any
     stage `stage_time_left` isn't counting down playing time in, and when no
