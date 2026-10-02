@@ -21,14 +21,20 @@ inside the tactic file itself; those calls are always present and cheap
 `match_log_path` is set here, so normal runs/tests/tournaments are
 unaffected. Read the result back with `utama_core.engine.match_log.load_jsonl`.
 
-`--stop-on-goal` and `--stop-after` end the match early — most debugging
-doesn't need the tail of a full match once the phase of interest has been
-seen once or twice.
+`--stop-on-goal` ends the match early — most debugging doesn't need the tail
+of a full match once the phase of interest has been seen once or twice.
+
+`--dump-ticks PATH` writes one JSON row per tick: sim time, referee command,
+score, ball, every robot's pose, and each robot's commanded position target
+(what a tactic asked for, as opposed to where physics put the robot; keys
+`y<id>` / `b<id>` because both teams number robots from 0). Use it when a
+position alone cannot tell a bad target from a transient collision.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 
 from tournament_lib import (
     _CONFIG_NAMES,
@@ -44,6 +50,62 @@ from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
 
+class _TargetRecorder:
+    """MotionController wrapper that records the target of every `calculate()` call.
+
+    Keys are ``y<id>`` for the strategy side and ``b<id>`` for the opponent.
+    """
+
+    def __init__(self, inner, side: str, targets: dict[str, tuple[float, float]]):
+        self._inner = inner
+        self._side = side
+        self._targets = targets
+
+    def __getattr__(self, name):
+        # Tactics read controller attributes (`mode`, `rsim_env`, ...): pass them through.
+        return getattr(self._inner, name)
+
+    def calculate(self, game, robot_id, target_pos, target_oren, **kwargs):
+        # go_to_point accepts Vector2D or plain (x, y) tuples.
+        x, y = (target_pos.x, target_pos.y) if hasattr(target_pos, "x") else (target_pos[0], target_pos[1])
+        self._targets[f"{self._side}{robot_id}"] = (round(float(x), 3), round(float(y), 3))
+        return self._inner.calculate(
+            game=game, robot_id=robot_id, target_pos=target_pos, target_oren=target_oren, **kwargs
+        )
+
+
+def _record_targets(runner: StrategyRunner) -> dict[str, tuple[float, float]]:
+    """Wrap both kernels' motion controllers; the returned dict holds the latest target per robot."""
+    targets: dict[str, tuple[float, float]] = {}
+    for side, prefix in ((runner.my, "y"), (runner.opp, "b")):
+        kernel = getattr(side.strategy, "_kernel_strategy", None)
+        if kernel is not None:
+            kernel._ctx.motion_controller = _TargetRecorder(kernel._ctx.motion_controller, prefix, targets)
+    return targets
+
+
+def _tick_row(runner: StrategyRunner, tick: int, targets: dict[str, tuple[float, float]]) -> dict:
+    frame = runner.my.current_game_frame
+    referee = runner.my.game.referee
+    ball = frame.ball
+
+    def poses(robots):
+        return {
+            str(rid): [round(r.p.x, 2), round(r.p.y, 2), round(r.orientation, 3)] for rid, r in sorted(robots.items())
+        }
+
+    return {
+        "tick": tick,
+        "t": round(tick / TICKS_PER_SECOND, 2),
+        "cmd": str(referee.referee_command),
+        "score": {"yellow": referee.yellow_team.score, "blue": referee.blue_team.score},
+        "ball": [round(ball.p.x, 3), round(ball.p.y, 3), round(ball.v.x, 3), round(ball.v.y, 3)] if ball else None,
+        "yellow": poses(frame.friendly_robots or {}),
+        "blue": poses(frame.enemy_robots or {}),
+        "targets": dict(targets),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--strategy", required=True, choices=sorted(_CONFIG_NAMES))
@@ -53,6 +115,7 @@ def main() -> None:
     parser.add_argument(
         "--match-log", default="/tmp/debug_match.intentions.jsonl", help="where to write the match_log JSONL"
     )
+    parser.add_argument("--dump-ticks", default=None, metavar="PATH", help="write one JSON row per tick to PATH")
     parser.add_argument("--print-trace", action="store_true", help="print every TraceEvent as it's written back")
     parser.add_argument("--headless", action="store_true", help="accepted for CLI-convention compatibility; unused")
     parser.add_argument(
@@ -98,10 +161,14 @@ def main() -> None:
         control_scheme=args.control_scheme,
     )
 
+    targets = _record_targets(runner) if args.dump_ticks else {}
+    dump = open(args.dump_ticks, "w") if args.dump_ticks else None
     try:
         prev_score = (0, 0)
-        for _ in range(int(args.duration * TICKS_PER_SECOND)):
+        for tick in range(int(args.duration * TICKS_PER_SECOND)):
             runner.step_once()
+            if dump is not None:
+                dump.write(json.dumps(_tick_row(runner, tick, targets)) + "\n")
             if args.stop_on_goal:
                 ref = runner.my.game.referee
                 score = (ref.yellow_team.score, ref.blue_team.score)
@@ -112,6 +179,9 @@ def main() -> None:
         ref_data = runner.my.game.referee
         print(f"Final score: yellow={ref_data.yellow_team.score} blue={ref_data.blue_team.score}")
     finally:
+        if dump is not None:
+            dump.close()
+            print(f"tick dump written: {args.dump_ticks}")
         # match_stats.finalize()/.to_json() (if --stats-path was given) happens
         # inside close() itself — see StrategyRunner.close().
         runner.close()

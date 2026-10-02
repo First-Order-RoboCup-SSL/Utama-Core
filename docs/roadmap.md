@@ -104,9 +104,7 @@ resolved, replace it with a one-line pointer under "Done".
    - *Compute discipline:* paired comparison on common seeds, sequential stopping, short
      sampled horizons over long matches.
    - **Not built:** one `evaluate <strategy> --budget` entry point (contracts + bench at low
-     budget, ladder at high) that also writes `docs/strategies.md`. Prerequisite: consolidate
-     `arena_tournament.py` onto `tournament_lib.run_match` (it still keeps its own
-     `_run_match` for per-tick instrumentation hooks).
+     budget, ladder at high) that also writes `docs/strategies.md`.
    - Build order: calibration tournament → bench on harvested states → ladder.
 
 3. **`BangBang1D` defects** — required-overshoot and `v0 > v_max` cases produce

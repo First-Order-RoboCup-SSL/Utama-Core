@@ -38,5 +38,4 @@ Root-cause chain:
 4. **Kickoff ceremony for sim matches** — done: `tournament_lib.py` starts matches with a real
    `PREPARE_KICKOFF_*`. `StrategyRunner` itself still defaults to `FORCE_START` in sim modes.
 
-Reproduce with `pixi run python arena_tournament.py default low_block` (per-tick instrumented
-dump) and render windows with `utama_core/replay/render_window.py`.
+Reproduce with `pixi run python debug_match.py --strategy build_default_kernel_strategy --opponent build_low_block_kernel_strategy --dump-ticks ticks.jsonl` (per-tick dump) and render windows with `utama_core/replay/render_window.py`.

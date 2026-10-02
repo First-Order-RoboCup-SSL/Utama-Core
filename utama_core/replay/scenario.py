@@ -21,7 +21,7 @@ callers, including the teleport accuracy test in
 plain (x, y) metres and get them back unchanged on the next frame). There is
 no additional per-team-color mirroring at the `GameFrame` layer — that only
 exists one level up, in kernel-tactic target *storage* (see
-`arena_tournament.py`'s `_sides_state`, which mirrors *tactic slot* targets,
+the kernel tactics' target storage, which mirrors *tactic slot* targets,
 not `GameFrame` positions). So `scenario_from_replay` can read a frame's
 `p.x`/`p.y`/`orientation` and hand them to `apply_scenario` unchanged; this
 is verified by `apply_scenario` itself reading back the first post-teleport

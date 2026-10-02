@@ -1,6 +1,5 @@
 """tournament_lib.py — shared match-construction/running mechanics for the
-top-level tournament drivers (`round_robin.py`, `full_match_tournament.py`,
-`arena_tournament.py`).
+top-level tournament drivers (`round_robin.py`, `full_match_tournament.py`).
 
 Why this exists: `round_robin.py`'s `run_match` and
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
@@ -15,12 +14,6 @@ the other and could easily have been missed. This module is the single place
 that logic lives now; each script above is a thin CLI over it, differing only
 in which strategies it selects, what duration it uses, and whether it sweeps
 side/kickoff as independent axes.
-
-`arena_tournament.py` is NOT a thin wrapper over `run_match` here — it needs
-per-tick instrumentation (target recorders, slot-state dumps) that `run_match`
-does not and should not provide, since every other caller pays no cost for
-it. It still shares `N_OUTFIELD`/`OUTFIELD_ROBOT_IDS`/`TICKS_PER_SECOND`/
-`_CONFIG_NAMES`/`_short_name` from here rather than keeping its own copies.
 """
 
 from __future__ import annotations

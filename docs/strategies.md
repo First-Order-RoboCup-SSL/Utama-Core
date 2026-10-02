@@ -10,8 +10,8 @@ Run:
   `--fuzz-restarts SEED`, `--control-scheme {fpp,trajsample,...}`, `--no-save`, `-v`.
 - `pixi run python full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over
   the `COMPETITIVE` list in that file.
-- `pixi run python arena_tournament.py <a> <b>` or `... round_robin` — instrumented matchup
-  runner.
+- `pixi run python debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
+  instrumented matchup.
 
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
 only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
