@@ -9,6 +9,40 @@ ingestion, motion planning, robot control, a simulator (`rsoccer_simulator`, "rs
 the strategy layer that decides what each robot does. `Utama-Strategy` is a sibling repo
 and is stale — all active strategy work happens here, on top of the tactic-kernel model.
 
+## Work areas
+
+Pick the row for what you are changing and read its doc first. "Doc" is `TODO` where none
+exists yet: say so in your change rather than guessing.
+
+| Area | Paths | Doc | Notes |
+|---|---|---|---|
+| Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
+| Strategy evaluation | `smoke_tournament.py`, `tournament_lib.py`, `tools/scenario_bench.py`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
+| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
+| Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
+| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `data_processing/` | `TODO` (see `team_controller/README.md`) | |
+
+## Glossary
+
+One term per thing; reuse these instead of coining new ones.
+
+- **Round-robin / tournament run** — every strategy config plays every other once
+  (`smoke_tournament.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
+  "which strategy is better", and slow.
+- **Standings** — points per match (3 a win, 1 a draw) and goal difference, from a round-robin.
+- **Start** — one starting situation (kickoff, free kick, penalty, or an open-play moment)
+  that the scenario bench replays for 20 s.
+- **Bank** — a versioned list of starts harvested from one round-robin's replays
+  (`utama_core/replay/banks/bank_vN.json`).
+- **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
+  against a baseline on a bank. A screen, not a ranking: confirm with a round-robin.
+- **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
+  how far the bench and cheap proxy metrics agree with round-robin standings.
+- **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
+  fixed scenarios. Unrelated to the scenario bench or any strategy.
+- **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
+
 ## Repo map
 
 - `utama_core/engine/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `TickContext`,
@@ -27,7 +61,8 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
 - `utama_core/custom_referee/` — the in-process referee (rules, restart positioning).
 - Everything else (`motion_planning/`, `rsoccer_simulator/`, `team_controller/`,
   `data_processing/`, `entities/`, `global_utils/`) is infrastructure the strategy layer
-  sits on top of and mostly doesn't need to change to write a new strategy.
+  sits on top of. Writing a strategy rarely needs to change it, but it is the main work area
+  for planner, simulator, vision and hardware work: see the Work areas table above.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
 `utama_core/skills/`, or `smoke_tournament.py`/`docs/strategies.md`, read
