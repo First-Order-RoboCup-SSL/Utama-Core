@@ -47,10 +47,10 @@ from utama_core.engine.match_stats import _POSSESSION_RADIUS_M, MatchStatsAccumu
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import load_frames_in_range
 
-_LIVE = {RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START}
+LIVE = {RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START}
 # Restarts that hand the ball to blue (the enemy). Kickoffs are excluded: blue kicks off
 # after *we* score, which is not a loss.
-_ENEMY_RESTARTS = {
+ENEMY_RESTARTS = {
     RefereeCommand.BALL_PLACEMENT_BLUE,
     RefereeCommand.DIRECT_FREE_BLUE,
     RefereeCommand.INDIRECT_FREE_BLUE,
@@ -62,7 +62,7 @@ _TACKLE_RADIUS_M = 1.5 * _POSSESSION_RADIUS_M
 _JUST_RESTARTED_S = 3.0
 # A turnover we win back this fast is almost always the nearest-robot flipping between two
 # robots pressed on the same ball, not a real loss of possession.
-_FLICKER_S = 1.0
+FLICKER_S = 1.0
 
 # A friendly release at least this fast, not goalward, in live play, is followed as a pass.
 _PASS_MIN_MPS = 1.5
@@ -222,15 +222,15 @@ def analyse_match(npz_path: str) -> dict:
         keeper_id = frame.referee.yellow_team.goalkeeper if frame.referee else 0
 
         def who(robot_id: int, t: float, command) -> str:
-            if command not in _LIVE:
+            if command not in LIVE:
                 return "restart override"
             if robot_id == keeper_id:
                 return "GoalkeeperTactic"
             return tactics.tactic_at(t, robot_id)
 
-        if cmd in _LIVE and prev_cmd not in _LIVE:
+        if cmd in LIVE and prev_cmd not in LIVE:
             live_since = frame.ts
-        if prev_cmd in _LIVE and cmd is not None and cmd not in _LIVE and frame.ball is not None:
+        if prev_cmd in LIVE and cmd is not None and cmd not in LIVE and frame.ball is not None:
             pending_stop = {
                 "t": frame.ts,
                 "ball_out": abs(frame.ball.p.x) > half_len or abs(frame.ball.p.y) > half_wid,
@@ -242,7 +242,7 @@ def analyse_match(npz_path: str) -> dict:
         if pending_stop is not None and pending_stop["rule"] is None and frame.referee and frame.referee.status_message:
             pending_stop["rule"] = _rule_name(frame.referee.status_message)
         if pending_stop is not None and cmd not in (None, RefereeCommand.STOP, RefereeCommand.HALT):
-            if cmd in _ENEMY_RESTARTS and pending_stop["we_had_it"]:
+            if cmd in ENEMY_RESTARTS and pending_stop["we_had_it"]:
                 if pending_stop["ball_out"]:
                     kind = "ball_out_after_kick" if pending_stop["last_was_kick"] else "ball_out_other"
                 else:
@@ -271,7 +271,7 @@ def analyse_match(npz_path: str) -> dict:
         acc.record_tick(frame)
         if in_flight is not None:
             enemy_has_it = acc._poss_side == "enemy" or any(r.has_ball for r in frame.enemy_robots.values())
-            finished = in_flight.step(frame, cmd in _LIVE, enemy_has_it)
+            finished = in_flight.step(frame, cmd in LIVE, enemy_has_it)
             if finished is not None:
                 if finished["outcome"] is not None:
                     passes.append(finished)
@@ -290,11 +290,11 @@ def analyse_match(npz_path: str) -> dict:
                 "tactic": who(prev_robot, frame.ts, cmd),
                 "just_restarted": frame.ts - live_since <= _JUST_RESTARTED_S,
             }
-            if cmd in _LIVE and not release["goalward"] and math.hypot(v.x, v.y) >= _PASS_MIN_MPS:
+            if cmd in LIVE and not release["goalward"] and math.hypot(v.x, v.y) >= _PASS_MIN_MPS:
                 in_flight = _PassTracker(frame.ts, prev_robot, release["tactic"], (frame.ball.p.x, frame.ball.p.y))
 
         if acc._turnovers > prev_turnovers:
-            if cmd not in _LIVE:
+            if cmd not in LIVE:
                 kind, tactic, just = "during_stoppage", "restart override", False
             elif prev_robot is None and release is not None:
                 kind = "shot_saved_or_blocked" if release["goalward"] else "pass_intercepted"
@@ -333,17 +333,17 @@ def analyse_run(run_dir: Path, workers: int = 8) -> list[dict]:
         return list(pool.map(analyse_match, paths))
 
 
-def _is_real(turnover: dict) -> bool:
+def is_real(turnover: dict) -> bool:
     """Not a stoppage handover (already counted as the foul/ball-out restart) and not won back
-    within `_FLICKER_S` (two robots on one ball; the nearest robot flips)."""
+    within `FLICKER_S` (two robots on one ball; the nearest robot flips)."""
     regained = turnover["regained_after_s"]
-    return turnover["kind"] != "during_stoppage" and not (regained is not None and regained <= _FLICKER_S)
+    return turnover["kind"] != "during_stoppage" and not (regained is not None and regained <= FLICKER_S)
 
 
 def real_loss_kinds(result: dict) -> dict[str, int]:
-    """Real ball losses in one `analyse_match` result (see `_is_real`) by kind, restarts
+    """Real ball losses in one `analyse_match` result (see `is_real`) by kind, restarts
     given away included (kind `foul` / `ball_out_*`)."""
-    kinds = collections.Counter(t["kind"] for t in result["turnovers"] if _is_real(t))
+    kinds = collections.Counter(t["kind"] for t in result["turnovers"] if is_real(t))
     kinds.update(x["kind"] for x in result["restarts"])
     return dict(kinds)
 
@@ -351,7 +351,7 @@ def real_loss_kinds(result: dict) -> dict[str, int]:
 def breakdown(results: list[dict]) -> dict:
     """Headline numbers for `summary.json`: real losses, and how, by which rule, by which tactic."""
     n = len(results)
-    real = [t for r in results for t in r["turnovers"] if _is_real(t)]
+    real = [t for r in results for t in r["turnovers"] if is_real(t)]
     rss = [x for r in results for x in r["restarts"]]
     losses = real + rss
 
@@ -462,7 +462,7 @@ def report(run_name: str, results: list[dict], summary: dict) -> str:
     kinds = collections.Counter(t["kind"] for t in tos) + collections.Counter(x["kind"] for x in rss)
     just = collections.Counter(t["kind"] for t in tos if t["just_restarted"])
     flicker = collections.Counter(
-        t["kind"] for t in tos if t["regained_after_s"] is not None and t["regained_after_s"] <= _FLICKER_S
+        t["kind"] for t in tos if t["regained_after_s"] is not None and t["regained_after_s"] <= FLICKER_S
     )
     desc = {**TURNOVER_KINDS, **RESTART_KINDS}
     rows = [
@@ -485,17 +485,17 @@ def report(run_name: str, results: list[dict], summary: dict) -> str:
                 "count",
                 "share",
                 "per match",
-                f"won back ≤{_FLICKER_S:.0f}s",
+                f"won back ≤{FLICKER_S:.0f}s",
                 f"≤{_JUST_RESTARTED_S:.0f}s after restart",
                 "meaning",
             ],
         )
     )
-    real = [t for t in tos if _is_real(t)]
+    real = [t for t in tos if is_real(t)]
     lines += [
         "",
         f"**Real losses: {len(real) + len(rss)}** ({(len(real) + len(rss)) / n:.1f}/match) — excluding "
-        f"turnovers won back within {_FLICKER_S:.0f}s (two robots on one ball; the nearest-robot flips) "
+        f"turnovers won back within {FLICKER_S:.0f}s (two robots on one ball; the nearest-robot flips) "
         "and `during_stoppage` (the opponent handling the ball for a restart already counted as "
         "`foul`/`ball_out_*`).",
     ]

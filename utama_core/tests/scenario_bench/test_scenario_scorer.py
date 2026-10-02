@@ -16,7 +16,7 @@ from utama_core.scenario_bench.hand_authored_scenarios import (
     all_hand_authored_scenarios,
 )
 from utama_core.scenario_bench.scenario_scorer import (
-    _FLICKER_S,
+    FLICKER_S,
     ScenarioOutcome,
     _classify_outcome,
     _RealLossWatch,
@@ -72,14 +72,14 @@ _LIVE_CMD = RefereeCommand.NORMAL_START
 def test_a_turnover_won_back_within_the_flicker_window_is_not_a_loss():
     """Raw `MatchStats.turnovers` counts two robots on one ball flipping "nearest"; the
     bench used to score every such flip as TURNOVER. Only an opponent holding the ball
-    for more than `_FLICKER_S` is a loss."""
+    for more than `FLICKER_S` is a loss."""
     flicker = [
         (0.0, _LIVE_CMD, 0, "friendly"),
         (0.5, _LIVE_CMD, 1, "enemy"),
-        (0.5 + _FLICKER_S, _LIVE_CMD, 1, "friendly"),
+        (0.5 + FLICKER_S, _LIVE_CMD, 1, "friendly"),
     ]
     assert _watch(flicker) == 0
-    kept = [(0.0, _LIVE_CMD, 0, "friendly"), (0.5, _LIVE_CMD, 1, "enemy"), (0.51 + _FLICKER_S, _LIVE_CMD, 1, "enemy")]
+    kept = [(0.0, _LIVE_CMD, 0, "friendly"), (0.5, _LIVE_CMD, 1, "enemy"), (0.51 + FLICKER_S, _LIVE_CMD, 1, "enemy")]
     assert _watch(kept) == 1
 
 

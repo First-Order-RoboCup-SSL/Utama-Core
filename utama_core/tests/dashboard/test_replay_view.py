@@ -72,7 +72,7 @@ def test_frames_payload_marks_goals_fouls_stalls_and_real_ball_losses_in_time_or
         {"kind": "tackled", "t": 5.0, "tactic": "GiveAndGoTactic", "regained_after_s": None},
         {"kind": "tackled", "t": 6.0, "tactic": "GiveAndGoTactic", "regained_after_s": 0.1},  # flicker, not real
     ]
-    monkeypatch.setattr(replay_view, "_ball_losses", lambda path: [t for t in turnovers if replay_view._is_real(t)])
+    monkeypatch.setattr(replay_view, "_ball_losses", lambda path: [t for t in turnovers if replay_view.is_real(t)])
     monkeypatch.setattr(replay_view, "REPLAY_BASE_PATH", tmp_path)
 
     payload = json.loads(replay_view._frames_bytes({"path": "a_vs_b.pkl"}))

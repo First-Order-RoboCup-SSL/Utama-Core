@@ -15,7 +15,7 @@ perspective, per the design pass in item 14:
 plus independent `foul` and `stalled` flags (a stall is reported, never ranked:
 it can be the strategy's fault or the planner's/referee's). TURNOVER counts real
 ball losses only, the same rule as `turnover_breakdown`: the opponent kept the
-ball for more than `_FLICKER_S` (raw `MatchStats.turnovers` is mostly two robots
+ball for more than `FLICKER_S` (raw `MatchStats.turnovers` is mostly two robots
 on one ball flipping "nearest"), or a restart was given to the opponent while we
 had the ball. `score_scenario` returns the raw
 `MatchStats` for both the candidate-as-friendly run so a caller (the bench
@@ -39,7 +39,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import apply_scenario
-from utama_core.replay.turnover_breakdown import _ENEMY_RESTARTS, _FLICKER_S, _LIVE
+from utama_core.replay.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.run import StrategyRunner
 from utama_core.scenario_bench.bench_scenario import BenchScenario
 from utama_core.strategy import kernel_strategy
@@ -126,15 +126,15 @@ class _RealLossWatch:
         self._we_had_it = False
 
     def step(self, t: float, cmd, turnovers: int, poss_side: Optional[str]) -> None:
-        if cmd in _LIVE and turnovers > self._turnovers and self._pending_since is None:
+        if cmd in LIVE and turnovers > self._turnovers and self._pending_since is None:
             self._pending_since = t
         if self._pending_since is not None:
             if poss_side == "friendly":
                 self._pending_since = None  # won back within the flicker window
-            elif t - self._pending_since > _FLICKER_S:
+            elif t - self._pending_since > FLICKER_S:
                 self.losses += 1
                 self._pending_since = None
-        if cmd in _ENEMY_RESTARTS and self._cmd not in _ENEMY_RESTARTS and self._we_had_it:
+        if cmd in ENEMY_RESTARTS and self._cmd not in ENEMY_RESTARTS and self._we_had_it:
             self.losses += 1
             self._pending_since = None  # the turnover that led here is this same loss
         self._turnovers, self._cmd, self._we_had_it = turnovers, cmd, poss_side == "friendly"

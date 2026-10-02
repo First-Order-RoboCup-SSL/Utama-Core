@@ -57,7 +57,7 @@ from utama_core.engine.match_log import (
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
-from utama_core.replay.turnover_breakdown import _is_real, analyse_match
+from utama_core.replay.turnover_breakdown import analyse_match, is_real
 
 _DEFAULT_GEOMETRY = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
@@ -196,11 +196,11 @@ def _load_match_log_events(replay_path: Path) -> tuple[list, list, list]:
 
 
 def _ball_losses(replay_path: Path) -> list[dict]:
-    """The recorded team's real ball losses (see `turnover_breakdown._is_real`)."""
+    """The recorded team's real ball losses (see `turnover_breakdown.is_real`)."""
     if replay_path.suffix != ".npz":
         return []
     try:
-        return [t for t in analyse_match(str(replay_path))["turnovers"] if _is_real(t)]
+        return [t for t in analyse_match(str(replay_path))["turnovers"] if is_real(t)]
     except Exception:  # noqa: BLE001 - markers are optional, never break loading the replay
         return []
 
