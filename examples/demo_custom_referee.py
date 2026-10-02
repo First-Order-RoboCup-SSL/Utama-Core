@@ -1,4 +1,4 @@
-"""demo_custom_referee.py — visual demonstration of the CustomReferee system.
+"""examples/demo_custom_referee.py — visual demonstration of the CustomReferee system.
 
 Runs entirely in-process (no network, no RSim binary needed). A scripted
 scenario exercises every referee rule in sequence while the pygame window shows:

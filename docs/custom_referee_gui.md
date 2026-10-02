@@ -8,12 +8,12 @@ server = attach_dashboard()               # utama_core.dashboard
 referee_view.attach(server, referee, profile)   # utama_core.dashboard.views.referee
 ```
 
-`demo_referee_gui_rsim.py` (repo root) does this with RSim, the `human` profile and
+`examples/demo_referee_gui_rsim.py` does this with RSim, the `human` profile and
 `tiki_taka_plus` (constants `PROFILE`, `N_ROBOTS`, `MY_TEAM_IS_YELLOW`, `MY_TEAM_IS_RIGHT` at
 the top of the file):
 
 ```bash
-pixi run python demo_referee_gui_rsim.py   # then open http://localhost:8080
+pixi run python examples/demo_referee_gui_rsim.py   # then open http://localhost:8080
 ```
 
 The page shows the score, current/next command, stage and time left, `designated_position`, the

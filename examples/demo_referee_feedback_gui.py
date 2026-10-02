@@ -1,7 +1,7 @@
 """Preview the referee web UI controller-feedback panel without hardware.
 
 Run:
-    pixi run python demo_referee_feedback_gui.py
+    pixi run python examples/demo_referee_feedback_gui.py
     # open http://localhost:8080
 
 This starts the CustomReferee browser UI and injects fake raw controller-port

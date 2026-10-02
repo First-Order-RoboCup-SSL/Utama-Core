@@ -1,7 +1,7 @@
-"""demo_exhibition_road.py — Exhibition Road Festival demo.
+"""examples/demo_exhibition_road.py — Exhibition Road Festival demo.
 
 Run:
-    pixi run python demo_exhibition_road.py
+    pixi run python examples/demo_exhibition_road.py
     # RSim window opens; open http://localhost:8080 in a browser
 
 What it does:

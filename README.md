@@ -83,7 +83,7 @@ The scripts in the repository root, run with `pixi run python <script>.py`:
 | `debug_match.py` | One-off match runner for tactic debugging |
 | `repro_from_replay.py` | Reload a replay's field state at a timestamp into a fresh headless rsim match |
 | `dashboard_server.py` | Standalone dashboard for browsing replays and tournaments |
-| `demo_*.py` | Demos: custom referee, referee GUIs, dribbler test, Exhibition Road, split-shape match |
+| `examples/demo_*.py` | Demos: custom referee, referee GUIs, dribbler test, Exhibition Road, split-shape match |
 | `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together |
 
 ### Code Writing

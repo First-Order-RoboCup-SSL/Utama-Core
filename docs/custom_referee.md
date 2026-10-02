@@ -118,6 +118,6 @@ ball speed, full-episode reset,
 
 ```bash
 pixi run pytest utama_core/tests/custom_referee/ --headless
-pixi run python demo_custom_referee.py     # pygame, 6 scripted rule scenes; SPACE pause, R restart, ←/→ skip
-pixi run python demo_referee_gui_rsim.py   # RSim + dashboard referee tab, see custom_referee_gui.md
+pixi run python examples/demo_custom_referee.py     # pygame, 6 scripted rule scenes; SPACE pause, R restart, ←/→ skip
+pixi run python examples/demo_referee_gui_rsim.py   # RSim + dashboard referee tab, see custom_referee_gui.md
 ```

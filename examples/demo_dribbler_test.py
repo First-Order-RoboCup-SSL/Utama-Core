@@ -1,7 +1,7 @@
-"""demo_dribbler_test.py — Test the dribbler with one robot on the Exhibition Road field.
+"""examples/demo_dribbler_test.py — Test the dribbler with one robot on the Exhibition Road field.
 
 Run:
-    pixi run python demo_dribbler_test.py
+    pixi run python examples/demo_dribbler_test.py
 
 What this does
 --------------
