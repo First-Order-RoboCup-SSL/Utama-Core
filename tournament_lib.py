@@ -1,8 +1,8 @@
 """tournament_lib.py — shared match-construction/running mechanics for the
-top-level tournament drivers (`smoke_tournament.py`, `full_match_tournament.py`,
+top-level tournament drivers (`round_robin.py`, `full_match_tournament.py`,
 `arena_tournament.py`).
 
-Why this exists: `smoke_tournament.py`'s `run_match` and
+Why this exists: `round_robin.py`'s `run_match` and
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
 two strategies from kernel_strategy factory names, construct a referee with
 the right kickoff-team/initial-command, wire up match_log/stats/replay paths,
@@ -104,7 +104,7 @@ def _stats_to_dict(stats) -> dict:
 @dataclass
 class MatchResult:
     """One match's outcome. `a_is_right`/`a_kicks_off` default to the
-    historical `smoke_tournament.py` fixed convention (config_a always right,
+    historical `round_robin.py` fixed convention (config_a always right,
     always kicks off) — `full_match_tournament.py`'s decoupled sweep passes
     both explicitly per cell.
     """

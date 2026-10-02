@@ -2,7 +2,7 @@
 into a fresh headless rsim match, and tick forward with match_log tracing on.
 
 Why this exists: finding a stall today means running a 231-match round-robin
-(`smoke_tournament.py`), spotting a suspicious match, then tracing its replay
+(`round_robin.py`), spotting a suspicious match, then tracing its replay
 (`render_window`/`load_frames_in_range`) to find the stall window. Once the
 window is known (e.g. "ball frozen from t=264s"), reproducing it previously
 meant replaying the *whole* match from t=0 in a fresh run just to get back

@@ -5,7 +5,7 @@ status, and the latest results. Short config names drop `build_`/`_kernel_strate
 
 Run:
 
-- `pixi run python smoke_tournament.py [name ...]` — 65s round-robin over every config (or the
+- `pixi run python round_robin.py [name ...]` — 65s round-robin over every config (or the
   named ones). Flags: `--both-sides`, `--strict`, `--stop-at-first-stall`,
   `--fuzz-restarts SEED`, `--control-scheme {fpp,trajsample,...}`, `--no-save`, `-v`.
 - `pixi run python full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over

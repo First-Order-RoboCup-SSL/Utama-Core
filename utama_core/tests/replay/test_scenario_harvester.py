@@ -1,7 +1,7 @@
 """Tests for `utama_core.replay.scenario_harvester`.
 
 Uses a synthetic `.npz` replay (`ColumnarReplayWriter`, same writer
-`smoke_tournament.py` uses) plus a hand-written `.intentions.jsonl` sidecar —
+`round_robin.py` uses) plus a hand-written `.intentions.jsonl` sidecar —
 referee-command info lives entirely in the sidecar here (frames carry
 `referee=None`), matching `scenario_from_replay`'s documented fallback path,
 so no real `RefereeData`/`TeamInfo`/`Stage` construction is needed to test

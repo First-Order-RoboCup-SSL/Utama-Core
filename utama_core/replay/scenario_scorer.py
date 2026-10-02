@@ -44,7 +44,7 @@ from utama_core.replay.turnover_breakdown import _ENEMY_RESTARTS, _FLICKER_S, _L
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
-TICKS_PER_SECOND = 60  # matches smoke_tournament.py/rsim's default step rate
+TICKS_PER_SECOND = 60  # matches round_robin.py/rsim's default step rate
 N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 

@@ -2,7 +2,7 @@
 
 An rsim match is deterministic, so a result is a function of `fingerprint.match_key`:
 both sides' code, the shared code and environment, and the run settings. A record holds
-everything `smoke_tournament.py` reads from a played match: the result and its stats, the
+everything `round_robin.py` reads from a played match: the result and its stats, the
 restart episodes (`restart_outcomes.analyse_match`) and the ball-loss record
 (`turnover_breakdown.analyse_match`). No replay is stored; `--pair A B` plays any match
 again, byte for byte.

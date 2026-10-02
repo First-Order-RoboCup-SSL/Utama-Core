@@ -1,4 +1,4 @@
-from smoke_tournament import foul_table, stall_incidents, strategy_table
+from round_robin import foul_table, stall_incidents, strategy_table
 
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:

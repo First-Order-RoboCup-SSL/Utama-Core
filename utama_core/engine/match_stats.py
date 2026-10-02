@@ -25,7 +25,7 @@ the ball moving just enough to dodge the 0.05m stillness tolerance every
 time, so the ball genuinely never "freezes" even though nothing useful is
 happening — see `_maybe_record_no_progress_possession`'s docstring for the
 live match this was found in). All three are pure observations recorded
-for post-match reporting (see `smoke_tournament.py`'s "STALLS" section) —
+for post-match reporting (see `round_robin.py`'s "STALLS" section) —
 nothing here reads back into or alters gameplay.
 
 `turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
@@ -283,7 +283,7 @@ class MatchStats:
     # the GiveAndGoTactic bug would have shown up as here.
     #
     # Kept as plain per-pass lists, not pre-aggregated into a mean/median --
-    # post-match tooling (`smoke_tournament.py`, `tools/metric_correlation.py`,
+    # post-match tooling (`round_robin.py`, `tools/metric_correlation.py`,
     # dashboards) can compute whatever summary statistic it wants from the
     # raw distribution; deciding that here would throw away information
     # (e.g. a bimodal distribution -- mostly fine passes plus a handful of

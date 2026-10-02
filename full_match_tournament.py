@@ -3,13 +3,13 @@ strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
 `counter_press`), at full-match duration (two 300s halves = 600s sim time,
 matching `half_duration_seconds` in
 `utama_core/custom_referee/profiles/simulation.yaml`) instead of
-`smoke_tournament.py`'s default 60s smoke-test length.
+`round_robin.py`'s default 60s smoke-test length.
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
-`smoke_tournament.py` — see that module's own docstring for why.
+`round_robin.py` — see that module's own docstring for why.
 
-Why this exists instead of `smoke_tournament.py --both-sides`
+Why this exists instead of `round_robin.py --both-sides`
 ---------------------------------------------------------------
 Every match here is fully deterministic — same tactic code, same fixed
 formation generator, no seeded randomness in the sim itself (confirmed live:

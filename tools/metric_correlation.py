@@ -12,7 +12,7 @@ Run from the repository root, for example:
 
 Purpose
 -------
-`docs/strategies.md` and `smoke_tournament.py` already tell us who won each match, but a
+`docs/strategies.md` and `round_robin.py` already tell us who won each match, but a
 full 65s round-robin match is expensive to run inside an agent loop that's iterating
 on a single strategy change. If some cheap per-match "proxy" metric (possession,
 territory, shots, ...) reliably predicts match outcome, a much shorter scenario
@@ -31,7 +31,7 @@ plays right (`my_team_is_right=True`), `config_b` is always blue/left. Every rep
 frame's `friendly_robots`/`ball` are recorded from `config_a`'s perspective
 (`ReplayMetadata.my_team_is_yellow=True` in every file checked), so "friendly" in a
 frame or in `<match>.stats.json` always means `config_a`. Side is a real effect in
-this sim (see `smoke_tournament.py`'s `--both-sides` docstring), so every metric below is
+this sim (see `round_robin.py`'s `--both-sides` docstring), so every metric below is
 reported both as a per-side value and as an a-minus-b differential, and side is kept
 as an explicit covariate in the logistic fit (part A) rather than assumed away.
 

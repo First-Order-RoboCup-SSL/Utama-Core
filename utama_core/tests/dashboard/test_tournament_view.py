@@ -15,7 +15,7 @@ def _write_run(root, results):
 
 
 def test_each_match_carries_the_path_of_its_replay_when_the_file_exists(tmp_path, monkeypatch):
-    # smoke_tournament.py names a replay "<a>_vs_<b>.npz"; the dashboard must not guess
+    # round_robin.py names a replay "<a>_vs_<b>.npz"; the dashboard must not guess
     # another runner's naming and link to a file that isn't there
     run = _write_run(
         tmp_path,

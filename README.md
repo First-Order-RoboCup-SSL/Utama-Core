@@ -75,7 +75,7 @@ The scripts in the repository root, run with `pixi run python <script>.py`:
 | Script | Purpose |
 | --- | --- |
 | `main.py` | Exhibition demo: one attacker plus keeper over grSim with the dashboard (`pixi run main`) |
-| `smoke_tournament.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
+| `round_robin.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
 | `full_match_tournament.py` | Full-length round-robin among the competitive-tier strategies |
 | `arena_tournament.py` | Headless tournament / matchup runner |
 | `tournament_lib.py` | Shared match-running code for the tournament scripts (not run directly) |

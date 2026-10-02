@@ -1066,7 +1066,7 @@ def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
 # Every existing picker reads possession/ball-zone but none reads the
 # scoreline itself, even though `game.referee.{yellow,blue}_team.score` is
 # already populated in any refereed match (`full_match_tournament.py`/
-# `smoke_tournament.py` already read the same fields to report a match's result).
+# `round_robin.py` already read the same fields to report a match's result).
 # This variant is `_zone_flow_picker`'s allocation with one added axis: late
 # in a half, shift the *size* of the attack/defense split based on whether
 # we're ahead or behind, instead of holding the same 3/2-ish split regardless
@@ -2064,7 +2064,7 @@ def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         # `_possession_streak` is module-level, not per-`Strategy` state (see
         # its own docstring for why) -- a tournament worker process reuses
-        # its process across many matches (`smoke_tournament.py`'s
+        # its process across many matches (`round_robin.py`'s
         # `ProcessPoolExecutor`), so without this reset a match would start
         # with whatever streak count the *previous* match on this worker
         # ended at, silently giving `overload_flow` a false head start (or a

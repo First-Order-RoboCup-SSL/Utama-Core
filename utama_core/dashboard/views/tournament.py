@@ -51,7 +51,7 @@ def _short(config: str) -> str:
 
 
 def _replay_path(run_dir: Path, result: dict) -> Optional[str]:
-    """The result's replay, relative to `REPLAY_BASE_PATH`: `smoke_tournament.py` writes
+    """The result's replay, relative to `REPLAY_BASE_PATH`: `round_robin.py` writes
     `<a>_vs_<b>.npz`, `full_match_tournament.py` `<a>_vs_<b>_<R|L><K|k>.pkl`."""
     stem = f"{_short(result['config_a'])}_vs_{_short(result['config_b'])}"
     names = [f"{stem}.npz", f"{stem}.pkl"]

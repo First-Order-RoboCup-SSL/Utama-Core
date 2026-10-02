@@ -358,7 +358,7 @@ def harvest_run_dir(
     open_play_per_match: int = 0,
 ) -> tuple[list[BenchScenario], dict[str, int]]:
     """Harvest restart-triggered scenarios from every trustworthy match in
-    `run_dir` (a completed `smoke_tournament.py` run directory).
+    `run_dir` (a completed `round_robin.py` run directory).
 
     Returns `(scenarios, report)` where `report` is a small summary dict
     (`matches_seen`, `matches_trusted`, `matches_untrusted`,

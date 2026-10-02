@@ -94,7 +94,7 @@ deterministic, so this is how a round-robin explores new restart geometries. Kin
 placement → `DIRECT_FREE_*` (position ≥0.25m infield, ≥0.2m from both defense areas),
 `PREPARE_KICKOFF_*`, and `STOP` → `FORCE_START`. `referee.injections` records each one; with a
 `MatchLog` attached, they are traced as `restart_fuzzer_injection`. Used by
-`smoke_tournament.py --fuzz-restarts SEED`.
+`round_robin.py --fuzz-restarts SEED`.
 
 ```python
 referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval_s=(8.0, 20.0),

@@ -1,6 +1,6 @@
-"""Tests for `smoke_tournament.py`'s hand-rolled
+"""Tests for `round_robin.py`'s hand-rolled
 `--fuzz-restarts`/`--fuzz-interval` CLI parsing (see `docs/STRATEGY_DEVELOPMENT.md`).
-`smoke_tournament.py` has no `--help` and no `argparse` — flags are parsed by
+`round_robin.py` has no `--help` and no `argparse` — flags are parsed by
 scanning `sys.argv` directly inside `main()` — so these tests monkeypatch
 `sys.argv` and stub out `run_match` (never actually running a match/simulator)
 to check the flags are parsed and threaded through correctly.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-import smoke_tournament as tournament
+import round_robin as tournament
 
 
 def _stub_result(config_a_name, config_b_name, **_kwargs):

@@ -1,7 +1,7 @@
 // Tournament view: standings + per-match results, sortable/expandable.
 // Successor concern to hand-reading full_match_tournament.py log output —
 // reads replays/<run_id>/summary.json via the tournament view's Python side.
-// A smoke_tournament.py summary also carries a per-strategy table, stall
+// A round_robin.py summary also carries a per-strategy table, stall
 // incidents, restart outcomes and fouls (docs/STRATEGY_DEVELOPMENT.md
 // "Reading a tournament run"); those are shown when present. Each result's
 // `replay` is the path of its replay file, or null (added server-side).
@@ -65,7 +65,7 @@
     return rows;
   }
 
-  // smoke_tournament.py's per-strategy table (summary.json `strategies`).
+  // round_robin.py's per-strategy table (summary.json `strategies`).
   function strategyRows(run) {
     return Object.entries(run.strategies).map(([name, s]) => ({
       name,
@@ -170,7 +170,7 @@
   ];
 
   function cellLabel(r, pairA) {
-    // smoke_tournament.py plays each pair once, config_a as yellow
+    // round_robin.py plays each pair once, config_a as yellow
     if (r.a_is_right === undefined) return `${short(r.config_a)} (yellow) vs ${short(r.config_b)}`;
     // r.config_a may be either physical config depending on which side of
     // the 4-cell product ran; re-express relative to pairA (the group's

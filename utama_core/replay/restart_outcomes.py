@@ -1,6 +1,6 @@
 """What became of every restart in a tournament run: taken, or why not.
 
-`smoke_tournament.py` runs this after every saved run and writes `summary()` into
+`round_robin.py` runs this after every saved run and writes `summary()` into
 `summary.json` under `restarts`. Found necessary 2026-09-28: 8 of 19 penalties in a full
 round-robin were never taken (the ball was never placed, then keep-out voided them) and no
 existing signal showed it.

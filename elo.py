@@ -1,4 +1,4 @@
-"""elo.py — Compute Elo ratings from one or more smoke_tournament.py summary.json files.
+"""elo.py — Compute Elo ratings from one or more round_robin.py summary.json files.
 
 Run:
     pixi run python elo.py replays/tournament_<id>/summary.json [more summaries...]
@@ -6,7 +6,7 @@ Run:
 What this does
 ---------------
 Reads each summary.json's "results" list (config_a/config_b/score_a/score_b
-per match, in the order smoke_tournament.py recorded them) and replays it through a
+per match, in the order round_robin.py recorded them) and replays it through a
 standard Elo update: every match is one game between two configs, win/draw/
 loss decided by final score, K-factor fixed (see K below). Multiple summary
 files are concatenated in the order given, so e.g. a --both-sides run and a
@@ -15,7 +15,7 @@ later re-run after a fix both feed the same continuously-updated ratings.
 Deliberately the smallest mechanism that answers "who's ahead, and by how
 much, accounting for who they played" — a straight port of the textbook Elo
 update (no Glicko/TrueSkill rating-uncertainty machinery, no separate
-per-surface ratings) over smoke_tournament.py's existing summary.json, not a new
+per-surface ratings) over round_robin.py's existing summary.json, not a new
 persistence layer. Prints a final ratings table and writes a per-match
 rating-history JSON (elo_history.json, one row per match with each config's
 rating *after* that match) for plot_elo.py to consume.

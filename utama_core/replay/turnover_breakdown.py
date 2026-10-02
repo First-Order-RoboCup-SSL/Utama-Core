@@ -1,6 +1,6 @@
 """Breakdown of *how* the friendly team loses the ball, over a tournament run's replays.
 
-`smoke_tournament.py` runs this after every saved run: headline numbers go into
+`round_robin.py` runs this after every saved run: headline numbers go into
 `summary.json` under `ball_losses`, the full report into `ball_losses.md` beside it. For an
 existing run:
 

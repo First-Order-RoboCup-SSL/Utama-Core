@@ -16,7 +16,7 @@ Bank sources, in the order this tool can use them today:
     from a tagged, trustworthy tournament run (`.stats.json` with zero
     `stall_events`, see `utama_core.replay.scenario_harvester`'s module
     docstring for why this gate exists). NOT run by this tool — point it at
-    an already-completed `smoke_tournament.py` run directory. `--open-play N`
+    an already-completed `round_robin.py` run directory. `--open-play N`
     adds up to N open-play starts of each kind per match (a pass about to be
     made, a ball just lost).
 
@@ -624,7 +624,7 @@ def parse_args() -> argparse.Namespace:
         "--harvest-from",
         type=Path,
         default=None,
-        help="a completed smoke_tournament.py run dir to harvest restart scenarios from",
+        help="a completed round_robin.py run dir to harvest restart scenarios from",
     )
     parser.add_argument(
         "--open-play",

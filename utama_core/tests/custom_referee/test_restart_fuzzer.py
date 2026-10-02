@@ -295,7 +295,7 @@ def test_rsim_short_match_produces_injections_observed_in_command_history(headle
     injection reached the real state machine and StrategyRunner's loop, not
     just `RestartFuzzingReferee`'s own bookkeeping).
 
-    Both sides need a real driven `Strategy` (not `smoke_tournament.py`'s
+    Both sides need a real driven `Strategy` (not `round_robin.py`'s
     `run_match`'s empty-outfield idle strategy pattern from
     `test_referee_rsim.py`): `RefereeOverride` only ever drives *friendly*
     robots for whichever `Strategy` it's attached to (see

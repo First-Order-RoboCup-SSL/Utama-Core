@@ -1,7 +1,7 @@
 # Strategy development
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, or `smoke_tournament.py`/`docs/strategies.md`. Assumes you've read the
+`utama_core/strategy/`, or `round_robin.py`/`docs/strategies.md`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
@@ -88,14 +88,14 @@ through the kernel invariants), give its partitioner pure-function tests in
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
-2. **One saved match** against a few opponents: `smoke_tournament.py --pair <name> <opp>`.
+2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
    Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
    before anything else.
 3. **Bench A/B** against its nearest existing strategy, the one it differs from in a single
    idea, so the A/B tests that idea: `tools/scenario_bench.py --load-bank <newest bank>
    --candidate <name> --baseline <nearest> --opponent <opp> --stop-at-t 4` (see below).
    Use an opponent outside the pair.
-4. **Matches** to confirm: a strict round-robin with it in (`smoke_tournament.py --strict
+4. **Matches** to confirm: a strict round-robin with it in (`round_robin.py --strict
    --reuse`), 0 stalls. Record the result in `docs/strategies.md`.
 
 **`--reuse`** (round-robin and bench) takes a match's or start's result from
@@ -133,7 +133,7 @@ round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
   committed clips: `demo_clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
   strategies aren't meant to win; don't tune them to.
-- **`smoke_tournament.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+- **`round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).
@@ -175,7 +175,7 @@ tick, so a baseline recorded in one mode is only comparable with a candidate run
 
 ## Reading a tournament run
 
-Every saved `smoke_tournament.py` run prints these sections and writes the same data to
+Every saved `round_robin.py` run prints these sections and writes the same data to
 `replays/<run>/summary.json`. Look here before adding a new metric: it probably exists.
 
 | Printed section | `summary.json` key | What it tells you | Caveat |

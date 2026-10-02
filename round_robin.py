@@ -1,4 +1,4 @@
-"""smoke_tournament.py (formerly tournament.py) — Round-robin every
+"""round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
 `kernel_strategy.py` config against every other, at smoke-test speed
 (`MATCH_DURATION_SECONDS` below — short matches, not full-length; see
 `full_match_tournament.py` for the full-length/competitive-tier counterpart).
@@ -8,7 +8,7 @@ ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
 `full_match_tournament.py` — see that module's own docstring for why.
 
 Run:
-    pixi run python smoke_tournament.py
+    pixi run python round_robin.py
 
 What this does
 --------------
@@ -123,7 +123,7 @@ def main() -> None:
     # Optional CLI args: config names (with or without the `build_`/
     # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
-    # waiting on every pair, e.g. `python smoke_tournament.py default
+    # waiting on every pair, e.g. `python round_robin.py default
     # low_block`. `--sequential` forces the old one-process-at-a-time loop
     # (useful for debugging a specific match without pool noise); otherwise
     # matches run in a process pool since each `run_match` call is fully

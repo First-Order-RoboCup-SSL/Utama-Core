@@ -1,4 +1,4 @@
-"""`smoke_tournament.py --reuse`: a match whose key is stored is not played again.
+"""`round_robin.py --reuse`: a match whose key is stored is not played again.
 
 Matches, keys and the replay analyses are stubbed: `fingerprint.match_key` is replaced by
 a key built from a per-config version number, so "editing" a config is bumping its
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-import smoke_tournament as tournament
+import round_robin as tournament
 from utama_core.replay.match_cache import MatchCache
 
 _CONFIGS = ["tiki_taka", "low_block", "high_press"]
