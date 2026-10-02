@@ -3,11 +3,12 @@
 An rsim match is a pure function of the code each side runs, the pairing and the run
 settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that code:
 
-- `strategy_fingerprint(config)`: one `build_*_kernel_strategy` factory. Inside
-  `kernel_strategy.py` only the factory and the module-level names it reaches count
-  (helpers, constants, imported tactic classes), so editing one factory leaves the other
-  configs' fingerprints alone. Each imported repo module counts as a whole file, with
-  every repo module it imports in turn (function-level imports included).
+- `strategy_fingerprint(config)`: one `build_*_kernel_strategy` factory. `kernel_strategy.py`
+  only re-exports the factories; the module it imports each from counts as a whole file,
+  with every repo module that imports in turn (function-level imports included, the shared
+  `strategy/pickers.py` and the tactics among them). Editing one strategy's module leaves
+  the other configs' fingerprints alone; editing `pickers.py` moves every config that
+  imports it.
 - `base_fingerprint(entry)`: everything both sides share, from the module that plays the
   match (`tournament_lib` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
   bench): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
@@ -16,16 +17,17 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   environment variables that change numerics.
 - `match_key(...)` / `bench_key(...)`: those fingerprints plus every run setting.
 
-`kernel_strategy.py`'s own imports run in every match whichever config is playing, so a
-module only one config uses still runs its import-time code in every match. A module whose
+`kernel_strategy.py` imports every strategy module, and they run in every match whichever
+config is playing, so a module only one config uses still runs its import-time code in every
+match. A module whose
 import-time code can change something outside itself (`_import_time_effects`) is moved
 into the base. `audit()` lists every place the code reaches outside the import graph
 (environment, files, subprocesses, dynamic imports, module-level state);
 `tests/replay/test_fingerprint.py` pins that list, so a new one fails a test until someone
 decides how it enters the fingerprint.
 
-Standard library only. Nothing here imports the code it fingerprints, except
-`kernel_strategy`'s file and the repo's own `.py` files, which are parsed, not run.
+Standard library only. Nothing here imports the code it fingerprints: the repo's `.py`
+files are parsed, not run.
 """
 
 from __future__ import annotations
@@ -213,74 +215,32 @@ class CodeGraph:
                     rows.append(f"{p.relative_to(self.root).as_posix()}  {_sha(p.read_bytes())}")
         return sorted(rows)
 
-    # --- kernel_strategy.py, sliced per factory ----------------------------------------
+    # --- kernel_strategy.py, the registry of factories ----------------------------------
 
     @cached_property
-    def _kernel_index(self):
-        """kernel_strategy's top level: name -> statements binding it, name -> modules an
-        import binding it pulls in, and the statements every slice includes."""
+    def factory_modules(self) -> dict[str, str]:
+        """Each `build_*_kernel_strategy` the registry re-exports -> the repo module that
+        defines it."""
         mod = self.module(KERNEL_STRATEGY)
-        binders: dict[str, list[ast.stmt]] = {}
-        imported: dict[str, set[str]] = {}
-        always: list[ast.stmt] = []
+        found = {}
         for stmt in mod.tree.body:
-            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
-                targets = set(self._import_targets(mod, stmt))
-                if isinstance(stmt, ast.ImportFrom) and stmt.module == "__future__":
-                    always.append(stmt)  # changes how the whole file compiles
-                if any(alias.name == "*" for alias in stmt.names):
-                    always.append(stmt)  # binds names this index can't see
-                for alias in stmt.names:
-                    bound = alias.asname or alias.name.split(".")[0]
-                    imported.setdefault(bound, set()).update(targets)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                binders.setdefault(stmt.name, []).append(stmt)
-                if _import_time_effects(stmt):
-                    always.append(stmt)
-            elif isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-                targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
-                names = [n.id for t in targets for n in ast.walk(t) if isinstance(n, ast.Name)]
-                if _import_time_effects(stmt) or not names:
-                    always.append(stmt)
-                for n in names:
-                    binders.setdefault(n, []).append(stmt)
-            elif (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)) or _is_main_guard(stmt):
-                continue  # a docstring, or code that never runs on import
-            else:  # if/try/with/a bare call at module level: assume it matters to everyone
-                always.append(stmt)
-        return mod, binders, imported, always
-
-    def factory_slice(self, config: str) -> tuple[list[str], set[str]]:
-        """(the source of every kernel_strategy statement `config` reaches, sorted; the
-        repo modules its imported names come from)."""
-        mod, binders, imported, always = self._kernel_index
-        if config not in binders:
-            raise KeyError(f"{config} is not defined in {KERNEL_STRATEGY}")
-        source = mod.source.decode()
-        included: dict[int, ast.stmt] = {}
-        modules: set[str] = set()
-        seen_names: set[str] = set()
-        stack: list[ast.stmt] = list(always) + binders[config]
-        while stack:
-            stmt = stack.pop()
-            if id(stmt) in included:
+            if not isinstance(stmt, ast.ImportFrom):
                 continue
-            included[id(stmt)] = stmt
-            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
-                modules |= set(self._import_targets(mod, stmt))
-            for node in ast.walk(stmt):
-                names = []
-                if isinstance(node, ast.Name):
-                    names = [node.id]
-                elif isinstance(node, (ast.Global, ast.Nonlocal)):
-                    names = list(node.names)
-                for n in names:
-                    if n in seen_names:
-                        continue
-                    seen_names.add(n)
-                    stack.extend(binders.get(n, []))
-                    modules |= imported.get(n, set())
-        return sorted(ast.get_source_segment(source, s) for s in included.values()), modules
+            source = self._resolve_from(mod, stmt)
+            home = self.module(source) if source is not None else None
+            if home is None or home.tree is None:
+                continue
+            defined = {s.name for s in home.tree.body if isinstance(s, ast.FunctionDef)}
+            for alias in stmt.names:
+                name = alias.asname or alias.name
+                if name.startswith("build_") and name.endswith("_kernel_strategy") and alias.name in defined:
+                    found[name] = source
+        return found
+
+    def factory_module(self, config: str) -> str:
+        if config not in self.factory_modules:
+            raise KeyError(f"{config} is not a factory {KERNEL_STRATEGY} re-exports")
+        return self.factory_modules[config]
 
     # --- what both sides share ----------------------------------------------------------
 
@@ -306,22 +266,20 @@ class CodeGraph:
         cut = {KERNEL_STRATEGY}
         mods = self.closure(entries + list(SUBPROCESS_SCRIPTS), cut=cut) - cut
         # The entries only look factories up by name. Shared code that imports kernel_strategy
-        # could call any helper in it, so all of the file is then shared.
+        # could call any factory or helper it re-exports, so every strategy module is then shared.
         if any(KERNEL_STRATEGY in self.imports(m) for m in mods - set(entries)):
-            mods.add(KERNEL_STRATEGY)
+            mods |= self.closure([KERNEL_STRATEGY])
         return mods | self.closure(self.ambient_modules())
 
     def strategy_modules(self, config: str) -> set[str]:
-        _, modules = self.factory_slice(config)
-        return self.closure(modules)
+        return self.closure([self.factory_module(config)])
 
     def strategy_fingerprint(self, config: str) -> str:
         key = ("strategy", config)
         if key not in self._fingerprints:
-            segments, _ = self.factory_slice(config)
             mods = self.strategy_modules(config)
             self._fingerprints[key] = _digest(
-                ["slice"] + [_sha(s.encode()) for s in segments] + ["files"] + self.file_digests(mods)
+                ["factory", config, self.factory_module(config), "files"] + self.file_digests(mods)
             )
         return self._fingerprints[key]
 
@@ -570,12 +528,4 @@ def bench_key(graph: CodeGraph, start: dict, candidate: str, opponent: str, *, h
 
 def config_names(graph: CodeGraph) -> list[str]:
     """The round-robin's configs, as `tournament_lib._CONFIG_NAMES` finds them, from source."""
-    _, binders, _, _ = graph._kernel_index
-    return sorted(
-        n
-        for n, stmts in binders.items()
-        if n.startswith("build_")
-        and n.endswith("_kernel_strategy")
-        and n != "build_default_kernel_strategy"
-        and any(isinstance(s, ast.FunctionDef) for s in stmts)
-    )
+    return sorted(n for n in graph.factory_modules if n != "build_default_kernel_strategy")
