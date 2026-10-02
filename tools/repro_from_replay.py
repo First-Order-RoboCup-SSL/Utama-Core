@@ -36,7 +36,7 @@ for the full rationale):
   starts with whatever the freshly-seeded `CustomReferee` defaults to.
 
 Usage:
-    pixi run python repro_from_replay.py replays/tournament_.../match.pkl \\
+    pixi run python tools/repro_from_replay.py replays/tournament_.../match.pkl \\
         --t 260 --duration 15 --control-scheme trajsample \\
         --trace-out /tmp/repro_trace.jsonl
 """
@@ -45,10 +45,19 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from pathlib import Path
 from typing import Optional
 
-from tournament_lib import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.tournament.tournament_lib import (
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    TICKS_PER_SECOND,
+)
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl

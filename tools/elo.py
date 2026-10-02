@@ -1,7 +1,7 @@
 """elo.py — Compute Elo ratings from one or more round_robin.py summary.json files.
 
 Run:
-    pixi run python elo.py replays/tournament_<id>/summary.json [more summaries...]
+    pixi run python tools/elo.py replays/tournament_<id>/summary.json [more summaries...]
 
 What this does
 ---------------
@@ -84,7 +84,7 @@ def compute_elo(all_results: list[dict]) -> tuple[dict[str, float], list[dict]]:
 def main() -> None:
     paths = [Path(p) for p in sys.argv[1:]]
     if not paths:
-        raise SystemExit("Usage: pixi run python elo.py <summary.json> [more summary.json ...]")
+        raise SystemExit("Usage: pixi run python tools/elo.py <summary.json> [more summary.json ...]")
 
     all_results: list[dict] = []
     for path in paths:

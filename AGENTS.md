@@ -17,7 +17,7 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `round_robin.py`, `tournament_lib.py`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `tools/tournament/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
@@ -28,7 +28,7 @@ exists yet: say so in your change rather than guessing.
 One term per thing; reuse these instead of coining new ones.
 
 - **Round-robin / tournament run** — every strategy config plays every other once
-  (`round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
+  (`tools/tournament/round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
   "which strategy is better", and slow.
 - **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
   `bench_vs_standings.py` uses points per match (3 a win, 1 a draw) and goal difference.
@@ -67,7 +67,7 @@ One term per thing; reuse these instead of coining new ones.
   for planner, simulator, vision and hardware work: see the Work areas table above.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
-`utama_core/skills/`, or `round_robin.py`/`docs/strategies.md`, read
+`utama_core/skills/`, or `tools/tournament/`/`docs/strategies.md`, read
 [`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
 referee-restart handling, lessons from past tactic bugs, and the observability tooling
 (`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to

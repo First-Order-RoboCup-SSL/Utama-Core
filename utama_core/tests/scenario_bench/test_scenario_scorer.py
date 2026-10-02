@@ -106,7 +106,7 @@ def test_bench_plays_with_the_round_robins_motion_planner(monkeypatch):
     left every outcome unchanged."""
     import inspect
 
-    import tournament_lib
+    from tools.tournament import tournament_lib
     from utama_core.scenario_bench import scenario_scorer
 
     seen = {}

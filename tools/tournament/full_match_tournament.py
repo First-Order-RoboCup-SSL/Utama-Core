@@ -92,13 +92,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from tournament_lib import (  # noqa: F401 -- re-exported for existing callers
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for existing callers
     _CONFIG_NAMES,
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
     _short_name,
 )
-from tournament_lib import run_match as _lib_run_match
+from tools.tournament.tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 
 MATCH_DURATION_SECONDS = 600.0  # full match: two 300s halves

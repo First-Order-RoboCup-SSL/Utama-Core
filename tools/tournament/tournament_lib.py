@@ -1,5 +1,5 @@
 """tournament_lib.py — shared match-construction/running mechanics for the
-top-level tournament drivers (`round_robin.py`, `full_match_tournament.py`).
+tournament drivers (`round_robin.py`, `full_match_tournament.py`).
 
 Why this exists: `round_robin.py`'s `run_match` and
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build

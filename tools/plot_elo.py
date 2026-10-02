@@ -1,7 +1,7 @@
 """plot_elo.py — Visualize elo.py's output: rating history, W/D/L matrix, goal diff.
 
 Run:
-    pixi run python plot_elo.py replays/<run>/elo_history.json replays/<run>/summary.json [out_dir]
+    pixi run python tools/plot_elo.py replays/<run>/elo_history.json replays/<run>/summary.json [out_dir]
 
 What this does
 ---------------
@@ -138,7 +138,7 @@ def plot_goal_diff(results: list[dict], configs: list[str], out_path: Path) -> N
 def main() -> None:
     args = sys.argv[1:]
     if len(args) < 2:
-        raise SystemExit("Usage: pixi run python plot_elo.py <elo_history.json> <summary.json> [out_dir]")
+        raise SystemExit("Usage: pixi run python tools/plot_elo.py <elo_history.json> <summary.json> [out_dir]")
 
     elo_path = Path(args[0])
     summary_path = Path(args[1])

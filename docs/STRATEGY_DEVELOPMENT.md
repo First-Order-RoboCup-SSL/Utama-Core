@@ -1,7 +1,7 @@
 # Strategy development
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, or `round_robin.py`/`docs/strategies.md`. Assumes you've read the
+`utama_core/strategy/`, or `tools/tournament/`/`docs/strategies.md`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
@@ -133,7 +133,7 @@ round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
   committed clips: `demo_clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
   strategies aren't meant to win; don't tune them to.
-- **`round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+- **`tools/tournament/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).
@@ -151,7 +151,7 @@ round-robins agree at +0.91), so it screens changes; it doesn't rank strategies.
   schedule. Details: `docs/custom_referee.md`.
 - **`tools/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
   why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
-- **`repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
+- **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that

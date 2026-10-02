@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-import round_robin as tournament
+from tools.tournament import round_robin as tournament
 from utama_core.replay.match_cache import MatchCache
 
 _CONFIGS = ["tiki_taka", "low_block", "high_press"]

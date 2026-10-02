@@ -8,7 +8,7 @@ ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
 `full_match_tournament.py` — see that module's own docstring for why.
 
 Run:
-    pixi run python round_robin.py
+    pixi run python tools/tournament/round_robin.py
 
 What this does
 --------------
@@ -72,16 +72,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from tournament_lib import TICKS_PER_SECOND  # noqa: F401 -- re-exported, see above
-from tournament_lib import (  # noqa: F401 -- re-exported for callers importing this module (debug_match.py, repro_from_replay.py); noqa: F401 -- re-exported, full_match_tournament.py reuses this directly
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for callers importing this module
     _CONFIG_NAMES,
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
+    TICKS_PER_SECOND,
     MatchResult,
     _short_name,
     _stats_to_dict,
 )
-from tournament_lib import run_match as _lib_run_match
+from tools.tournament.tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache, restart_outcomes, turnover_breakdown
 from utama_core.replay.fingerprint import CodeGraph, match_key
@@ -123,7 +127,7 @@ def main() -> None:
     # Optional CLI args: config names (with or without the `build_`/
     # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
-    # waiting on every pair, e.g. `python round_robin.py default
+    # waiting on every pair, e.g. `python tools/tournament/round_robin.py default
     # low_block`. `--sequential` forces the old one-process-at-a-time loop
     # (useful for debugging a specific match without pool noise); otherwise
     # matches run in a process pool since each `run_match` call is fully

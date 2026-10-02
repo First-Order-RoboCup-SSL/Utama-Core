@@ -5,12 +5,12 @@ status, and the latest results. Short config names drop `build_`/`_kernel_strate
 
 Run:
 
-- `pixi run python round_robin.py [name ...]` — 65s round-robin over every config (or the
+- `pixi run python tools/tournament/round_robin.py [name ...]` — 65s round-robin over every config (or the
   named ones). Flags: `--both-sides`, `--strict`, `--stop-at-first-stall`,
   `--fuzz-restarts SEED`, `--control-scheme {fpp,trajsample,...}`, `--no-save`, `-v`.
-- `pixi run python full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over
+- `pixi run python tools/tournament/full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over
   the `COMPETITIVE` list in that file.
-- `pixi run python debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
+- `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes

@@ -29,7 +29,7 @@ resolved, replace it with a one-line pointer under "Done".
 - **Sumatra-fidelity audit, top 3 findings** — acceptor leniency, escaping-grace clearance, full-window priority re-check.
 - **Tournament gate tooling** — `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED` (`405693c`).
 - **`metric_correlation.py` reads `.npz`**.
-- **Repo root cleanup** — decided not to move root scripts (~45 inbound citations; `conftest.py`, `main.py` and `tournament_lib` are pinned) — `1f542fd`.
+- **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `tournament_lib` are now `tools/tournament/`, and `elo`, `plot_elo`, `debug_match` and `repro_from_replay` are in `tools/`. `main.py`, `conftest.py`, `dashboard_server.py` and `start_test_env.sh` stay at the root (pinned by pixi tasks, pytest and the README).
 
 ## Open
 

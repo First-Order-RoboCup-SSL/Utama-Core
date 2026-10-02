@@ -70,17 +70,17 @@ Everything lives under `utama_core/`:
 
 ### Scripts
 
-The scripts in the repository root, run with `pixi run python <script>.py`:
+Scripts, run with `pixi run python <path>` from the repository root:
 
 | Script | Purpose |
 | --- | --- |
 | `main.py` | Exhibition demo: one attacker plus keeper over grSim with the dashboard (`pixi run main`) |
-| `round_robin.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
-| `full_match_tournament.py` | Full-length round-robin among the competitive-tier strategies |
-| `tournament_lib.py` | Shared match-running code for the tournament scripts (not run directly) |
-| `elo.py` / `plot_elo.py` | Elo ratings from tournament `summary.json` files, and their plots |
-| `debug_match.py` | One-off match runner for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
-| `repro_from_replay.py` | Reload a replay's field state at a timestamp into a fresh headless rsim match |
+| `tools/tournament/round_robin.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
+| `tools/tournament/full_match_tournament.py` | Full-length round-robin among the competitive-tier strategies |
+| `tools/tournament/tournament_lib.py` | Shared match-running code for the tournament scripts (not run directly) |
+| `tools/elo.py` / `tools/plot_elo.py` | Elo ratings from tournament `summary.json` files, and their plots |
+| `tools/debug_match.py` | One-off match runner for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
+| `tools/repro_from_replay.py` | Reload a replay's field state at a timestamp into a fresh headless rsim match |
 | `dashboard_server.py` | Standalone dashboard for browsing replays and tournaments |
 | `examples/demo_*.py` | Demos: custom referee, referee GUIs, dribbler test, Exhibition Road, split-shape match |
 | `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together |

@@ -1,7 +1,7 @@
 """`utama_core.replay.fingerprint`: which edits change which fingerprints.
 
 Most tests build a small repo in `tmp_path` with the real layout (a `kernel_strategy.py`
-with factories, tactic modules, a planner the runner imports, `tournament_lib.py`), edit
+with factories, tactic modules, a planner the runner imports, `tools/tournament/tournament_lib.py`), edit
 one file, and check exactly the fingerprints that should move do. The rest run against
 this repo itself."""
 
@@ -61,7 +61,8 @@ def build_c_kernel_strategy(ids):
 '''
 
 FILES = {
-    "tournament_lib.py": "from utama_core.run.runner import run\nfrom utama_core.strategy import kernel_strategy\n",
+    "tools/tournament/__init__.py": "",
+    "tools/tournament/tournament_lib.py": "from utama_core.run.runner import run\nfrom utama_core.strategy import kernel_strategy\n",
     "utama_core/__init__.py": "",
     "utama_core/run/__init__.py": "",
     "utama_core/run/runner.py": "from ..planning import planner\nfrom utama_core.profiles import loader\n\n\ndef run():\n"
@@ -258,7 +259,7 @@ def graph() -> CodeGraph:
 
 
 def test_configs_found_from_source_match_the_round_robin(graph):
-    import tournament_lib
+    from tools.tournament import tournament_lib
 
     assert config_names(graph) == sorted(tournament_lib._CONFIG_NAMES)
 
@@ -298,7 +299,7 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     log, stats, replays) or read old ones for harvesting, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
-#   getattr on a module by computed name: tournament_lib and scenario_scorer look a factory
+#   getattr on a module by computed name: tools.tournament.tournament_lib and scenario_scorer look a factory
 #     up by name -> the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
@@ -310,7 +311,10 @@ AUDIT = {
         "utama_core.config.settings",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
     ],
-    "getattr on a module by computed name": ["tournament_lib", "utama_core.scenario_bench.scenario_scorer"],
+    "getattr on a module by computed name": [
+        "tools.tournament.tournament_lib",
+        "utama_core.scenario_bench.scenario_scorer",
+    ],
     "module-level state": [
         "utama_core.motion_planning.src.fastpathplanning.planner",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
