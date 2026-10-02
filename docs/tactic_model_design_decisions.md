@@ -1,7 +1,7 @@
 # Tactic Model — Design Decisions
 
 Why the strategy layer (`utama_core/engine/`, `utama_core/tactics/`,
-`utama_core/strategy/kernel_strategy.py`) is shaped the way it is. The code is the source of
+`utama_core/strategy/`) is shaped the way it is. The code is the source of
 truth for *how*; this file records *why* and what was deliberately not built. The design
 borrowed vocabulary from Sumatra (TIGERs Mannheim) and OS process scheduling to stress-test
 ideas, not as a mandate to copy either's weight. For the general allocation framework see

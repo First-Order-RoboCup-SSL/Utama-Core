@@ -54,8 +54,10 @@ One term per thing; reuse these instead of coining new ones.
   vocabulary (every factory is `build_*_kernel_strategy`, e.g. `build_tiki_taka_kernel_strategy`)
   — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
 - `utama_core/strategy/` — the actual strategies people write, run, and compare
-  (`kernel_strategy.py`'s `build_*_kernel_strategy` factories — `tiki_taka`, `counter_flow`,
-  etc.). This is where day-to-day strategy-dev edits land.
+  (`build_*_kernel_strategy` factories — `tiki_taka`, `counter_flow`, etc.), one module per
+  strategy (`strategy/<name>.py`, with the pickers only it uses) plus `pickers.py` for helpers
+  shared by several; `kernel_strategy.py` re-exports every factory, so a new strategy must be
+  imported there to be discovered. This is where day-to-day strategy-dev edits land.
 - `utama_core/tactics/` — reusable `Tactic` implementations (`GiveAndGoTactic`,
   `PressAndContainTactic`, ...) that strategies compose.
 - `utama_core/skills/` — lower-level per-robot primitives (`go_to_ball`, `block_attacker`,

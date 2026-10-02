@@ -1,7 +1,7 @@
 """The stage leaves NORMAL_FIRST_HALF_PRE when play starts, whether a person or the
 referee's own auto-advance starts it. Only the manual path did, so a match run by
 CustomReferee stayed "PRE" throughout: stage_time_left never counted down a playing
-half, and score-aware strategies (kernel_strategy._is_late_in_half) never saw one.
+half, and score-aware strategies (strategy.pickers._is_late_in_half) never saw one.
 """
 
 from utama_core.custom_referee.state_machine import GameStateMachine

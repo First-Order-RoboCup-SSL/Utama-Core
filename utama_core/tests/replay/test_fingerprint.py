@@ -1,9 +1,9 @@
 """`utama_core.replay.fingerprint`: which edits change which fingerprints.
 
 Most tests build a small repo in `tmp_path` with the real layout (a `kernel_strategy.py`
-with factories, tactic modules, a planner the runner imports, `tools/tournament/tournament_lib.py`), edit
-one file, and check exactly the fingerprints that should move do. The rest run against
-this repo itself."""
+registry, one module per strategy and a shared `pickers.py`, tactic modules, a planner the
+runner imports, `tools/tournament/tournament_lib.py`), edit one file, and check exactly the
+fingerprints that should move do. The rest run against this repo itself."""
 
 from __future__ import annotations
 
@@ -23,22 +23,41 @@ from utama_core.replay.fingerprint import (
     match_key,
 )
 
-KERNEL = '''\
+REGISTRY = '''\
 """Factories."""
 
-from __future__ import annotations
+from utama_core.strategy.a import build_a_kernel_strategy
+from utama_core.strategy.b import build_b_kernel_strategy
+from utama_core.strategy.c import build_c_kernel_strategy
+'''
 
-from utama_core.tactics.attack import AttackTactic
-from utama_core.tactics.defend import DefendTactic
-from utama_core.tactics.unused import UnusedTactic
-
+PICKERS = """\
 _MARGIN = 0.05  # used by the shared helper
-_ONLY_B = 3
-_streak = 0
 
 
 def _shared_helper(x):
     return x + _MARGIN
+"""
+
+STRATEGY_A = """\
+from __future__ import annotations
+
+from utama_core.strategy.pickers import _shared_helper
+from utama_core.tactics.attack import AttackTactic
+
+
+def build_a_kernel_strategy(ids):
+    return [AttackTactic(), _shared_helper(1)]
+"""
+
+STRATEGY_B = """\
+from __future__ import annotations
+
+from utama_core.strategy.pickers import _shared_helper
+from utama_core.tactics.defend import DefendTactic
+
+_ONLY_B = 3
+_streak = 0
 
 
 def _b_picker(x):
@@ -47,18 +66,21 @@ def _b_picker(x):
     return _shared_helper(x) * _ONLY_B
 
 
-def build_a_kernel_strategy(ids):
-    return [AttackTactic(), _shared_helper(1)]
-
-
 def build_b_kernel_strategy(ids):
     return [DefendTactic(), _b_picker(2)]
+"""
+
+# imports a tactic it never uses: an import counts whether or not the strategy uses it
+STRATEGY_C = """\
+from __future__ import annotations
+
+from utama_core.tactics.unused import UnusedTactic
 
 
 def build_c_kernel_strategy(ids):
     # no helper, no tactic of its own
     return [len(ids)]
-'''
+"""
 
 FILES = {
     "tools/tournament/__init__.py": "",
@@ -73,7 +95,11 @@ FILES = {
     "utama_core/profiles/loader.py": "def load():\n    return open('sim.yaml').read()\n",
     "utama_core/profiles/sim.yaml": "speed: 1\n",
     "utama_core/strategy/__init__.py": "",
-    "utama_core/strategy/kernel_strategy.py": KERNEL,
+    "utama_core/strategy/kernel_strategy.py": REGISTRY,
+    "utama_core/strategy/pickers.py": PICKERS,
+    "utama_core/strategy/a.py": STRATEGY_A,
+    "utama_core/strategy/b.py": STRATEGY_B,
+    "utama_core/strategy/c.py": STRATEGY_C,
     "utama_core/tactics/__init__.py": "",
     "utama_core/tactics/attack.py": "from utama_core.skills.kick import kick\n\n\nclass AttackTactic:\n"
     "    def tick(self):\n        return kick()\n",
@@ -120,36 +146,38 @@ def _short(changed: set[str]) -> set[str]:
 
 
 KS = "utama_core/strategy/kernel_strategy.py"
+PICKERS_PY = "utama_core/strategy/pickers.py"
+A_PY, B_PY, C_PY = ("utama_core/strategy/a.py", "utama_core/strategy/b.py", "utama_core/strategy/c.py")
 
 
-def test_editing_one_factory_changes_only_that_config(repo):
-    assert _short(_changed_after(repo, KS, "return [len(ids)]", "return [len(ids) + 1]")) == {"c"}
+def test_editing_one_strategy_changes_only_that_config(repo):
+    assert _short(_changed_after(repo, C_PY, "return [len(ids)]", "return [len(ids) + 1]")) == {"c"}
+    assert _short(_changed_after(repo, A_PY, "AttackTactic(), ", "AttackTactic(), 0, ")) == {"a"}
 
 
-def test_editing_a_helper_changes_the_configs_that_reach_it(repo):
-    assert _short(_changed_after(repo, KS, "return x + _MARGIN", "return x - _MARGIN")) == {"a", "b"}
+def test_editing_a_constant_or_state_in_one_strategy_changes_only_that_config(repo):
+    assert _short(_changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4")) == {"b"}
+    assert _short(_changed_after(repo, B_PY, "_streak = 0", "_streak = 5")) == {"b"}
 
 
-def test_editing_a_constant_changes_the_configs_that_reach_it_through_helpers(repo):
-    assert _short(_changed_after(repo, KS, "_ONLY_B = 3", "_ONLY_B = 4")) == {"b"}
-    assert _short(_changed_after(repo, KS, "_MARGIN = 0.05", "_MARGIN = 0.06")) == {"a", "b"}
+def test_editing_the_shared_pickers_changes_the_configs_that_import_them(repo):
+    assert _short(_changed_after(repo, PICKERS_PY, "return x + _MARGIN", "return x - _MARGIN")) == {"a", "b"}
+    assert _short(_changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06")) == {"a", "b"}
 
 
-def test_module_state_named_by_global_is_in_the_slice(repo):
-    assert _short(_changed_after(repo, KS, "_streak = 0", "_streak = 5")) == {"b"}
-
-
-def test_a_comment_or_docstring_outside_every_slice_changes_nothing(repo):
+def test_the_registry_is_not_part_of_any_strategy_fingerprint(repo):
     assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == set()
-    assert _changed_after(repo, KS, "# used by the shared helper", "# edited") == set()
 
 
-def test_a_future_import_is_in_every_slice(repo):
-    changed = _changed_after(repo, KS, "from __future__ import annotations\n", "")
-    assert _short(changed) == {"a", "b", "c"}
+def test_pointing_a_factory_at_another_module_changes_that_config(repo):
+    (repo / "utama_core/strategy/c2.py").write_text(STRATEGY_C)
+    changed = _changed_after(
+        repo, KS, "from utama_core.strategy.c import build_c", "from utama_core.strategy.c2 import build_c"
+    )
+    assert _short(changed) == {"c"}
 
 
-def test_editing_a_tactic_changes_exactly_the_configs_that_use_it(repo):
+def test_editing_a_tactic_changes_exactly_the_configs_that_import_it(repo):
     rel = "utama_core/tactics/attack.py"
     assert _short(_changed_after(repo, rel, "return kick()", "return kick() + 1")) == {"a"}
 
@@ -158,19 +186,30 @@ def test_a_function_level_import_is_followed(repo):
     assert _short(_changed_after(repo, "utama_core/skills/aim.py", "return 0", "return 1")) == {"a"}
 
 
-def test_a_tactic_no_config_uses_changes_nothing(repo):
-    assert _changed_after(repo, "utama_core/tactics/unused.py", "pass", "x = 1") == set()
+def test_an_imported_tactic_counts_even_if_the_strategy_never_uses_it(repo):
+    assert _short(_changed_after(repo, "utama_core/tactics/unused.py", "pass", "x = 1")) == {"c"}
+
+
+def test_a_tactic_no_strategy_imports_changes_nothing(repo):
+    (repo / "utama_core/tactics/orphan.py").write_text("class Orphan:\n    pass\n")
+    assert _changed_after(repo, "utama_core/tactics/orphan.py", "pass", "x = 1") == set()
 
 
 def test_import_time_effects_move_a_module_into_the_base(repo):
-    # `unused` runs in every match (kernel_strategy imports it): once its import-time code
-    # can reach outside it, it is part of what every match runs.
+    # `unused` runs in every match (strategy c imports it, and kernel_strategy imports c): once
+    # its import-time code can reach outside it, it is part of what every match runs.
     rel = "utama_core/tactics/unused.py"
-    assert _changed_after(
-        repo, rel, "class UnusedTactic:", "import sys\nsys.path.append('x')\n\n\nclass UnusedTactic:"
-    ) == {"base"}
+    assert _short(
+        _changed_after(repo, rel, "class UnusedTactic:", "import sys\nsys.path.append('x')\n\n\nclass UnusedTactic:")
+    ) == {"base", "c"}
     assert "utama_core.tactics.unused" in CodeGraph(repo).ambient_modules()
-    assert _changed_after(repo, rel, "pass", "y = 2") == {"base"}
+    assert _short(_changed_after(repo, rel, "pass", "y = 2")) == {"base", "c"}
+
+
+def test_import_time_effects_in_a_strategy_module_move_it_into_the_base(repo):
+    changed = _changed_after(repo, A_PY, "\n\ndef build_a", "\nREGISTRY = {}\nREGISTRY.update(a=1)\n\n\ndef build_a")
+    assert _short(changed) == {"base", "a"}
+    assert "utama_core.strategy.a" in CodeGraph(repo).ambient_modules()
 
 
 def test_a_main_guard_is_not_an_import_time_effect(repo):
@@ -186,19 +225,17 @@ def test_editing_shared_infrastructure_changes_the_base_and_every_match_key(repo
     assert all(match_key(g, a, b, duration_seconds=65.0) != k for (a, b), k in keys.items())
 
 
-def test_a_star_import_is_in_every_slice(repo):
-    path = repo / KS
-    path.write_text(path.read_text().replace("import UnusedTactic", "import *"))
-    changed = _changed_after(repo, "utama_core/tactics/unused.py", "pass", "x = 1")
-    assert _short(changed) == {"a", "b", "c"}
-
-
-def test_shared_code_importing_kernel_strategy_puts_the_whole_file_in_the_base(repo):
+def test_shared_code_importing_kernel_strategy_puts_every_strategy_module_in_the_base(repo):
     rel = "utama_core/planning/planner.py"
     path = repo / rel
     path.write_text("from utama_core.strategy.kernel_strategy import _shared_helper\n\n\n" + path.read_text())
-    assert _changed_after(repo, KS, "_ONLY_B = 3", "_ONLY_B = 4") == {"base", "build_b_kernel_strategy"}
-    assert _changed_after(repo, KS, "# used by the shared helper", "# edited") == {"base"}
+    assert _changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4") == {"base", "build_b_kernel_strategy"}
+    assert _changed_after(repo, PICKERS_PY, "# used by the shared helper", "# edited") == {
+        "base",
+        "build_a_kernel_strategy",
+        "build_b_kernel_strategy",
+    }
+    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == {"base"}
 
 
 def test_the_rsim_subprocess_script_and_data_files_are_in_the_base(repo):
@@ -264,6 +301,42 @@ def test_configs_found_from_source_match_the_round_robin(graph):
     assert config_names(graph) == sorted(tournament_lib._CONFIG_NAMES)
 
 
+def test_every_factory_defined_in_the_strategy_package_is_re_exported(graph):
+    """A factory nobody re-exports from `kernel_strategy` is never discovered, so it would silently
+    never play."""
+    import ast
+
+    defined = set()
+    for path in (REPO_ROOT / "utama_core" / "strategy").glob("*.py"):
+        for stmt in ast.parse(path.read_text()).body:
+            if (
+                isinstance(stmt, ast.FunctionDef)
+                and stmt.name.startswith("build_")
+                and stmt.name.endswith("_kernel_strategy")
+            ):
+                defined.add(stmt.name)
+    assert defined == set(graph.factory_modules)
+
+
+def test_every_factory_is_defined_in_its_own_module_named_after_it(graph):
+    for config, module in graph.factory_modules.items():
+        short = config.removeprefix("build_").removesuffix("_kernel_strategy")
+        assert module == f"utama_core.strategy.{short}", (config, module)
+
+
+def test_editing_one_real_strategy_does_not_change_another_configs_fingerprint(graph):
+    """The point of one module per strategy: a strategy's fingerprint reaches its own module and
+    the shared pickers, never a sibling strategy's module."""
+    modules = {c: graph.strategy_modules(c) for c in config_names(graph)}
+    strategy_modules = {m for c in modules for m in (graph.factory_module(c),)}
+    for config, reached in modules.items():
+        assert reached & strategy_modules == {graph.factory_module(config)}, config
+    for pair_a, pair_b in [("tiki_taka", "counter_press"), ("clear_danger", "overload_flow")]:
+        a, b = (f"build_{n}_kernel_strategy" for n in (pair_a, pair_b))
+        assert graph.strategy_fingerprint(a) != graph.strategy_fingerprint(b)
+        assert graph.factory_module(a) not in graph.strategy_modules(b)
+
+
 def test_every_tactic_a_factory_builds_is_in_its_closure(graph):
     """Independent of the static analysis: build every config's `Strategy` and check the
     module of each tactic object it holds is in that config's fingerprinted modules."""
@@ -303,7 +376,7 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     up by name -> the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
-#     possession/shield state: reset in StrategyRunner.__init__; kernel_strategy's
+#     possession/shield state: reset in StrategyRunner.__init__; overload_flow's
 #     _possession_streak: reset by its factory; the planner's _PERP_ROTATIONS: a memo of
 #     pure values; robosim_wrapper's idle sims: a fresh native world per start.
 AUDIT = {
@@ -320,7 +393,7 @@ AUDIT = {
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
         "utama_core.shared.pass_and_score_geometry",
         "utama_core.skills.src.shielding",
-        "utama_core.strategy.kernel_strategy",
+        "utama_core.strategy.overload_flow",
     ],
     "opens files": [
         "utama_core.custom_referee.profiles.profile_loader",
