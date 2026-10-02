@@ -10,11 +10,11 @@ design pass for the full rationale behind every design choice below;
 this docstring only summarizes what the tool actually does.
 
 Bank sources, in the order this tool can use them today:
-  - Hand-authored anchors (`utama_core.replay.hand_authored_scenarios`) —
+  - Hand-authored anchors (`utama_core.scenario_bench.hand_authored_scenarios`) —
     always available, no dependency on any replay data.
   - Harvested restart-transition scenarios (`--harvest-from RUN_DIR`) — only
     from a tagged, trustworthy tournament run (`.stats.json` with zero
-    `stall_events`, see `utama_core.replay.scenario_harvester`'s module
+    `stall_events`, see `utama_core.scenario_bench.scenario_harvester`'s module
     docstring for why this gate exists). NOT run by this tool — point it at
     an already-completed `round_robin.py` run directory. `--open-play N`
     adds up to N open-play starts of each kind per match (a pass about to be
@@ -41,7 +41,7 @@ opponent, horizon and repeats must match. With neither, it only records the
 candidate's outcomes, e.g. to serve as a later run's `--against-results`.
 
 Scenario outcomes count real ball losses and flag stalls; see
-`utama_core.replay.scenario_scorer`.
+`utama_core.scenario_bench.scenario_scorer`.
 
 `--save-bank PATH` persists the currently-loaded scenario set (hand-authored
 + optional `--harvest-from`, after `--families` filtering) to a single JSON
@@ -84,11 +84,11 @@ Run from the repository root, for example:
 
     # Freeze a bank from a harvest for reuse across sessions:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
-        --save-bank utama_core/replay/banks/bank_v5.json --bank-id bank_v5 --list-scenarios
+        --save-bank utama_core/scenario_bench/banks/bank_v5.json --bank-id bank_v5 --list-scenarios
 
     # Grow a bank from a new round-robin (harvest, drop duplicates, save):
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \\
-        --merge-into utama_core/replay/banks/bank_v5.json --save-bank utama_core/replay/banks/bank_v6.json \\
+        --merge-into utama_core/scenario_bench/banks/bank_v5.json --save-bank utama_core/scenario_bench/banks/bank_v6.json \\
         --list-scenarios
 
     # A/B a code change: record at commit A, compare at commit B.
@@ -99,7 +99,7 @@ Run from the repository root, for example:
         --against-results scenario_bench_results/scenario_bench_<commit A>.json
 
     # Score against the frozen bank later, without re-harvesting:
-    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_v5.json \\
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v5.json \\
         --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
         --opponent build_low_block_kernel_strategy
 """
@@ -123,19 +123,24 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from utama_core.replay import match_cache
-from utama_core.replay.bench_scenario import (
+from utama_core.replay.fingerprint import CodeGraph, bench_key
+from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+    enable_sim_reuse,
+)
+from utama_core.scenario_bench.bench_scenario import (
     BenchScenario,
     drop_near_duplicates,
     jittered,
     load_bank,
     save_bank,
 )
-from utama_core.replay.fingerprint import CodeGraph, bench_key
-from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
-from utama_core.replay.scenario_harvester import harvest_run_dir
-from utama_core.replay.scenario_scorer import _resolve_config_name, score_scenario
-from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
-    enable_sim_reuse,
+from utama_core.scenario_bench.hand_authored_scenarios import (
+    all_hand_authored_scenarios,
+)
+from utama_core.scenario_bench.scenario_harvester import harvest_run_dir
+from utama_core.scenario_bench.scenario_scorer import (
+    _resolve_config_name,
+    score_scenario,
 )
 
 SCHEMA_VERSION = 1

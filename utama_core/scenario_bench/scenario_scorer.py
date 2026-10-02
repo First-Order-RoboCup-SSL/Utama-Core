@@ -38,10 +38,10 @@ from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.bench_scenario import BenchScenario
 from utama_core.replay.scenario import apply_scenario
 from utama_core.replay.turnover_breakdown import _ENEMY_RESTARTS, _FLICKER_S, _LIVE
 from utama_core.run import StrategyRunner
+from utama_core.scenario_bench.bench_scenario import BenchScenario
 from utama_core.strategy import kernel_strategy
 
 TICKS_PER_SECOND = 60  # matches round_robin.py/rsim's default step rate

@@ -13,7 +13,7 @@ themselves.
     pixi run python tools/bench_vs_standings.py \\
         --summary replays/tournament_<id>/summary.json \\
         --also-summary replays/tournament_<older id>/summary.json \\
-        --bank utama_core/replay/banks/bank_v5.json --sample 200 \\
+        --bank utama_core/scenario_bench/banks/bank_v5.json --sample 200 \\
         --opponents counter_press high_line_zone --workers 15
 """
 
@@ -32,8 +32,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utama_core.replay.bench_scenario import BenchScenario, load_bank
-from utama_core.replay.scenario_scorer import score_scenario
+from utama_core.scenario_bench.bench_scenario import BenchScenario, load_bank
+from utama_core.scenario_bench.scenario_scorer import score_scenario
 
 
 def standings(summary: dict) -> dict[str, dict[str, float]]:

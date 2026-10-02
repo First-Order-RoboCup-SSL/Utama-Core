@@ -9,7 +9,7 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   configs' fingerprints alone. Each imported repo module counts as a whole file, with
   every repo module it imports in turn (function-level imports included).
 - `base_fingerprint(entry)`: everything both sides share, from the module that plays the
-  match (`tournament_lib` for round-robins, `utama_core.replay.scenario_scorer` for the
+  match (`tournament_lib` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
   bench): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
   next to that code (referee profiles), both pixi environments (every installed package's
   name, version and build), the installed robosim binary, the CPU model and the
@@ -43,9 +43,9 @@ from typing import Iterable, Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
 ROUND_ROBIN_ENTRY = "tournament_lib"
-BENCH_ENTRY = "utama_core.replay.scenario_scorer"
+BENCH_ENTRY = "utama_core.scenario_bench.scenario_scorer"
 # `scenario_bench._runs` plays a start through these two; the bench CLI itself only reports.
-BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.replay.bench_scenario")
+BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.bench_scenario")
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.

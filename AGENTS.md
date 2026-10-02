@@ -17,7 +17,7 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `round_robin.py`, `tournament_lib.py`, `tools/scenario_bench.py`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `round_robin.py`, `tournament_lib.py`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
@@ -34,7 +34,7 @@ One term per thing; reuse these instead of coining new ones.
 - **Start** — one starting situation (kickoff, free kick, penalty, or an open-play moment)
   that the scenario bench replays for 20 s.
 - **Bank** — a versioned list of starts harvested from one round-robin's replays
-  (`utama_core/replay/banks/bank_vN.json`).
+  (`utama_core/scenario_bench/banks/bank_vN.json`).
 - **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
   against a baseline on a bank. A screen, not a ranking: confirm with a round-robin.
 - **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check

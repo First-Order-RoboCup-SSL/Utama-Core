@@ -310,7 +310,7 @@ AUDIT = {
         "utama_core.config.settings",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
     ],
-    "getattr on a module by computed name": ["tournament_lib", "utama_core.replay.scenario_scorer"],
+    "getattr on a module by computed name": ["tournament_lib", "utama_core.scenario_bench.scenario_scorer"],
     "module-level state": [
         "utama_core.motion_planning.src.fastpathplanning.planner",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
@@ -322,13 +322,13 @@ AUDIT = {
         "utama_core.custom_referee.profiles.profile_loader",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
-        "utama_core.replay.bench_scenario",
         "utama_core.replay.columnar_reader",
         "utama_core.replay.columnar_writer",
         "utama_core.replay.replay_player",
         "utama_core.replay.replay_writer",
         "utama_core.replay.scenario",
         "utama_core.replay.turnover_breakdown",
+        "utama_core.scenario_bench.bench_scenario",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
 }

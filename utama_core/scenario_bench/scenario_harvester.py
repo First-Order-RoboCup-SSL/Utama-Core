@@ -41,15 +41,15 @@ from pathlib import Path
 from typing import Optional
 
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.bench_scenario import (
+from utama_core.replay.scenario import Scenario, scenario_from_replay
+from utama_core.replay.turnover_breakdown import _is_real, analyse_match
+from utama_core.scenario_bench.bench_scenario import (
     BenchScenario,
     ScenarioFamily,
     ScenarioProvenance,
     ScenarioTrigger,
     static_screen,
 )
-from utama_core.replay.scenario import Scenario, scenario_from_replay
-from utama_core.replay.turnover_breakdown import _is_real, analyse_match
 
 logger = logging.getLogger(__name__)
 

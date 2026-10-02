@@ -197,17 +197,17 @@ planner, the referee) is failing every strategy at once.
 ## A/B on the scenario bank
 
 For a targeted A/B of one change (a tactic, the planner) without an hour-long round-robin, use
-`tools/scenario_bench.py` on the committed bank (`utama_core/replay/banks/`, newest version):
+`tools/scenario_bench.py` on the committed bank (`utama_core/scenario_bench/banks/`, newest version):
 every start harvested from one round-robin (kickoffs, free kicks, penalties, and open play: a
 pass about to be made, a ball just lost), near-duplicates dropped, each played 20 s once, the
 candidate against a fixed opponent. rsim is deterministic, so the same code gives the same
 outcomes, and a baseline recorded once serves every later candidate.
 
     # once, at the baseline commit
-    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_vN.json \
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
         --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_base
     # per candidate commit
-    pixi run python tools/scenario_bench.py --load-bank utama_core/replay/banks/bank_vN.json \
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
         --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_new \
         --against-results bench_base/scenario_bench_<timestamp>.json
 
@@ -260,7 +260,7 @@ A new bank from a new round-robin (keep its replays until this is done) takes a 
 no simulation:
 
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \
-        --save-bank utama_core/replay/banks/bank_vN+1.json --list-scenarios
+        --save-bank utama_core/scenario_bench/banks/bank_vN+1.json --list-scenarios
 
 Starts where a robot is past the field lines are dropped (the sim can't place it there), and a
 scenario whose run errored on either side has no delta. There is no screen that plays starts

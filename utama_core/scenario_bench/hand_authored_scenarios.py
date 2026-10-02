@@ -14,7 +14,7 @@ separately by the kernel strategy, see `engine/strategy.py`); 1-5 are
 outfield, matching `tournament_lib`'s `OUTFIELD_ROBOT_IDS`.
 
 Run this module directly to print the static-screen result for every
-scenario it defines (`pixi run python -m utama_core.replay.hand_authored_scenarios`).
+scenario it defines (`pixi run python -m utama_core.scenario_bench.hand_authored_scenarios`).
 """
 
 from __future__ import annotations
@@ -23,14 +23,14 @@ import subprocess
 from pathlib import Path
 
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.bench_scenario import (
+from utama_core.replay.scenario import RobotState, Scenario
+from utama_core.scenario_bench.bench_scenario import (
     BenchScenario,
     ScenarioFamily,
     ScenarioProvenance,
     ScenarioTrigger,
     static_screen,
 )
-from utama_core.replay.scenario import RobotState, Scenario
 
 _HALF_LEN = 4.5
 _HALF_WIDTH = 3.0

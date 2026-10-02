@@ -1,4 +1,4 @@
-"""Tests for `utama_core.replay.scenario_scorer`.
+"""Tests for `utama_core.scenario_bench.scenario_scorer`.
 
 Runs real headless rsim matches (short horizons) — this module can't be
 tested with pure fixtures the way the harvester's transition-detection can,
@@ -12,8 +12,10 @@ import dataclasses
 
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
-from utama_core.replay.scenario_scorer import (
+from utama_core.scenario_bench.hand_authored_scenarios import (
+    all_hand_authored_scenarios,
+)
+from utama_core.scenario_bench.scenario_scorer import (
     _FLICKER_S,
     ScenarioOutcome,
     _classify_outcome,
@@ -105,7 +107,7 @@ def test_bench_plays_with_the_round_robins_motion_planner(monkeypatch):
     import inspect
 
     import tournament_lib
-    from utama_core.replay import scenario_scorer
+    from utama_core.scenario_bench import scenario_scorer
 
     seen = {}
     monkeypatch.setattr(scenario_scorer, "StrategyRunner", lambda **kwargs: seen.update(kwargs))

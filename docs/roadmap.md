@@ -35,7 +35,7 @@ resolved, replace it with a one-line pointer under "Done".
 
 1. **Current stall count (2026-10-01, `fpp`, `e83a7466`): 0/231 matches** in the full strict
    65s round-robin (`replays/tournament_20261001_094103/`), none flagged by the possession
-   backstop; 93% of restarts reach NORMAL_START. `utama_core/replay/banks/bank_v7.json` is
+   backstop; 93% of restarts reach NORMAL_START. `utama_core/scenario_bench/banks/bank_v7.json` is
    harvested from it. Earlier stall families (overload-slot COMMITTED_FROZEN, DIRECT_FREE
    restart stalls, low_block's PassAndShoot holding the ball) are fixed; see `git log`.
    Confirm any stall fix against the full round-robin: small-subset re-runs have repeatedly
@@ -58,7 +58,7 @@ resolved, replace it with a one-line pointer under "Done".
      flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
      screen's default pool was the champion itself, so every live scenario came out
      DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
-     across commits. Banks in `utama_core/replay/banks/` are committed (v3 onward; v1/v2 predate
+     across commits. Banks in `utama_core/scenario_bench/banks/` are committed (v3 onward; v1/v2 predate
      the rulebook referee fixes and stay local). **Bank v4** (173 scenarios) = v3 (from
      RR `tournament_20260928_132051`) + RR `tournament_20260928_125725`, each harvested,
      screened (informative + noisy kept), then merged dropping near-duplicate starts (same

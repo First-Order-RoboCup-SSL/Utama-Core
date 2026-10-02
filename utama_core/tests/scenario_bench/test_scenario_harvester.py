@@ -1,4 +1,4 @@
-"""Tests for `utama_core.replay.scenario_harvester`.
+"""Tests for `utama_core.scenario_bench.scenario_harvester`.
 
 Uses a synthetic `.npz` replay (`ColumnarReplayWriter`, same writer
 `round_robin.py` uses) plus a hand-written `.intentions.jsonl` sidecar —
@@ -15,13 +15,13 @@ import json
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay import scenario_harvester
-from utama_core.replay.bench_scenario import ScenarioFamily, ScenarioTrigger
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
-from utama_core.replay.scenario_harvester import (
+from utama_core.scenario_bench import scenario_harvester
+from utama_core.scenario_bench.bench_scenario import ScenarioFamily, ScenarioTrigger
+from utama_core.scenario_bench.scenario_harvester import (
     _PASS_LEAD_S,
     OpenPlayEvent,
     find_restart_transitions,

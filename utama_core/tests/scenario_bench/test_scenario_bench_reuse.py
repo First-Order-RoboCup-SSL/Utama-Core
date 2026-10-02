@@ -11,8 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from utama_core.replay.hand_authored_scenarios import all_hand_authored_scenarios
 from utama_core.replay.match_cache import MatchCache
+from utama_core.scenario_bench.hand_authored_scenarios import (
+    all_hand_authored_scenarios,
+)
 
 _TOOL = Path(__file__).resolve().parents[3] / "tools" / "scenario_bench.py"
 _spec = importlib.util.spec_from_file_location("scenario_bench", _TOOL)
