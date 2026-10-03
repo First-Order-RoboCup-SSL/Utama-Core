@@ -29,6 +29,7 @@ import pytest
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
+from utama_core.strategy import kernel_strategy
 from utama_core.strategy.kernel_strategy import (
     _clear_danger_picker,
     _clear_press_plus_picker,
@@ -53,18 +54,12 @@ from utama_core.strategy.kernel_strategy import (
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
+# Every factory `kernel_strategy` re-exports, as round-robins discover them, so a new strategy is
+# covered without editing this file (a strategy-search branch can't: see tools/check_search_paths.py).
 _CONFIGS = [
-    pytest.param(build_split_shape_kernel_strategy, id="split_shape"),
-    pytest.param(build_press_and_pass_kernel_strategy, id="press_and_pass"),
-    pytest.param(build_high_press_kernel_strategy, id="high_press"),
-    pytest.param(build_low_block_kernel_strategy, id="low_block"),
-    pytest.param(build_three_slot_kernel_strategy, id="three_slot"),
-    pytest.param(build_give_and_go_solo_kernel_strategy, id="give_and_go_solo"),
-    pytest.param(build_decoy_and_overload_kernel_strategy, id="decoy_and_overload"),
-    pytest.param(build_tiki_taka_kernel_strategy, id="tiki_taka"),
-    pytest.param(build_counter_press_kernel_strategy, id="counter_press"),
-    pytest.param(build_zone_fluid_kernel_strategy, id="zone_fluid"),
-    pytest.param(build_clear_danger_kernel_strategy, id="clear_danger"),
+    pytest.param(getattr(kernel_strategy, name), id=name.removeprefix("build_").removesuffix("_kernel_strategy"))
+    for name in sorted(dir(kernel_strategy))
+    if name.startswith("build_") and name.endswith("_kernel_strategy") and name != "build_default_kernel_strategy"
 ]
 
 
