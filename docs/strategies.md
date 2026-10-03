@@ -87,18 +87,6 @@ to noise; two round-robins of near-identical code rank strategies with Spearman 
 | `shadow_switch` | 2-8-11 | 4-13 | 0.67 |
 | `score_aware_zone_flow` | 0-13-8 | 0-9 | 0.62 |
 
-**`zone_split_shape` pair matches** (2026-10-03, `--pair`, 65s, `zone_split_shape` as config_a, 5 matches,
-0 stalls, not a round-robin: `--reuse` missed every match, the cache predating the `analysis/` split
-and the `pickers.py` change, so the 253-match run was not played). Not comparable with the table above.
-
-| Opponent | Result |
-|---|---|
-| `split_shape` | 2-0 |
-| `counter_flow` | 1-0 |
-| `tiki_taka` | 1-0 |
-| `low_block` | 1-0 |
-| `clear_danger` | 0-0 |
-
 The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
 Treat them as rough ordering, not current truth.
 
