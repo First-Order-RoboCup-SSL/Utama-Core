@@ -8,7 +8,19 @@ ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
 `full_match_tournament.py` — see that module's own docstring for why.
 
 Run:
-    pixi run python tools/tournament/round_robin.py
+    pixi run python tools/tournament/round_robin.py [config ...] [flags]
+
+Configs are short names (`tiki_taka`); none means every config. Flags:
+    --pair A B              one match, A as config_a
+    --reuse                 take unchanged matches from replays/match_cache/; check the
+                            "N reused ... M to play" line it prints before waiting on M
+    --spot-check F          with --reuse, replay this fraction of reused matches to verify
+    --strict                fail on any stall
+    --stop-at-first-stall   stop the run at the first stall
+    --both-sides            play each pair twice, sides swapped
+    --control-scheme NAME   planner (fpp, trajsample, ...)
+    --fuzz-restarts SEED    inject random legal restarts; --fuzz-interval LO HI sets the gap
+    --max-workers N, --sequential, --no-save, -v/--verbose, -h/--help
 
 What this does
 --------------
@@ -186,6 +198,9 @@ def main() -> None:
     # them with their stored records: a difference means the fingerprint missed
     # a dependency, is printed loudly, evicts those records, and fails `--strict`.
     args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print(__doc__)
+        return
     sequential = "--sequential" in args
     args = [a for a in args if a != "--sequential"]
     verbose = "--verbose" in args or "-v" in args

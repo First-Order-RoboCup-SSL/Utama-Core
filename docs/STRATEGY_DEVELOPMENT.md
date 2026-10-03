@@ -89,18 +89,13 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
 `Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
 `experimental`.
 
-A strategy branch is named `strategy/<idea>` and may change only `strategy/`,
-`tests/strategy/` and `docs/strategies.md`: CI fails it otherwise (`tools/check_strategy_branch.py`,
-run from the base branch's copy). Anything else it needs, such as a new tactic, is a separate
-human change.
-
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
 2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
    Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
    before anything else.
 3. **Matches:** a strict round-robin with it in (`round_robin.py --strict --reuse`), 0 stalls.
-   With `--reuse` a change to one strategy plays only its own 21 matches, so this is the
+   With `--reuse` a change to one strategy plays only its own matches, one per other config, so this is the
    judgement, not a final confirmation. Record the result in `docs/strategies.md`.
 4. **Bench A/B**, only when the round-robin can't answer: the change is too small to move a
    row of mostly draws, or you need to know which kind of start it changed. Run it against the
@@ -114,7 +109,7 @@ first, batch such changes, and run one round-robin over the batch.
 
 **`--reuse`** (round-robin and bench) takes a match's or start's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
-to one strategy only its matches play: 21 of a 22-config round-robin's 231. What counts as
+to one strategy only its matches play, one per other config (21 of 231 with 22 configs). What counts as
 "runs" is `utama_core/replay/fingerprint.py`'s: the factory's own module, every module that
 imports (`strategy/pickers.py` and the tactics among them, whole files), and the shared code and
 environment (planner, referee, runner, simulator build, packages, CPU). Editing `pickers.py`
@@ -132,6 +127,29 @@ strategy got better. The bench agreed with round-robin standings at Spearman +0.
 so it screens changes; it doesn't rank strategies, and a bench result alone never accepts a
 change. The +0.97 is not a ceiling: rsim is deterministic, so two round-robins of near-identical
 code agree largely because the code is near-identical.
+
+### Strategy branches
+
+A new or changed strategy, whether a person or an agent writes it, goes on its own branch and
+reaches `main` by pull request:
+
+1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
+   from the main checkout first: pixi needs the environment, and `--reuse` needs
+   `replays/match_cache/`, or every match plays again.
+2. Change only `utama_core/strategy/`, `utama_core/tests/strategy/` and `docs/strategies.md`.
+   CI fails a `strategy/*` pull request that changes anything else
+   (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
+   new tactic, is a separate change on an ordinary branch.
+3. Within that, change only your own strategy's module and its import line in
+   `kernel_strategy.py`. Editing another strategy or `pickers.py` changes the opponents you are
+   scored against; CI can't tell, so the reviewer checks.
+4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
+   `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
+   a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger
+   than your own matches means the cache is stale (shared code changed since it was filled).
+   Stop it and ask for a full refresh on `main` rather than paying for one on your branch.
+5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
+   ran one. An agent never merges: a person reviews and merges.
 
 ## Observability — use these before adding a debug print
 

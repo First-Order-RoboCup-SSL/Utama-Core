@@ -6,8 +6,7 @@ status, and the latest results. Short config names drop `build_`/`_kernel_strate
 Run:
 
 - `pixi run python tools/tournament/round_robin.py [name ...]` — 65s round-robin over every config (or the
-  named ones). Flags: `--both-sides`, `--strict`, `--stop-at-first-stall`,
-  `--fuzz-restarts SEED`, `--control-scheme {fpp,trajsample,...}`, `--no-save`, `-v`.
+  named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
 - `pixi run python tools/tournament/full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over
   the `COMPETITIVE` list in that file.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
@@ -147,3 +146,5 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
 - New tournament → replace the matching results table (one table per tournament type) and
   record the run directory; don't append narrative. Findings belong in commit messages.
 - Strategy abandoned after losing → mark it `parked`, don't delete the row.
+- Only single matches (`--pair`), no round-robin → put them in the pull request, not here: this
+  file holds round-robin and full-match results only.
