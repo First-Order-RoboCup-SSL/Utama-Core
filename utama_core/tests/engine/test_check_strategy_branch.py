@@ -1,6 +1,6 @@
-"""`tools/check_search_paths.py`: a search branch may change strategy code only.
+"""`tools/check_strategy_branch.py`: a strategy branch may change strategy code only.
 
-Lives outside `tests/strategy/` on purpose: that directory is on the allowlist, so a search branch
+Lives outside `tests/strategy/` on purpose: that directory is on the allowlist, so a strategy branch
 could edit a test kept there.
 """
 
@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from tools.check_search_paths import ALLOWED, changed_paths, main, outside_allowlist
+from tools.check_strategy_branch import ALLOWED, changed_paths, main, outside_allowlist
 
 
 def test_strategy_modules_tests_and_catalog_are_allowed():
@@ -32,7 +32,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
         "utama_core/tactics/give_and_go.py",
         "utama_core/scenario_bench/scenario_scorer.py",
         "tools/tournament/tournament_lib.py",
-        "tools/check_search_paths.py",
+        "tools/check_strategy_branch.py",
         ".github/workflows/ci.yml",
         # Prefix matches on whole directory names only.
         "utama_core/strategy_runner/x.py",
@@ -60,7 +60,7 @@ def repo(tmp_path, monkeypatch):
     (tmp_path / "utama_core/strategy/a.py").write_text("x = 1\n")
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-q", "-m", "base")
-    _git(tmp_path, "checkout", "-q", "-b", "search/x")
+    _git(tmp_path, "checkout", "-q", "-b", "strategy/x")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 

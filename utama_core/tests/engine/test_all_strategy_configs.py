@@ -55,7 +55,7 @@ from utama_core.strategy.kernel_strategy import (
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
 # Every factory `kernel_strategy` re-exports, as round-robins discover them, so a new strategy is
-# covered without editing this file (a strategy-search branch can't: see tools/check_search_paths.py).
+# covered without editing this file (a strategy branch can't: see tools/check_strategy_branch.py).
 _CONFIGS = [
     pytest.param(getattr(kernel_strategy, name), id=name.removeprefix("build_").removesuffix("_kernel_strategy"))
     for name in sorted(dir(kernel_strategy))

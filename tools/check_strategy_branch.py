@@ -1,12 +1,12 @@
-"""check_search_paths.py — fail if a strategy-search branch changed anything outside strategy code.
+"""check_strategy_branch.py — fail if a strategy branch changed anything outside strategy code.
 
 Run:
-    python tools/check_search_paths.py --base origin/main
+    python tools/check_strategy_branch.py --base origin/main
 
-A search agent is scored by the round-robin and the scenario bench. If its branch could also edit
-the engine, the tactics, the referee, the simulator or the evaluation tools, it could raise its
-score without playing better. So a search branch may change only `ALLOWED`; everything else is a
-human change, made on an ordinary branch. CI runs this on every pull request from a `search/*`
+A strategy is scored by the round-robin and the scenario bench. If the branch that changes it, often
+written by an agent, could also edit the engine, the tactics, the referee, the simulator or the
+evaluation tools, it could raise its score without playing better. So a strategy branch may change
+only `ALLOWED`; anything else goes on an ordinary branch, reviewed by a person. CI runs this on every pull request from a `strategy/*`
 branch, using the copy of this file on the base branch, so the branch under test can't loosen it.
 
 Renames are listed as a deletion and an addition (`--no-renames`), so moving a file out of an
@@ -32,7 +32,7 @@ def _allowed(path: str) -> bool:
 
 
 def outside_allowlist(paths: list[str]) -> list[str]:
-    """The changed paths a search branch may not touch, in the order given."""
+    """The changed paths a strategy branch may not touch, in the order given."""
     return [p for p in paths if not _allowed(p)]
 
 
@@ -48,14 +48,14 @@ def changed_paths(base: str) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--base", required=True, help="the branch the search branch will merge into")
+    parser.add_argument("--base", required=True, help="the branch the strategy branch will merge into")
     args = parser.parse_args(argv)
 
     bad = outside_allowlist(changed_paths(args.base))
     if not bad:
         print(f"OK: every change is under {', '.join(ALLOWED)}")
         return 0
-    print("A search branch may only change " + ", ".join(ALLOWED) + ". Outside it:")
+    print("A strategy branch may only change " + ", ".join(ALLOWED) + ". Outside it:")
     for path in bad:
         print(f"  {path}")
     return 1

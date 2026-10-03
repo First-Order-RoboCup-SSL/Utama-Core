@@ -89,8 +89,8 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
 `Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
 `experimental`.
 
-A strategy-search branch is named `search/<idea>` and may change only `strategy/`,
-`tests/strategy/` and `docs/strategies.md`: CI fails it otherwise (`tools/check_search_paths.py`,
+A strategy branch is named `strategy/<idea>` and may change only `strategy/`,
+`tests/strategy/` and `docs/strategies.md`: CI fails it otherwise (`tools/check_strategy_branch.py`,
 run from the base branch's copy). Anything else it needs, such as a new tactic, is a separate
 human change.
 
