@@ -159,6 +159,12 @@ reaches `main` by pull request:
 5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
    ran one. An agent never merges: a person reviews and merges.
 
+Several branches can be worked on at once, each in its own worktree; they share
+`replays/match_cache/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
+concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
+more of them at once. How to organise a search (how many in parallel, which ideas) is up to
+whoever runs it.
+
 ## Observability — use these before adding a debug print
 
 - **`MatchLog`** (`engine/match_log.py`) — one JSONL per match. `Strategy` records an
