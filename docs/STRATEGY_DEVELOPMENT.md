@@ -136,11 +136,11 @@ code agree largely because the code is near-identical.
   `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
   `tactics/give_and_go.py`. Enable with `match_log_path=` or `tournament_lib.run_match(...,
   run_dir=...)`; read back with `load_jsonl(path)`.
-- **`render_window()` / `render_around_event()`** (`replay/render_window.py`) — PNG of
+- **`render_window()` / `render_around_event()`** (`analysis/render_window.py`) — PNG of
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
   over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
-- **`render_clip()`** (`replay/render_clip.py`) — MP4 of a window for humans, ball-following
+- **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `demo_clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
@@ -149,9 +149,9 @@ code agree largely because the code is near-identical.
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).
-- **Ball losses** (`replay/turnover_breakdown.py`) — runs after every saved tournament and
+- **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
   writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
-  `python -m utama_core.replay.turnover_breakdown <run_dir>` re-runs it on an older run.
+  `python -m utama_core.analysis.turnover_breakdown <run_dir>` re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
   <5cm for >10s in live play while a slot is committed). Each `RESTART_STALL` carries a one-line
@@ -198,7 +198,7 @@ Every saved `round_robin.py` run prints these sections and writes the same data 
 | `passes:` line | `ball_losses.receptions` | every pass to `received` / `missed_reception` (reached a teammate, no contact) / `intercepted` / `off_target`; catch rate by receiver facing | config_a only |
 | FOULS | `fouls` | every foul, both sides, by rule, then strategy/tactic of the offending robot | `*` rules name only a team: attributed to its robot nearest the ball |
 | STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `RESTART_STALL` with a one-line diagnosis, `COMMITTED_FROZEN` with the committed tactics; `stall_incidents` merges one freeze seen against two opponents (same kind and ticks, a shared strategy) | a stall may be the strategy, the planner, the referee or the sim |
-| RESTARTS | `restarts` | every kickoff, free kick and penalty: how many reached NORMAL_START and were `taken`, or were `voided` / `stopped_before_kick` / `timeout` / `match_ended` (`replay/restart_outcomes.py`) | both sides' restarts |
+| RESTARTS | `restarts` | every kickoff, free kick and penalty: how many reached NORMAL_START and were `taken`, or were `voided` / `stopped_before_kick` / `timeout` / `match_ended` (`analysis/restart_outcomes.py`) | both sides' restarts |
 | — | `run` | git commit, dirty flag, argv | compare runs only at clean commits |
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that

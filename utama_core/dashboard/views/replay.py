@@ -43,6 +43,7 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from utama_core.analysis.turnover_breakdown import analyse_match, is_real
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee.geometry import RefereeGeometry
@@ -57,7 +58,6 @@ from utama_core.engine.match_log import (
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
-from utama_core.replay.turnover_breakdown import analyse_match, is_real
 
 _DEFAULT_GEOMETRY = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 

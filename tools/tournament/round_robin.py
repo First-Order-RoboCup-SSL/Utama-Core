@@ -86,8 +86,9 @@ from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for c
     _stats_to_dict,
 )
 from tools.tournament.tournament_lib import run_match as _lib_run_match
+from utama_core.analysis import restart_outcomes, turnover_breakdown
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.replay import match_cache, restart_outcomes, turnover_breakdown
+from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 
 # 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony

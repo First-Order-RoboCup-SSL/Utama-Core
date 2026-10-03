@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
+from utama_core.analysis.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
@@ -39,7 +40,6 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import apply_scenario
-from utama_core.replay.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.run import StrategyRunner
 from utama_core.scenario_bench.start import BenchScenario
 from utama_core.strategy import kernel_strategy

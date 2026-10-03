@@ -208,7 +208,7 @@ def run_match(
         # format vs. a fraction of that here, and every reader a tournament
         # run's replays are actually fed through — `load_frames_in_range`
         # (`replay_player.py`, used by `render_window`) and
-        # `find_stuck_windows` (`stuck_detector.py`) — already dispatches on
+        # `find_stuck_windows` (`analysis/stuck_detector.py`) — already dispatches on
         # `.npz` vs `.pkl` by extension, so nothing downstream of a
         # tournament run breaks. Only the interactive `play_replay`/
         # `get_latest_replay_name` CLI helpers in `replay_player.py` still

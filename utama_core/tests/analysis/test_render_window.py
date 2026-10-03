@@ -1,4 +1,4 @@
-"""Tests for `utama_core.replay.render_window` and `replay_player.load_frames_in_range`."""
+"""Tests for `utama_core.analysis.render_window` and `replay_player.load_frames_in_range`."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import pickle
 
 import pytest
 
+from utama_core.analysis.render_window import render_around_event, render_window
 from utama_core.engine.match_log import MatchLog
 from utama_core.engine.tactic import TacticTag
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.replay.entities import ReplayMetadata
-from utama_core.replay.render_window import render_around_event, render_window
 from utama_core.replay.replay_player import load_frames_in_range
 
 

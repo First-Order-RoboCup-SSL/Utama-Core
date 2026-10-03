@@ -1,4 +1,4 @@
-"""Tests for `utama_core.replay.render_clip`."""
+"""Tests for `utama_core.analysis.render_clip`."""
 
 from __future__ import annotations
 
@@ -9,6 +9,12 @@ from typing import Optional
 
 import pytest
 
+from utama_core.analysis.render_clip import (
+    _clip_fps,
+    camera_windows,
+    displayed_ball,
+    render_clip,
+)
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -17,12 +23,6 @@ from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.entities import ReplayMetadata
-from utama_core.replay.render_clip import (
-    _clip_fps,
-    camera_windows,
-    displayed_ball,
-    render_clip,
-)
 
 FIELD_HALF_X = STANDARD_FIELD_DIMS.full_field_half_length + STANDARD_FIELD_DIMS.goal_depth
 FIELD_HALF_Y = STANDARD_FIELD_DIMS.full_field_half_width
