@@ -85,7 +85,7 @@ def build_c_kernel_strategy(ids):
 FILES = {
     "tools/tournament/__init__.py": "",
     "tools/tournament/tournament_lib.py": "from utama_core.run.runner import run\nfrom utama_core.strategy import kernel_strategy\n",
-    "utama_core/__init__.py": "",
+    "utama_core/__init__.py": '__version__ = "1.0.0"\n',
     "utama_core/run/__init__.py": "",
     "utama_core/run/runner.py": "from ..planning import planner\nfrom utama_core.profiles import loader\n\n\ndef run():\n"
     "    return planner.plan()\n",
@@ -251,6 +251,16 @@ def test_fingerprints_do_not_depend_on_where_the_checkout_is(repo, tmp_path_fact
     shutil.copytree(repo, other)
     (other / ".git").write_text("gitdir: /some/other/checkout\n")
     assert _fingerprints(other) == _fingerprints(repo)
+
+
+def test_a_release_version_bump_changes_nothing(repo):
+    # The release workflow rewrites `__version__` on every merge into main; hashing it emptied
+    # the whole match cache after each merge.
+    rel = "utama_core/__init__.py"
+    assert _changed_after(repo, rel, '__version__ = "1.0.0"', '__version__ = "2.0.1"') == set()
+    assert _changed_after(repo, rel, '__version__ = "2.0.1"', '__version__ = "2.0.1"\nDEBUG = True') == {"base"} | set(
+        CONFIGS
+    )
 
 
 def test_a_relative_import_resolves(repo):
