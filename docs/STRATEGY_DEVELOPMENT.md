@@ -140,9 +140,13 @@ reaches `main` by pull request:
    CI fails a `strategy/*` pull request that changes anything else
    (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
    new tactic, is a separate change on an ordinary branch.
-3. Within that, change only your own strategy's module and its import line in
-   `kernel_strategy.py`. Editing another strategy or `pickers.py` changes the opponents you are
-   scored against; CI can't tell, so the reviewer checks.
+3. Leave the opponents as they are on `main`: either add new strategy modules (plus their import
+   lines in `kernel_strategy.py`) or change exactly one existing strategy, never both, and never
+   `pickers.py`. Your strategy's code may not reach outside its module: no import-time effects,
+   no module-level state (keep state in the factory's closure), no imports of another strategy,
+   no changing attributes of what it imports. CI checks all of this statically, from `main`'s
+   copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
+   directly, not through `kernel_strategy.py`.
 4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger

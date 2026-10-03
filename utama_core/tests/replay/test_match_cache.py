@@ -45,3 +45,26 @@ def test_spot_check_sample_takes_the_fraction_and_at_least_one():
 def test_spot_check_sample_is_the_same_every_run_and_independent_of_order():
     keys = [f"k{i}" for i in range(50)]
     assert spot_check_sample(keys, 0.1) == spot_check_sample(list(reversed(keys)), 0.1)
+
+
+def test_two_processes_storing_the_same_match_use_different_temp_files(tmp_path, monkeypatch):
+    # Round-robins on different strategy branches share the cache. With one shared temp file,
+    # one process could rename away the other's half-written file and fail the other's rename.
+    import os
+    from pathlib import Path
+
+    temps = []
+    real_replace = Path.replace
+
+    def _recording_replace(self, target):
+        temps.append(self.name)
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", _recording_replace)
+    cache = MatchCache(tmp_path)
+    for pid in (101, 202):
+        monkeypatch.setattr(os, "getpid", lambda pid=pid: pid)
+        cache.put("ab" * 32, {"result": {"score_a": 1}})
+    assert len(set(temps)) == 2
+    assert cache.get("ab" * 32) == {"result": {"score_a": 1}}
+    assert not list(tmp_path.rglob("*.tmp"))
