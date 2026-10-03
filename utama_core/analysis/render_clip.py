@@ -37,7 +37,7 @@ frame timestamps, so a clip always plays in real time whatever rate the
 replay was recorded at.
 
 CLI:
-    pixi run python -m utama_core.replay.render_clip \\
+    pixi run python -m utama_core.analysis.render_clip \\
         --replay replays/<name>.npz --t-start 97 --t-end 105.5 --out clip.mp4 [--camera full]
 """
 

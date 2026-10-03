@@ -396,6 +396,7 @@ AUDIT = {
         "utama_core.strategy.overload_flow",
     ],
     "opens files": [
+        "utama_core.analysis.turnover_breakdown",
         "utama_core.custom_referee.profiles.profile_loader",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
@@ -404,7 +405,6 @@ AUDIT = {
         "utama_core.replay.replay_player",
         "utama_core.replay.replay_writer",
         "utama_core.replay.scenario",
-        "utama_core.replay.turnover_breakdown",
         "utama_core.scenario_bench.start",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],

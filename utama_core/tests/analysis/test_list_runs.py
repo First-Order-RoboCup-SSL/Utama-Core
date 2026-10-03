@@ -1,6 +1,6 @@
 import json
 
-from utama_core.replay.list_runs import run_rows
+from utama_core.analysis.list_runs import run_rows
 
 
 def test_reads_summary_and_tolerates_missing_fields(tmp_path):

@@ -4,7 +4,7 @@
 `summary.json` under `ball_losses`, the full report into `ball_losses.md` beside it. For an
 existing run:
 
-    pixi run python -m utama_core.replay.turnover_breakdown replays/tournament_<id> --out report.md
+    pixi run python -m utama_core.analysis.turnover_breakdown replays/tournament_<id> --out report.md
 
 Why: across a round-robin, turnovers outnumber completed passes more than 2:1 and play
 rarely reaches the attacking third, but `MatchStats` only counts turnovers. This says which

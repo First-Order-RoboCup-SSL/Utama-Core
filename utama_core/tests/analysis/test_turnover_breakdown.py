@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from utama_core.replay.turnover_breakdown import (
+from utama_core.analysis.turnover_breakdown import (
     _REACH_M,
     _PassTracker,
     breakdown,

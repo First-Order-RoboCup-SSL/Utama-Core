@@ -1,4 +1,4 @@
-"""Tests for `utama_core.replay.stuck_detector` (gap #11 prototype)."""
+"""Tests for `utama_core.analysis.stuck_detector` (gap #11 prototype)."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from utama_core.analysis.stuck_detector import find_stuck_windows
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.replay.entities import ReplayMetadata
-from utama_core.replay.stuck_detector import find_stuck_windows
 
 _TICK_HZ = 60
 

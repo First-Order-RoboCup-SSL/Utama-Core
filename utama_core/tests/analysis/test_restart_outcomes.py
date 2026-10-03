@@ -1,7 +1,7 @@
 import numpy as np
 
+from utama_core.analysis.restart_outcomes import analyse_match, episodes, summarise
 from utama_core.entities.referee.referee_command import RefereeCommand as C
-from utama_core.replay.restart_outcomes import analyse_match, episodes, summarise
 
 _BALL = (1.0, 0.0)
 
