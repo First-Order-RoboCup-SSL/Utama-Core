@@ -17,7 +17,7 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/tournament/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `tools/tournament/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
@@ -63,6 +63,11 @@ One term per thing; reuse these instead of coining new ones.
 - `utama_core/skills/` — lower-level per-robot primitives (`go_to_ball`, `block_attacker`,
   ...) tactics call directly.
 - `utama_core/custom_referee/` — the in-process referee (rules, restart positioning).
+- `utama_core/replay/` — the replay file format (writer, player, columnar reader/writer), scenario
+  rebuilding from a replay, and the match-result cache/fingerprint.
+- `utama_core/analysis/` — offline analyses of tournament runs and replays (`turnover_breakdown`,
+  `restart_outcomes`, `stuck_detector`, `render_window`, `render_clip`, `list_runs`). Imports
+  `replay/`; `replay/` never imports it.
 - Everything else (`motion_planning/`, `rsoccer_simulator/`, `team_controller/`,
   `data_processing/`, `entities/`, `global_utils/`) is infrastructure the strategy layer
   sits on top of. Writing a strategy rarely needs to change it, but it is the main work area

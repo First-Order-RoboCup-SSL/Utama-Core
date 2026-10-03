@@ -45,7 +45,7 @@ treated as a bug; recheck if a match produces a ≥2s linger, or build an advers
    separate (`referee_integration.md`, Open).
 10. **Replay investigations used raw numbers instead of `render_window()`** — the guidance now
     lives in `STRATEGY_DEVELOPMENT.md`'s Observability section.
-11. **No automated stuck-match detector.** `utama_core/replay/stuck_detector.py`'s
+11. **No automated stuck-match detector.** `utama_core/analysis/stuck_detector.py`'s
     `find_stuck_windows()` (`39257ee`): per-3s window, ball frozen (position std-dev) or robot
     oscillating (FFT peak fraction); excludes non-live referee states, held/shielded ball, and
     ball resting in a defense area (`ce6abe3`). Bugs it found, each with a regression test:
