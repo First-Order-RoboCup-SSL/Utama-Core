@@ -29,7 +29,7 @@ One term per thing; reuse these instead of coining new ones.
 
 - **Round-robin / tournament run** — every strategy config plays every other once
   (`tools/tournament/round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
-  "which strategy is better", and slow.
+  "which strategy is better". Slow in full; with `--reuse` only matches whose code changed rerun.
 - **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
   `bench_vs_standings.py` uses points per match (3 a win, 1 a draw) and goal difference.
 - **Start** — one starting situation (kickoff, free kick, penalty, or an open-play moment)

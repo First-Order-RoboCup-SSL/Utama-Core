@@ -94,12 +94,18 @@ through the kernel invariants), give its partitioner pure-function tests in
 2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
    Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
    before anything else.
-3. **Bench A/B** against its nearest existing strategy, the one it differs from in a single
-   idea, so the A/B tests that idea: `tools/scenario_bench.py --load-bank <newest bank>
-   --candidate <name> --baseline <nearest> --opponent <opp> --stop-at-t 4` (see below).
-   Use an opponent outside the pair.
-4. **Matches** to confirm: a strict round-robin with it in (`round_robin.py --strict
-   --reuse`), 0 stalls. Record the result in `docs/strategies.md`.
+3. **Matches:** a strict round-robin with it in (`round_robin.py --strict --reuse`), 0 stalls.
+   With `--reuse` a change to one strategy plays only its own 21 matches, so this is the
+   judgement, not a final confirmation. Record the result in `docs/strategies.md`.
+4. **Bench A/B**, only when the round-robin can't answer: the change is too small to move a
+   row of mostly draws, or you need to know which kind of start it changed. Run it against the
+   nearest existing strategy, the one it differs from in a single idea, so the A/B tests that
+   idea: `tools/scenario_bench.py --load-bank <newest bank> --candidate <name> --baseline
+   <nearest> --opponent <opp> --stop-at-t 4` (see below). Use an opponent outside the pair.
+
+A change to `tactics/`, `skills/` or `pickers.py` is the other way round: reuse saves little,
+because most strategies import the changed code and their matches all rerun. Screen it on the bench
+first, batch such changes, and run one round-robin over the batch.
 
 **`--reuse`** (round-robin and bench) takes a match's or start's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
@@ -115,10 +121,12 @@ nothing while its code is unchanged.
 
 **What counts as better.** Results: goals and W-D-L in matches, and the bench's outcome delta.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
-it is a target. Don't tune a threshold until the bench moves: a change needs a reason in game
+it is a target. Don't tune a threshold until results move: a change needs a reason in game
 terms, and a bench gain that matches don't confirm means distrust the bench, not that the
 strategy got better. The bench agreed with round-robin standings at Spearman +0.51 (two round-robins agree at +0.97),
-so it screens changes; it doesn't rank strategies.
+so it screens changes; it doesn't rank strategies, and a bench result alone never accepts a
+change. The +0.97 is not a ceiling: rsim is deterministic, so two round-robins of near-identical
+code agree largely because the code is near-identical.
 
 ## Observability — use these before adding a debug print
 
@@ -200,7 +208,8 @@ planner, the referee) is failing every strategy at once.
 
 ## A/B on the scenario bank
 
-For a targeted A/B of one change (a tactic, the planner) without an hour-long round-robin, use
+For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
+round-robin even with `--reuse`, or of a change too small to move match results, use
 `tools/scenario_bench.py` on the committed bank (`utama_core/scenario_bench/banks/`, newest version):
 every start harvested from one round-robin (kickoffs, free kicks, penalties, and open play: a
 pass about to be made, a ball just lost), near-duplicates dropped, each played 20 s once, the
