@@ -53,6 +53,7 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 | `press_trigger_flow` | competitive | `counter_flow`, but an all-in press when the ball is lost in our own third. |
 | `overload_press` | parked | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
 | `high_line_zone` | parked | Zone screen (`BlockShapeTactic`) + switch attack, built to deny tiki_taka 1v1s. |
+| `zone_split_shape` | experimental | `split_shape`'s tactics; the 4/1 possession split shifts one robot by the ball's third (3/2 building out from our own third, 2/3 when the ball is lost in theirs), near-ties keep the last split. |
 
 ## Latest results
 
@@ -86,6 +87,18 @@ to noise; two round-robins of near-identical code rank strategies with Spearman 
 | `zone_fluid` | 1-12-8 | 2-10 | 0.71 |
 | `shadow_switch` | 2-8-11 | 4-13 | 0.67 |
 | `score_aware_zone_flow` | 0-13-8 | 0-9 | 0.62 |
+
+**`zone_split_shape` pair matches** (2026-10-03, `--pair`, 65s, `zone_split_shape` as config_a, 5 matches,
+0 stalls, not a round-robin: `--reuse` missed every match, the cache predating the `analysis/` split
+and the `pickers.py` change, so the 253-match run was not played). Not comparable with the table above.
+
+| Opponent | Result |
+|---|---|
+| `split_shape` | 2-0 |
+| `counter_flow` | 1-0 |
+| `tiki_taka` | 1-0 |
+| `low_block` | 1-0 |
+| `clear_danger` | 0-0 |
 
 The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
 Treat them as rough ordering, not current truth.

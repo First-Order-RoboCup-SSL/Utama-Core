@@ -69,3 +69,7 @@ from utama_core.strategy.zone_fluid import (
     _zone_flow_picker,
     build_zone_fluid_kernel_strategy,
 )
+from utama_core.strategy.zone_split_shape import (
+    _zone_split_picker,
+    build_zone_split_shape_kernel_strategy,
+)
