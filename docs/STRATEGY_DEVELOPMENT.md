@@ -89,11 +89,6 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
 `Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
 `experimental`.
 
-A strategy branch is named `strategy/<idea>` and may change only `strategy/`,
-`tests/strategy/` and `docs/strategies.md`: CI fails it otherwise (`tools/check_strategy_branch.py`,
-run from the base branch's copy). Anything else it needs, such as a new tactic, is a separate
-human change.
-
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
 2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
@@ -132,6 +127,25 @@ strategy got better. The bench agreed with round-robin standings at Spearman +0.
 so it screens changes; it doesn't rank strategies, and a bench result alone never accepts a
 change. The +0.97 is not a ceiling: rsim is deterministic, so two round-robins of near-identical
 code agree largely because the code is near-identical.
+
+### Strategy branches
+
+A new or changed strategy, whether a person or an agent writes it, goes on its own branch and
+reaches `main` by pull request:
+
+1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
+   from the main checkout first: pixi needs the environment, and `--reuse` needs
+   `replays/match_cache/`, or every match plays again.
+2. Change only `utama_core/strategy/`, `utama_core/tests/strategy/` and `docs/strategies.md`.
+   CI fails a `strategy/*` pull request that changes anything else
+   (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
+   new tactic, is a separate change on an ordinary branch.
+3. Within that, change only your own strategy's module and its import line in
+   `kernel_strategy.py`. Editing another strategy or `pickers.py` changes the opponents you are
+   scored against; CI can't tell, so the reviewer checks.
+4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
+5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
+   ran one. An agent never merges: a person reviews and merges.
 
 ## Observability — use these before adding a debug print
 
