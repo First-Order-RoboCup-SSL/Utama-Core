@@ -25,10 +25,29 @@ unless `--allow-failures`; `--output-dir PATH` redirects output.
 | `direct` | Unobstructed 6m traversal and braking | 12s | 0.15m |
 | `static_slalom` | Three staggered stationary robots | 20s | 0.15m |
 | `crossing` | One perpendicular crossing robot | 20s | 0.20m |
+| `crossing_oblique_45` | Crossing at 45°, both heading the same general way | 20s | 0.20m |
+| `crossing_oblique_135` | Crossing at 135°, heading broadly towards each other | 20s | 0.20m |
+| `crossing_offset` | Perpendicular crossing off-centre, reaching it at different times | 20s | 0.20m |
+| `crossing_steady_runner` | Opponent follows a point crossing our path at 1 m/s | 20s | 0.20m |
+| `overtaking` | Passing an opponent that follows a point ahead on the same line at 0.5 m/s | 20s | 0.20m |
 | `grid_intersection` | Four moving robots, four crossing points | 30s | 0.25m |
 | `mirror_swap` | Dense 6v6 yielding and convergence (2cm symmetry-breaking offset) | 45s | 0.30m |
+| `narrow_passage` | Threading a 0.24m gap between two stationary robots | 10s | 0.15m |
+| `head_on_swap` | Two robots swap positions driving straight at each other | 10s | 0.20m |
+| `field_boundary_corner` | Target just inside a field corner | 10s | 0.15m |
+| `defense_area_boundary` | Target just outside the defense-area keep-distance (fpp's clamp settles ~0.2m short) | 10s | 0.25m |
+| `interception` | Meeting an opponent that follows a point at constant velocity | 8s | 0.20m |
+| `sudden_obstacle` | Clear corridor; an obstacle appears mid-path at 2s | 12s | 0.15m |
+| `disturbance_recovery` | Robot is teleported off its path at 1.5s and must replan | 12s | 0.15m |
+| `start_inside_obstacle` | Starts overlapping a stationary robot; only a new collision fails it | 10s | 0.15m |
+| `jittering_target` | `direct`'s geometry with ~1mm per-tick target jitter; compare its time with `direct`'s | 12s | 0.15m |
 
-Moving scenarios use the selected scheme for both teams; `static_slalom`'s opponents stay put.
+Opponents with a target or a moving target point drive with the selected scheme; the others stay
+put (`sudden_obstacle`'s is teleported into the corridor).
+
+Latest full run: `benchmark_results/motion_planning_20261003_071923.md` (1.5 min wall for all 57
+cells). fpp passes 18 of 19 (`mirror_swap` times out, 8 of 12 robots home, no collision);
+trajsample fails `mirror_swap` with a collision; dwa collides in 9.
 
 ## Pass/fail and metrics
 
