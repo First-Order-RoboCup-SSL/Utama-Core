@@ -1,4 +1,13 @@
+import os
+
 import pytest
+
+# The planner's numba kernels are compiled with fastmath for the host CPU, so an rsim game played
+# on CI's CPU can drift from the same game played locally, and a test that asserts how a game
+# unfolds passes on one machine and fails on the other. Compile them for a generic x86-64 CPU in
+# tests, so every machine runs the same code. Set before numba is imported; rsim worker
+# processes inherit it.
+os.environ.setdefault("NUMBA_CPU_NAME", "generic")
 
 
 def pytest_addoption(parser):
