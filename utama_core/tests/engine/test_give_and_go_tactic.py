@@ -140,6 +140,59 @@ def test_carrier_eventually_abandons_the_hold_after_max_hop_ticks():
     assert mem.receiver_id is None
 
 
+def test_carrier_does_not_hold_again_after_the_first_touch_hold_times_out():
+    """A pressed carrier (enemy 0.3 m in front: no shot lane, and the only
+    teammate's lane blocked) held still for `_MAX_HOP_TICKS`, fell through for
+    a single tick, then held for another `_MAX_HOP_TICKS`, and so on until
+    `first_touch_stuck` at 8 s. Repartitions and the referee's 10 s
+    no_progress restart renew `mem` sooner than that, so carriers froze with
+    the ball for 15-20 s (tournament_20261003_102921,
+    clear_danger_vs_overload_flow_RK t=171-192 s). After the hold times out
+    once, the carrier must keep moving (strafe for a lane) instead of holding
+    in place again."""
+    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.0, 0.0), enemy_pos=Vector2D(0.5, 0.0))
+    frame = game.current
+    enemy = dict(frame.enemy_robots)
+    enemy[4] = Robot(
+        id=4,
+        is_friendly=False,
+        has_ball=False,
+        p=Vector2D(-0.3, 0.0),
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+    game = Game(
+        past=GameHistory(max_history=20),
+        current=GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=frame.friendly_robots,
+            enemy_robots=enemy,
+            ball=frame.ball,
+        ),
+        field=game.field,
+    )
+    goal_x = float(game.field.enemy_goal_line[0][0])
+    assert find_best_shot(Vector2D(0.0, 0.0), list(enemy.values()), goal_x, -0.5, 0.5)[0] is None
+    ctx = TickContext(motion_controller=_PerRobotMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+
+    for _ in range(_MAX_HOP_TICKS - 1):
+        _, mem = tactic.tick(game, ctx, (1, 2), mem)
+    held = ctx.motion_controller.targets[1]
+    assert held.distance_to(Vector2D(0.0, 0.0)) < 1e-6  # holding in place during the hold
+
+    for _ in range(2):  # the timeout tick, then the first tick after it
+        _, mem = tactic.tick(game, ctx, (1, 2), mem)
+
+    assert mem.ticks_held < _MAX_FIRST_TOUCH_TICKS  # first_touch_stuck is not what moves it
+    assert mem.receiver_id is None and mem.hop_count == 0
+    assert ctx.motion_controller.targets[1].distance_to(Vector2D(0.0, 0.0)) > 0.5
+
+
 def _make_flicker_game() -> Game:
     """Carrier facing +x, teammate off-axis at (1.5, 2.0), enemy at (1.0, 0.0).
 

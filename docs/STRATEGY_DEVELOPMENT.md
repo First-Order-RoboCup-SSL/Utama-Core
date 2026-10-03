@@ -68,8 +68,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 ## Writing and evaluating a strategy
 
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
-each gets. Most new strategies need no new tactic; if one does, propose the tactic first
-(see `AGENTS.md`, minimalism).
+each gets. Most new strategies need no new tactic. When one does, add it as a new module in
+`tactics/` (on a strategy branch, never by changing an existing tactic: see below).
 
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
@@ -136,13 +136,20 @@ reaches `main` by pull request:
 1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
    from the main checkout first: pixi needs the environment, and `--reuse` needs
    `replays/match_cache/`, or every match plays again.
-2. Change only `utama_core/strategy/`, `utama_core/tests/strategy/` and `docs/strategies.md`.
-   CI fails a `strategy/*` pull request that changes anything else
+2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
+   `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
+   `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
    (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
-   new tactic, is a separate change on an ordinary branch.
-3. Within that, change only your own strategy's module and its import line in
-   `kernel_strategy.py`. Editing another strategy or `pickers.py` changes the opponents you are
-   scored against; CI can't tell, so the reviewer checks.
+   skill or an engine primitive, is a separate change on an ordinary branch.
+3. Leave the opponents as they are on `main`: either add new strategy modules (plus their import
+   lines in `kernel_strategy.py`) or change exactly one existing strategy, never both, and never
+   `pickers.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
+   a new module and change the copy; making the improvement everyone's is a human change. Your
+   strategy's and tactics' code may not reach outside its module: no import-time effects,
+   no module-level state (keep state in the factory's closure), no imports of another strategy,
+   no changing attributes of what it imports. CI checks all of this statically, from `main`'s
+   copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
+   directly, not through `kernel_strategy.py`.
 4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger
@@ -151,6 +158,12 @@ reaches `main` by pull request:
    strategies' matches run `main`'s code, so they refill the cache for everyone.
 5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
    ran one. An agent never merges: a person reviews and merges.
+
+Several branches can be worked on at once, each in its own worktree; they share
+`replays/match_cache/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
+concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
+more of them at once. How to organise a search (how many in parallel, which ideas) is up to
+whoever runs it.
 
 ## Observability — use these before adding a debug print
 

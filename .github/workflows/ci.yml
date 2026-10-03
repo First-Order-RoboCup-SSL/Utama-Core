@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A strategy branch may change strategy code only (tools/check_strategy_branch.py).
+  # A strategy branch may change only strategy code, not its opponents (tools/check_strategy_branch.py).
   # Runs the base branch's copy of the checker, so the branch under test can't loosen it.
   strategy-branch:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'strategy/')

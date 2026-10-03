@@ -269,6 +269,7 @@ class GiveAndGoMem:
     hop_ticks: int = 0  # ticks since receiver_id was locked for the current hop; feeds _MAX_HOP_TICKS below
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early hop abandon
     carry_origin: Optional[Vector2D] = None  # see shared carry_origin; caps the no-lane strafe
+    first_touch_hold_spent: bool = False  # the no-receiver hold ran its _MAX_HOP_TICKS once; never hold again
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -455,7 +456,13 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             mem.hop_ticks = 0
             mem.lane_blocked_ticks = 0
 
-        if first_touch_of_possession and not first_touch_stuck and mem.receiver_id is None and not force_shot:
+        if (
+            first_touch_of_possession
+            and not first_touch_stuck
+            and not mem.first_touch_hold_spent
+            and mem.receiver_id is None
+            and not force_shot
+        ):
             # No teammate was even reachable/unblocked (e.g. boxed in by
             # opponents right at kickoff) — hold rather than fall through to
             # the shoot branch below, which would reintroduce the double-
@@ -463,6 +470,17 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # as `_relocate_others` keeps repositioning teammates; give up
             # and force a solo shot only after `_MAX_HOP_TICKS`, the same
             # timeout budget the in-flight pass handshake already uses.
+            #
+            # The give-up is once per possession (`first_touch_hold_spent`):
+            # it used to fall through for one tick and then hold again for
+            # another `_MAX_HOP_TICKS`, so a pressed carrier with no open
+            # teammate stood still with the ball until `first_touch_stuck`
+            # (8 s of `ticks_held`). A repartition or a referee reset renews
+            # `mem` before that (overload_flow's picker every ~6 s, and the
+            # referee's own no_progress restart at 10 s), so it never came:
+            # carriers froze 15-20 s while both teams' other robots milled
+            # around them (tournament_20261003_102921,
+            # clear_danger_vs_overload_flow_RK t=171-192 s).
             mem.hop_ticks += 1
             if mem.hop_ticks < _MAX_HOP_TICKS:
                 carrier_pos = game.friendly_robots[carrier_id].p
@@ -478,6 +496,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 self._relocate_others(game, ctx, robot_ids, carrier_id, commands)
                 return commands, mem
             mem.hop_ticks = 0
+            mem.first_touch_hold_spent = True
 
         if mem.receiver_id is not None:
             if ctx.match_log is not None:
