@@ -45,7 +45,9 @@ jobs:
 
 
       - name: Test Report
-        if: always()
+        # Not on a cancelled run (a newer run of the same branch replaced it): it has no results
+        # file, and failing here would show a red X for tests that never ran.
+        if: ${{ !cancelled() }}
         uses: pmeier/pytest-results-action@main
         with:
           path: test-results.xml

@@ -1,6 +1,6 @@
 """Tests for `round_robin.py`'s hand-rolled
 `--fuzz-restarts`/`--fuzz-interval` CLI parsing (see `docs/STRATEGY_DEVELOPMENT.md`).
-`round_robin.py` has no `--help` and no `argparse` — flags are parsed by
+`round_robin.py` has no `argparse` — flags are parsed by
 scanning `sys.argv` directly inside `main()` — so these tests monkeypatch
 `sys.argv` and stub out `run_match` (never actually running a match/simulator)
 to check the flags are parsed and threaded through correctly.
@@ -114,3 +114,16 @@ def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkey
     tournament.main()
 
     assert calls == [("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy")]
+
+
+def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
+    # `--help` used to be taken for a config name, so it failed instead of listing the flags.
+    def _no_match(*_args, **_kwargs):
+        raise AssertionError("--help must not play a match")
+
+    monkeypatch.setattr(tournament, "run_match", _no_match)
+    for flag in ("--help", "-h"):
+        monkeypatch.setattr("sys.argv", ["round_robin.py", flag])
+        tournament.main()
+        out = capsys.readouterr().out
+        assert "--pair A B" in out and "--reuse" in out
