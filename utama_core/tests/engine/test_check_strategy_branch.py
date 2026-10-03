@@ -43,7 +43,6 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
     "path",
     [
         "utama_core/engine/strategy.py",
-        "utama_core/tactics/give_and_go.py",
         "utama_core/scenario_bench/scenario_scorer.py",
         "tools/tournament/tournament_lib.py",
         "tools/check_strategy_branch.py",
@@ -60,7 +59,12 @@ def test_anything_else_is_reported(path):
 
 def test_allowlist_is_strategy_code_only():
     # Widening this is a decision, not a fix: change the test with it.
-    assert ALLOWED == ("utama_core/strategy/", "utama_core/tests/strategy/", "docs/strategies.md")
+    assert ALLOWED == (
+        "utama_core/strategy/",
+        "utama_core/tactics/",
+        "utama_core/tests/strategy/",
+        "docs/strategies.md",
+    )
 
 
 def _git(repo, *args):
@@ -86,6 +90,9 @@ def repo(tmp_path, monkeypatch):
     (s / "pickers.py").write_text("def helper(ids):\n    return ids\n")
     for n in "ab":
         (s / f"{n}.py").write_text(STRATEGY_SRC.format(n=n))
+    t = tmp_path / "utama_core/tactics"
+    t.mkdir()
+    (t / "press.py").write_text("class PressTactic:\n    reach = 1\n")
     fp = tmp_path / "utama_core/replay/fingerprint.py"
     fp.parent.mkdir(parents=True)
     shutil.copy(REPO_ROOT / "utama_core/replay/fingerprint.py", fp)
@@ -127,6 +134,33 @@ def test_adding_a_strategy_and_weakening_another_fails(repo):
             "utama_core/strategy/b.py": STRATEGY_SRC.format(n="b").replace("helper(ids)", "[]"),
         },
     )
+    assert main(["--base", "main"]) == 1
+
+
+def test_adding_a_tactic_and_a_strategy_that_uses_it_passes(repo):
+    tactic = "from utama_core.tactics.press import PressTactic\n\n\nclass FastPress(PressTactic):\n    reach = 2\n"
+    registry = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy\n"
+    strategy = "from utama_core.tactics.fast_press import FastPress\n\n\ndef build_c_kernel_strategy(ids):\n    return FastPress()\n"
+    _commit(
+        repo,
+        {
+            "utama_core/tactics/fast_press.py": tactic,
+            "utama_core/strategy/c.py": strategy,
+            "utama_core/strategy/kernel_strategy.py": registry,
+        },
+    )
+    assert main(["--base", "main"]) == 0
+
+
+def test_changing_an_existing_tactic_fails(repo):
+    # The opponents run the existing tactics: changing one changes who you are scored against.
+    _commit(repo, {"utama_core/tactics/press.py": "class PressTactic:\n    reach = 0\n"})
+    assert main(["--base", "main"]) == 1
+
+
+def test_a_new_tactic_may_not_reach_outside_itself(repo):
+    sneaky = "from utama_core.tactics.press import PressTactic\n\nPressTactic.reach = 0\n"
+    _commit(repo, {"utama_core/tactics/sneaky.py": sneaky})
     assert main(["--base", "main"]) == 1
 
 

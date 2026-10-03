@@ -68,8 +68,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 ## Writing and evaluating a strategy
 
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
-each gets. Most new strategies need no new tactic; if one does, propose the tactic first
-(see `AGENTS.md`, minimalism).
+each gets. Most new strategies need no new tactic. When one does, add it as a new module in
+`tactics/` (on a strategy branch, never by changing an existing tactic: see below).
 
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
@@ -136,13 +136,16 @@ reaches `main` by pull request:
 1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
    from the main checkout first: pixi needs the environment, and `--reuse` needs
    `replays/match_cache/`, or every match plays again.
-2. Change only `utama_core/strategy/`, `utama_core/tests/strategy/` and `docs/strategies.md`.
-   CI fails a `strategy/*` pull request that changes anything else
+2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
+   `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
+   `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
    (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
-   new tactic, is a separate change on an ordinary branch.
+   skill or an engine primitive, is a separate change on an ordinary branch.
 3. Leave the opponents as they are on `main`: either add new strategy modules (plus their import
    lines in `kernel_strategy.py`) or change exactly one existing strategy, never both, and never
-   `pickers.py`. Your strategy's code may not reach outside its module: no import-time effects,
+   `pickers.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
+   a new module and change the copy; making the improvement everyone's is a human change. Your
+   strategy's and tactics' code may not reach outside its module: no import-time effects,
    no module-level state (keep state in the factory's closure), no imports of another strategy,
    no changing attributes of what it imports. CI checks all of this statically, from `main`'s
    copy of the checker; the reviewer still reads the diff. Tests import pickers from your module

@@ -13,9 +13,10 @@ copy of this file on the base branch, so the branch under test can't loosen it. 
 2. **Opponents.** Every other strategy must run the base branch's code, so the round-robin plays
    the same opponents as on `main`. A branch either adds new strategy modules or changes exactly
    one existing one, never both; it never changes or deletes `pickers.py` (shared by most
-   strategies) or deletes a strategy; and in `kernel_strategy.py` it only adds imports from the
-   modules it adds.
-3. **Reach.** A new or changed strategy module can't affect anything outside itself: no import-time
+   strategies) or deletes a strategy; in `kernel_strategy.py` it only adds imports from the
+   modules it adds; and in `tactics/` it only adds new modules, since the existing tactics are
+   what the opponents run (to improve one, copy it into a new module).
+3. **Reach.** A new or changed strategy or tactic module can't affect anything outside itself: no import-time
    effects or hazards (`utama_core/replay/fingerprint.py`'s `_import_time_effects` and `_hazards`:
    environment, files, dynamic imports, module-level state), no imports of another strategy
    module, and no assigning or deleting attributes of what it imports (`SomeTactic.x = ...`,
@@ -37,11 +38,13 @@ from pathlib import Path
 # A trailing "/" allows everything under that directory; anything else is one exact file.
 ALLOWED = (
     "utama_core/strategy/",
+    "utama_core/tactics/",  # new modules only (check 2)
     "utama_core/tests/strategy/",
     "docs/strategies.md",
 )
 
 STRATEGY_DIR = "utama_core/strategy/"
+TACTICS_DIR = "utama_core/tactics/"
 REGISTRY = STRATEGY_DIR + "kernel_strategy.py"
 PICKERS = STRATEGY_DIR + "pickers.py"
 _FINGERPRINT = Path("utama_core/replay/fingerprint.py")
@@ -78,6 +81,11 @@ def opponent_problems(changes: dict[str, str]) -> list[str]:
     """Check 2's file rules, from `changed_files`."""
     strategy = {p: s for p, s in changes.items() if p.startswith(STRATEGY_DIR) and p.endswith(".py") and p != REGISTRY}
     problems = [f"{p}: deletes a strategy module" for p, s in strategy.items() if s == "D"]
+    problems += [
+        f"{p}: changes an existing tactic, which the opponents run; copy it into a new module instead"
+        for p, s in changes.items()
+        if p.startswith(TACTICS_DIR) and s != "A"
+    ]
     if PICKERS in strategy:
         problems.append(f"{PICKERS}: shared by most strategies, so changing it changes the opponents")
     added = sorted(p for p, s in strategy.items() if s == "A")
@@ -118,7 +126,7 @@ def _load_fingerprint(path: Path = _FINGERPRINT):
 
 
 def reach_problems(path: str, source: str, fingerprint) -> list[str]:
-    """Check 3 for one new or changed strategy module."""
+    """Check 3 for one new or changed strategy or tactic module."""
     tree = ast.parse(source)
     problems = [f"{path}: {e}" for stmt in tree.body for e in fingerprint._import_time_effects(stmt)]
     problems += [f"{path}: {kind}" for kind in sorted(fingerprint._hazards(tree))]
@@ -165,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         problems += registry_problems(_git("show", f"{args.base}:{REGISTRY}"), Path(REGISTRY).read_text(), added)
     fingerprint = _load_fingerprint()
     for path, status in sorted(changes.items()):
-        if status != "D" and path.startswith(STRATEGY_DIR) and path.endswith(".py") and path != REGISTRY:
+        code = path.startswith((STRATEGY_DIR, TACTICS_DIR)) and path.endswith(".py")
+        if status != "D" and code and path != REGISTRY:
             problems += reach_problems(path, Path(path).read_text(), fingerprint)
     if problems:
         print("This strategy branch could change its opponents or the evaluation:")
