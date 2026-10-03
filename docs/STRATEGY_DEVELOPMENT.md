@@ -84,10 +84,15 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
 - `fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `split_shape.py`) — the
   two common split shapes.
 
-Then add it to `_CONFIGS` in `tests/engine/test_all_strategy_configs.py` (builds it and runs it
-through the kernel invariants), give its partitioner pure-function tests in
-`tests/strategy/test_<name>.py` (a `Game` built by hand, no rsim), and add a catalog row to
-`docs/strategies.md` with status `experimental`.
+`tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
+kernel invariants. Give its partitioner pure-function tests in `tests/strategy/test_<name>.py` (a
+`Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
+`experimental`.
+
+A strategy-search branch is named `search/<idea>` and may change only `strategy/`,
+`tests/strategy/` and `docs/strategies.md`: CI fails it otherwise (`tools/check_search_paths.py`,
+run from the base branch's copy). Anything else it needs, such as a new tactic, is a separate
+human change.
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.

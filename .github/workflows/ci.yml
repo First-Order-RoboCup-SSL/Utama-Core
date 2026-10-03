@@ -10,6 +10,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A strategy-search branch may change strategy code only (tools/check_search_paths.py).
+  # Runs the base branch's copy of the checker, so the branch under test can't loosen it.
+  search-paths:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'search/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Only strategy code changed
+        run: |
+          git show "origin/${{ github.base_ref }}:tools/check_search_paths.py" > "$RUNNER_TEMP/check_search_paths.py"
+          python3 "$RUNNER_TEMP/check_search_paths.py" --base "origin/${{ github.base_ref }}"
+
   test:
     runs-on: ubuntu-latest
 

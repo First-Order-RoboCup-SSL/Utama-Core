@@ -1,0 +1,3 @@
+# Changes here decide what a strategy-search branch may touch and how it is scored.
+/.github/                     @isaac0804
+/tools/check_search_paths.py  @isaac0804
