@@ -36,6 +36,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from functools import cached_property
@@ -59,6 +60,10 @@ ENV_PREFIXES = ("UTAMA_", "NUMBA_", "OMP_", "OPENBLAS_", "MKL_", "PYTHONHASHSEED
 
 # Files next to a module that are not data it reads.
 _NOT_DATA_SUFFIXES = (".py", ".pyc", ".md")
+
+# The release workflow rewrites `utama_core/__init__.py`'s `__version__` on every merge into main.
+# Nothing reads it in a match, and hashing it would invalidate every stored result on each merge.
+_VERSION_LINE = re.compile(rb"""^__version__\s*=\s*["'][^"'\n]*["']\s*$""", re.MULTILINE)
 
 # Method names that mutate their receiver; called at import time, they reach outside the module.
 _MUTATORS = frozenset(
@@ -195,7 +200,8 @@ class CodeGraph:
         for name in names:
             mod = self.module(name)
             if mod is not None and mod.path is not None:
-                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_sha(mod.source)}")
+                code = _VERSION_LINE.sub(b"", mod.source)
+                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_sha(code)}")
         return sorted(rows)
 
     def data_files(self, names: Iterable[str]) -> list[str]:

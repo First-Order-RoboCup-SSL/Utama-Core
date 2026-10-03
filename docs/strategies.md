@@ -55,36 +55,36 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
 ## Latest results
 
-**Smoke round-robin, full catalog** (2026-10-01, `e83a7466`, 22 configs, 231 matches, 65s,
-`--strict`, 0 stalls, `replays/tournament_20261001_094103/summary.json`). Points are 3 a win,
-1 a draw. 65s matches are mostly draws (152 of 231 here), so the middle of the table is close
-to noise; two round-robins of near-identical code rank strategies with Spearman +0.97
-(`docs/STRATEGY_DEVELOPMENT.md`, A/B on the scenario bank).
+**Smoke round-robin, full catalog** (2026-10-03, v2.0.1, 22 configs, 231 matches, 65s,
+`--strict`, 0 stalls, about 9 min wall on 15 workers, `replays/tournament_20261003_092151/summary.json`).
+Points are 3 a win, 1 a draw. 65s matches are mostly draws (129 of 231 here), so the middle of
+the table is close to noise; two round-robins of near-identical code rank strategies with Spearman
++0.97 (`docs/STRATEGY_DEVELOPMENT.md`, A/B on the scenario bank).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 8-13-0 | 11-1 | 1.76 |
-| `clear_danger` | 6-15-0 | 7-0 | 1.57 |
-| `overload_press` | 7-11-3 | 9-3 | 1.52 |
-| `counter_flow` | 5-16-0 | 6-0 | 1.48 |
-| `score_aware_counter_flow` | 5-15-1 | 5-1 | 1.43 |
-| `press_and_pass` | 5-14-2 | 5-2 | 1.38 |
-| `high_press` | 3-18-0 | 3-0 | 1.29 |
-| `low_block` | 4-15-2 | 4-2 | 1.29 |
-| `give_and_go_solo` | 5-12-4 | 6-7 | 1.29 |
-| `clear_press_plus` | 3-17-1 | 3-1 | 1.24 |
-| `counter_press` | 4-14-3 | 5-4 | 1.24 |
-| `press_trigger_flow` | 4-14-3 | 5-4 | 1.24 |
-| `high_line_zone` | 4-13-4 | 4-4 | 1.19 |
-| `tiki_taka_plus` | 3-15-3 | 3-3 | 1.14 |
-| `tiki_taka` | 2-17-2 | 2-2 | 1.10 |
-| `decoy_and_overload` | 3-13-5 | 3-6 | 1.05 |
-| `three_slot` | 1-17-3 | 1-3 | 0.95 |
-| `switch_of_play` | 3-9-9 | 3-9 | 0.86 |
-| `overload_flow` | 1-13-7 | 2-9 | 0.76 |
-| `zone_fluid` | 1-12-8 | 2-10 | 0.71 |
-| `shadow_switch` | 2-8-11 | 4-13 | 0.67 |
-| `score_aware_zone_flow` | 0-13-8 | 0-9 | 0.62 |
+| `counter_flow` | 9-12-0 | 9-0 | 1.86 |
+| `clear_danger` | 10-9-2 | 10-2 | 1.86 |
+| `split_shape` | 10-8-3 | 12-3 | 1.81 |
+| `give_and_go_solo` | 8-11-2 | 9-3 | 1.67 |
+| `score_aware_counter_flow` | 6-14-1 | 6-1 | 1.52 |
+| `decoy_and_overload` | 7-9-5 | 8-5 | 1.43 |
+| `low_block` | 5-14-2 | 5-2 | 1.38 |
+| `overload_press` | 4-16-1 | 5-1 | 1.33 |
+| `press_and_pass` | 4-16-1 | 4-1 | 1.33 |
+| `press_trigger_flow` | 6-10-5 | 6-5 | 1.33 |
+| `clear_press_plus` | 4-15-2 | 4-2 | 1.29 |
+| `high_press` | 4-14-3 | 4-3 | 1.24 |
+| `tiki_taka_plus` | 3-16-2 | 3-2 | 1.19 |
+| `counter_press` | 4-11-6 | 4-6 | 1.10 |
+| `high_line_zone` | 4-11-6 | 4-7 | 1.10 |
+| `tiki_taka` | 2-16-3 | 2-3 | 1.05 |
+| `overload_flow` | 4-8-9 | 5-11 | 0.95 |
+| `three_slot` | 2-12-7 | 2-7 | 0.86 |
+| `score_aware_zone_flow` | 3-7-11 | 4-12 | 0.76 |
+| `switch_of_play` | 2-10-9 | 2-10 | 0.76 |
+| `shadow_switch` | 0-13-8 | 2-11 | 0.62 |
+| `zone_fluid` | 1-6-14 | 1-14 | 0.43 |
 
 The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
 Treat them as rough ordering, not current truth.
