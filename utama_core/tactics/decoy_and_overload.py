@@ -85,6 +85,8 @@ _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow
 _LOOSE_BALL_SPEED = 0.3  # m/s — matches ball_is_loose's own threshold; see _teammate_already_has_ball
 _WAITING_ON_TEAMMATE_TIMEOUT_TIME = 6.0  # seconds — see waiting_on_teammate_ticks's comment below
 _WAITING_ON_TEAMMATE_TIMEOUT_TICKS = round(_WAITING_ON_TEAMMATE_TIMEOUT_TIME * CONTROL_FREQUENCY)
+_ENEMY_BALL_RELEASE_TIME = 1.0  # seconds the enemy must hold the ball before the tactic releases its robots
+_ENEMY_BALL_RELEASE_TICKS = round(_ENEMY_BALL_RELEASE_TIME * CONTROL_FREQUENCY)
 
 
 def _nearest_marker(game: Game, decoy_id: int) -> Optional[int]:
@@ -202,6 +204,20 @@ def _decoy_shot_open(game: Game, decoy_id: int) -> bool:
     return not segment_blocked(decoy_pos, Vector2D(goal_x, best_shot_y), enemy_positions(game))
 
 
+def _enemy_held_ball_too_long(game: Game, mem: "DecoyOverloadMem") -> bool:
+    """Count consecutive ticks an enemy robot holds the ball; True once past
+    `_ENEMY_BALL_RELEASE_TICKS`. An attack then has nothing to do, but neither phase had a
+    way out while the enemy held the ball, and `is_committed()` kept the decoy chasing it
+    until the stall watchdog fired (tournament_20261003_102921,
+    overload_flow_vs_tiki_taka_plus_LK, t=125-136 s)."""
+    with_ball = game.robot_with_ball
+    if with_ball is not None and with_ball.team_type == TeamType.ENEMY:
+        mem.enemy_ball_ticks += 1
+    else:
+        mem.enemy_ball_ticks = 0
+    return mem.enemy_ball_ticks > _ENEMY_BALL_RELEASE_TICKS
+
+
 @dataclass
 class DecoyOverloadMem:
     phase: str = "lure"  # "lure" -> "finish" -> (goal_scored)
@@ -215,6 +231,7 @@ class DecoyOverloadMem:
     goal_scored: bool = False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
     carry_origin: Optional[Vector2D] = None  # see shared carry_origin; the lure ends before an excessive-dribbling foul
+    enemy_ball_ticks: int = 0  # consecutive ticks an enemy robot has held the ball; see _ENEMY_BALL_RELEASE_TICKS
 
 
 def _support_hold_point(game: Game, robot_id: int, index: int) -> Vector2D:
@@ -316,6 +333,8 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             )
 
         if mem.phase == "lure":
+            if _enemy_held_ball_too_long(game, mem):
+                return {}, DecoyOverloadMem()
             if not has_ball(game, mem.decoy_id) and _teammate_already_has_ball(game, excluding_id=mem.decoy_id):
                 # A different tactic's carrier already has it -- see
                 # `_teammate_already_has_ball`'s docstring. Hold at the
@@ -428,7 +447,7 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         # no-timeout bug class pass_and_shoot.py's own _PHASE_TIMEOUT_TICKS
         # was added to fix; apply the identical budget here.
         mem.finish_ticks += 1
-        if mem.finish_ticks > _FINISH_TIMEOUT_TICKS:
+        if mem.finish_ticks > _FINISH_TIMEOUT_TICKS or _enemy_held_ball_too_long(game, mem):
             return {}, DecoyOverloadMem()
 
         if has_ball(game, mem.decoy_id, visual=True) and _decoy_shot_open(game, mem.decoy_id):

@@ -38,6 +38,7 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.tactics.decoy_and_overload import (
+    _ENEMY_BALL_RELEASE_TICKS,
     _FINISH_TIMEOUT_TICKS,
     _LOOSE_BALL_SPEED,
     _LURE_MAX_TICKS,
@@ -254,3 +255,38 @@ def test_lure_ends_once_the_decoy_has_carried_the_ball_0_8m(carried, expected_ph
     )
 
     assert new_mem.phase == expected_phase
+
+
+# ---------------------------------------------------------------------------
+# Enemy possession releases the tactic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("held_ticks", "released"), [(_ENEMY_BALL_RELEASE_TICKS, False), (_ENEMY_BALL_RELEASE_TICKS + 1, True)]
+)
+def test_tactic_releases_its_robots_once_the_enemy_has_held_the_ball_1s(held_ticks, released):
+    """With the enemy holding the ball, the lure had no way out: the decoy chased it and
+    is_committed() pinned both robots until the stall watchdog fired
+    (tournament_20261003_102921, overload_flow_vs_tiki_taka_plus_LK, t=125-136 s)."""
+    friendly = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, -1.5, 1.5, True)}
+    enemy = {4: _robot(4, 1.0, 0.0, False, has_ball=True)}
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=Ball(p=Vector3D(0.91, 0.0, 0.0), v=zv, a=zv),
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+    tactic = DecoyOverloadTactic()
+    mem = DecoyOverloadMem(decoy_id=1, overloader_id=3, marker_id=4, marker_start_y=0.0, phase="lure")
+    ctx = TickContext(motion_controller=_NullMotionController())
+    for _ in range(held_ticks):
+        _commands, mem = tactic.tick(game, ctx, (1, 3), mem)
+    assert tactic.is_committed(game, mem) is not released

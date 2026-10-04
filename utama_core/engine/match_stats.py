@@ -130,8 +130,9 @@ class StallEvent:
     duration_s: float
     tactic_ids: tuple = ()
     robot_ids: tuple = ()
-    # RESTART_STALL only: why the restart can't be taken, from the onset frame (see
-    # `_diagnose_restart`), e.g. "ball in goal" or "taker not closing: 1.55m -> 1.55m".
+    # Why it stalled, from the onset frame. RESTART_STALL: why the restart can't be taken
+    # (`_diagnose_restart`), e.g. "ball in goal". COMMITTED_FROZEN: who holds the ball and how
+    # far each committed robot is from it (`_diagnose_frozen`).
     diagnosis: str = ""
 
 
@@ -171,6 +172,21 @@ def _diagnose_restart(game_frame: GameFrame, command: RefereeCommand, taker_star
         return f"taker at ball ({now_m:.2f}m) but restart not taken"
     start = f"{taker_start_m:.2f}m -> " if taker_start_m is not None else ""
     return f"taker not closing: {start}{now_m:.2f}m from ball at ({ball.p.x:.2f}, {ball.p.y:.2f})"
+
+
+def _diagnose_frozen(game_frame: GameFrame, robot_ids: tuple) -> str:
+    """One line on a COMMITTED_FROZEN stall: who holds the ball, and each committed
+    robot's distance from it, e.g. "enemy 4 holds the ball; committed 3: 0.31m, 4: 2.10m"."""
+    ball = game_frame.ball
+    holders = [f"friendly {r.id}" for r in game_frame.friendly_robots.values() if r.has_ball]
+    holders += [f"enemy {r.id}" for r in game_frame.enemy_robots.values() if r.has_ball]
+    held = f"{' and '.join(holders)} holds the ball" if holders else "nobody holds the ball"
+    distances = [
+        f"{rid}: {math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y):.2f}m"
+        for rid in robot_ids
+        if (r := game_frame.friendly_robots.get(rid)) is not None
+    ]
+    return f"{held}; committed {', '.join(distances)}" if distances else held
 
 
 @dataclass
@@ -1005,6 +1021,7 @@ class MatchStatsAccumulator:
                     duration_s=frozen_for,
                     tactic_ids=committed_tactic_ids,
                     robot_ids=committed_robot_ids,
+                    diagnosis=_diagnose_frozen(game_frame, committed_robot_ids),
                 )
             )
         elif self._committed_frozen_event_idx is not None:
