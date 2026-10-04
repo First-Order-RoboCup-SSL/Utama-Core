@@ -174,7 +174,7 @@ class GameStateMachine:
         self._advance2_ready_since: float = math.inf  # PREPARE_* → NORMAL_START
         self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
-        # Last Defender Too Close foul; restarts the free kick's clock.
+        # First Defender Too Close foul of the current free kick; restarts its clock.
         self._defender_too_close_at: float = -math.inf
 
         # Cooldown: don't process a new violation within this window.
@@ -817,7 +817,11 @@ class GameStateMachine:
             # command_counter bump reads as a real transition to every
             # other piece of code that watches it, e.g. rule.reset()).
             logger.info("Non-stopping foul detected: %s", violation.rule_name)
-            if violation.rule_name == "keep_out":
+            # §8.4.3 resets the timer on every Defender Too Close foul, and repeat fouls
+            # earn cards. Our cards never take a robot off, so a defender parked inside
+            # 0.5 m (keep_out re-raises every 2 s) held a free kick for the rest of a
+            # match. Only the first foul of each free kick restarts the clock.
+            if violation.rule_name == "keep_out" and self._defender_too_close_at < self.command_timestamp:
                 self._defender_too_close_at = current_time
             return
 
