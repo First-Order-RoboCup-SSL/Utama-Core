@@ -45,9 +45,10 @@ unless `--allow-failures`; `--output-dir PATH` redirects output.
 Opponents with a target or a moving target point drive with the selected scheme; the others stay
 put (`sudden_obstacle`'s is teleported into the corridor).
 
-Latest full run: `benchmark_results/motion_planning_20261003_071923.md` (1.5 min wall for all 57
-cells). fpp passes 18 of 19 (`mirror_swap` times out, 8 of 12 robots home, no collision);
-trajsample fails `mirror_swap` with a collision; dwa collides in 9.
+Latest full run: `benchmark_results/motion_planning_20261004_222719.md` (about 1.5 min wall for all
+57 cells). fpp and trajsample pass all 19; dwa collides in 9. `mirror_swap` used to time out for
+fpp because four targets sat on the opponent's defense-area edge, which planners keep outfield
+robots away from; its back-row targets are now at |x| = 2.9.
 
 ## Pass/fail and metrics
 

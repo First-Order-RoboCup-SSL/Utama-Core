@@ -234,6 +234,9 @@ SCENARIOS = {
         Scenario(
             name="mirror_swap",
             description="Six-versus-six mirrored swap with a deterministic 2 cm symmetry break.",
+            # Back-row targets at |x| = 2.9, not 3.5 where they start: 3.5 is the opponent's
+            # defense-area edge, which planners keep outfield robots ~0.5 m away from, so four
+            # robots stopped at |x| = 2.98 and the cell always timed out.
             friendly_starts=(
                 (-2.5, -1.5),
                 (-2.5, -0.5),
@@ -247,8 +250,8 @@ SCENARIOS = {
                 (2.5, -0.5),
                 (2.5, 0.5),
                 (2.5, 1.5),
-                (3.5, -0.75),
-                (3.5, 0.75),
+                (2.9, -0.75),
+                (2.9, 0.75),
             ),
             enemy_starts=(
                 (2.5, -1.48),
@@ -263,8 +266,8 @@ SCENARIOS = {
                 (-2.5, -0.5),
                 (-2.5, 0.5),
                 (-2.5, 1.5),
-                (-3.5, -0.75),
-                (-3.5, 0.75),
+                (-2.9, -0.75),
+                (-2.9, 0.75),
             ),
             timeout_s=45.0,
             endpoint_tolerance_m=0.3,

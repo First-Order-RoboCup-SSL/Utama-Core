@@ -283,9 +283,9 @@ class FastPathPlanner:
         SSL violation took priority. KNOWN TRADE-OFF: this also redirects a
         target placed deliberately at/near the exact boundary line even when
         that target isn't itself a violation — e.g. `test_mirror_swap`'s
-        formation spots at (3.5, ±0.75), which sit precisely on a
-        standard-field defense area's edge, now fail that (synthetic, not
-        real-gameplay) test. `margin` is kept as a parameter rather than
+        formation spots used to sit at (3.5, ±0.75), precisely on a
+        standard-field defense area's edge, and stopped ~0.5 m short (its
+        targets are now at 2.9). `margin` is kept as a parameter rather than
         hardcoded so a future, better-tuned fix (e.g. a velocity-aware margin)
         can revisit this per call site without re-deriving the rectangle logic.
 
