@@ -1,7 +1,6 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
-`build_*_kernel_strategy` config against every other, at smoke-test speed
-(`MATCH_DURATION_SECONDS` below — short matches, not full-length; see
-`full_match_tournament.py` for the full-length/competitive-tier counterpart).
+`build_*_kernel_strategy` config against every other, one full-length match per pair
+(`MATCH_DURATION_SECONDS` below; `full_match_tournament.py` also sweeps side and kickoff).
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
@@ -103,12 +102,11 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 
-# 60s of intended play, +5s for a real PREPARE_KICKOFF_YELLOW ceremony
-# (prepare_duration_seconds=3.0 in the "simulation" profile, plus the kicker's
-# walk to the centre circle — observed ~5s total; see run_match's
-# referee_initial_command) so a "60s" tournament match still gets 60s of live
-# play rather than 60s minus ceremony overhead.
-MATCH_DURATION_SECONDS = 65.0
+# A full match: two 300s halves. Shorter matches rank differently: 65s matches were
+# 55% draws, and 16 of 40 full matches (replays/tournament_20261003_102921) changed
+# result after 180s, enough to reorder the top of the table. rsim is deterministic, so
+# a short match is exactly the start of the full one; it just stops before it's decided.
+MATCH_DURATION_SECONDS = 600.0
 
 
 def run_match(
@@ -269,10 +267,10 @@ def main() -> None:
         fuzz_seed = int(args[idx + 1])
         args = args[:idx] + args[idx + 2 :]
     # `--fuzz-interval LO HI` sets the (sim-second) gap range between
-    # injections when `--fuzz-restarts` is on. Default 25-45s: over a 65s
-    # match this means one or two injections, not the 8-20s range in
+    # injections when `--fuzz-restarts` is on. Default 25-45s: about 17
+    # injections over a full match, not the 8-20s range in
     # RestartFuzzingReferee's own docstring, which is a stress-test example,
-    # not a sane default for a normal round-robin match length.
+    # not a sane default for a normal round-robin.
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0)
     if "--fuzz-interval" in args:
         idx = args.index("--fuzz-interval")

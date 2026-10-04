@@ -345,7 +345,7 @@ def test_first_touch_stuck_eventually_force_shoots_instead_of_repositioning_fore
 # attacking third when the field ahead is open.
 
 
-def _make_relocate_game(my_team_is_right: bool, ball_x: float = 0.0) -> Game:
+def _make_relocate_game(my_team_is_right: bool, ball_x: float = 0.0, support_pos: Optional[Vector2D] = None) -> Game:
     friendly = {
         1: Robot(
             id=1,
@@ -360,7 +360,7 @@ def _make_relocate_game(my_team_is_right: bool, ball_x: float = 0.0) -> Game:
             id=2,
             is_friendly=True,
             has_ball=False,
-            p=Vector2D(ball_x - 0.5, -1.0),
+            p=support_pos if support_pos is not None else Vector2D(ball_x - 0.5, -1.0),
             v=Vector2D(0, 0),
             a=Vector2D(0, 0),
             orientation=0.0,
@@ -392,6 +392,18 @@ def _make_relocate_game(my_team_is_right: bool, ball_x: float = 0.0) -> Game:
         field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
     )
     return Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+
+def test_a_support_robot_that_reaches_its_relocate_target_keeps_it():
+    """Candidates used to be offset from the robot's own y and the tie-break
+    preferred the farthest one, so a robot that reached its target got a new
+    one 2.2 m to the other side, every time (tournament_20261003_102921: a
+    support robot's y went -1.9 -> +1.86 -> -2.3 -> +1.97 in 4 s while the
+    ball sat still). Arriving must not move the target."""
+    game = _make_relocate_game(my_team_is_right=False, ball_x=0.0, support_pos=Vector2D(1.0, -1.9))
+    target = _relocate_target(game, 2, avoid=[Vector2D(0.0, 0.0)])
+    arrived = _make_relocate_game(my_team_is_right=False, ball_x=0.0, support_pos=target)
+    assert _relocate_target(arrived, 2, avoid=[Vector2D(0.0, 0.0)]).distance_to(target) < 1e-9
 
 
 def test_relocate_target_advances_toward_enemy_goal_when_attacking_negative_x():

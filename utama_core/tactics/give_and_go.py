@@ -237,9 +237,14 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
     # *overshoot past the cap*, not silently no-op or clamp the wrong way.
     clamp = min if attack_sign > 0 else max
 
+    # Offsets from the ball, not from this robot: offsets from the robot's own
+    # y, with the farthest candidate preferred, gave a robot that reached its
+    # target a new one 2.2 m to the other side, so support runs swung side to
+    # side forever and robots circled each other (tournament_20261003_102921).
+    ball_y = game.ball.p.to_2d().y
     candidates = [
         Vector2D(
-            clamp(ball_x + attack_sign * dx, forward_cap), max(-half_width + 0.6, min(half_width - 0.6, current.y + dy))
+            clamp(ball_x + attack_sign * dx, forward_cap), max(-half_width + 0.6, min(half_width - 0.6, ball_y + dy))
         )
         for dx in (0.5, 1.0, 1.8, 2.8, 4.0)
         for dy in (-1.2, 1.2, -2.2, 2.2)
@@ -250,11 +255,10 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
             continue
         # Prefer real progress toward the attacking goal first (so a deep,
         # reachable run beats a short lateral shuffle); among similarly
-        # advanced options, prefer whichever is farther from this robot's
-        # current spot (the tactic's own existing tie-break, kept as-is —
-        # spreads support robots apart rather than clustering them).
+        # advanced options, the one nearest this robot, so the target holds
+        # still once reached. `avoid` already keeps support robots apart.
         progress = point.x * attack_sign
-        key = (progress, point.distance_to(current))
+        key = (progress, -point.distance_to(current))
         if best_progress is None or key > best_progress:
             best, best_progress = point, key
     return best if best is not None else current
