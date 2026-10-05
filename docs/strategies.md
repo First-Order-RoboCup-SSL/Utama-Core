@@ -60,12 +60,15 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 `replays/tournament_20261004_204810/summary.json`). Points are 3 a win, 1 a draw; 24 of 231
 matches were draws (65s matches were 55%).
 
-This run predates two fixes in the same PR (#141), so a rerun may move a few places:
+This run predates three fixes in the same PR (#141), so a rerun will move places:
 `DecoyOverloadTactic` now releases its robots once the enemy has held the ball 1 s (used by
 `decoy_and_overload`, `overload_press`, `clear_press_plus`, `tiki_taka_plus`), and a defender
 standing inside 0.5 m can no longer hold a free kick forever. That freeze ran to full time in
 `counter_flow` 1-2 `split_shape` and `decoy_and_overload` 3-6 `split_shape` (frozen with
-`split_shape` ahead) and for the last minute of `low_block` 1-1 `score_aware_zone_flow`.
+`split_shape` ahead) and for the last minute of `low_block` 1-1 `score_aware_zone_flow`. Above all, a ball over a
+goal line now restarts in the corner (corner or goal kick, as the rulebook says) instead of as
+a free kick 2 m in front of goal: 521 such kicks gave 150 goals in this run, and `split_shape`
+converted 69% of its own. Without them its lead over `counter_flow` drops from 11 points to 1.
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|

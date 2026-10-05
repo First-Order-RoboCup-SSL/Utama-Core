@@ -222,12 +222,31 @@ class TestOutOfBoundsDefenseAreaProjection:
         assert v.designated_position is not None
         assert not GEO.is_in_left_defense_area(*v.designated_position)
         assert not GEO.is_in_right_defense_area(*v.designated_position)
-        # Left defense area's inner edge is at -3.5 (half_length - 2*depth);
-        # the legal projection sits the rulebook's 1 m free-kick distance
-        # outside it -- see `legal_restart_position`.
-        px, py = v.designated_position
-        assert px == pytest.approx(-2.5)
-        assert py == pytest.approx(0.576)
+
+    # A ball over a goal line restarts in the corner (§6.2.1-2), not where it
+    # crossed: that spot, pushed 1 m off the box, was a free kick 2 m in front of
+    # goal (521 of them, 150 goals, tournament_20261004_204810).
+    @pytest.mark.parametrize(
+        "toucher_is_friendly,expected",
+        [
+            (True, (-4.0, 2.5)),  # friendly defends the left goal: corner kick, 0.5 m from both lines
+            (False, (-3.5, 2.5)),  # enemy attacked it: goal kick, 1 m from the goal line
+        ],
+    )
+    def test_goal_line_exit_restarts_in_the_corner(self, toucher_is_friendly, expected):
+        rule = OutOfBoundsRule()
+        toucher = {0: _robot(0, -3.0, 0.5, is_friendly=toucher_is_friendly, has_ball=True)}
+        robots = {"friendly_robots": toucher} if toucher_is_friendly else {"enemy_robots": toucher}
+        frame_touch = _frame(ball=_ball(-3.0, 0.5), my_team_is_right=False, my_team_is_yellow=True, **robots)
+        assert rule.check(frame_touch, GEO, RefereeCommand.NORMAL_START) is None
+
+        frame_out = _frame(ball=_ball(-4.6, 0.576), my_team_is_right=False, my_team_is_yellow=True)
+        v = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.next_command == (
+            RefereeCommand.DIRECT_FREE_BLUE if toucher_is_friendly else RefereeCommand.DIRECT_FREE_YELLOW
+        )
+        assert v.designated_position == pytest.approx(expected)
 
     def test_out_of_bounds_far_from_any_defense_area_is_unaffected(self):
         # A sideline out-of-bounds well clear of either box needs no

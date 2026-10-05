@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
@@ -22,6 +23,8 @@ _INFIELD_OFFSET = 0.25  # metres inside the boundary for a playable free-kick pl
 # (as little as 0.08m observed live, see _nearest_infield_point's docstring), which
 # is robot-body scale. Deeper offset used only when both axes are being clamped.
 _CORNER_INFIELD_OFFSET = 0.5
+# §6.2.1: a goal kick sits 1 m from the goal line.
+_GOAL_KICK_DISTANCE = 1.0
 
 
 class OutOfBoundsRule(BaseRule):
@@ -63,7 +66,10 @@ class OutOfBoundsRule(BaseRule):
 
         # Determine which team gets the free kick (non-touching team).
         free_kick_cmd = self._assign_free_kick(game_frame)
-        placement = self._nearest_infield_point(bx, by, geometry)
+        # Over a goal line: a corner kick when the goal's own team touched it last.
+        crossed_friendly_goal_line = (bx > 0) == game_frame.my_team_is_right
+        corner_kick = self._last_touch_was_friendly == crossed_friendly_goal_line
+        placement = self._nearest_infield_point(bx, by, geometry, corner_kick)
 
         return RuleViolation(
             rule_name="out_of_bounds",
@@ -111,9 +117,18 @@ class OutOfBoundsRule(BaseRule):
                 return RefereeCommand.DIRECT_FREE_BLUE
 
     @staticmethod
-    def _nearest_infield_point(bx: float, by: float, geometry: RefereeGeometry) -> tuple[float, float]:
+    def _nearest_infield_point(
+        bx: float, by: float, geometry: RefereeGeometry, corner_kick: bool = False
+    ) -> tuple[float, float]:
         """Return the nearest point on the field boundary, offset inward, and
         clear of both defense areas.
+
+        A ball over a goal line instead restarts in the corner nearer `by`, as
+        §6.2.1–2 place goal and corner kicks: `_CORNER_INFIELD_OFFSET` from both
+        lines for a corner kick (`corner_kick`), `_GOAL_KICK_DISTANCE` from the
+        goal line for a goal kick. Placing it where it crossed, pushed 1 m off
+        the box, gave the attackers a free kick 2 m in front of goal: 521 of them
+        and 150 goals in tournament_20261004_204810.
 
         The boundary offset alone (`_INFIELD_OFFSET` = 0.25m) is shallower
         than a defense area's depth (`half_defense_depth`, 0.5m on the
@@ -155,6 +170,11 @@ class OutOfBoundsRule(BaseRule):
         whichever axis wasn't the "nearer" one at its raw clamped value.
         """
         near_x_boundary = abs(bx) > geometry.half_length
+        if near_x_boundary:
+            depth = _CORNER_INFIELD_OFFSET if corner_kick else _GOAL_KICK_DISTANCE
+            px = math.copysign(geometry.half_length - depth, bx)
+            py = math.copysign(geometry.half_width - _CORNER_INFIELD_OFFSET, by)
+            return geometry.legal_restart_position(px, py, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         near_y_boundary = abs(by) > geometry.half_width
         # Corner detection must look at the RAW exit position on the axis
         # that wasn't clamped too, not just "was this axis itself out of
@@ -181,10 +201,9 @@ class OutOfBoundsRule(BaseRule):
         px = max(-geometry.half_length, min(geometry.half_length, bx))
         py = max(-geometry.half_width, min(geometry.half_width, by))
 
-        # If clamped on x boundary (or a corner pushed the offset deeper than
-        # the raw in-field x already sat from the goal line), offset inward
-        # along x.
-        if near_x_boundary or (near_corner and geometry.half_length - abs(bx) < offset):
+        # If a corner pushed the offset deeper than the raw in-field x already
+        # sat from the goal line, offset inward along x.
+        if near_corner and geometry.half_length - abs(bx) < offset:
             sign = 1.0 if bx > 0 else -1.0
             px = sign * (geometry.half_length - offset)
 
