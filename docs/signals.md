@@ -25,6 +25,9 @@ Every saved `tools/tournament/round_robin.py` run prints its sections and writes
 | — | `results[*].stats` | per-match `MatchStats`, everything above per match |
 | — | `run` | git commit, dirty flag, argv: compare runs only at clean commits |
 
+**Figures:** [`signal_report.md`](signal_report.md) draws the main signals for the latest full
+round-robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on what stands out.
+
 **Offline only** (not in a round-robin's output): `tools/metric_correlation.py <run_dir> ...`
 replays a run at 10 Hz for the signals marked *offline* below.
 

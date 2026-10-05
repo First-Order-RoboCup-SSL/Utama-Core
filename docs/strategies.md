@@ -63,7 +63,8 @@ Against the previous run (tournament_20261004_204810, same configs, before this 
 tactic fixes): goal-line exits now restart in the corner instead of 2 m in front of goal,
 `no_progress` restarts fell from 699 to 296 and keep-out fouls from 245 to 26, and
 `split_shape`'s lead over second place fell from 0.52 to 0.28 points per match.
-Out-of-bounds restarts rose from 2446 to 2938; not yet looked into.
+Out-of-bounds restarts rose from 2446 to 2938; not yet looked into. What each strategy does
+well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
