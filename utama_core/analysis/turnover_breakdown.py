@@ -26,6 +26,9 @@ teammate's dribbler, or missed although the ball came within reach of a teammate
 ball speed, receiver speed and receiver facing at the closest point — the three usual reasons
 a reception fails.
 
+The same pass feeds `chances.ChanceTracker` (shots, regains, danger, free kicks, both
+sides); its record is under `chances`.
+
 Friendly is always `config_a` (yellow): `tournament_lib.run_match` writes the intentions log,
 used for tactic attribution, for that side only.
 """
@@ -41,6 +44,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
 
+from utama_core.analysis.chances import ChanceTracker
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.engine.match_stats import _POSSESSION_RADIUS_M, MatchStatsAccumulator
@@ -216,6 +220,8 @@ def analyse_match(npz_path: str) -> dict:
     half_len = STANDARD_FIELD_DIMS.full_field_half_length
     half_wid = STANDARD_FIELD_DIMS.full_field_half_width
 
+    chance_tracker = ChanceTracker()
+
     for frame in frames:
         cmd = frame.referee.referee_command if frame.referee else None
         attack_sign = -1.0 if frame.my_team_is_right else 1.0
@@ -268,7 +274,9 @@ def analyse_match(npz_path: str) -> dict:
 
         prev_side, prev_robot = acc._poss_side, acc._poss_robot_id
         prev_turnovers = acc._turnovers
+        shots_before = dict(acc._shots)
         acc.record_tick(frame)
+        chance_tracker.step(frame, acc, cmd, live_since, shots_before)
         if in_flight is not None:
             enemy_has_it = acc._poss_side == "enemy" or any(r.has_ball for r in frame.enemy_robots.values())
             finished = in_flight.step(frame, cmd in LIVE, enemy_has_it)
@@ -317,6 +325,7 @@ def analyse_match(npz_path: str) -> dict:
         "restarts": restarts,
         "passes": passes,
         "acc_turnovers": acc._turnovers,
+        "chances": chance_tracker.result(),
     }
 
 

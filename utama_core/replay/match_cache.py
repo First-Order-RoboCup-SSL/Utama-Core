@@ -4,8 +4,10 @@ An rsim match is deterministic, so a result is a function of `fingerprint.match_
 both sides' code, the shared code and environment, and the run settings. A record holds
 everything `round_robin.py` reads from a played match: the result and its stats, the
 restart episodes (`restart_outcomes.analyse_match`) and the ball-loss record
-(`turnover_breakdown.analyse_match`). No replay is stored; `--pair A B` plays any match
-again, byte for byte.
+(`turnover_breakdown.analyse_match`, with its `chances`). No replay is stored; `--pair A B`
+plays any match again, byte for byte. The analysis code is not in the key: a record keeps
+the analysis it was stored with, so after changing it, refresh the records from a run's
+replays or the spot-check will report the difference.
 
 A fingerprint can miss a dependency (see `fingerprint.py`'s "Known gaps"), so a run also
 replays a sample of the matches it would reuse (`spot_check_sample`) and compares the

@@ -97,7 +97,7 @@ from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for c
     _stats_to_dict,
 )
 from tools.tournament.tournament_lib import run_match as _lib_run_match
-from utama_core.analysis import restart_outcomes, turnover_breakdown
+from utama_core.analysis import chances, restart_outcomes, turnover_breakdown
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
@@ -526,6 +526,7 @@ def main() -> None:
         ),
     }
     real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
+    chances_by_match: dict[str, dict] = {}
     mismatches: list[tuple[str, str]] = []
     if run_dir is not None:
         summary_path = run_dir / "summary.json"
@@ -554,10 +555,13 @@ def main() -> None:
             (run_dir / "ball_losses.md").write_text(turnover_breakdown.report(run_id, losses, summary))
             _print_ball_losses(summary["ball_losses"], run_id)
             real_losses_by_match = {r["match"]: turnover_breakdown.real_loss_kinds(r) for r in losses}
+            # Records stored before chances were measured have none: their matches are left out.
+            chances_by_match = {r["match"]: r["chances"] for r in losses if "chances" in r}
 
-    summary["strategies"] = strategy_table(summary["results"], real_losses_by_match)
+    summary["strategies"] = strategy_table(summary["results"], real_losses_by_match, chances_by_match)
     _print_strategy_table(summary["strategies"])
     _print_loss_kinds(summary["strategies"])
+    _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
     _print_foul_table(summary["fouls"])
     if run_dir is not None:
@@ -671,7 +675,9 @@ def _run_metadata() -> dict:
 
 
 def strategy_table(
-    results: list[dict], real_losses_by_match: Optional[dict[str, dict[str, int]]] = None
+    results: list[dict],
+    real_losses_by_match: Optional[dict[str, dict[str, int]]] = None,
+    chances_by_match: Optional[dict[str, dict]] = None,
 ) -> dict[str, dict]:
     """Per-strategy totals over `summary.json`-shaped `results`. Match stats are from
     config_a's side, so config_b reads the `enemy_*` counterparts. Real ball losses are only
@@ -679,8 +685,13 @@ def strategy_table(
     matches a strategy played as config_a (`matches_as_a`), in total and by kind
     (`turnover_breakdown.TURNOVER_KINDS` and `RESTART_KINDS`). `stalled` counts matches that
     recorded a stall event or tripped the possession backstop: their result is still in
-    W-D-L, flagged rather than dropped, since a stall can be the strategy's own fault."""
+    W-D-L, flagged rather than dropped, since a stall can be the strategy's own fault.
+    `chances` (`analysis.chances.rates`) is measured for both sides, over the matches in
+    `chances_by_match`; `pass_progress_m` is the mean metres gained toward goal per
+    completed pass, `forward_pass_share` the share gaining at least 1 m."""
     table: dict[str, dict] = {}
+    chance_totals: dict[str, dict[str, float]] = {}
+    progress: dict[str, list[float]] = {}
     for r in results:
         stats = r.get("stats") or {}
         fouls = stats.get("fouls_by_side") or {}
@@ -716,12 +727,20 @@ def strategy_table(
             row["attacking_third_entries"] += stats.get(f"{prefix}attacking_third_entries", 0)
             row["fouls"] += sum((fouls.get(own) or {}).values())
             row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
+            progress.setdefault(name, []).extend(stats.get(f"{prefix}pass_progress_m") or [])
+            if chances_by_match and tag in chances_by_match:
+                chances.add(chance_totals.setdefault(name, {}), chances.side_totals(chances_by_match[tag], own))
             if is_a and real_losses_by_match is not None and tag in real_losses_by_match:
                 row["matches_as_a"] += 1
                 kinds = real_losses_by_match[tag]
                 row["real_losses_as_a"] += sum(kinds.values())
                 for kind, n in kinds.items():
                     row["real_loss_kinds_as_a"][kind] = row["real_loss_kinds_as_a"].get(kind, 0) + n
+    for name, row in table.items():
+        gains = progress.get(name, [])
+        row["pass_progress_m"] = round(sum(gains) / len(gains), 2) if gains else None
+        row["forward_pass_share"] = round(sum(g >= 1.0 for g in gains) / len(gains), 2) if gains else None
+        row["chances"] = chances.rates(chance_totals.get(name, {}))
     return table
 
 
@@ -826,6 +845,39 @@ def _print_loss_kinds(table: dict[str, dict]) -> None:
         n = t["matches_as_a"]
         print(
             f"  {_short_name(name):<32} " + " ".join(f"{t['real_loss_kinds_as_a'].get(k, 0) / n:>11.2f}" for k in kinds)
+        )
+
+
+def _print_chances(table: dict[str, dict]) -> None:
+    """Chances created and conceded per strategy, both sides (`analysis.chances`)."""
+    rows = {name: t for name, t in table.items() if t["chances"]["matches"]}
+    if not rows:
+        return
+
+    def pct(v: Optional[float]) -> str:
+        return f"{v:.0%}" if v is not None else "-"
+
+    def num(v: Optional[float]) -> str:
+        return f"{v:.1f}" if v is not None else "-"
+
+    print(
+        "\nCHANCES (both sides; conv = goals per shot, open = goal mouth unblocked at the shot, "
+        "regain>shot = open-play regains shot from within 10 s, danger = s/match the enemy held "
+        "the ball in our defensive third, fk>shot = free kicks shot from within 10 s, "
+        "progress = m gained per completed pass):"
+    )
+    print(
+        f"  {'strategy':<28} {'shots':>6} {'conv':>5} {'dist':>5} {'open':>5} {'save':>5} {'open vs':>7} "
+        f"{'regain>shot':>11} {'secs':>5} {'danger':>6} {'fk>shot':>7} {'progress':>8} {'fwd':>4}"
+    )
+    for name, t in sorted(rows.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
+        c = t["chances"]
+        print(
+            f"  {_short_name(name):<28} {c['shots'] / c['matches']:>6.1f} {pct(c['conversion']):>5} "
+            f"{num(c['shot_distance_m']):>5} {pct(c['shot_open_goal']):>5} {pct(c['save_rate']):>5} "
+            f"{pct(c['faced_open_goal']):>7} {pct(c['regain_to_shot']):>11} {num(c['regain_to_shot_s']):>5} "
+            f"{num(c['danger_s_per_match']):>6} {pct(c['free_kick_to_shot']):>7} "
+            f"{num(t['pass_progress_m']):>8} {pct(t['forward_pass_share']):>4}"
         )
 
 
