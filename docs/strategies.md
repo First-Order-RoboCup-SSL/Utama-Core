@@ -128,10 +128,6 @@ separated them. Prefer full-length results when ranking.
 Writeups of bugs since fixed were removed from this file; code comments that cite "Known open
 bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still open:
 
-- **`go_to_ball`'s dribbler-back approach angle is a no-op**
-  (`skills/src/go_to_ball.py:130`): `(approach_oren + pi) % (2pi) - pi` is an identity on an
-  already-normalized angle, so every approach faces the ball head-on. A correct flip was
-  reverted because it broke `test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball`.
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. Both are baselines, so
   not worth fixing for its own sake.
