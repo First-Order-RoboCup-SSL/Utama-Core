@@ -1641,7 +1641,13 @@ class StrategyRunner:
                     # (added alongside this fix), 2026-09-04.
                     x, y = ref_data.designated_position
                     self._teleport_ball_and_settle(x, y)
-                    self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+                    # A queued FORCE_START (no_progress, a no-fault push) restarts the ball
+                    # where it is, so StopStep has to separate the robots first; the state
+                    # machine advances once all are 0.5 m clear. Forced on the same tick, two
+                    # robots locked on the ball never let go: no_progress fired every 10 s for
+                    # 230 s of tiki_taka_plus_vs_zone_fluid (tournament_20261005_115048).
+                    if ref_data.next_command != RefereeCommand.FORCE_START:
+                        self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
                 elif (
                     ref_data.referee_command in _BALL_PLACEMENT_COMMANDS
                     and self._prev_custom_ref_command not in _BALL_PLACEMENT_COMMANDS
