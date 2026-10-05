@@ -56,7 +56,11 @@ degenerate one-slot partition (`Strategy.single_tactic_picker` adapts a
 and removed as duplicated machinery. Consequences, each learned from a bug:
 - Commitment is per slot: a committed slot pins only its own robots; the `Partitioner` only
   ever sees the free pool, so it cannot propose reassigning a pinned robot.
-- `mem` resets exactly when a slot's robot set changes (compared as sets).
+- `mem` resets exactly when a slot's robot set changes (compared as sets), unless the
+  tactic sets `keeps_mem_on_robot_change` (only `GiveAndGoTactic`: its hold-once flag and hop
+  count belong to the possession, and pickers moving robots in and out re-armed the 4 s hold).
+  Such a tactic must cope with a role holder leaving. A released slot, a barrier reset and a
+  deadline release still give a fresh `mem`.
 - A slot absent from the partition is cleared, not left stale; a slot with zero robots is
   not ticked.
 - A free robot need not be assigned; an uncovered robot simply isn't ticked.

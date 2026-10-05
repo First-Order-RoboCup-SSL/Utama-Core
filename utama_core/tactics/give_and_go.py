@@ -288,6 +288,11 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
     """
 
     tag = TacticTag.ATTACK
+    # The hold-once flag and hop count belong to the possession, not the robot set:
+    # wiped every time a picker moved a robot in or out (every ~6 s in overload_flow),
+    # the 4 s no-receiver hold came back until the referee's 10 s no_progress stop.
+    # `tick` starts over when the carrier leaves and drops a receiver that left.
+    keeps_mem_on_robot_change = True
 
     def initial_mem(self) -> GiveAndGoMem:
         return GiveAndGoMem()
@@ -331,7 +336,11 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GiveAndGoMem
     ) -> tuple[dict[RobotId, RobotCommand], GiveAndGoMem]:
-        if mem.carrier_id is None or mem.carrier_id not in robot_ids:
+        if mem.carrier_id is not None and mem.carrier_id not in robot_ids:
+            mem = GiveAndGoMem()  # the carrier left the slot: a new possession for this tactic
+        if mem.receiver_id is not None and mem.receiver_id not in robot_ids:
+            mem.receiver_id, mem.hop_ticks, mem.lane_blocked_ticks = None, 0, 0
+        if mem.carrier_id is None:
             # `robot_ids` arrives numerically sorted by the scheduler (see
             # `Strategy._run_step`'s `tuple(sorted(robot_ids))`), not ordered
             # by proximity -- `robot_ids[0]` here previously meant "whichever

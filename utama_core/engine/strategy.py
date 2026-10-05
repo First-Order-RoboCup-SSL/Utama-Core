@@ -420,7 +420,9 @@ class Strategy:
             slot = self._slot_for(tactic_id)
 
             if slot.assigned_robots != robot_ids:
-                slot.mem = slot.tactic.initial_mem() if robot_ids else None
+                keep_mem = slot.mem is not None and getattr(slot.tactic, "keeps_mem_on_robot_change", False)
+                if not keep_mem:
+                    slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
                 slot.commit_started_ts = None

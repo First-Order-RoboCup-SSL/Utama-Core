@@ -577,3 +577,54 @@ def test_receiver_keeps_meeting_the_pass_once_the_carrier_has_released_it():
     assert target.y == pytest.approx(0.0, abs=1e-6)
     assert commands[2].dribble
     assert mem.receiver_id == 2
+
+
+def test_hold_does_not_come_back_when_a_robot_leaves_the_slot():
+    """The once-per-possession hold lived in `mem`, which the kernel wiped whenever
+    the slot's robot set changed: a picker moving robots in and out (every ~6 s in
+    overload_flow) re-armed the 4 s hold until the referee's 10 s no_progress stop
+    (overload_flow_vs_tiki_taka_plus_LK, 565-575 s). Robot 5 leaving must not."""
+    from utama_core.engine.strategy import Strategy
+
+    def robot(rid, x, y, friendly, has_ball=False):
+        z = Vector2D(0, 0)
+        return Robot(id=rid, is_friendly=friendly, has_ball=has_ball, p=Vector2D(x, y), v=z, a=z, orientation=0.0)
+
+    friendly = {1: robot(1, 0.0, 0.0, True, True), 2: robot(2, 1.0, 0.0, True), 5: robot(5, -1.0, 0.0, True)}
+    enemy = {3: robot(3, 0.5, 0.0, False), 4: robot(4, -0.3, 0.0, False)}  # both lanes and the shot blocked
+    ball = Ball(Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
+    frame = GameFrame(
+        ts=0.0, my_team_is_yellow=True, my_team_is_right=True, friendly_robots=friendly, enemy_robots=enemy, ball=ball
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+    robots = {"slot": frozenset({1, 2, 5})}
+    ctx = TickContext(motion_controller=_PerRobotMotionController(), match_log=None)
+    strategy = Strategy(
+        tactics={"givego": GiveAndGoTactic()},
+        partitioner=lambda game, free_robots, prev, available_tactic_ids: {"givego": robots["slot"]},
+        outfield_robot_ids=(1, 2, 5),
+        ctx=ctx,
+    )
+    for _ in range(_MAX_HOP_TICKS + 1):  # the hold runs out
+        strategy.tick(game)
+    assert strategy._slots["givego"].mem.first_touch_hold_spent
+
+    robots["slot"] = frozenset({1, 2})  # robot 5 goes to another slot
+    for _ in range(3):
+        strategy.tick(game)
+    assert ctx.motion_controller.targets[1].distance_to(Vector2D(0.0, 0.0)) > 0.5  # still moving, not holding
+
+
+def test_a_receiver_that_left_the_slot_is_dropped():
+    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.0, 0.0), enemy_pos=Vector2D(0.5, 0.0))
+    ctx = TickContext(motion_controller=_NullMotionController(), match_log=None)
+    mem = GiveAndGoMem(carrier_id=1, receiver_id=5, hop_ticks=30, hop_count=1)
+
+    _, mem = GiveAndGoTactic().tick(game, ctx, (1, 2), mem)
+
+    assert mem.receiver_id != 5
+    assert mem.carrier_id == 1 and mem.hop_count == 1  # the possession is still the same one
