@@ -55,45 +55,40 @@ only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
 ## Latest results
 
-**Round-robin, full catalog** (2026-10-04, strategy-guard at 1c29a4e8, 22 configs, 231 matches,
-600s, `--strict`, about 2h45m wall on 15 workers sharing the machine,
-`replays/tournament_20261004_204810/summary.json`). Points are 3 a win, 1 a draw; 24 of 231
-matches were draws (65s matches were 55%).
+**Round-robin, full catalog** (2026-10-05, strategy-guard at b26f5b37, 22 configs, 231 matches,
+600s, `replays/tournament_20261005_170958/summary.json`). Points are 3 a win, 1 a draw; 33 of 231
+matches were draws. 10 matches stalled (9 committed-frozen, 1 restart stall).
 
-This run predates three fixes in the same PR (#141), so a rerun will move places:
-`DecoyOverloadTactic` now releases its robots once the enemy has held the ball 1 s (used by
-`decoy_and_overload`, `overload_press`, `clear_press_plus`, `tiki_taka_plus`), and a defender
-standing inside 0.5 m can no longer hold a free kick forever. That freeze ran to full time in
-`counter_flow` 1-2 `split_shape` and `decoy_and_overload` 3-6 `split_shape` (frozen with
-`split_shape` ahead) and for the last minute of `low_block` 1-1 `score_aware_zone_flow`. Above all, a ball over a
-goal line now restarts in the corner (corner or goal kick, as the rulebook says) instead of as
-a free kick 2 m in front of goal: 521 such kicks gave 150 goals in this run, and `split_shape`
-converted 69% of its own. Without them its lead over `counter_flow` drops from 11 points to 1.
+Against the previous run (tournament_20261004_204810, same configs, before this PR's referee and
+tactic fixes): goal-line exits now restart in the corner instead of 2 m in front of goal,
+`no_progress` restarts fell from 699 to 296 and keep-out fouls from 245 to 26, and
+`split_shape`'s lead over second place fell from 0.52 to 0.28 points per match.
+Out-of-bounds restarts rose from 2446 to 2938; not yet looked into.
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 21-0-0 | 135-29 | 3.00 |
-| `give_and_go_solo` | 17-1-3 | 86-32 | 2.48 |
-| `counter_flow` | 17-1-3 | 63-21 | 2.48 |
-| `high_press` | 16-1-4 | 57-20 | 2.33 |
-| `score_aware_counter_flow` | 15-1-5 | 70-30 | 2.19 |
-| `press_and_pass` | 13-6-2 | 50-21 | 2.14 |
-| `clear_danger` | 14-1-6 | 63-27 | 2.05 |
-| `press_trigger_flow` | 12-1-8 | 56-34 | 1.76 |
-| `overload_press` | 11-4-6 | 65-43 | 1.76 |
-| `clear_press_plus` | 11-3-7 | 60-29 | 1.71 |
-| `decoy_and_overload` | 11-1-9 | 58-48 | 1.62 |
-| `tiki_taka_plus` | 11-1-9 | 47-41 | 1.62 |
-| `three_slot` | 8-3-10 | 29-34 | 1.29 |
-| `low_block` | 7-5-9 | 30-30 | 1.24 |
-| `tiki_taka` | 6-5-10 | 45-52 | 1.10 |
-| `high_line_zone` | 6-1-14 | 34-72 | 0.90 |
-| `counter_press` | 4-1-16 | 19-70 | 0.62 |
-| `switch_of_play` | 3-2-16 | 17-66 | 0.52 |
-| `score_aware_zone_flow` | 1-5-15 | 47-97 | 0.38 |
-| `overload_flow` | 2-2-17 | 31-85 | 0.38 |
-| `zone_fluid` | 1-3-17 | 43-100 | 0.29 |
-| `shadow_switch` | 0-0-21 | 12-136 | 0.00 |
+| `split_shape` | 19-1-1 | 103-23 | 2.76 |
+| `high_press` | 17-1-3 | 89-40 | 2.48 |
+| `give_and_go_solo` | 16-2-3 | 84-28 | 2.38 |
+| `clear_danger` | 14-4-3 | 59-28 | 2.19 |
+| `press_trigger_flow` | 15-1-5 | 64-41 | 2.19 |
+| `press_and_pass` | 13-5-3 | 76-29 | 2.10 |
+| `counter_flow` | 14-2-5 | 62-27 | 2.10 |
+| `score_aware_counter_flow` | 13-3-5 | 64-29 | 2.00 |
+| `overload_press` | 13-2-6 | 55-40 | 1.95 |
+| `clear_press_plus` | 10-5-6 | 51-30 | 1.67 |
+| `tiki_taka_plus` | 9-6-6 | 48-32 | 1.57 |
+| `decoy_and_overload` | 10-0-11 | 59-52 | 1.43 |
+| `tiki_taka` | 6-5-10 | 34-41 | 1.10 |
+| `high_line_zone` | 5-3-13 | 34-54 | 0.86 |
+| `counter_press` | 5-3-13 | 35-69 | 0.86 |
+| `three_slot` | 3-8-10 | 10-33 | 0.81 |
+| `switch_of_play` | 4-4-13 | 23-58 | 0.76 |
+| `low_block` | 4-3-14 | 21-40 | 0.71 |
+| `zone_fluid` | 3-3-15 | 33-77 | 0.57 |
+| `score_aware_zone_flow` | 2-2-17 | 24-84 | 0.38 |
+| `overload_flow` | 1-3-17 | 21-91 | 0.29 |
+| `shadow_switch` | 2-0-19 | 19-122 | 0.29 |
 
 The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
 Treat them as rough ordering, not current truth.
