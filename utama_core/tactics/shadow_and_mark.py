@@ -67,7 +67,9 @@ _FALLBACK_Y_SPACING = 0.8  # metres between stacked fallback holders
 def _mark_target(game: Game, opponent_id: int) -> Vector2D:
     goal_x = game.field.my_goal_line[0][0]
     opponent = game.enemy_robots[opponent_id]
-    direction = 1.0 if goal_x < opponent.p.x else -1.0
+    # Toward our own goal. The sign was reversed until 2026-10-05: markers stood on the
+    # far side, leaving the opponent a clear run at goal.
+    direction = -1.0 if goal_x < opponent.p.x else 1.0
     return Vector2D(opponent.p.x + direction * _MARK_STANDOFF, opponent.p.y)
 
 

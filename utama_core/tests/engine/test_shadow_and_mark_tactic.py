@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -19,7 +21,11 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
+from utama_core.tactics.shadow_and_mark import (
+    _MARK_STANDOFF,
+    ShadowAndMarkTactic,
+    _mark_target,
+)
 
 
 class _NullMotionController(MotionController):
@@ -70,3 +76,30 @@ def test_shadow_holding_the_ball_clears_it_instead_of_defending_on_it():
 
     assert commands[3].kick == 1
     assert commands[4].kick == 0
+
+
+@pytest.mark.parametrize("we_are_right", [False, True])
+def test_marker_stands_between_its_opponent_and_our_goal(we_are_right):
+    """The comment always said goal side; the sign put the marker on the far side."""
+    zero = Vector3D(0.0, 0.0, 0.0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=we_are_right,
+        friendly_robots={1: _robot(1, 0.0, -2.0, True)},
+        enemy_robots={2: _robot(2, 1.0, 0.5, False)},
+        ball=Ball(p=Vector3D(0.0, 0.0, 0.0), v=zero, a=zero),
+    )
+    field = Field(
+        my_team_is_right=we_are_right,
+        field_dims=STANDARD_FIELD_DIMS,
+        field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+    )
+    game = Game(past=GameHistory(10), current=frame, field=field)
+
+    target = _mark_target(game, 2)
+
+    own_goal_x = 4.5 if we_are_right else -4.5
+    assert target.y == 0.5
+    assert abs(target.x - 1.0) == pytest.approx(_MARK_STANDOFF)
+    assert abs(target.x - own_goal_x) < abs(1.0 - own_goal_x)
