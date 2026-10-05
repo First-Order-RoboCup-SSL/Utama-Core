@@ -39,6 +39,10 @@ class VelocityRefiner(BaseRefiner):
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
+    def __init__(self, compute_acceleration: bool = True):
+        # False leaves every `a` zero: for a frame whose acceleration nothing reads.
+        self.compute_acceleration = compute_acceleration
+
     def refine(self, game_history: GameHistory, game_frame: GameFrame) -> GameFrame:
         current_game_ts = game_frame.ts
 
@@ -102,7 +106,8 @@ class VelocityRefiner(BaseRefiner):
 
             new_a = zero_vector(twod)  # Default to zero
             try:
-                new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
+                if self.compute_acceleration:
+                    new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
             except Exception as e:
                 logger.warning(
                     f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
@@ -142,7 +147,8 @@ class VelocityRefiner(BaseRefiner):
 
         new_ball_a = zero_vector(twod=False)  # Default to zero
         try:
-            new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
+            if self.compute_acceleration:
+                new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
         except Exception as e:
             logger.warning(f"Could not calculate acceleration for ball (key: {ball_obj_key}), setting to zero: {e}")
 

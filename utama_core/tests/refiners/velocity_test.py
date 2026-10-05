@@ -155,3 +155,14 @@ def test_acceleration_calculation_implements_expected_formula():
     assert game.ball.a.x == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
     assert game.ball.a.y == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
     assert game.ball.a.z == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+
+
+def test_acceleration_left_zero_when_not_computed():
+    game_history = GameHistory(20)
+    for ts in range(VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE):
+        game_history.add_game_frame(create_ball_only_game(ts, ts, 0, 0, ts, ts, ts))
+
+    game = VelocityRefiner(compute_acceleration=False).refine(game_history, create_ball_only_game(15, 15, 0, 0))
+
+    assert game.ball.v.x == pytest.approx(1)
+    assert (game.ball.a.x, game.ball.a.y, game.ball.a.z) == (0, 0, 0)

@@ -553,6 +553,12 @@ class StrategyRunner:
         else:
             self.replay_writer = None
 
+        # Acceleration is read only by the replay (no strategy, tactic or planner reads
+        # `.a`), so the side the replay doesn't record skips it: about 7% of the runner's CPU.
+        if self.opp is not None:
+            recorded_is_my = self.replay_writer is None or self.replay_writer.replay_configs.is_my_perspective
+            (self.opp if recorded_is_my else self.my).velocity_refiner.compute_acceleration = False
+
         # Live terminal status panel
         self.num_frames_elapsed = 0
         self.elapsed_time = 0.0
