@@ -1878,6 +1878,29 @@ class TestDirectFreeTheirsStep:
         assert len(captured) == 1
         assert captured[0][1] == pytest.approx(Vector2D(0.8, 0.0))
 
+    def test_robot_between_ball_and_opponent_box_clears_round_the_ball(self, monkeypatch):
+        """A free kick 1 m in front of the opponent box (inner edge x = -3.5 here):
+        straight out from the ball is (-3.3, 0), where the planner's box margin
+        stopped the robot 0.48 m from the ball, a Defender Too Close foul."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+        monkeypatch.setattr(
+            referee_actions, "move", lambda game, mc, rid, target, oren, dribbling=False: captured.append(target)
+        )
+
+        robots = {0: _robot(0, -2.9, 0.1)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_right=True, ball=_ball(-2.5, 0.0))
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        (target,) = captured
+        assert (target - Vector2D(-2.5, 0.0)).mag() == pytest.approx(0.8)
+        assert target.x >= -3.5 + 0.25 + 0.28  # outside the planner's margin round the box
+
     def test_all_robots_get_commands(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 

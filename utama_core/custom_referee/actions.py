@@ -226,6 +226,34 @@ def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -
     return Vector2D(safe_x, point.y)
 
 
+def _in_planner_opp_defense_margin(game, point: Vector2D) -> bool:
+    """True when the planner would push a target at `point` out of the opponent
+    defense area's margin (keep distance plus its own clearance ring)."""
+    margin = OPPONENT_DEFENSE_AREA_KEEP_DISTANCE + RefereeGeometry._PLANNER_CLEARANCE_BUFFER_M
+    opp_goal_sign = -1.0 if game.my_team_is_right else 1.0
+    inner_x = opp_goal_sign * (_field_half_length(game) - 2.0 * game.field.half_defense_area_depth)
+    return abs(point.y) < game.field.half_defense_area_width + margin and opp_goal_sign * (point.x - inner_x) > -margin
+
+
+def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float) -> Vector2D:
+    """`point` (on the circle round `center`), or the nearest point of that circle
+    the planner will drive to.
+
+    A free kick 1 m in front of the opponent box pushed a robot between the ball and
+    the box straight toward the box; the planner stopped it 0.48 m from the ball, a
+    Defender Too Close foul every free kick."""
+    if not _in_planner_opp_defense_margin(game, point):
+        return point
+    base = math.atan2(point.y - center.y, point.x - center.x)
+    for step in range(1, 37):
+        for sign in (1.0, -1.0):
+            angle = base + sign * step * math.pi / 36
+            candidate = Vector2D(center.x + radius * math.cos(angle), center.y + radius * math.sin(angle))
+            if not _in_planner_opp_defense_margin(game, candidate) and _clamp_to_field(candidate, game) == candidate:
+                return candidate
+    return point
+
+
 def _clear_to_legal_positions(
     blackboard,
     *,
@@ -309,7 +337,10 @@ def _clear_to_legal_positions(
         if robot_id in own_defense_evict:
             target = Vector2D(_own_defense_area_exit_x(game), robot.p.y)
         if ball_center is not None:
-            target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
+            projected = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
+            if projected != target:
+                projected = _reachable_on_circle(game, projected, ball_center, ball_keep_dist)
+            target = projected
         if designated_center is not None:
             # The ball travels from where it is to the designated spot, so keep clear
             # of that whole line (the placement-interference rule's shape), not of
