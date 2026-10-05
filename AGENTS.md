@@ -17,7 +17,7 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/tournament/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `tools/tournament/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
@@ -44,6 +44,8 @@ One term per thing; reuse these instead of coining new ones.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to the scenario bench or any strategy.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
+- **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
+  ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 
 ## Repo map
 
@@ -132,10 +134,11 @@ declarations) — check there before reintroducing one of them.
 - `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
 - `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
   assuming a doc's claim about "not yet built" is still accurate — these drift.
-- `docs/STRATEGY_DEVELOPMENT.md#reading-a-tournament-run` — every signal a tournament run
-  already records (loss kinds per strategy, pass receptions, fouls by robot and tactic, stall
-  diagnoses) and where it lives in `summary.json`. Check there before adding a metric; they
-  are diagnostics, not objectives.
+- `docs/signals.md` — every signal we record about how a strategy plays (stalls, fouls, chances
+  created and conceded, ball losses, pass receptions, restarts), grouped by the question it
+  answers, with where it lives in `summary.json`, a reference range and what an off value means.
+  Read it when designing or debugging a strategy, and before adding a metric; they are
+  diagnostics, not objectives.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
   results per `build_*_kernel_strategy` factory.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real

@@ -224,20 +224,12 @@ tick, so a baseline recorded in one mode is only comparable with a candidate run
 
 ## Reading a tournament run
 
-Every saved `round_robin.py` run prints these sections and writes the same data to
-`replays/<run>/summary.json`. Look here before adding a new metric: it probably exists.
-
-| Printed section | `summary.json` key | What it tells you | Caveat |
-|---|---|---|---|
-| Standings, STRATEGIES | `strategies` | per strategy: W-D-L, goals, shots, passes, entries, fouls, real losses, `stalled` | a stalled match stays in W-D-L, flagged |
-| LOSS KINDS | `strategies[*].real_loss_kinds_as_a` | where each strategy gives the ball away: tackled, kicked out, shot saved, intercepted, loose ball lost, foul (`turnover_breakdown.TURNOVER_KINDS` and `RESTART_KINDS`) | config_a matches only (the side with an intentions log) |
-| BALL LOSSES | `ball_losses` | the same kinds over the run, fouls by rule, losses by the tactic holding the ball; full tables in `ball_losses.md` | raw `MatchStats.turnovers` is ~40% two robots on one ball flipping "nearest": use real losses |
-| `passes:` line | `ball_losses.receptions` | every pass to `received` / `missed_reception` (reached a teammate, no contact) / `intercepted` / `off_target`; catch rate by receiver facing | config_a only |
-| CHANCES | `strategies[*].chances`, `pass_progress_m`, `forward_pass_share` | shots per match, goals per shot, shot distance and open goal mouth; save rate and how open the shots faced were; open-play regains shot from within 10 s; seconds the enemy held the ball in our defensive third; free kicks shot from within 10 s; metres gained per completed pass (`analysis/chances.py`) | both sides; save rate measures the defense, every strategy fields the same keeper; matches reused from records stored before chances existed are left out (`chances.matches`) |
-| FOULS | `fouls` | every foul, both sides, by rule, then strategy/tactic of the offending robot | `*` rules name only a team: attributed to its robot nearest the ball |
-| STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `RESTART_STALL` with a one-line diagnosis, `COMMITTED_FROZEN` with the committed tactics; `stall_incidents` merges one freeze seen against two opponents (same kind and ticks, a shared strategy) | a stall may be the strategy, the planner, the referee or the sim |
-| RESTARTS | `restarts` | every kickoff, free kick and penalty: how many reached NORMAL_START and were `taken`, or were `voided` / `stopped_before_kick` / `timeout` / `match_ended` (`analysis/restart_outcomes.py`) | both sides' restarts |
-| — | `run` | git commit, dirty flag, argv | compare runs only at clean commits |
+Every saved `round_robin.py` run prints its sections and writes the same data to
+`replays/<run>/summary.json`. [`docs/signals.md`](signals.md) lists every signal it records
+(and the offline ones), grouped by the question each answers: is something broken, does it
+create chances, keep and move the ball, defend, take restarts. Each comes with where to find
+it, a reference range from the latest round-robin and what an off value usually means. Look
+there before adding a metric: it probably exists.
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that
 never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L), and use
