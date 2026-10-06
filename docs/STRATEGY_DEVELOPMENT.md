@@ -154,7 +154,7 @@ reaches `main` by pull request:
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger
    than your own matches means the cache is stale (shared code changed since it was filled).
-   Let it run anyway (a full round-robin of 600 s matches is about an hour on 15 workers): the other
+   Let it run anyway (a full round-robin of 600 s matches has taken from about 1 h 50 min, on 15 workers plugged in, to 4.7 h for `tournament_20261005_170958`): the other
    strategies' matches run `main`'s code, so they refill the cache for everyone.
 5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
    ran one. An agent never merges: a person reviews and merges.

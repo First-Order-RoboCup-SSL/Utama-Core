@@ -1,9 +1,8 @@
 """Full-length, side/kickoff-decoupled round-robin among the `competitive`-tier
 strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
-`counter_press`), at full-match duration (two 300s halves = 600s sim time,
-matching `half_duration_seconds` in
-`utama_core/custom_referee/profiles/simulation.yaml`) instead of
-`round_robin.py`'s default 60s smoke-test length.
+`counter_press`), 600s of continuous play per match like `round_robin.py`. There is
+no half-time (nothing advances the referee's stage); instead each pair plays on both
+sides and with both kickoffs.
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
@@ -105,7 +104,7 @@ from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for e
 from tools.tournament.tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 
-MATCH_DURATION_SECONDS = 600.0  # full match: two 300s halves
+MATCH_DURATION_SECONDS = 600.0  # full length, continuous: no half-time
 
 COMPETITIVE = [
     "build_counter_flow_kernel_strategy",

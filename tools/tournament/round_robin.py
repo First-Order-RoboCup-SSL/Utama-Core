@@ -102,7 +102,9 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 
-# A full match: two 300s halves. Shorter matches rank differently: 65s matches were
+# A full-length match: 600 s of continuous play. There is no half-time (nothing advances the
+# referee's stage), so config_a stays on the right and takes the only kickoff; matches are
+# not repeated with sides swapped. Shorter matches rank differently: 65s matches were
 # 55% draws, and 16 of 40 full matches (replays/tournament_20261003_102921) changed
 # result after 180s, enough to reorder the top of the table. rsim is deterministic, so
 # a short match is exactly the start of the full one; it just stops before it's decided.
