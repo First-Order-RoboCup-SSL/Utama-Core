@@ -85,7 +85,7 @@ Check these first: a broken strategy's other signals mean nothing.
 | Signal | Where | Meaning | Reference | If it's off |
 |---|---|---|---|---|
 | Goals against | STRATEGIES `GA` | | 23 (`split_shape`) · 40 · 122 (`shadow_switch`) per 21 matches | |
-| Danger conceded | CHANCES `danger`; `chances.danger_s_per_match`, `danger_spells_per_match` | seconds the enemy held the ball in the side's defensive third in live play, and how many separate spells | 50 (`overload_press`) · 78 · 167 s (`high_line_zone`) | High: the defense doesn't win the ball back near its goal or lets the enemy settle there. One stalled match can add hundreds of seconds |
+| Danger conceded | CHANCES `danger`; `chances.danger_s_per_match`, `danger_spells_per_match` | seconds the enemy had possession (its passes and shots in flight included) with the ball in the side's defensive third in live play, and how many separate spells | 50 (`overload_press`) · 78 · 167 s (`high_line_zone`) | High: the defense doesn't win the ball back near its goal or lets the enemy settle there. One stalled match can add hundreds of seconds |
 | Shots faced, open goal faced | `chances.shots_faced`, `faced_open_goal` | the enemy's shots and how open they were | open 37% · 49% · 66% (`give_and_go_solo`) | Open shots faced: nobody blocks the lane; usually everyone is upfield |
 | Save rate | CHANCES `save`; `chances.save_rate` | 1 - goals from shots / shots faced. Every strategy fields the same keeper, so this measures the shots the defense allows | 49% (`high_press`) · 64% · 74% (`split_shape`) | Low: see open goal faced |
 | Regains | `chances.regains` | open-play regains kept ≥ 1 s | 16 (`shadow_switch`) · 25 · 29 (`high_press`) | Few: the press or the marking doesn't win the ball |

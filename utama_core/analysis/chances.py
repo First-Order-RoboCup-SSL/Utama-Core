@@ -16,8 +16,10 @@ measured for both sides: it needs positions and possession, not the intentions l
 - **Regains**: the ball won from the opponent in open play (not within
   `JUST_RESTARTED_S` of a restart) and kept `REGAIN_MIN_HOLD_S` — shorter is two robots on
   one ball flipping "nearest". `shot_after_s`: how soon the side shot, within `CHANCE_WINDOW_S`.
-- **Danger**: seconds the opponent held the ball in a side's defensive third (the third
-  the shot detector calls attacking) in live play, and how many separate spells.
+- **Danger**: seconds the opponent had possession with the ball in a side's defensive third
+  (the third the shot detector calls attacking) in live play, and how many separate spells.
+  Possession is the team's (`MatchStats`' possession side): it stays with the opponent while
+  its pass or shot is in flight, until a robot of the other side touches the ball.
 - **Free kicks**: every `DIRECT_FREE_*` (corner and goal kicks included) that reached
   NORMAL_START, whether it was in the kicking side's attacking third, and how soon that side
   shot, within `CHANCE_WINDOW_S`.

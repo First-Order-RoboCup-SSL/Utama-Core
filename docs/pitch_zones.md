@@ -59,7 +59,9 @@ A third and a strip together name one of nine cells: "attacking left wing", "def
 
 ## Words with a fixed meaning
 
-- **Danger**: the opponent has the ball in our defensive third in live play. The signal
+- **Danger**: the opponent has possession with the ball in our defensive third in live play.
+  Possession is the team's: a pass between two opponents, or their shot, stays theirs until we
+  touch the ball. The signal
   `danger_s` counts the seconds of it (`analysis/chances.py`; see [signals.md](signals.md)).
   Don't use "danger" for anything else.
 - **Clearance condition**: when `ClearBallTactic` clears (`clear_ball.in_danger`): the ball within
