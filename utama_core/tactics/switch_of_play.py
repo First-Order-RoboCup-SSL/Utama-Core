@@ -498,8 +498,16 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # ball (inside the visual has_ball box, short of contact) for 10 s
             # until no_progress, with the overload slot committed and waiting
             # (tournament_20261005_170958: vs split_shape t=479, vs three_slot
-            # t=149).
-            commands[carrier_id], _shot, mem.prev_best_shot_y = _score_goal(game, ctx, carrier_id, mem.prev_best_shot_y)
+            # t=149). Fetch the ball first: with no lane, `_score_goal` moves to a
+            # better shooting spot before it checks possession.
+            if not has_ball(game, carrier_id, visual=True):
+                commands[carrier_id] = go_to_ball(
+                    game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
+                )
+            else:
+                commands[carrier_id], _shot, mem.prev_best_shot_y = _score_goal(
+                    game, ctx, carrier_id, mem.prev_best_shot_y
+                )
             return commands, mem
 
         if mem.phase == "assess":

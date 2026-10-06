@@ -415,3 +415,20 @@ def test_a_lone_carrier_at_the_ball_plays_it_instead_of_holding_it():
 
     assert commands[3].kick
     assert mem.phase == "assess"  # nothing to commit to with one robot
+
+
+def test_a_lone_robot_without_the_ball_fetches_it_even_with_no_shooting_lane():
+    """Copilot on #141: with no lane, `_score_goal` repositions for a shot before it checks
+    possession, so a lone robot 1 m from the ball walked to a shooting spot instead of
+    fetching the ball, and might never get it."""
+    game = _make_relay_game(source_pos=Vector2D(1.0, 0.0), source_has_ball=False)
+    with (
+        patch("utama_core.tactics._pass_and_score.find_best_shot", return_value=(None, None)),
+        patch("utama_core.tactics.switch_of_play.go_to_ball") as mock_go_to_ball,
+        patch("utama_core.tactics._pass_and_score.move") as mock_move,
+    ):
+        mock_go_to_ball.return_value = object()
+        SwitchOfPlayTactic().tick(game, TickContext(motion_controller=_NullMotionController()), (3,), SwitchOfPlayMem())
+
+    mock_go_to_ball.assert_called_once()
+    mock_move.assert_not_called()
