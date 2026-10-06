@@ -50,10 +50,9 @@ from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.kick_upfield import kick_upfield
+from utama_core.skills.src.man_mark import mark_target
 
 _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
-
-_MARK_STANDOFF = 0.6  # metres — mark from this distance on the goal side of the opponent, not on top of them
 
 # How far in front of our own defense area an unmatched marker holds, as a
 # fraction of the way from the defense area's front edge to the centre line —
@@ -62,15 +61,6 @@ _MARK_STANDOFF = 0.6  # metres — mark from this distance on the goal side of t
 # meant to shadow the shot line.
 _FALLBACK_HOLD_FRACTION = 0.35
 _FALLBACK_Y_SPACING = 0.8  # metres between stacked fallback holders
-
-
-def _mark_target(game: Game, opponent_id: int) -> Vector2D:
-    goal_x = game.field.my_goal_line[0][0]
-    opponent = game.enemy_robots[opponent_id]
-    # Toward our own goal. The sign was reversed until 2026-10-05: markers stood on the
-    # far side, leaving the opponent a clear run at goal.
-    direction = -1.0 if goal_x < opponent.p.x else 1.0
-    return Vector2D(opponent.p.x + direction * _MARK_STANDOFF, opponent.p.y)
 
 
 def _fallback_hold_target(game: Game, index: int) -> Vector2D:
@@ -187,7 +177,7 @@ class ShadowAndMarkTactic(BaseTactic[ShadowAndMarkMem]):
                     game=game, motion_controller=ctx.motion_controller, robot_id=marker_id, target_coords=target
                 )
                 continue
-            target = _mark_target(game, opponent_id)
+            target = mark_target(game, opponent_id)
             commands[marker_id] = go_to_point(
                 game=game, motion_controller=ctx.motion_controller, robot_id=marker_id, target_coords=target
             )

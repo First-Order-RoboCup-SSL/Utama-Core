@@ -124,12 +124,6 @@ separated them. Prefer full-length results when ranking.
 Writeups of bugs since fixed were removed from this file; code comments that cite "Known open
 bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still open:
 
-- **Two markers can chase each other off the pitch.** `ShadowAndMarkTactic` targets 0.6 m
-  goal-side of its opponent and `man_mark` (in `PressAndContainTactic`) 0.5 m beside its own;
-  when each marks the other, both targets move with the robots and the pair walks to the sim's
-  wall outside the field (42 of 231 matches in tournament_20261004_204810, mostly during
-  wedges; 5 of 15 after the wedge fix, the longest 22 s). Clamping the targets only moves where
-  they stick; the fix is markers that don't define their targets from each other.
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. Both are baselines, so
   not worth fixing for its own sake.

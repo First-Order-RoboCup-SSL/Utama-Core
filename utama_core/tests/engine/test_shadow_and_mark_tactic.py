@@ -21,11 +21,8 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.tactics.shadow_and_mark import (
-    _MARK_STANDOFF,
-    ShadowAndMarkTactic,
-    _mark_target,
-)
+from utama_core.skills.src.man_mark import MARK_STANDOFF, mark_target
+from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
 
 class _NullMotionController(MotionController):
@@ -97,9 +94,9 @@ def test_marker_stands_between_its_opponent_and_our_goal(we_are_right):
     )
     game = Game(past=GameHistory(10), current=frame, field=field)
 
-    target = _mark_target(game, 2)
+    target = mark_target(game, 2)
 
     own_goal_x = 4.5 if we_are_right else -4.5
     assert target.y == 0.5
-    assert abs(target.x - 1.0) == pytest.approx(_MARK_STANDOFF)
+    assert abs(target.x - 1.0) == pytest.approx(MARK_STANDOFF)
     assert abs(target.x - own_goal_x) < abs(1.0 - own_goal_x)
