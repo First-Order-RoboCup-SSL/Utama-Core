@@ -59,6 +59,12 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |
 | 6 | end of a half → second half, then `POST_GAME` | the half's playing time (`half_duration_seconds`) used up |
 
+Nothing leaves `HALT` on its own: a person or the game controller resumes it. In the sim,
+`StrategyRunner` resumes after 5 s with `resume_from_halt`, which goes to `STOP` and keeps the
+queued restart, so play continues into it (transition 1). A `HALT` that interrupts a restart in
+progress (a kick-off being prepared, a ball being placed, a free kick) queues that restart again.
+With nothing queued, the runner holds `STOP` for 4 s to clear robots, then `NORMAL_START`.
+
 The match clock (`stage_time_left`) counts playing time only: it runs under `NORMAL_START`,
 `FORCE_START` and free kicks and is paused in `STOP`, `HALT`, kick-off and penalty preparation and
 ball placement, as the rulebook's Game Stages section says. When the first half's time is up

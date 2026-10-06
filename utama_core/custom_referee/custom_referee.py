@@ -392,6 +392,10 @@ class CustomReferee:
         """God-mode override — bypasses the STOP-first guard."""
         self._state.force_command(command, timestamp, ball_placement_target)
 
+    def resume_from_halt(self, timestamp: float) -> bool:
+        """HALT → STOP, keeping any queued restart (`GameStateMachine.resume_from_halt`)."""
+        return self._state.resume_from_halt(timestamp)
+
     def reset(self) -> None:
         """Restore this referee to its just-constructed state (score, command,
         stage, timers, and every rule's internal counters), for reuse across

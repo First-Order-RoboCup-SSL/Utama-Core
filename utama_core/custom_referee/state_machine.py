@@ -830,6 +830,22 @@ class GameStateMachine:
             self.next_command = None
         logger.info("Referee command force-set to: %s", command.name)
 
+    def resume_from_halt(self, timestamp: float) -> bool:
+        """Leave HALT for STOP, keeping the restart queued when the HALT came (`force_command`
+        clears it). STOP's own auto-advance then continues that restart once every robot is clear
+        of the ball. Returns whether a restart is queued; with none, the caller decides how play
+        resumes."""
+        self.command = RefereeCommand.STOP
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self._stop_entered_time = timestamp
+        self.status_message = None
+        self._advance2_ready_since = math.inf
+        self._advance3_ready_since = math.inf
+        self._advance4_ready_since = math.inf
+        logger.info("Resuming from HALT (queued: %s)", self.next_command.name if self.next_command else "None")
+        return self.next_command in self._NEEDS_STOP_FIRST or self.next_command == RefereeCommand.FORCE_START
+
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:
         """Advance the game stage."""
         logger.info("Stage %s → %s", self.stage.name, new_stage.name)
@@ -913,9 +929,16 @@ class GameStateMachine:
                 self._defender_too_close_at = current_time
             return
 
+        interrupted = self.command
         self.command = violation.suggested_command
         self.command_counter += 1
         self.command_timestamp = current_time
+        if violation.next_command is None and interrupted in self._NEEDS_STOP_FIRST:
+            # A stoppage with no restart of its own (DefenseAreaStoppageRule's HALT) in the middle
+            # of a restart: queue that restart again, so play resumes into it, not into open play.
+            if interrupted in self._BALL_PLACEMENT_COMMANDS:
+                self._post_ball_placement_command = self.next_command
+            self.next_command = interrupted
         if self.command == RefereeCommand.STOP:
             # Unlike _handle_goal and force_command, this path never recorded
             # when STOP was entered -- _stop_entered_time was left stale from

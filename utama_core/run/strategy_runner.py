@@ -1673,6 +1673,9 @@ class StrategyRunner:
                     and self._prev_custom_ref_command != RefereeCommand.STOP
                     and ref_data.next_command not in _BALL_PLACEMENT_COMMANDS
                     and self._halt_resume_stop_entered_at is None
+                    # A STOP out of a HALT resumes the restart the HALT interrupted
+                    # (`resume_from_halt`); forcing FORCE_START here would drop it.
+                    and self._prev_custom_ref_command != RefereeCommand.HALT
                 ):
                     # On transition into STOP with a designated position, teleport
                     # the ball immediately and skip straight to FORCE_START so
@@ -1778,8 +1781,15 @@ class StrategyRunner:
                         # a second short sim-only grace window, tracked the
                         # same way, giving StopStep a chance to clear illegal
                         # positions before NORMAL_START is force-issued.
-                        self.referee.force_command(RefereeCommand.STOP, self.my.current_game_frame.ts)
-                        self._halt_resume_stop_entered_at = self.my.current_game_frame.ts
+                        #
+                        # A restart queued when the HALT came (a kick-off after
+                        # half-time or a goal, a free kick, a penalty) resumes
+                        # through STOP into that restart: STOP's own auto-advance
+                        # waits for robots to clear. Forcing STOP used to clear the
+                        # queue, so play resumed as FORCE_START and the kick-off
+                        # was lost (test_change_of_ends on CI, 2026-10-06).
+                        if not self.referee.resume_from_halt(self.my.current_game_frame.ts):
+                            self._halt_resume_stop_entered_at = self.my.current_game_frame.ts
                 elif ref_data.referee_command == RefereeCommand.STOP and self._halt_resume_stop_entered_at is not None:
                     if (
                         self.my.current_game_frame.ts - self._halt_resume_stop_entered_at
