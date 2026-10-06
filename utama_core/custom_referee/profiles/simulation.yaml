@@ -66,3 +66,4 @@ game:
     direct_free_to_normal: true     # DIRECT_FREE_* → NORMAL_START when kicker ready
     ball_placement_to_next: true    # BALL_PLACEMENT_* → next_command when ball at target
     normal_start_to_force: true     # NORMAL_START → FORCE_START on kickoff timeout
+    end_of_half: true               # half's playing time up → second half, then POST_GAME

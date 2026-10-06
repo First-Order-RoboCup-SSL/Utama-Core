@@ -55,6 +55,21 @@ _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 _FREE_KICK_TIMEOUT_SECONDS = 10.0
 
 
+# Commands during which the match clock runs: the rulebook pauses it "whenever no team is
+# allowed to manipulate the ball", which "includes stop, halt and the preparation states of
+# kick-off and penalty kick. Additionally, it is paused during ball placement" (Game Stages).
+_CLOCK_RUNS = frozenset(
+    {
+        RefereeCommand.NORMAL_START,
+        RefereeCommand.FORCE_START,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.INDIRECT_FREE_YELLOW,
+        RefereeCommand.INDIRECT_FREE_BLUE,
+    }
+)
+_PLAYING_STAGES = frozenset({Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF})
+
 # A PRE stage and the stage it becomes when play starts.
 _PRE_TO_ACTIVE = {
     Stage.NORMAL_FIRST_HALF_PRE: Stage.NORMAL_FIRST_HALF,
@@ -114,6 +129,9 @@ class GameStateMachine:
         # Seeded by seed_clock() after the first valid game frame is available.
         self.stage_start_time: Optional[float] = None
         self.stage_duration = self._half_duration_seconds
+        # Playing time of the current stage: only the time spent under a `_CLOCK_RUNS` command.
+        self._stage_played = 0.0
+        self._clock_time: Optional[float] = None  # when `_stage_played` was last brought up to date
 
         self.yellow_team = TeamInfo(
             name="Yellow",
@@ -230,6 +248,13 @@ class GameStateMachine:
         """Process one tick.  Apply violation if not in cooldown.  Return RefereeData."""
         if self.stage_start_time is None:
             self.stage_start_time = current_time
+        # The command in force since the last tick decides whether that time was playing time.
+        if self._clock_time is not None and self.command in _CLOCK_RUNS:
+            self._stage_played += current_time - self._clock_time
+        self._clock_time = current_time
+
+        if self.stage == Stage.POST_GAME:
+            return self._generate_referee_data(current_time)
 
         if violation is not None and self._can_transition(current_time):
             self._apply_violation(violation, current_time)
@@ -473,7 +498,45 @@ class GameStateMachine:
             logger.info("Auto-advanced STOP → FORCE_START after goal (force-start profile mode)")
 
         self._start_half_if_play_started(current_time)
+        self._end_half_if_time_is_up(current_time)
         return self._generate_referee_data(current_time)
+
+    def _end_half_if_time_is_up(self, timestamp: float) -> None:
+        """When a half's playing time has run out: after the first half, a 0 s half-time and a
+        second half kicked off by the team that didn't kick off the first; after the second,
+        POST_GAME. Teams do not change ends (`docs/custom_referee.md`, Known gaps)."""
+        if (
+            not self._auto_advance.end_of_half
+            or self.stage not in _PLAYING_STAGES
+            or self._stage_played < self.stage_duration
+        ):
+            return
+        self.command = RefereeCommand.STOP
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self._stop_entered_time = timestamp
+        self._last_transition_time = timestamp
+        if self.stage == Stage.NORMAL_FIRST_HALF:
+            logger.info("First half over — half-time, then the second half")
+            self.advance_stage(Stage.NORMAL_SECOND_HALF_PRE, timestamp)
+            kickoff = (
+                RefereeCommand.PREPARE_KICKOFF_BLUE
+                if self._kickoff_team_is_yellow
+                else RefereeCommand.PREPARE_KICKOFF_YELLOW
+            )
+            # As after a goal: the ball goes back to the centre, then the kick-off.
+            self.next_command = self._ball_placement_command_for(kickoff)
+            self._post_ball_placement_command = kickoff
+            self.ball_placement_target = (0.0, 0.0)
+            self.status_message = "Half-time"
+        else:
+            logger.info("Second half over — full time")
+            self.advance_stage(Stage.POST_GAME, timestamp)
+            self.next_command = None
+            self._post_ball_placement_command = None
+            # No position: StrategyRunner turns a STOP with one into a FORCE_START in the sim.
+            self.ball_placement_target = None
+            self.status_message = "Full time"
 
     def _start_half_if_play_started(self, timestamp: float) -> None:
         """A PRE stage becomes its playing stage once play starts, however it started:
@@ -635,6 +698,7 @@ class GameStateMachine:
         """
         if self.stage_start_time is None:
             self.stage_start_time = timestamp
+        self._clock_time = timestamp
         self.command_timestamp = timestamp
         # Push all "entered-at" sentinels to the new timebase so that
         # cooldowns / durations are not immediately satisfied.
@@ -749,6 +813,8 @@ class GameStateMachine:
         logger.info("Stage %s → %s", self.stage.name, new_stage.name)
         self.stage = new_stage
         self.stage_start_time = timestamp
+        self._stage_played = 0.0
+        self._clock_time = timestamp
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -878,7 +944,7 @@ class GameStateMachine:
         )
 
     def _generate_referee_data(self, current_time: float) -> RefereeData:
-        stage_time_left = max(0.0, self.stage_duration - (current_time - self.stage_start_time))
+        stage_time_left = max(0.0, self.stage_duration - self._stage_played)
         return RefereeData(
             source_identifier="custom_referee",
             time_sent=current_time,

@@ -57,6 +57,16 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | 3 | `DIRECT_FREE_*` → `NORMAL_START` | kicker ≤0.3m from ball, defenders ≥0.5m, held 2s |
 | 4 | `BALL_PLACEMENT_*` → next command | ball ≤0.15m from target, held 2s (10s placement timeout) |
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |
+| 6 | end of a half → second half, then `POST_GAME` | the half's playing time (`half_duration_seconds`) used up |
+
+The match clock (`stage_time_left`) counts playing time only: it runs under `NORMAL_START`,
+`FORCE_START` and free kicks and is paused in `STOP`, `HALT`, kick-off and penalty preparation and
+ball placement, as the rulebook's Game Stages section says. When the first half's time is up
+(transition 6), play stops, the stage becomes `NORMAL_SECOND_HALF_PRE` (half-time takes 0 s), the
+ball goes to the centre and the team that didn't kick off the first half (`kickoff_team`) kicks
+off the second. When the second half's time is up, the stage becomes `POST_GAME` with a plain
+`STOP` (no `designated_position`, so the sim runner doesn't restart play), and violations are
+ignored from then on. `round_robin.py` ends a match there.
 
 `force_start_after_goal` is a legacy path (STOP → FORCE_START after `stop_duration_seconds`).
 Scripts resume play with `referee.set_command(RefereeCommand.NORMAL_START, timestamp=...)`.
@@ -103,6 +113,15 @@ referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval
 
 ## Known gaps
 
+- **Teams don't change ends at half-time.** The rulebook has the coin-toss winner choose the goal
+  it attacks in the first half, so the teams swap for the second; ours stay on the same side all
+  match. Swapping mid-match isn't a referee change: `StrategyRunner` builds each side's `Field`
+  once at start-up, the columnar replay records one `my_team_is_right` per file (so every replay
+  analysis would read the second half from the wrong side), and tactic memories hold absolute
+  targets. The field and the sim are symmetric, so in the sim the side only matters through
+  side-dependent bugs; `full_match_tournament.py` plays both sides for that. The second half is
+  kicked off by the other team, which was the asymmetry that mattered (config_a took the only
+  kick-off of every round-robin match).
 - **Last-touch attribution needs contact data for both teams.** Enemy `has_ball` is filled
   by `RobotInfoRefiner` from sim contact physics (`data_processing/refiners/robot_info.py`).
 
