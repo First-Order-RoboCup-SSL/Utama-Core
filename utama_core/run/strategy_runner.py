@@ -1,4 +1,5 @@
 import cProfile
+import dataclasses
 import logging
 import math
 import signal
@@ -1360,6 +1361,32 @@ class StrategyRunner:
         if self.opp:
             self.opp.strategy.load_game(self.opp.game)
 
+    def _follow_referee_sides(self, referee_data: Optional["RefereeData"]) -> None:
+        """Change ends when the referee says the teams have.
+
+        The referee says which team defends the +x goal (`blue_team_on_positive_half`): the game
+        controller in a real match, `CustomReferee` in the sim, which swaps it at half-time. When
+        that disagrees with the side we play on, both teams change ends: their frames, `Field`s
+        and history start again on the new side. Tactic memory is cleared by the stoppage the
+        change happens in (`Strategy._barrier_reset`). A referee that doesn't say (None) changes
+        nothing.
+        """
+        if referee_data is None or referee_data.blue_team_on_positive_half is None:
+            return
+        on_positive = referee_data.blue_team_on_positive_half != self.my_team_is_yellow
+        if on_positive == self.my_team_is_right:
+            return
+        self.logger.info("Teams change ends: my team now defends the %s goal", "right" if on_positive else "left")
+        self.my_team_is_right = on_positive
+        for side, is_right in ((self.my, on_positive), (self.opp, not on_positive)):
+            if side is None or side.game is None:
+                continue
+            frame = dataclasses.replace(side.current_game_frame, my_team_is_right=is_right)
+            side.current_game_frame = frame
+            side.game_history = GameHistory(MAX_GAME_HISTORY)
+            side.game = Game(side.game_history, frame, field=Field(is_right, self.full_field_dims, self.field_bounds))
+            side.strategy.load_game(side.game)
+
     # Reset the game state and robot info in buffer
     def _reset_game(self):
         """Reload game state by waiting for valid frames and reinitializing Game objects.
@@ -1750,6 +1777,8 @@ class StrategyRunner:
             if self.ref_buffer:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
+
+        self._follow_referee_sides(referee_data)
 
         friendly_res, opp_res = None, None
         if self.mode == Mode.REAL:

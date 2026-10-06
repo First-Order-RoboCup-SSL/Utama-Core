@@ -58,8 +58,9 @@ also prints a possession/shots/ball-travel line per match as it completes,
 independent of `--no-save`.
 
 `--both-sides` plays each pair twice — once with each config as
-`config_a` (yellow, defending/attacking the right side per `run_match`'s
-hardcoded `my_team_is_yellow=True, my_team_is_right=True`) — instead of
+`config_a` (yellow, defending the right goal in the first half per `run_match`'s
+hardcoded `my_team_is_yellow=True, my_team_is_right=True`; the teams change ends at
+half-time) — instead of
 once. This isn't a repeat: the sim's initial formation and every
 `my_team_is_right`-relative geometry call (`enemy_goal_line`, defense-area
 clamps, etc.) genuinely differ by side, so re-running the exact same pair

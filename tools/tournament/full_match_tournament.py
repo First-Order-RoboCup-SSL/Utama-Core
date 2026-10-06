@@ -1,8 +1,8 @@
 """Full-length, side/kickoff-decoupled round-robin among the `competitive`-tier
 strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
 `counter_press`), two halves of 300 s of playing time per match like `round_robin.py`.
-Teams don't change ends at half-time, so each pair plays on both sides and with both
-first-half kickoffs.
+Each pair plays starting on both sides and with both first-half kickoffs (the teams change
+ends at half-time, so each starting side is still a different match).
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with

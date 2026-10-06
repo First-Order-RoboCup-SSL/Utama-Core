@@ -304,8 +304,8 @@ def score_scenario(
                 chance_tracker.step(frame, acc, cmd, live_since, shots_before)
             if frame.ball is not None:
                 bx, by = frame.ball.p.x, frame.ball.p.y
-                # Friendly is always right-defending (my_team_is_right=True),
-                # so a ball in the RIGHT goal is conceded by friendly and a
+                # Friendly is always right-defending (my_team_is_right=True; a 20 s
+                # start never reaches half-time, where the teams change ends), so a ball in the RIGHT goal is conceded by friendly and a
                 # ball in the LEFT goal is scored by friendly.
                 if geometry.is_in_right_goal(bx, by):
                     conceded_goal = True

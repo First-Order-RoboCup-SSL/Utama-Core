@@ -27,7 +27,8 @@ It does not run the simulator, a tactic, or a strategy — it only reads
 family of metrics `MatchStats` does not currently report.
 
 Side convention (see `tournament_lib.run_match`): `config_a` is always yellow AND
-plays right (`my_team_is_right=True`), `config_b` is always blue/left. Every replay
+starts on the right (`my_team_is_right=True`), `config_b` is always blue/left; the teams
+change ends at half-time, so each frame's own `my_team_is_right` gives its side. Every replay
 frame's `friendly_robots`/`ball` are recorded from `config_a`'s perspective
 (`ReplayMetadata.my_team_is_yellow=True` in every file checked), so "friendly" in a
 frame or in `<match>.stats.json` always means `config_a`. Side is a real effect in
@@ -232,8 +233,7 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
     match-level counts (`n_restarts`, `n_restarts_with_entry`).
     """
     frames_iter = _iter_sampled_frames(replay_path)
-    metadata = next(frames_iter)
-    my_team_is_right = metadata.my_team_is_yellow  # config_a is always yellow+right together
+    next(frames_iter)  # metadata
 
     sides = ("friendly", "enemy")
     shots_on_target = {s: 0 for s in sides}
@@ -310,6 +310,7 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
     prev_command: Optional[str] = None
 
     for frame in frames_iter:
+        my_team_is_right = frame.my_team_is_right  # config_a's side; the teams change ends at half-time
         ball = frame.ball
         if ball is None:
             continue
@@ -1089,8 +1090,9 @@ def main() -> None:
     )
     report_lines.append("")
     report_lines.append(
-        "Side convention: `config_a` is always yellow and plays right "
-        "(`tournament_lib.run_match` hardcodes `my_team_is_yellow=True, my_team_is_right=True`); "
+        "Side convention: `config_a` is always yellow and starts on the right "
+        "(`tournament_lib.run_match` hardcodes `my_team_is_yellow=True, my_team_is_right=True`; "
+        "in runs with halves the teams change ends at half-time); "
         "`friendly` in stats/frame metrics always means `config_a`. All metrics below are reported "
         "as `a - b` differentials. Because config_a is right on literally every match in this corpus, "
         "side cannot be fit as a genuine covariate (it is a constant column) -- see part A."

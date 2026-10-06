@@ -32,7 +32,8 @@ A replay only ever records one side's perspective (`ReplayWriterConfig`/
 `ColumnarReplayWriterConfig.is_my_perspective`, and
 `tournament.run_match`/`repro_from_replay.py` both always construct the
 runner with `my_team_is_yellow=True, my_team_is_right=True` — config_a is
-always yellow/right/friendly) — so `friendly_robots` in the replay is
+always yellow/friendly, and right in the first half; `scenario_from_replay` turns a
+second-half frame so it is right here too) — so `friendly_robots` in the replay is
 config_a's robots and `enemy_robots` is config_b's, keyed by `Robot.id`
 (the same id `sim_controller.teleport_robot(is_team_yellow, robot_id, ...)`
 expects).
@@ -78,6 +79,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -134,15 +136,18 @@ def _short_name(config_name: str) -> str:
     return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
 
 
-def _robot_states(robots: dict) -> tuple[RobotState, ...]:
+def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:
+    """`turn`: rotate the pitch half a turn, as `scenario_from_replay` does for a frame where the
+    recorded team defends the left goal."""
+    k = -1.0 if turn else 1.0
     return tuple(
         RobotState(
             id=r.id,
-            x=r.p.x,
-            y=r.p.y,
-            orientation=r.orientation,
-            vx=r.v.x,
-            vy=r.v.y,
+            x=k * r.p.x,
+            y=k * r.p.y,
+            orientation=math.remainder(r.orientation + math.pi, 2 * math.pi) if turn else r.orientation,
+            vx=k * r.v.x,
+            vy=k * r.v.y,
         )
         for r in robots.values()
     )
@@ -268,10 +273,15 @@ def scenario_from_replay(replay_path, t_seconds: float) -> Scenario:
 
     config_a_name, config_b_name = _config_names_from_summary(replay_path)
 
+    # A scenario is played with config_a defending the right goal. After the teams change ends
+    # at half-time it defends the left one, so the pitch is turned half a turn: the same
+    # situation, seen from the other end.
+    turn = not frame.my_team_is_right
+    k = -1.0 if turn else 1.0
     ball_x = ball_y = ball_vx = ball_vy = 0.0
     if frame.ball is not None:
-        ball_x, ball_y = frame.ball.p.x, frame.ball.p.y
-        ball_vx, ball_vy = frame.ball.v.x, frame.ball.v.y
+        ball_x, ball_y = k * frame.ball.p.x, k * frame.ball.p.y
+        ball_vx, ball_vy = k * frame.ball.v.x, k * frame.ball.v.y
 
     return Scenario(
         sim_time=t_seconds,
@@ -279,8 +289,8 @@ def scenario_from_replay(replay_path, t_seconds: float) -> Scenario:
         ball_y=ball_y,
         ball_vx=ball_vx,
         ball_vy=ball_vy,
-        friendly_robots=_robot_states(frame.friendly_robots),
-        enemy_robots=_robot_states(frame.enemy_robots),
+        friendly_robots=_robot_states(frame.friendly_robots, turn),
+        enemy_robots=_robot_states(frame.enemy_robots, turn),
         referee_command=referee_command,
         source_replay=replay_path,
         config_a_name=config_a_name,

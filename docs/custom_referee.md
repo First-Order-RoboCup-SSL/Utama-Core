@@ -64,7 +64,19 @@ The match clock (`stage_time_left`) counts playing time only: it runs under `NOR
 ball placement, as the rulebook's Game Stages section says. When the first half's time is up
 (transition 6), play stops, the stage becomes `NORMAL_SECOND_HALF_PRE` (half-time takes 0 s), the
 ball goes to the centre and the team that didn't kick off the first half (`kickoff_team`) kicks
-off the second. When the second half's time is up, the stage becomes `POST_GAME` with a plain
+off the second, and the teams change ends.
+
+**Ends.** The referee says which team defends the +x goal in `blue_team_on_positive_half`, the
+game controller's field: taken from the side the teams start on, swapped at half-time.
+`StrategyRunner` follows it every tick, from `CustomReferee` or the real game controller: when it
+disagrees with the side a team plays on, both teams' frames, `Field`s and game history start
+again on the other side (tactic memory is already cleared by the stoppage it happens in). The
+columnar replay stores the side on every tick (`side_is_right`; `ColumnarReplay.is_right_at`),
+and replay analyses read it per frame (`frame.my_team_is_right`), never once per file.
+`scenario_from_replay` turns a second-half frame half a turn, so a scenario is still played with
+config_a defending the right goal. Replays written before this have one side throughout.
+
+When the second half's time is up, the stage becomes `POST_GAME` with a plain
 `STOP` (no `designated_position`, so the sim runner doesn't restart play), and violations are
 ignored from then on. `round_robin.py` ends a match there.
 
@@ -113,21 +125,12 @@ referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval
 
 ## Known gaps
 
-- **Teams don't change ends at half-time.** The rulebook has the coin-toss winner choose the goal
-  it attacks in the first half, so the teams swap for the second; ours stay on the same side all
-  match. Swapping mid-match isn't a referee change: `StrategyRunner` builds each side's `Field`
-  once at start-up, the columnar replay records one `my_team_is_right` per file (so every replay
-  analysis would read the second half from the wrong side), and tactic memories hold absolute
-  targets. The field and the sim are symmetric, so in the sim the side only matters through
-  side-dependent bugs; `full_match_tournament.py` plays both sides for that. The second half is
-  kicked off by the other team, which was the asymmetry that mattered (config_a took the only
-  kick-off of every round-robin match).
 - **Last-touch attribution needs contact data for both teams.** Enemy `has_ball` is filled
   by `RobotInfoRefiner` from sim contact physics (`data_processing/refiners/robot_info.py`).
 
 Resolved (kept here so nobody re-reports them): the old friendly-first, ≤0.15m proximity
 last-touch heuristic and its yellow default (replaced by `infer_last_touch_team`), double touch,
-ball speed, full-episode reset,
+ball speed, full-episode reset, teams changing ends at half-time,
 `bt_nodes` → `debug_status` rename, auto-advance after goals/timeouts, keep-out during bare
 `STOP`, blue-perspective goal tests, `StrategyRunner` integration tests
 (`tests/strategy_runner/test_referee_rsim.py`, `test_ball_placement_rsim.py`),

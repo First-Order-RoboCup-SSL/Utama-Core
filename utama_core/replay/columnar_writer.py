@@ -104,6 +104,7 @@ class _TickRecord:
     referee_command: int
     stage: int
     designated_position: tuple
+    my_team_is_right: bool = True
 
 
 class ColumnarReplayWriter:
@@ -199,6 +200,7 @@ class ColumnarReplayWriter:
                 referee_command=referee_command,
                 stage=stage,
                 designated_position=designated_position,
+                my_team_is_right=frame.my_team_is_right,
             )
         )
 
@@ -272,7 +274,9 @@ class ColumnarReplayWriter:
         f32 = np.float32  # see _FLOAT32_KEYS
         return {
             "my_team_is_yellow": np.array(self.metadata.my_team_is_yellow),
+            # the side at the first tick; `side_is_right` has every tick's (teams change ends at half-time)
             "my_team_is_right": np.array(bool(self._my_team_is_right)),
+            "side_is_right": np.array([t.my_team_is_right for t in self._ticks], dtype=bool),
             "friendly_ids": np.array(friendly_ids, dtype=np.int32),
             "enemy_ids": np.array(enemy_ids, dtype=np.int32),
             "ts": ts,

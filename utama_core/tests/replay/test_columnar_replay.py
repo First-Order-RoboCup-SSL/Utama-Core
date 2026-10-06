@@ -374,3 +374,60 @@ def test_a_stage_clock_paused_in_a_stoppage_is_not_stored_every_tick(tmp_path):
     assert sorted(replay.sparse_referee) == [0, 60]
     for i in range(120):
         assert replay.frame_at(i).referee.stage_time_left == pytest.approx(100.0 - max(0, i - 60) * dt)
+
+
+# --- Changing ends at half-time -----------------------------------------------------------
+# The side the recorded team defends was stored once per file, from the first tick, so a
+# replay of a match where the teams change ends read the second half with the wrong goals.
+
+
+def _side_frame(ts: float, is_right: bool) -> GameFrame:
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=is_right,
+        friendly_robots={1: _robot(1, 2.0, 1.0, True)},
+        enemy_robots={2: _robot(2, -1.0, -0.5, False)},
+        ball=Ball(p=Vector3D(1.5, 0.5, 0.0), v=Vector3D(1.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+        referee=None,
+    )
+
+
+def test_every_tick_reads_back_the_side_it_was_played_on(tmp_path):
+    replay = _write(tmp_path, [_side_frame(0.0, True), _side_frame(0.1, True), _side_frame(0.2, False)])
+
+    assert [replay.frame_at(i).my_team_is_right for i in range(3)] == [True, True, False]
+    assert replay.my_team_is_right is True  # the first tick's, as before
+
+
+def test_a_replay_from_before_the_side_was_stored_per_tick_keeps_one_side(tmp_path):
+    import numpy as np
+
+    replay = _write(tmp_path, [_side_frame(0.0, False), _side_frame(0.1, False)])
+    path = tmp_path / "test_replay.npz"
+    with np.load(path) as data:
+        arrays = {k: data[k] for k in data.files if k != "side_is_right"}
+    np.savez(path, **arrays)
+
+    old = load_columnar_replay(path)
+
+    assert old.side_is_right is None
+    assert [old.frame_at(i).my_team_is_right for i in range(2)] == [False, False]
+    assert replay.frame_at(1).my_team_is_right is False
+
+
+def test_a_scenario_from_the_second_half_is_turned_to_config_a_s_right_side(tmp_path):
+    from utama_core.replay.scenario import scenario_from_replay
+
+    _write(tmp_path, [_side_frame(0.0, True), _side_frame(1.0, False)])
+    path = tmp_path / "test_replay.npz"
+
+    first = scenario_from_replay(path, 0.0)
+    second = scenario_from_replay(path, 1.0)
+
+    assert (first.ball_x, first.ball_y, first.ball_vx) == pytest.approx((1.5, 0.5, 1.0))
+    assert (second.ball_x, second.ball_y, second.ball_vx) == pytest.approx((-1.5, -0.5, -1.0))
+    robot = second.friendly_robots[0]
+    assert (robot.x, robot.y, robot.vx, robot.vy) == pytest.approx((-2.0, -1.0, -0.1, -0.2))
+    assert robot.orientation == pytest.approx(1.5 - 3.141592653589793)
+    assert (second.enemy_robots[0].x, second.enemy_robots[0].y) == pytest.approx((1.0, 0.5))

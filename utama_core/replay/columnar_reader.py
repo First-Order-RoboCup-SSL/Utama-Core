@@ -56,7 +56,7 @@ def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
 @dataclass
 class ColumnarReplay:
     my_team_is_yellow: bool
-    my_team_is_right: bool
+    my_team_is_right: bool  # at the first tick; see `is_right_at`
     friendly_ids: np.ndarray
     enemy_ids: np.ndarray
     ts: np.ndarray
@@ -78,6 +78,7 @@ class ColumnarReplay:
     stage: np.ndarray
     designated_position: np.ndarray  # (n_ticks, 2), NaN when absent
     sparse_referee: dict[int, RefereeData]  # tick index -> full RefereeData, where it changed
+    side_is_right: Optional[np.ndarray] = None  # (n_ticks,) bool; None in replays from before it was recorded
 
     @property
     def n_ticks(self) -> int:
@@ -112,12 +113,17 @@ class ColumnarReplay:
         return GameFrame(
             ts=float(self.ts[tick]),
             my_team_is_yellow=self.my_team_is_yellow,
-            my_team_is_right=self.my_team_is_right,
+            my_team_is_right=self.is_right_at(tick),
             friendly_robots=friendly_robots,
             enemy_robots=enemy_robots,
             ball=ball,
             referee=referee,
         )
+
+    def is_right_at(self, tick: int) -> bool:
+        """Whether the recorded team defends the right goal at `tick`. Teams change ends at
+        half-time; a replay written before that was recorded has one side throughout."""
+        return self.my_team_is_right if self.side_is_right is None else bool(self.side_is_right[tick])
 
     def _referee_at(self, tick: int) -> Optional[RefereeData]:
         if not self.has_referee[tick]:
@@ -212,4 +218,5 @@ def load_columnar_replay(path: Union[str, Path]) -> ColumnarReplay:
         stage=arrays["stage"],
         designated_position=arrays["designated_position"],
         sparse_referee=sparse_referee,
+        side_is_right=arrays.get("side_is_right"),
     )

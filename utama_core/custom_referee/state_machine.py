@@ -111,6 +111,9 @@ class GameStateMachine:
         self.command = RefereeCommand.HALT
         self.command_counter = 0
         self.command_timestamp = 0.0
+        # Which team defends the +x goal, as the game controller's `blue_team_on_positive_half`:
+        # taken from the first frame seen, swapped when the teams change ends at half-time.
+        self.blue_team_on_positive_half: Optional[bool] = None
 
         self.stage = self._initial_stage
         # Seeded by seed_clock() after the first valid game frame is available.
@@ -235,6 +238,9 @@ class GameStateMachine:
         """Process one tick.  Apply violation if not in cooldown.  Return RefereeData."""
         if self.stage_start_time is None:
             self.stage_start_time = current_time
+        if self.blue_team_on_positive_half is None and game_frame is not None:
+            yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
+            self.blue_team_on_positive_half = not yellow_is_right
         # The command in force since the last tick decides whether that time was playing time.
         if self._clock_time is not None and self.command in CLOCK_RUNS:
             self._stage_played += current_time - self._clock_time
@@ -491,7 +497,8 @@ class GameStateMachine:
     def _end_half_if_time_is_up(self, timestamp: float) -> None:
         """When a half's playing time has run out: after the first half, a 0 s half-time and a
         second half kicked off by the team that didn't kick off the first; after the second,
-        POST_GAME. Teams do not change ends (`docs/custom_referee.md`, Known gaps)."""
+        POST_GAME. At half-time the teams change ends: `blue_team_on_positive_half` swaps, and
+        `StrategyRunner` follows it."""
         if (
             not self._auto_advance.end_of_half
             or self.stage not in _PLAYING_STAGES
@@ -504,8 +511,10 @@ class GameStateMachine:
         self._stop_entered_time = timestamp
         self._last_transition_time = timestamp
         if self.stage == Stage.NORMAL_FIRST_HALF:
-            logger.info("First half over — half-time, then the second half")
+            logger.info("First half over — half-time: the teams change ends, then the second half")
             self.advance_stage(Stage.NORMAL_SECOND_HALF_PRE, timestamp)
+            if self.blue_team_on_positive_half is not None:
+                self.blue_team_on_positive_half = not self.blue_team_on_positive_half
             kickoff = (
                 RefereeCommand.PREPARE_KICKOFF_BLUE
                 if self._kickoff_team_is_yellow
@@ -943,7 +952,7 @@ class GameStateMachine:
             blue_team=copy.copy(self.blue_team),
             yellow_team=copy.copy(self.yellow_team),
             designated_position=self.ball_placement_target,
-            blue_team_on_positive_half=None,
+            blue_team_on_positive_half=self.blue_team_on_positive_half,
             next_command=self.next_command,
             current_action_time_remaining=None,
             status_message=self.status_message,

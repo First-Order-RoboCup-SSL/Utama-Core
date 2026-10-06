@@ -214,6 +214,10 @@
     frame.overlays = overlaysEnabled ? traceValues : null;
     const tacticStatus = tacticStatusFromSlots();
     frame.tactic_tags = tacticTagsFromStatus(tacticStatus);
+    // The teams change ends at half-time; frames from older replays carry no side.
+    if (fieldView && frame.my_team_is_right !== undefined) {
+      fieldView.setTeamLayout(frame.my_team_is_right, fieldView.myTeamIsYellow);
+    }
     if (fieldView) fieldView.draw(frame);
     renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
     renderTacticStatusInto("replay-tactic-entries", tacticStatus, {

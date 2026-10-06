@@ -107,6 +107,21 @@ def test_the_first_half_ends_after_its_playing_time_and_the_other_team_kicks_off
     assert after.designated_position == (0.0, 0.0)
 
 
+def test_the_teams_change_ends_at_half_time():
+    """The referee says which team defends the +x goal (`blue_team_on_positive_half`, as the
+    game controller does): taken from the first frame, swapped at half-time, and only then.
+    `_frame` is yellow defending the left goal, so blue starts on the +x half."""
+    sm = _machine()
+    _playing(sm, 10.0)
+    assert _run(sm, 10.0, 309.0).blue_team_on_positive_half is True
+
+    assert sm.step(310.0, None, _frame(310.0)).blue_team_on_positive_half is False
+    _playing(sm, 320.0)
+    assert _run(sm, 320.0, 619.0).blue_team_on_positive_half is False
+    assert sm.step(620.0, None, _frame(620.0)).stage == Stage.POST_GAME
+    assert sm.step(621.0, None, _frame(621.0)).blue_team_on_positive_half is False
+
+
 def test_the_second_half_starts_with_its_kick_off_and_ends_the_match():
     sm = _machine()
     _playing(sm, 10.0)
