@@ -19,8 +19,10 @@ copy of this file on the base branch, so the branch under test can't loosen it. 
 3. **Reach.** A new or changed strategy or tactic module can't affect anything outside itself: no import-time
    effects or hazards (`utama_core/replay/fingerprint.py`'s `_import_time_effects` and `_hazards`:
    environment, files, dynamic imports, module-level state), no imports of another strategy
-   module, and no assigning or deleting attributes of what it imports (`SomeTactic.x = ...`,
-   `setattr`).
+   module (relative ones included), no changing what it imports or an alias of it
+   (`SomeTactic.x = ...`, `t = SomeTactic; t.x = ...`, `mod.TABLE.clear()`, `setattr`), and
+   no changing its own module-level classes or variables from inside a function
+   (`State.streak += 1`): both teams share them.
 
 A static check, not a sandbox: the reviewer still reads the diff. Stdlib only: CI runs it
 without the pixi environment.
@@ -47,6 +49,7 @@ STRATEGY_DIR = "utama_core/strategy/"
 TACTICS_DIR = "utama_core/tactics/"
 REGISTRY = STRATEGY_DIR + "kernel_strategy.py"
 PICKERS = STRATEGY_DIR + "pickers.py"
+PACKAGE_INIT = STRATEGY_DIR + "__init__.py"
 _FINGERPRINT = Path("utama_core/replay/fingerprint.py")
 
 
@@ -64,7 +67,8 @@ def _git(*args: str) -> str:
 
 
 def changed_files(base: str) -> dict[str, str]:
-    """Changed path -> git status letter (A added, M modified, D deleted)."""
+    """Changed path -> git status letter (A added, M modified, D deleted, T type changed, e.g.
+    to a symlink)."""
     out = _git("diff", "--name-status", "--no-renames", f"{base}...HEAD")
     return {path: status[0] for status, path in (line.split("\t", 1) for line in out.splitlines() if line)}
 
@@ -88,8 +92,14 @@ def opponent_problems(changes: dict[str, str]) -> list[str]:
     ]
     if PICKERS in strategy:
         problems.append(f"{PICKERS}: shared by most strategies, so changing it changes the opponents")
+    if PACKAGE_INIT in strategy:
+        problems.append(f"{PACKAGE_INIT}: every strategy runs it, so changing it changes the opponents")
+    problems += [
+        f"{p}: changes the file's type (status {s}), e.g. to a symlink" for p, s in changes.items() if s == "T"
+    ]
     added = sorted(p for p, s in strategy.items() if s == "A")
-    modified = sorted(p for p, s in strategy.items() if s == "M" and p != PICKERS)
+    # anything but an addition or a deletion changes an existing strategy, a type change included
+    modified = sorted(p for p, s in strategy.items() if s not in ("A", "D") and p not in (PICKERS, PACKAGE_INIT))
     if added and modified:
         problems.append(f"adds {', '.join(added)} and also changes {', '.join(modified)}: do one or the other")
     elif len(modified) > 1:
@@ -99,8 +109,14 @@ def opponent_problems(changes: dict[str, str]) -> list[str]:
 
 def registry_problems(old_source: str, new_source: str, added_modules: set[str]) -> list[str]:
     """Check 2's `kernel_strategy.py` rule: the old statements unchanged and in order, plus only
-    `from <added module> import ...` statements."""
-    old = [ast.dump(s) for s in ast.parse(old_source).body]
+    `from <added module> import ...` statements, which may not rebind a name the registry
+    already has (that would replace an opponent's factory) or rename what they import."""
+    old_tree = ast.parse(old_source)
+    old = [ast.dump(s) for s in old_tree.body]
+    bound = {n.id for n in ast.walk(old_tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+    bound |= {
+        a.asname or a.name for n in ast.walk(old_tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names
+    }
     new = ast.parse(new_source).body
     problems, i = [], 0
     for stmt in new:
@@ -110,6 +126,14 @@ def registry_problems(old_source: str, new_source: str, added_modules: set[str])
             problems.append(
                 f"{REGISTRY} line {stmt.lineno}: only imports from the modules this branch adds may be added"
             )
+        else:
+            for a in stmt.names:
+                if a.asname or a.name in bound:
+                    problems.append(
+                        f"{REGISTRY} line {stmt.lineno}: imports {a.name}"
+                        + (f" as {a.asname}" if a.asname else "")
+                        + ", which would rebind or rename a name the registry has"
+                    )
     if i < len(old):
         problems.append(f"{REGISTRY}: changes or removes an existing statement")
     return problems
@@ -125,6 +149,66 @@ def _load_fingerprint(path: Path = _FINGERPRINT):
     return module
 
 
+def _imported_modules(path: str, node: ast.Import | ast.ImportFrom) -> list[str]:
+    """The absolute modules an import statement in `path` names, relative imports resolved
+    (`from . import x` names `<package>.x`)."""
+    if isinstance(node, ast.Import):
+        return [a.name for a in node.names]
+    if not node.level:
+        return [node.module or ""]
+    package = _module_name(path).split(".")[: -node.level]
+    if node.module:
+        return [".".join(package + [node.module])]
+    return [".".join(package + [a.name]) for a in node.names]
+
+
+def _root(node: ast.AST) -> ast.AST:
+    """`x` of `x.a[0].b`."""
+    while isinstance(node, (ast.Attribute, ast.Subscript)):
+        node = node.value
+    return node
+
+
+def _aliases(tree: ast.Module, names: set[str]) -> set[str]:
+    """`names` plus every name bound by a plain assignment from one of them (`t = Tactic`,
+    `a, b = X, Y`, `cfg = mod.TABLE`), to a fixed point. A call (`t = Tactic()`) makes a new
+    object, not an alias."""
+    names = set(names)
+    pairs = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                if isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                    pairs += zip(target.elts, node.value.elts)
+                elif isinstance(target, ast.Tuple):
+                    pairs += [(t, node.value) for t in target.elts]
+                else:
+                    pairs.append((target, node.value))
+    changed = True
+    while changed:
+        changed = False
+        for target, value in pairs:
+            root = _root(value)
+            if isinstance(target, ast.Name) and isinstance(root, ast.Name) and root.id in names:
+                if target.id not in names:
+                    names.add(target.id)
+                    changed = True
+    return names
+
+
+def _module_bindings(tree: ast.Module) -> set[str]:
+    """Names the module itself binds at its top level, classes and variables (not imports or
+    functions): state every team that imports the module shares."""
+    names = set()
+    for stmt in tree.body:
+        if isinstance(stmt, ast.ClassDef):
+            names.add(stmt.name)
+        elif isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            for target in stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]:
+                names |= {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+    return names
+
+
 def reach_problems(path: str, source: str, fingerprint) -> list[str]:
     """Check 3 for one new or changed strategy or tactic module."""
     tree = ast.parse(source)
@@ -134,21 +218,43 @@ def reach_problems(path: str, source: str, fingerprint) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             imported |= {a.asname or a.name.split(".")[0] for a in node.names}
-            modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
-            for m in modules:
+            for m in _imported_modules(path, node):
                 if m.startswith("utama_core.strategy") and m != _module_name(PICKERS):
                     problems.append(f"{path} line {node.lineno}: imports another strategy module ({m})")
+                    break
+    imported = _aliases(tree, imported)
+    # module-level state changed from inside a function; at the top level it is set up once
+    shared = _aliases(tree, _module_bindings(tree)) - imported
+    functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
+    in_function = {id(n) for f in functions for n in ast.walk(f) if n is not f}
+    for node in ast.walk(tree):
         targets = []
         if isinstance(node, (ast.Assign, ast.Delete)):
             targets = node.targets
         elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
             targets = [node.target]
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in fingerprint._MUTATORS
+        ):
+            targets = [node.func.value]
+            changes = f"calls {ast.unparse(node.func)}()"
+        else:
+            changes = None
         for t in targets:
-            base = t
-            while isinstance(base, (ast.Attribute, ast.Subscript)):
-                base = base.value
-            if base is not t and isinstance(base, ast.Name) and base.id in imported:
-                problems.append(f"{path} line {node.lineno}: changes {ast.unparse(t)}, which it imports")
+            base = _root(t)
+            if not isinstance(base, ast.Name) or (base is t and changes is None):
+                continue
+            if base.id in imported:
+                problems.append(
+                    f"{path} line {node.lineno}: {changes or 'changes ' + ast.unparse(t)}, which it imports"
+                )
+            elif base.id in shared and id(node) in in_function:
+                problems.append(
+                    f"{path} line {node.lineno}: {changes or 'changes ' + ast.unparse(t)}, module-level state "
+                    "every team shares; keep it in the factory's closure"
+                )
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("setattr", "delattr"):
             problems.append(f"{path} line {node.lineno}: calls {node.func.id}()")
     return problems

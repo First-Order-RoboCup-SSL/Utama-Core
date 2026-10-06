@@ -175,6 +175,27 @@ def test_moving_a_file_out_of_strategy_fails(repo):
 # --- opponents --------------------------------------------------------------------------------
 
 
+def test_replacing_two_strategies_with_symlinks_fails(repo):
+    # git reports a file turned into a symlink as T, not M; each still changes an opponent
+    for n in "ab":
+        (repo / f"utama_core/strategy/{n}.py").unlink()
+        (repo / f"utama_core/strategy/{n}.py").symlink_to("pickers.py")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "symlinks")
+    assert main(["--base", "main"]) == 1
+
+
+def test_a_type_change_counts_as_changing_a_strategy():
+    problems = opponent_problems({"utama_core/strategy/a.py": "T"})
+    assert any("type" in p for p in problems)
+    assert opponent_problems({"utama_core/strategy/a.py": "M", "utama_core/strategy/b.py": "T"})
+
+
+def test_changing_the_strategy_package_initializer_is_reported():
+    # every strategy runs it, so it is not the one strategy a branch may change
+    assert opponent_problems({"utama_core/strategy/__init__.py": "M"})
+
+
 def test_changing_two_existing_strategies_is_reported():
     assert opponent_problems({"utama_core/strategy/a.py": "M", "utama_core/strategy/b.py": "M"})
 
@@ -205,6 +226,15 @@ def test_registry_may_only_gain_imports_from_added_modules():
     assert registry_problems(REGISTRY_SRC, REGISTRY_SRC + "build_b_kernel_strategy = None\n", added)
 
 
+def test_an_added_module_may_not_rebind_or_rename_a_registry_name():
+    added = {"utama_core.strategy.c"}
+    # placed after b's import, this would replace the opponent b's factory with c's code
+    shadow = REGISTRY_SRC + "from utama_core.strategy.c import build_b_kernel_strategy\n"
+    assert registry_problems(REGISTRY_SRC, shadow, added)
+    renamed = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy as build_a_kernel_strategy\n"
+    assert registry_problems(REGISTRY_SRC, renamed, added)
+
+
 # --- reach ------------------------------------------------------------------------------------
 
 
@@ -231,6 +261,15 @@ def test_a_plain_strategy_reaches_nothing(fingerprint):
         "import sys\n\nsys.path.append('x')\n",
         "import os\n\n\ndef build(ids):\n    return os.environ['X']\n",
         "_streak = 0\n\n\ndef build(ids):\n    global _streak\n    _streak += 1\n",
+        # Through an alias of what it imports.
+        "from utama_core.tactics.press import PressTactic\n\n\ndef build(ids):\n    target = PressTactic\n"
+        "    target.reach = 0\n",
+        "from utama_core.tactics.press import PressTactic\n\n\ndef build(ids):\n    t, n = PressTactic, 1\n"
+        "    t.reach = n\n",
+        # Calling a mutating method on what it imports.
+        "from utama_core.tactics import press\n\n\ndef build(ids):\n    press.TABLE.clear()\n",
+        # Class-level state of its own module, which both teams share.
+        "class State:\n    streak = 0\n\n\ndef build(ids):\n    State.streak += 1\n",
     ],
 )
 def test_reaching_outside_the_module_is_reported(fingerprint, body):
@@ -240,6 +279,19 @@ def test_reaching_outside_the_module_is_reported(fingerprint, body):
 def test_setting_attributes_on_its_own_objects_is_fine(fingerprint):
     body = "class State:\n    pass\n\n\ndef build(ids):\n    s = State()\n    s.last = ids\n    return s\n"
     assert reach_problems("s.py", body, fingerprint) == []
+    made = (
+        "from utama_core.tactics.press import PressTactic\n\n\ndef build(ids):\n    t = PressTactic()\n"
+        "    t.reach = 0\n    t.seen.append(ids)\n    return t\n"
+    )
+    assert reach_problems("s.py", made, fingerprint) == []
+
+
+@pytest.mark.parametrize(
+    "body", ["from .tiki_taka import build_tiki_taka_kernel_strategy\n", "from . import tiki_taka\n"]
+)
+def test_a_relative_import_of_another_strategy_is_reported(fingerprint, body):
+    assert reach_problems("utama_core/strategy/c.py", body, fingerprint)
+    assert reach_problems("utama_core/strategy/c.py", "from .pickers import helper\n", fingerprint) == []
 
 
 def test_every_existing_strategy_but_overload_flow_passes_the_reach_check(fingerprint):
