@@ -1,196 +1,93 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 # Utama Core
-First Order Robotics core software stack for [RoboCup SSL](https://ssl.robocup.org/), an international league where teams build autonomous robotic teams to play football competitively.
 
-## Table of Contents
-- [Setup Utama](#setup-utama)
-- [Repository Guide](#repository-guide)
-- [Setup grSim](#setup-grsim)
-- [Setup AutoReferee](#setup-autoreferee)
-- [Setup SSL Vision for Real Testing](#setup-ssl-vision-for-real-testing)
-- [Field Guide](#field-guide)
-- [System Design](#system-design)
-- [Milestones](#milestones)
+First Order Robotics' software stack for [RoboCup SSL](https://ssl.robocup.org/) (Small Size
+League), where teams of six autonomous robots play football. It covers vision and referee
+input, motion planning, robot control, an in-process referee, a fast simulator (rsim), and the
+strategy layer that decides what every robot does.
 
-## Setup Utama
+## Quick start
 
-1. Install `pixi` package manager with `curl -fsSL https://pixi.sh/install.sh | sh` or click here for Windows installation [Pixi installation](https://pixi.sh/latest/#__tabbed_1_1) 
-1. Restart or create a new terminal 
-1. With pixi: just run `pixi install` in the base folder and you're all setup.
-1. Note that this also installs all modules with `__init__.py` (so you need to run it again when you add an `__init__.py`)
-1. In order to go into the `pixi` venv, run `pixi shell`. You can also run any of the tasks in the `pixi.toml` without first being in a pixi shell. See [Pixi Tasks](#pixi-tasks).
-1. Finally, run `pixi run precommit-install`. This will ensure that linting is done before you commit.
+1. Install [pixi](https://pixi.sh/latest/#installation)
+   (`curl -fsSL https://pixi.sh/install.sh | sh`) and open a new terminal.
+2. `pixi install` in the repository root, then `pixi run precommit-install` so every commit is
+   linted.
+3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
+4. Play one headless match between two strategies and save its replay:
 
-**Note on `CLAUDE.md`**: it is a symlink to `AGENTS.md`, which is the single source of agent
-context (`AGENTS.md` is the cross-vendor default; Claude Code reads `CLAUDE.md`). Edit
-`AGENTS.md` — never the symlink. Linux, macOS and WSL check this out correctly with no setup.
-On *native* Windows, git only materialises symlinks with Developer Mode or Administrator
-privileges enabled; without them `CLAUDE.md` arrives as a 9-byte text file, fixable with
-`git config --global core.symlinks true && git checkout -- CLAUDE.md`.
+       pixi run python tools/tournament/round_robin.py --pair tiki_taka low_block
 
-**Note**
-- if you are using the run button and it is selecting the wrong env (robosim) you will need to manually change the interpreter in VS Code using `Ctrl + Shift + P` -> `Select Interpreter`.
-- if you want to perform a one-off run (ad-hoc) use `pixi run python -m path.to.your_file`, where you replace the `/` with `.` and remove the trailing `.py`.
+5. `pixi run python dashboard_server.py` and open http://localhost:8080 to watch replays and
+   browse tournament results.
 
-### Pixi Tasks
-`pixi run <task_name>` is the generic way to run a task. Some of the main tasks you can run:
-1. `pixi run main` runs main.py
-2. `pixi run precommit-install` downloads the precommit hook to ensure that your code is formatted correctly when you commit and push.
-3. `pixi run lint` runs the full suite of precommit checkers on all files (You need to run the precommit install task above first).
-4. `pixi run test` runs pytest over the `utama_core/tests/` folder
-5. `pixi run replay [-n <file_name>] [-p]` plays a legacy pickle replay (`./replays/<file_name>.pkl`) in the rSoccer viewer.
-   - Use `-n/--replay-file` to give the file name without `.pkl`; if not provided, defaults to the newest `.pkl` directly in `./replays`.
-   - Use `-p/--play-by-play` for step-by-step playback.
-   - Matches run today write columnar `.npz` replays into `./replays/<run>/`; open those in the dashboard (`pixi run python dashboard_server.py`) instead.
-6. `pixi run runs` lists the tournament runs in `./replays` with their start time, git commit, match and stall counts and arguments.
+Everything runs in rsim with the in-process referee; grSim, the official GameController and
+real robots are optional ([external setup](docs/setup_external.md)).
 
-## Repository Guide
+## What are you working on?
 
-### Folder Structure
+| Task | Start here |
+|---|---|
+| Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
+| Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
+| The referee | [docs/custom_referee.md](docs/custom_referee.md) |
+| Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
+| The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
+| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/setup_external.md](docs/setup_external.md) |
+| Which script does what | [docs/tools.md](docs/tools.md) |
+| Everything else | [docs/README.md](docs/README.md), the index of every doc |
+
+Coding agents: read [AGENTS.md](AGENTS.md) first (`CLAUDE.md` is a symlink to it).
+
+## Layout
 
 Everything lives under `utama_core/`:
 
-1. `engine`: the tactic-kernel infrastructure: `Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee-override plumbing
-1. `strategy`: the strategies (one module per `build_*_kernel_strategy` factory, re-exported by `kernel_strategy.py`), see `docs/strategies.md`
-1. `tactics`: reusable `Tactic` implementations that strategies compose
-1. `skills`: lowest level of control for individual robots
-1. `shared`: geometry and helpers shared by tactics and skills
-1. `custom_referee`: the in-process referee (rules, state machine, restart positioning, profiles)
-1. `motion_planning`: control algorithms for movement and path planning
-1. `team_controller`: interfacing with vision (including processing) and robots
-1. `run`: the main running loop (`StrategyRunner`)
-1. `data_processing`: processors of vision, robot_info and referee raw data
-1. `dashboard`: the browser dashboard
-1. `global_utils`: utility functions shared across all folders
-1. `entities`: classes for field, robot, data entities etc.
-1. `rsoccer_simulator`: lightweight rSoccer simulator for testing
-1. `replay`: replay writing/reading, clip rendering and replay analysis
-1. `tests`: all tests
-1. `config`: configs for the robots (defaults, settings, physical and referee constants, etc.)
+- `strategy/`: the strategies (one module per `build_*_kernel_strategy` factory, re-exported by `kernel_strategy.py`)
+- `tactics/`, `skills/`, `shared/`: reusable tactics, per-robot skills, and geometry they share
+- `engine/`: the tactic-kernel infrastructure (`Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee overrides)
+- `custom_referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
+- `motion_planning/`: path planning and motion control
+- `run/`: the main loop (`StrategyRunner`)
+- `replay/`: replay files, the match-result cache and code fingerprints
+- `analysis/`: offline analyses of tournament runs and replays (ball losses, chances, restarts, stalls)
+- `scenario_bench/`: the scenario bench's starts, banks, harvester and scorer
+- `rsoccer_simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
+- `team_controller/`, `data_processing/`: vision, robot radio and referee input
+- `dashboard/`: the browser dashboard
+- `entities/`, `config/`, `global_utils/`: data classes, settings and constants, utilities
+- `tests/`: all tests
 
-### Scripts
+Scripts live in `tools/` (tournaments in `tools/tournament/`) and `examples/`; see
+[docs/tools.md](docs/tools.md).
 
-Scripts, run with `pixi run python <path>` from the repository root:
-
-| Script | Purpose |
-| --- | --- |
-| `main.py` | Exhibition demo: one attacker plus keeper over grSim with the dashboard (`pixi run main`) |
-| `tools/tournament/round_robin.py` | Round-robin of every kernel strategy at smoke-test length; writes `replays/tournament_*/` |
-| `tools/tournament/full_match_tournament.py` | Full-length round-robin among the competitive-tier strategies |
-| `tools/tournament/tournament_lib.py` | Shared match-running code for the tournament scripts (not run directly) |
-| `tools/elo.py` / `tools/plot_elo.py` | Elo ratings from tournament `summary.json` files, and their plots |
-| `tools/debug_match.py` | One-off match runner for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
-| `tools/repro_from_replay.py` | Reload a replay's field state at a timestamp into a fresh headless rsim match |
-| `dashboard_server.py` | Standalone dashboard for browsing replays and tournaments |
-| `examples/demo_*.py` | Demos: custom referee, referee GUIs, dribbler test, Exhibition Road, split-shape match |
-| `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together |
-
-### Code Writing
-
-1. Use typing for all variables.
-2. Document your code on the subfolder's `README.md` and wiki.
-3. Download and install `Black Formatter` for code formatting
-
-   1. For VScode, go to View > Command Palette and search `Open User Settings (JSON)`
-   2. Find the `"[python]"` field and add the following lines:
-
-   ```yaml
-   "[python]": {
-       "editor.defaultFormatter": "ms-python.black-formatter", # add this
-       "editor.formatOnSave": true, # and add this
-     }
-   ```
-
-### Push and Commit
-
-1. Each feature should live within its own branch of the repository. Clear out stale branches.
-2. Ensure that you have run `pixi run precommit-install` at least once. This ensures that the pre-commit steps are run on each commit to clean up your code.
-3. If the precommit fails, click on `Open Git Log` on the popup window to view the error. Often times, the failure is automatically fixed and you just need to commit the changes the precommit hook makes.
-4. The popup window can often be quite cryptic when it fails. If you are getting a `bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)` popup on commit, this is not the actual cause of the failure. However, Windows decides to show this warning, because it is first warning in the output. To silence this:
-```bash
-sudo apt-get update
-sudo apt-get install -y locales
-sudo locale-gen en_US.UTF-8
-sudo update-locale LANG=en_US.UTF-8
-source ~/.bashrc
-```
-
-### Making a PR
-For a PR to be accepted, it must:
-1. have a `release` tag assigned, either `release:major`, `release:minor`, or `release:patch`.
-2. Pass all CI checks, both tests and linting.
-3. Not be branched from a stale version of main. Remember to update the PR:
-```bash
-git checkout main
-git checkout <your_branch>
-git merge main
-```
-4. have all Copilot comments reviewed (Not all must be addressed: Copilot makes mistakes too, so don't blindly accept!)
-5. have at least one tick from an assigned reviewer
-
-## Setup grSim
-1. Go to [grSim repo](https://github.com/RoboCup-SSL/grSim) and follow the [installation steps](https://github.com/RoboCup-SSL/grSim/blob/master/INSTALL.md).
-2. Change the values in the configuration to what is highlighted below:
-
-![grsim_setup](./assets/images/grsim_setup.png)
-
-3. To run, execute `./bin/grSim` in the cloned repo.
-
-
-## Setup AutoReferee
-
-1. Make sure `grSim` is setup properly and can be called through terminal.
-2. `git clone` from [AutoReferee repo](https://github.com/TIGERs-Mannheim/AutoReferee) in a folder named `/AutoReferee` in root directory.
-3. Change `DIV_A` in `/AutoReferee/config/moduli/moduli.xml` to `DIV_B`.
-
-```xml
-    <globalConfiguration>
-        <environment>ROBOCUP</environment>
-        <geometry>DIV_B</geometry>
-    </globalConfiguration>
-```
-
-4. Get the latest [compiled game controller](https://github.com/RoboCup-SSL/ssl-game-controller/releases/) and rename it to `ssl-game-controller`. Save it in `/ssl-game-controller` directory.
-
-### Starting the external test environment
-
-Once grSim, the GameController and AutoReferee are all set up per the steps above, `./start_test_env.sh` launches all three together and tears them down on Ctrl+C. It starts nothing from this repo — run your own strategy separately once they are up — and it reminds you to open the GameController's web UI at http://localhost:8081/#/match (that port is the GameController's own; this repo's dashboard is :8080). See the comment block at the top of the script for what each process is for and its known rough edges.
-
-You only need this when you specifically want the *official* GameController/AutoReferee in the loop. For everyday work the in-process [`CustomReferee`](docs/custom_referee.md) replaces both, needs no external process, and behaves identically across RSim, grSim and real modes.
-
-## Setup SSL Vision for Real Testing
-
-1. Connect to an external hotspot and ensure both the vision Linux laptop and your personal laptop are connected to the same network.
-2. Allow inbound UDP packets through the port you set. Run the following command with admin privileges:
-<pre>
-New-NetFirewallRule -DisplayName "Allow Multicast UDP 10006" -Direction Inbound -Protocol UDP -LocalPort 10006 -Action Allow
-</pre>
-3. Type "%USERPROFILE%" into "Windows + R", then add a `.wslconfig` file. Ensure that the file type is set to WSLCONFIG.
-<pre>
-[wsl2]
-networkingMode=mirrored
-</pre>
-4. Restart WSL using `wsl --shutdown`, then check the connection using the following command:
-<pre>
-sudo tcpdump -i eth1 -n host 224.5.23.2 and udp port 10006
-</pre>
-If you see UDP packets, everything is working.
-
-## Field Guide
+## Field conventions
 
 ![field_guide](assets/images/field_guide.jpg)
 
-1. All coordinates and velocities will be in meters or meters per second.
-2. All angular properties will be in radians or radians per second, normalised between [pi, -pi]. A heading of radian 0 indicates a robot facing towards the positive x-axis (ie left to right).
-3. Unless otherwise stated, the coordinate system is aligned such that blue robots are on the left and yellow are on the right.
-4. The center of the field is marked as (0, 0).
+- Distances in metres, velocities in metres per second.
+- Angles in radians, normalised to [-pi, pi]; heading 0 faces the positive x-axis (left to right).
+- The centre of the field is (0, 0). Unless stated otherwise, blue defends the left and yellow
+  the right.
 
-## System Design
+## System design
 
-![Dataflow Diagram](/assets/images/pipeline_new.drawio.png)
+![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
 
-The system design diagram is attached here for reference. For more information on the design, see [here](/docs/pipeline_method.md).
+How vision, robot and referee data become one `Game` state: [docs/pipeline_method.md](docs/pipeline_method.md).
+
+## Contributing
+
+Work on a branch and open a pull request into `main`. A pull request needs:
+
+1. a `release:major`, `release:minor` or `release:patch` label: every merge to `main` releases
+   a new version automatically;
+2. passing CI (tests and lint; `pixi run test` and `pixi run lint` locally);
+3. to be up to date with `main`;
+4. every Copilot comment reviewed (not necessarily accepted);
+5. an approval from an assigned reviewer.
+
+Editor setup, pre-commit troubleshooting and the pixi environments: [docs/contributing.md](docs/contributing.md).
 
 ## Milestones
 
-- 2024 November 20 - First goal in grSim (featuring Ray casting)
+- 2024 November 20 - First goal in grSim (featuring ray casting)

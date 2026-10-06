@@ -14,19 +14,19 @@
 #
 # What it launches, in order:
 #   1. grSim                     — the official SSL simulator (vision + robot
-#                                  command UDP). Must be on PATH; see README's
-#                                  "Setup grSim".
+#                                  command UDP). Must be on PATH; see
+#                                  docs/setup_external.md.
 #   2. ssl-game-controller/      — the official referee GameController. Its web
 #                                  UI is the http://localhost:8081/#/match the
 #                                  script reminds you to open; it is not served
 #                                  by this repo (our own dashboard is :8080).
 #   3. AutoReferee/ (./gradlew run) — TIGERs Mannheim's automatic referee, which
 #                                  watches vision and feeds decisions to the
-#                                  GameController. See README's "Setup
-#                                  AutoReferee".
+#                                  GameController. See
+#                                  docs/setup_external.md.
 #
 # Prerequisites (none of these directories are tracked here — both are
-# gitignored, you clone/download them yourself per the README):
+# gitignored, you clone/download them yourself per docs/setup_external.md):
 #   - `grSim` callable from the terminal
 #   - `./ssl-game-controller/` containing the GameController binary
 #   - `./AutoReferee/` containing the AutoReferee checkout (gradle wrapper)
@@ -37,13 +37,7 @@
 # specifically want the official GameController/AutoReferee in the loop, e.g.
 # validating against real competition software. See docs/custom_referee.md.
 #
-# Known rough edges (documented rather than silently changed — the naming one
-# needs whoever actually runs this to say which spelling is correct):
-#   - README's "Setup AutoReferee" step 4 says to rename the downloaded
-#     GameController binary to `ssl_game_controller` (underscore), but line 49
-#     below executes `./ssl-game-controller` (hyphen, same as the directory).
-#     One of the two is wrong; following the README literally makes this step
-#     fail.
+# Known rough edges (documented rather than silently changed):
 #   - The `if [ $? -ne 0 ]` checks after each `&` test whether the shell
 #     managed to background the job, not whether the program actually started,
 #     so a missing binary or a crash-on-startup is not caught here — it shows

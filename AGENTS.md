@@ -125,6 +125,9 @@ declarations) — check there before reintroducing one of them.
 
 ## Where things live
 
+`docs/README.md` indexes every doc by kind and `docs/tools.md` every script; the ones agents
+need most:
+
 - `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
