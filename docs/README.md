@@ -23,6 +23,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 ## Current results
 
 - [strategies.md](strategies.md): the strategy catalog: every `build_*_kernel_strategy`, its status, and its latest round-robin results.
+- [pitch_zones.md](pitch_zones.md): names for the parts of the pitch (thirds, wings, centre, the box, danger), with a diagram.
 - [signals.md](signals.md): every signal recorded about how a strategy plays, grouped by question, with reference ranges and what an off value means.
 - [signal_report.md](signal_report.md): figures of the main signals for every strategy in the latest full round-robin.
 

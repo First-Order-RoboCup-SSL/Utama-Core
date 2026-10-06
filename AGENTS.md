@@ -43,6 +43,8 @@ One term per thing; reuse these instead of coining new ones.
   how far the bench and cheap proxy metrics agree with round-robin standings.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to the scenario bench or any strategy.
+- **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
+  box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
