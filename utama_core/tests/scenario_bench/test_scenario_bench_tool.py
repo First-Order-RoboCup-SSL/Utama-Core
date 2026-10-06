@@ -119,8 +119,8 @@ def test_an_earlier_run_s_errored_scenarios_are_not_a_baseline(tmp_path):
             }
         )
     )
-    outcomes, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
-    assert outcomes == {"fine": [1]}
+    runs, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
+    assert runs == {"fine": {"outcomes": [1], "signals": None}}
 
 
 def _many(n):
@@ -202,3 +202,37 @@ def test_a_clear_difference_is_detected_not_futile():
     deltas = [-1.0] * 30 + [0.0] * 70  # t far past 4
     assert scenario_bench._stop_reason(deltas, stop_at_t=4.0) == "detected"
     assert scenario_bench._stop_reason([0.0], stop_at_t=4.0) is None  # one delta decides nothing
+
+
+def _signals(**changed) -> dict:
+    return {name: 0 for name in scenario_bench.SIGNALS} | changed
+
+
+def test_signals_are_paired_per_start_and_summarised_with_their_t(monkeypatch):
+    # the candidate concedes 3 s more danger on every other start and is otherwise the same
+    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats, *_reuse):
+        worse = config == "cand" and int(bench_scenario.scenario_id[1:]) % 2 == 0
+        signals = _signals(danger_s=3.0 if worse else 0.0)
+        return {"outcomes": [0] * repeats, "signals": [signals] * repeats, "fouls": 0, "stalls": 0, "errors": []}
+
+    monkeypatch.setattr(scenario_bench, "_runs", fake_runs)
+    rows, _ = scenario_bench._score(
+        _many(10), candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base"
+    )
+
+    summary = scenario_bench._signal_summary(rows)
+    assert summary["danger_s"]["mean_delta"] == 1.5
+    assert summary["danger_s"]["changed"] == 5
+    assert summary["danger_s"]["t"] == 1.5 / (math.sqrt(2.5) / math.sqrt(10))
+    assert summary["shots"] == {"mean_delta": 0.0, "t": 0.0, "changed": 0, "n_paired": 10}
+
+
+def test_an_earlier_run_without_signals_still_pairs_outcomes():
+    rows = []
+    cand = {"outcomes": [1], "signals": [_signals(shots=1)], "fouls": 0, "stalls": 0, "errors": []}
+    against = {"s000": {"outcomes": [0], "signals": None}}
+    scenario_bench._score_batch(rows, _many(1), [(cand, None)], against, 1)
+
+    assert rows[0]["delta"] == 1.0
+    assert rows[0]["signal_deltas"] is None
+    assert scenario_bench._signal_report({"signals": scenario_bench._signal_summary(rows), "aggregates": []}) == []

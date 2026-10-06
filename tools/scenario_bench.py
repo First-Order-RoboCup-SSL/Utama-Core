@@ -132,6 +132,7 @@ from utama_core.scenario_bench.hand_authored_scenarios import (
 )
 from utama_core.scenario_bench.scenario_harvester import harvest_run_dir
 from utama_core.scenario_bench.scenario_scorer import (
+    SIGNALS,
     _resolve_config_name,
     score_scenario,
 )
@@ -211,7 +212,13 @@ def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
 
 def _start_result(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float) -> dict:
     r = score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
-    return {"outcome": int(r.outcome), "foul": bool(r.foul), "stalled": bool(r.stalled), "error": r.error}
+    return {
+        "outcome": int(r.outcome),
+        "foul": bool(r.foul),
+        "stalled": bool(r.stalled),
+        "error": r.error,
+        "signals": r.signals,
+    }
 
 
 def _runs(
@@ -236,25 +243,28 @@ def _runs(
         results.append(record["result"])
     return {
         "outcomes": [r["outcome"] for r in results],
+        "signals": [r.get("signals") for r in results],
         "fouls": sum(r["foul"] for r in results),
         "stalls": sum(r["stalled"] for r in results),
         "errors": [r["error"] for r in results if r["error"]],
     }
 
 
-def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) -> tuple[dict[str, list[int]], dict]:
-    """Baseline outcomes from an earlier run's JSON (typically another commit), keyed by
-    scenario id. Refuses a file scored against a different opponent/horizon/repeats:
+def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) -> tuple[dict[str, dict], dict]:
+    """Baseline outcomes and signals from an earlier run's JSON (typically another commit),
+    keyed by scenario id. Refuses a file scored against a different opponent/horizon/repeats:
     those outcomes are not comparable."""
     payload = json.loads(path.read_text())
     for key, want in (("opponent", opponent), ("horizon_s", horizon_s), ("repeats", repeats)):
         if payload.get(key) != want:
             raise SystemExit(f"--against-results {path}: {key} is {payload.get(key)!r}, this run uses {want!r}")
-    outcomes = {
-        row["scenario_id"]: row["candidate_outcomes"] for row in payload["results"] if not row.get("candidate_errors")
+    runs = {
+        row["scenario_id"]: {"outcomes": row["candidate_outcomes"], "signals": row.get("candidate_signals")}
+        for row in payload["results"]
+        if not row.get("candidate_errors")
     }
     source = {"path": str(path), "git_revision": payload.get("git_revision"), "candidate": payload.get("candidate")}
-    return outcomes, source
+    return runs, source
 
 
 def _score_one(
@@ -356,7 +366,7 @@ def _score(
     horizon_s: float,
     repeats: int,
     baseline: Optional[str] = None,
-    against: Optional[dict[str, list[int]]] = None,
+    against: Optional[dict[str, dict]] = None,
     workers: int = 1,
     stop_at_t: Optional[float] = None,
     check_every: int = 100,
@@ -438,11 +448,13 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
         index = len(rows) + 1
         sid = bench_scenario.scenario_id
         print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
-        base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
-        delta = None
+        base_run = base or (against or {}).get(sid)
+        base_outcomes = base_run["outcomes"] if base_run else None
+        delta = signal_deltas = None
         # a run that errored (e.g. the start could not be set up) is not an outcome
         if base_outcomes is not None and not cand["errors"] and not (base and base["errors"]):
             delta = statistics.fmean(cand["outcomes"]) - statistics.fmean(base_outcomes)
+            signal_deltas = _signal_deltas(cand.get("signals"), base_run.get("signals"))
         print(
             f"  candidate={cand['outcomes']} baseline={base_outcomes}"
             + (f" delta={delta:+.2f}" if delta is not None else "")
@@ -458,6 +470,9 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
                 "candidate_outcomes": cand["outcomes"],
                 "baseline_outcomes": base_outcomes,
                 "delta": delta,
+                "candidate_signals": cand.get("signals"),
+                "baseline_signals": base_run.get("signals") if base_run else None,
+                "signal_deltas": signal_deltas,
                 "candidate_fouls": cand["fouls"],
                 "candidate_stalls": cand["stalls"],
                 "baseline_fouls": base["fouls"] if base else None,
@@ -466,6 +481,30 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
                 "baseline_errors": base["errors"] if base else [],
             }
         )
+
+
+def _signal_deltas(cand: Optional[list], base: Optional[list]) -> Optional[dict[str, float]]:
+    """Per signal, the candidate's mean over the jittered starts minus the baseline's; None
+    when either side has no signals (an older results file)."""
+    if not cand or not base or any(s is None for s in cand + base):
+        return None
+    return {name: statistics.fmean(s[name] for s in cand) - statistics.fmean(s[name] for s in base) for name in SIGNALS}
+
+
+def _signal_summary(rows: list[dict]) -> dict[str, dict]:
+    """Per signal: mean paired delta over the scenarios that have one, its t, and how many
+    scenarios it changed. Like the outcome delta, |t| under about 2 is within chance."""
+    paired = [r["signal_deltas"] for r in rows if r.get("signal_deltas")]
+    summary = {}
+    for name in SIGNALS:
+        deltas = [d[name] for d in paired]
+        summary[name] = {
+            "mean_delta": statistics.fmean(deltas) if deltas else None,
+            "t": _t(deltas) if len(deltas) > 1 else None,
+            "changed": sum(1 for d in deltas if d != 0),
+            "n_paired": len(deltas),
+        }
+    return summary
 
 
 def _aggregate_by_family(rows: list[dict]) -> list[dict]:
@@ -492,6 +531,7 @@ def _aggregate_by_family(rows: list[dict]) -> list[dict]:
                 # mean over scenarios of the candidate's outcome stdev across jittered starts
                 "seed_noise": statistics.fmean(statistics.pstdev(r["candidate_outcomes"]) for r in family_rows),
                 "candidate_stalls": sum(r["candidate_stalls"] for r in family_rows),
+                "signals": _signal_summary(family_rows),
             }
         )
     return sorted(aggregates, key=lambda a: a["family"])
@@ -517,6 +557,38 @@ def _overall(rows: list[dict]) -> Optional[str]:
 
 def _fmt(x: Optional[float], spec: str = "+.2f") -> str:
     return "-" if x is None else format(x, spec)
+
+
+def _signal_cell(summary: dict) -> str:
+    if summary["mean_delta"] is None:
+        return "-"
+    t = summary["t"]
+    if t is None or not math.isfinite(t):
+        return _fmt(summary["mean_delta"])
+    return f"{_fmt(summary['mean_delta'])} (t {t:+.1f})"
+
+
+def _signal_report(payload: dict) -> list[str]:
+    """The signals table: per signal, the mean paired delta per start and its t, overall and
+    per family."""
+    if not payload.get("signals") or not any(s["n_paired"] for s in payload["signals"].values()):
+        return []
+    families = payload["aggregates"]
+    lines = [
+        "",
+        "## Signals",
+        "",
+        "Mean paired delta per start (candidate minus baseline) of the candidate's signals over the "
+        "scored window, see `docs/signals.md`. Better is the direction that usually helps the candidate.",
+        "",
+        "| Signal | Better | All | " + " | ".join(a["family"] for a in families) + " |",
+        "|---|---|---:|" + "---:|" * len(families),
+    ]
+    for name, direction in SIGNALS.items():
+        cells = [_signal_cell(payload["signals"][name])]
+        cells += [_signal_cell(a["signals"][name]) for a in families]
+        lines.append(f"| {name} | {'more' if direction > 0 else 'less'} | " + " | ".join(cells) + " |")
+    return lines
 
 
 def _markdown_report(payload: dict) -> str:
@@ -556,6 +628,7 @@ def _markdown_report(payload: dict) -> str:
             f"{agg['wins']} | {agg['losses']} | {agg['ties']} | {agg['seed_noise']:.2f} | {agg['candidate_stalls']} |"
         )
 
+    lines.extend(_signal_report(payload))
     lines.extend(
         [
             "",
@@ -757,6 +830,7 @@ def main() -> int:
         "stopped": stopped,
         "reuse": reuse_report,
         "aggregates": aggregates,
+        "signals": _signal_summary(rows),
         "results": rows,
         "harvest_report": harvest_report,
     }

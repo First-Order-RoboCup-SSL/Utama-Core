@@ -17,10 +17,12 @@ from utama_core.scenario_bench.hand_authored_scenarios import (
 )
 from utama_core.scenario_bench.scenario_scorer import (
     FLICKER_S,
+    SIGNALS,
     ScenarioOutcome,
     _classify_outcome,
     _RealLossWatch,
     score_scenario,
+    start_signals,
 )
 
 
@@ -42,6 +44,7 @@ def test_score_scenario_returns_a_result_with_stats():
     assert result.scenario_id == "kickoff_center_v1"
     assert isinstance(result.outcome, ScenarioOutcome)
     assert result.ticks_run > 0
+    assert set(result.signals) == set(SIGNALS)
 
 
 def test_score_scenario_reports_error_on_bad_config():
@@ -114,3 +117,27 @@ def test_bench_plays_with_the_round_robins_motion_planner(monkeypatch):
     scenario_scorer._build_runner("press_and_pass", "low_block", stats_path="unused")
 
     assert seen["control_scheme"] == inspect.signature(tournament_lib.run_match).parameters["control_scheme"].default
+
+
+def test_start_signals_are_the_candidate_s_side_only():
+    shot = {"side": "friendly", "open_goal": 0.5, "shot_after_s": None}
+    chances = {
+        "shots": [shot, {**shot, "open_goal": 0.25}, {**shot, "side": "enemy", "open_goal": 0.75}],
+        "regains": [
+            {"side": "friendly", "shot_after_s": 2.0},
+            {"side": "friendly", "shot_after_s": None},
+            {"side": "enemy", "shot_after_s": 1.0},
+        ],
+        "danger": {"friendly": {"s": 4.5, "spells": 1}, "enemy": {"s": 9.0, "spells": 2}},
+    }
+
+    assert start_signals(chances, real_losses=2, entries=1) == {
+        "shots": 2,
+        "open_shots": 0.75,
+        "regains_to_shot": 1,
+        "entries": 1,
+        "real_losses": 2,
+        "shots_faced": 1,
+        "open_shots_faced": 0.75,
+        "danger_s": 4.5,
+    }
