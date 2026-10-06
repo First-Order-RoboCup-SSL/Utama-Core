@@ -1,6 +1,6 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
-`build_*_kernel_strategy` config against every other, one full-length match per pair
-(`MATCH_DURATION_SECONDS` below; `full_match_tournament.py` also sweeps side and kickoff).
+`build_*_kernel_strategy` config against every other, one full match per pair
+(two halves, see `MAX_MATCH_SECONDS` below; `full_match_tournament.py` also sweeps side and kickoff).
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
@@ -28,8 +28,8 @@ Headless rsim, no external process required. For each distinct pair of the
 runs one `StrategyRunner` match (6v6: 1 goalkeeper + 5 outfield robots per
 side — enough for every factory's minimum, including the `min_attack=2`
 configs and `build_three_slot_kernel_strategy`'s three concurrent slots),
-steps it for `MATCH_DURATION_SECONDS` of sim time, and records the final
-score from `CustomReferee`'s scoreboard.
+steps it until `CustomReferee` calls full time, and records the final
+score from its scoreboard.
 
 Deliberately the smallest mechanism that answers "how do these configs do
 against each other": a for-loop over `StrategyRunner` matches and a plain
@@ -102,13 +102,16 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 
-# A full-length match: 600 s of continuous play. There is no half-time (nothing advances the
-# referee's stage), so config_a stays on the right and takes the only kickoff; matches are
-# not repeated with sides swapped. Shorter matches rank differently: 65s matches were
+# A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped
+# whenever no team may play the ball (`custom_referee/state_machine.py`), so about 710 s of
+# sim time (785 s in two measured matches, tournament_20261006_111922). config_a kicks off the first half and config_b the second; the teams don't change
+# ends (config_a stays on the right; `docs/custom_referee.md`, Known gaps). Matches are not
+# repeated with sides swapped. Shorter matches rank differently: 65s matches were
 # 55% draws, and 16 of 40 full matches (replays/tournament_20261003_102921) changed
 # result after 180s, enough to reorder the top of the table. rsim is deterministic, so
 # a short match is exactly the start of the full one; it just stops before it's decided.
-MATCH_DURATION_SECONDS = 600.0
+# This only caps a match that can't reach full time (most took under 870 s of sim time).
+MAX_MATCH_SECONDS = 1200.0
 
 
 def run_match(
@@ -119,7 +122,7 @@ def run_match(
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
 ) -> MatchResult:
-    """Play one match at this module's `MATCH_DURATION_SECONDS`, config_a
+    """Play one full match (capped at this module's `MAX_MATCH_SECONDS`), config_a
     fixed to the right side and kickoff (this module's historical, un-swept
     convention — see `full_match_tournament.py` for the decoupled side/
     kickoff sweep). Thin wrapper over `tournament_lib.run_match`; see its
@@ -128,7 +131,7 @@ def run_match(
     return _lib_run_match(
         config_a_name,
         config_b_name,
-        duration_seconds=MATCH_DURATION_SECONDS,
+        duration_seconds=MAX_MATCH_SECONDS,
         run_dir=run_dir,
         control_scheme=control_scheme,
         fuzz_seed=fuzz_seed,
@@ -324,7 +327,7 @@ def main() -> None:
                 graph,
                 a,
                 b,
-                duration_seconds=MATCH_DURATION_SECONDS,
+                duration_seconds=MAX_MATCH_SECONDS,
                 control_scheme=control_scheme,
                 fuzz_seed=fuzz_seed,
                 fuzz_interval_s=fuzz_interval_s,
@@ -349,7 +352,7 @@ def main() -> None:
             f"--reuse: {len(reused)} stored result(s) reused, {len(spot_checked)} replayed as a spot-check, "
             f"{len(pairs) - len(spot_checked)} to play"
         )
-    print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, {MATCH_DURATION_SECONDS:.0f}s sim time per match, headless rsim")
+    print(f"{N_OUTFIELD + 1}v{N_OUTFIELD + 1}, two 300 s halves of playing time per match, headless rsim")
     if no_save:
         print("--no-save: not recording replay/intention-log/stats for this run")
     else:
@@ -501,7 +504,7 @@ def main() -> None:
         "run": _run_metadata(),
         "config_names": sorted(config_names),
         "control_scheme": control_scheme,
-        "match_duration_seconds": MATCH_DURATION_SECONDS,
+        "max_match_seconds": MAX_MATCH_SECONDS,
         "fuzz_seed": fuzz_seed,
         "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
         "results": [

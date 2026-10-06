@@ -5,9 +5,9 @@ status, and the latest results. Short config names drop `build_`/`_kernel_strate
 
 Run:
 
-- `pixi run python tools/tournament/round_robin.py [name ...]` — full-length (600s) round-robin over every config (or the
+- `pixi run python tools/tournament/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
   named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
-- `pixi run python tools/tournament/full_match_tournament.py` — 600s, side x kickoff decoupled round-robin over
+- `pixi run python tools/tournament/full_match_tournament.py` — full-match, side x kickoff decoupled round-robin over
   the `COMPETITIVE` list in that file.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.

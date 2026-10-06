@@ -1,8 +1,8 @@
 """Full-length, side/kickoff-decoupled round-robin among the `competitive`-tier
 strategies from `docs/strategies.md` (`counter_flow`, `tiki_taka`, `zone_fluid`,
-`counter_press`), 600s of continuous play per match like `round_robin.py`. There is
-no half-time (nothing advances the referee's stage); instead each pair plays on both
-sides and with both kickoffs.
+`counter_press`), two halves of 300 s of playing time per match like `round_robin.py`.
+Teams don't change ends at half-time, so each pair plays on both sides and with both
+first-half kickoffs.
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
 ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
@@ -104,7 +104,7 @@ from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for e
 from tools.tournament.tournament_lib import run_match as _lib_run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 
-MATCH_DURATION_SECONDS = 600.0  # full length, continuous: no half-time
+MAX_MATCH_SECONDS = 1200.0  # caps a match that can't reach full time; see round_robin.py
 
 COMPETITIVE = [
     "build_counter_flow_kernel_strategy",
@@ -153,7 +153,7 @@ def run_match_cell(
     result = _lib_run_match(
         config_a_name,
         config_b_name,
-        duration_seconds=MATCH_DURATION_SECONDS,
+        duration_seconds=MAX_MATCH_SECONDS,
         a_is_right=a_is_right,
         a_kicks_off=a_kicks_off,
         run_dir=run_dir,
@@ -195,7 +195,7 @@ def main() -> None:
 
     print(f"Competitive-only decoupled round-robin: {len(COMPETITIVE)} configs, {len(base_pairs)} pairs")
     print(f"{len(cells)} cells/pair (side x kickoff) = {len(jobs)} matches")
-    print(f"6v6, {MATCH_DURATION_SECONDS:.0f}s sim time per match (full match), headless rsim")
+    print("6v6, two 300 s halves of playing time per match, headless rsim")
     if no_save:
         print("--no-save: not recording replay/intention-log/stats for this run\n")
     else:
@@ -261,7 +261,7 @@ def main() -> None:
     summary = {
         "run_id": run_id,
         "config_names": sorted(COMPETITIVE),
-        "match_duration_seconds": MATCH_DURATION_SECONDS,
+        "max_match_seconds": MAX_MATCH_SECONDS,
         "results": [
             {
                 "config_a": r.config_a,

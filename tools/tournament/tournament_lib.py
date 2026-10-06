@@ -28,6 +28,7 @@ from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
@@ -132,7 +133,11 @@ def run_match(
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
 ) -> MatchResult:
-    """Play one match between two kernel-strategy factories.
+    """Play one match between two kernel-strategy factories, until the referee calls full
+    time (two halves of the profile's `half_duration_seconds` of playing time, the clock
+    stopped whenever no team may play the ball) or `duration_seconds` of sim time pass,
+    whichever is first. The cap only ends a match that can't finish: two 300 s halves took
+    at most 870 s of sim time in `tournament_20261005_170958`'s replays.
 
     `config_a` is always yellow (a fixed convention — colour is never varied
     separately, since no tactic reads it and there's no rule reason to test
@@ -236,6 +241,8 @@ def run_match(
     try:
         for _ in range(int(duration_seconds * TICKS_PER_SECOND)):
             runner.step_once()
+            if runner.my.game.referee is not None and runner.my.game.referee.stage == Stage.POST_GAME:
+                break
         ref_data = runner.my.game.referee
         score_a = ref_data.yellow_team.score
         score_b = ref_data.blue_team.score
