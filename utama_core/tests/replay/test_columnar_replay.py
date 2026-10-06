@@ -8,6 +8,8 @@ floats off it dominates load time on a full-length match.
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from utama_core.entities.data.referee import RefereeData
@@ -302,3 +304,39 @@ def test_state_arrays_are_stored_as_float32_and_read_back_as_float64(tmp_path):
     assert isinstance(got.friendly_robots[1].p.x, float)  # np.float64 is a float; np.float32 is not
     assert got.friendly_robots[1].p.x == pytest.approx(1.23456789, abs=1e-6)
     assert got.referee.designated_position == pytest.approx((1.5, -0.25))
+
+
+@pytest.mark.parametrize(
+    "clock, stored",
+    [
+        (lambda ts: max(0.0, 1.0 - ts), [0]),  # the custom referee: stops at 0
+        (lambda ts: 0.5 - ts, [0, 31]),  # a real referee into overtime: stored once, as it crosses 0
+        (lambda ts: max(0.0, 1.0 - ts) if ts < 2.0 else 300.0 - (ts - 2.0), [0, 120]),  # a new stage
+    ],
+)
+def test_a_stage_clock_that_stops_at_zero_is_not_stored_every_tick(tmp_path, clock, stored):
+    """tournament_20261005_170958: the first-half stage clock reads 0 from 300 s on, and the
+    sidecar stored a full referee message on every tick of the second 300 s of every match."""
+    dt = 1.0 / 60
+    writer = _make_writer(tmp_path)
+    for i in range(180):
+        ts = i * dt
+        writer.write_frame(
+            GameFrame(
+                ts=ts,
+                my_team_is_yellow=True,
+                my_team_is_right=True,
+                friendly_robots={1: _robot(1, 0, 0, True)},
+                enemy_robots={},
+                ball=Ball(p=Vector3D(0, 0, 0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
+                referee=dataclasses.replace(
+                    _referee(RefereeCommand.NORMAL_START), time_sent=ts, time_received=ts, stage_time_left=clock(ts)
+                ),
+            )
+        )
+    writer.close()
+    replay = load_columnar_replay(writer.path)
+
+    assert sorted(replay.sparse_referee) == stored
+    for i in range(180):
+        assert replay.frame_at(i).referee.stage_time_left == pytest.approx(clock(i * dt), abs=1e-6)

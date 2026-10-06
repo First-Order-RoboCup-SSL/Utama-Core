@@ -34,11 +34,19 @@ def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
     referee message changes every tick. The sparse sidecar stores a message only when the
     next one differs from this (see `columnar_writer`), and the reader rebuilds the rest."""
     remaining = referee.current_action_time_remaining
+    stage_left = referee.stage_time_left - dt
+    if referee.stage_time_left >= 0:
+        # The custom referee stops its stage clock at 0 (state_machine: max(0, ...)), and in a
+        # round-robin nothing ends the 300 s first-half stage, so it reads 0 for the second
+        # half of every match. Counting on past 0 made every one of those ticks a "change",
+        # and the sidecar stored about half of all ticks. A clock already negative (a real
+        # referee in overtime) keeps counting.
+        stage_left = max(0.0, stage_left)
     return dataclasses.replace(
         referee,
         time_sent=referee.time_sent + dt,
         time_received=referee.time_received + dt,
-        stage_time_left=referee.stage_time_left - dt,
+        stage_time_left=stage_left,
         current_action_time_remaining=None if remaining is None else remaining - round(dt * 1e6),
     )
 
