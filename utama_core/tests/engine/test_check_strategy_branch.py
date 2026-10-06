@@ -270,6 +270,14 @@ def test_a_plain_strategy_reaches_nothing(fingerprint):
         "from utama_core.tactics import press\n\n\ndef build(ids):\n    press.TABLE.clear()\n",
         # Class-level state of its own module, which both teams share.
         "class State:\n    streak = 0\n\n\ndef build(ids):\n    State.streak += 1\n",
+        # Copilot on #141: through a classmethod, a wildcard import, a default, an in-place sort.
+        "class State:\n    streak = 0\n\n    @classmethod\n    def bump(cls):\n        cls.streak += 1\n",
+        "class State:\n    streak = 0\n\n    def bump(cls):\n        cls.streak += 1\n",
+        "from utama_core.tactics.press import *\n\n\ndef build(ids):\n    PressTactic.reach = 0\n",
+        "from utama_core.tactics.press import PressTactic\n\n\ndef build(ids, t=PressTactic):\n    t.reach = 0\n",
+        "from utama_core.tactics.press import PressTactic\n\n\ndef build(ids, *, t=PressTactic):\n    t.reach = 0\n",
+        "from utama_core.tactics import press\n\n\ndef build(ids):\n    press.TABLE.sort()\n",
+        "from utama_core.tactics import press\n\n\ndef build(ids):\n    press.QUEUE.rotate(1)\n",
     ],
 )
 def test_reaching_outside_the_module_is_reported(fingerprint, body):
@@ -284,6 +292,10 @@ def test_setting_attributes_on_its_own_objects_is_fine(fingerprint):
         "    t.reach = 0\n    t.seen.append(ids)\n    return t\n"
     )
     assert reach_problems("s.py", made, fingerprint) == []
+    own = "class State:\n    def __init__(self):\n        self.streak = 0\n\n    def bump(self):\n        self.streak += 1\n"
+    assert reach_problems("s.py", own, fingerprint) == []
+    local = "def build(ids, order=None):\n    xs = list(ids)\n    xs.sort()\n    return xs\n"
+    assert reach_problems("s.py", local, fingerprint) == []
 
 
 @pytest.mark.parametrize(

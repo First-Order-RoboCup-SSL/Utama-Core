@@ -171,11 +171,16 @@ def _root(node: ast.AST) -> ast.AST:
 
 def _aliases(tree: ast.Module, names: set[str]) -> set[str]:
     """`names` plus every name bound by a plain assignment from one of them (`t = Tactic`,
-    `a, b = X, Y`, `cfg = mod.TABLE`), to a fixed point. A call (`t = Tactic()`) makes a new
-    object, not an alias."""
+    `a, b = X, Y`, `cfg = mod.TABLE`) or as a parameter's default (`def f(t=Tactic)`), to a
+    fixed point. A call (`t = Tactic()`) makes a new object, not an alias."""
     names = set(names)
     pairs = []
     for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            a = node.args
+            positional = a.posonlyargs + a.args
+            pairs += zip([ast.Name(id=x.arg) for x in positional[len(positional) - len(a.defaults) :]], a.defaults)
+            pairs += [(ast.Name(id=x.arg), d) for x, d in zip(a.kwonlyargs, a.kw_defaults) if d is not None]
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
             for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
                 if isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
@@ -209,6 +214,46 @@ def _module_bindings(tree: ast.Module) -> set[str]:
     return names
 
 
+# In-place methods of the builtin containers and deque, on top of the fingerprint's list:
+# called on what a module imports or shares, they change it for both teams.
+_IN_PLACE = frozenset(
+    {
+        "sort",
+        "reverse",
+        "appendleft",
+        "extendleft",
+        "popleft",
+        "rotate",
+        "difference_update",
+        "intersection_update",
+        "symmetric_difference_update",
+        "move_to_end",
+        "__delitem__",
+        "__iadd__",
+        "__ior__",
+    }
+)
+
+
+def _class_receivers(tree: ast.Module, shared: set[str]) -> dict[int, str]:
+    """`id(node) -> receiver name` for every node in a method of a module-level class in
+    `shared` whose first parameter is the class itself: a `@classmethod`, or one that calls
+    it `cls`. A store through it (`cls.streak += 1`) changes state both teams share; one
+    through `self` changes only that object."""
+    receivers = {}
+    for cls in tree.body:
+        if not isinstance(cls, ast.ClassDef) or cls.name not in shared:
+            continue
+        for fn in cls.body:
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) or not fn.args.args:
+                continue
+            first = fn.args.args[0].arg
+            is_classmethod = any(isinstance(d, ast.Name) and d.id == "classmethod" for d in fn.decorator_list)
+            if is_classmethod or first == "cls":
+                receivers.update({id(n): first for n in ast.walk(fn)})
+    return receivers
+
+
 def reach_problems(path: str, source: str, fingerprint) -> list[str]:
     """Check 3 for one new or changed strategy or tactic module."""
     tree = ast.parse(source)
@@ -217,6 +262,8 @@ def reach_problems(path: str, source: str, fingerprint) -> list[str]:
     imported = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if any(a.name == "*" for a in node.names):
+                problems.append(f"{path} line {node.lineno}: a wildcard import (its names can't be checked)")
             imported |= {a.asname or a.name.split(".")[0] for a in node.names}
             for m in _imported_modules(path, node):
                 if m.startswith("utama_core.strategy") and m != _module_name(PICKERS):
@@ -225,6 +272,7 @@ def reach_problems(path: str, source: str, fingerprint) -> list[str]:
     imported = _aliases(tree, imported)
     # module-level state changed from inside a function; at the top level it is set up once
     shared = _aliases(tree, _module_bindings(tree)) - imported
+    receivers = _class_receivers(tree, shared)
     functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
     in_function = {id(n) for f in functions for n in ast.walk(f) if n is not f}
     for node in ast.walk(tree):
@@ -236,7 +284,7 @@ def reach_problems(path: str, source: str, fingerprint) -> list[str]:
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and node.func.attr in fingerprint._MUTATORS
+            and node.func.attr in fingerprint._MUTATORS | _IN_PLACE
         ):
             targets = [node.func.value]
             changes = f"calls {ast.unparse(node.func)}()"
@@ -250,7 +298,7 @@ def reach_problems(path: str, source: str, fingerprint) -> list[str]:
                 problems.append(
                     f"{path} line {node.lineno}: {changes or 'changes ' + ast.unparse(t)}, which it imports"
                 )
-            elif base.id in shared and id(node) in in_function:
+            elif (base.id in shared and id(node) in in_function) or receivers.get(id(node)) == base.id:
                 problems.append(
                     f"{path} line {node.lineno}: {changes or 'changes ' + ast.unparse(t)}, module-level state "
                     "every team shares; keep it in the factory's closure"
