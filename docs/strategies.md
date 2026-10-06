@@ -124,6 +124,13 @@ separated them. Prefer full-length results when ranking.
 Writeups of bugs since fixed were removed from this file; code comments that cite "Known open
 bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still open:
 
+- **`kick_upfield` clears at fixed power, so a clearance from our half leaves the pitch.** It is
+  a boolean kick at one constant speed (about 4.7 m/s; the ball rolls about 17 m at 0.64 m/s²),
+  longer than the pitch, so from our half it usually crosses the far goal line whichever way it
+  is aimed. Out-of-bounds fouls by tactic in tournament_20261005_170958: `PressAndContainTactic`
+  356, `ShadowAndMarkTactic` 252 (both call it on a robot that holds the ball). three_slot's case
+  (its picker handed the ball holder to those slots) is fixed in 44a6c05f. Selectable kick power
+  would need a `RobotCommand` and controller change; otherwise a tactic must stop clearing blind.
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. Both are baselines, so
   not worth fixing for its own sake.
