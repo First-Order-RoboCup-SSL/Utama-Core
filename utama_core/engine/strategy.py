@@ -420,7 +420,13 @@ class Strategy:
             slot = self._slot_for(tactic_id)
 
             if slot.assigned_robots != robot_ids:
-                keep_mem = slot.mem is not None and getattr(slot.tactic, "keeps_mem_on_robot_change", False)
+                # Kept only while the slot still has robots: a slot given none (an empty set
+                # in the partition, or left out of it) is released and starts afresh.
+                keep_mem = (
+                    bool(robot_ids)
+                    and slot.mem is not None
+                    and getattr(slot.tactic, "keeps_mem_on_robot_change", False)
+                )
                 if not keep_mem:
                     slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
