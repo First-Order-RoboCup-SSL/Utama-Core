@@ -5,6 +5,8 @@ half, and score-aware strategies (strategy.pickers.is_late_in_half) never saw on
 """
 
 from utama_core.custom_referee.state_machine import GameStateMachine
+from utama_core.entities.data.vector import Vector2D, Vector3D
+from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.tests.custom_referee.test_free_kick_timeout import _frame
@@ -195,3 +197,61 @@ def test_late_in_half_means_the_last_minute_of_playing_time_not_of_sim_time():
     assert not is_late_in_half(SimpleNamespace(referee=at_330))
     at_391 = _run(sm, 330.0, 391.0)  # 241 s played
     assert is_late_in_half(SimpleNamespace(referee=at_391))
+
+
+# --- Kick-off waits for every robot in its own half ---------------------------------------
+# The kick-off started as soon as the kicker reached the centre circle. After the teams change
+# ends every robot crosses the pitch, so the second half kicked off with robots still in the
+# wrong half (found by test_change_of_ends on CI).
+
+
+def _kickoff_frame(ts: float, straggler_x: float) -> GameFrame:
+    """Yellow (friendly) defends the left goal and kicks off: its kicker in the circle, a
+    second yellow robot at `straggler_x`; blue in its own (right) half."""
+    zero = Vector3D(0, 0, 0)
+
+    def robot(rid, x, friendly):
+        return Robot(
+            id=rid,
+            is_friendly=friendly,
+            has_ball=False,
+            p=Vector2D(x, 0.0),
+            v=Vector2D(0, 0),
+            a=Vector2D(0, 0),
+            orientation=0.0,
+        )
+
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        friendly_robots={1: robot(1, -0.3, True), 2: robot(2, straggler_x, True)},
+        enemy_robots={1: robot(1, 1.0, False)},
+        ball=Ball(p=Vector3D(0.0, 0.0, 0), v=zero, a=zero),
+        referee=None,
+    )
+
+
+def _kickoff_command_after(straggler_x: float, until: float) -> RefereeCommand:
+    sm = _machine()
+    sm.force_command(RefereeCommand.PREPARE_KICKOFF_YELLOW, 0.0)
+    t, data = 0.0, None
+    while t < until - 1e-9:
+        t += 0.5
+        data = sm.step(t, None, _kickoff_frame(t, straggler_x))
+    return data.referee_command
+
+
+def test_a_kickoff_waits_for_a_robot_still_in_the_other_half():
+    assert _kickoff_command_after(straggler_x=-1.0, until=6.0) == RefereeCommand.NORMAL_START
+    assert _kickoff_command_after(straggler_x=0.5, until=6.0) == RefereeCommand.PREPARE_KICKOFF_YELLOW
+
+
+def test_a_robot_on_the_halfway_line_counts_as_in_its_own_half():
+    assert _kickoff_command_after(straggler_x=0.08, until=6.0) == RefereeCommand.NORMAL_START
+
+
+def test_a_robot_that_never_gets_back_holds_the_kickoff_up_only_so_long():
+    # force_command counts the 3 s preparation as already done: the 10 s cap, then the 2 s sustain
+    assert _kickoff_command_after(straggler_x=0.5, until=11.5) == RefereeCommand.PREPARE_KICKOFF_YELLOW
+    assert _kickoff_command_after(straggler_x=0.5, until=12.0) == RefereeCommand.NORMAL_START

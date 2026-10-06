@@ -53,7 +53,7 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | # | Transition | Trigger |
 |---|---|---|
 | 1 | `STOP` → queued restart | all robots ≥0.5m from ball (15s clear timeout) |
-| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position, held 2s |
+| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position (kick-off: and every robot in its own half, waited for at most 10 s), held 2s |
 | 3 | `DIRECT_FREE_*` → `NORMAL_START` | kicker ≤0.3m from ball, defenders ≥0.5m, held 2s |
 | 4 | `BALL_PLACEMENT_*` → next command | ball ≤0.15m from target, held 2s (10s placement timeout) |
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |

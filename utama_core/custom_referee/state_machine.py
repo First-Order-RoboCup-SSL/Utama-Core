@@ -8,6 +8,7 @@ import math
 from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import PENALTY_MARK_HALF_FIELD_RATIO
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import AutoAdvanceConfig
@@ -25,6 +26,9 @@ _BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball befor
 _KICKER_READY_DIST = 0.3  # metres — kicker must be within this distance to trigger free kick start
 _PLACEMENT_DONE_DIST = 0.15  # metres — ball within this dist of target → placement complete
 _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long before play starts
+# A kickoff waits for every robot to be in its own half; a robot that can't get there (stuck,
+# lost by vision) holds it up at most this long past prepare_duration_seconds.
+_KICKOFF_POSITIONING_CAP_S = 10.0
 # Seconds a STOP can wait on _all_robots_clear() before advancing anyway. A
 # real GC operator would eventually force it through if a robot never backs
 # off; without this, one robot that fails to clear the ball (whatever the
@@ -300,13 +304,20 @@ class GameStateMachine:
         # ----------------------------------------------------------------
         # Auto-advance 2a: PREPARE_KICKOFF_* → NORMAL_START
         # Fires after prepare_duration_seconds AND one attacker is inside
-        # the centre circle, sustained for _AUTO_ADVANCE_DELAY seconds.
+        # the centre circle AND every robot is in its own half (or
+        # _KICKOFF_POSITIONING_CAP_S has passed), sustained for
+        # _AUTO_ADVANCE_DELAY seconds.
         # ----------------------------------------------------------------
         elif self._auto_advance.prepare_kickoff_to_normal and self.command in self._PREPARE_KICKOFF_COMMANDS:
+            waited = current_time - self._prepare_entered_time
             ready = (
-                (current_time - self._prepare_entered_time) >= self._prepare_duration_seconds
+                waited >= self._prepare_duration_seconds
                 and game_frame is not None
                 and self._kicker_in_centre_circle(self.command, game_frame)
+                and (
+                    waited >= self._prepare_duration_seconds + _KICKOFF_POSITIONING_CAP_S
+                    or self._all_robots_in_own_half(game_frame)
+                )
             )
             if ready:
                 if self._advance2_ready_since == math.inf:
@@ -550,6 +561,21 @@ class GameStateMachine:
         bx, by = ball.p.x, ball.p.y
         for r in list(game_frame.friendly_robots.values()) + list(game_frame.enemy_robots.values()):
             if math.hypot(r.p.x - bx, r.p.y - by) < _BALL_CLEAR_DIST:
+                return False
+        return True
+
+    def _all_robots_in_own_half(self, game_frame: "GameFrame") -> bool:
+        """Every robot in its own half, as the rulebook's kick-off requires: up to its radius over
+        the halfway line. After the teams change ends at half-time every robot has the length of
+        the pitch to cross, and the kick-off used to start as soon as the kicker reached the
+        circle, with robots of both teams still in the wrong half."""
+        yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
+        for robots, is_yellow in (
+            (game_frame.friendly_robots, game_frame.my_team_is_yellow),
+            (game_frame.enemy_robots, not game_frame.my_team_is_yellow),
+        ):
+            own_sign = 1.0 if is_yellow == yellow_is_right else -1.0
+            if any(r.p.x * own_sign < -ROBOT_RADIUS for r in robots.values()):
                 return False
         return True
 
