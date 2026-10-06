@@ -252,9 +252,28 @@ robot of each side nearest it every 0.25 s, and each change in the candidate's t
 assignments. The replay, the candidate's match log, the timeline and the picture are kept in
 `replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). One start takes about
 12 s. `--repeats N` plays it from N slightly jittered positions, to see whether what happened
-holds up. `--list-scenarios` lists the starts; their family (kickoff, free kick, penalty, open
-play) and the match they came from are in the id. A start is robot and ball positions only: both
-strategies begin it with no memory.
+holds up. A start is robot and ball positions only: both strategies begin it with no memory.
+
+To find starts, tag them by situation with `--where` (names from
+[pitch_zones.md](pitch_zones.md), all from the candidate's side):
+
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
+        --list-scenarios --where third=defensive ball=theirs
+
+| Tag | Values |
+|---|---|
+| `third` | `defensive`, `middle`, `attacking`: where the ball is |
+| `lane` | `left_wing`, `centre`, `right_wing` |
+| `restart` | `ours`, `theirs` (whose kickoff, free kick, penalty or ball placement), `stop`, `live` |
+| `ball` | `ours`, `theirs` (a robot within 0.2 m of it), `loose` |
+| `near` | robots of each side within 1.5 m of the ball, e.g. `2v3` |
+
+`TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`. Trust the
+`restart` tag over the id's `candidate_kicking`: kickoffs and penalties carry that label whoever
+kicks. In `bank_v7` the four hand-authored starts (`kickoff_center_v1`,
+`direct_free_*_near_box_v1`, `open_play_3v2_counter_v1`) are stored mirrored: the candidate's keeper
+starts in the goal it attacks. The anchors are fixed in code, so a bank saved from now on has them
+right; `bank_v7` stays as it is, so its results remain comparable.
 
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a

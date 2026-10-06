@@ -6,9 +6,11 @@ act as a stable reference when the harvested part of the bank turns over
 between versions. Every scenario here has `ScenarioTrigger.HAND_AUTHORED`
 and `anchor_tick=None` (see `start.ScenarioProvenance`).
 
-Coordinates follow the same plain pitch-frame metres as `scenario.py`
-(friendly is always the +x/right side, matching `tournament.run_match`'s
-`my_team_is_right=True` convention) — half length 4.5m, half width 3.0m
+Each scenario below is written with friendly defending the left goal and attacking +x,
+in plain pitch-frame metres; `all_hand_authored_scenarios` mirrors them (`_mirrored`) into
+the frame every start is played in, where friendly (the candidate) is the +x/right side,
+matching `tournament.run_match`'s `my_team_is_right=True`. They were once returned
+unmirrored, which put the candidate's keeper in the goal it attacks. Half length 4.5m, half width 3.0m
 (`STANDARD_FIELD_DIMS`). Robot 0 is the goalkeeper on each side (pinned
 separately by the kernel strategy, see `engine/strategy.py`); 1-5 are
 outfield, matching `tournament_lib`'s `OUTFIELD_ROBOT_IDS`.
@@ -19,6 +21,8 @@ scenario it defines (`pixi run python -m utama_core.scenario_bench.hand_authored
 
 from __future__ import annotations
 
+import dataclasses
+import math
 import subprocess
 from pathlib import Path
 
@@ -229,12 +233,33 @@ def _open_play_3v2_counter() -> BenchScenario:
     )
 
 
+def _mirrored(bench_scenario: BenchScenario) -> BenchScenario:
+    """Reflect a start across the halfway line (x -> -x), so the side defending the left goal
+    defends the right one. A robot facing +x then faces -x."""
+
+    def robot(r: RobotState) -> RobotState:
+        return dataclasses.replace(r, x=-r.x, vx=-r.vx, orientation=math.pi - r.orientation)
+
+    s = bench_scenario.scenario
+    scenario = dataclasses.replace(
+        s,
+        ball_x=-s.ball_x,
+        ball_vx=-s.ball_vx,
+        friendly_robots=tuple(robot(r) for r in s.friendly_robots),
+        enemy_robots=tuple(robot(r) for r in s.enemy_robots),
+    )
+    return dataclasses.replace(bench_scenario, scenario=scenario)
+
+
 def all_hand_authored_scenarios() -> tuple[BenchScenario, ...]:
-    return (
-        _kickoff_center(),
-        _direct_free_defending_near_box(),
-        _direct_free_attacking_near_box(),
-        _open_play_3v2_counter(),
+    return tuple(
+        _mirrored(bs)
+        for bs in (
+            _kickoff_center(),
+            _direct_free_defending_near_box(),
+            _direct_free_attacking_near_box(),
+            _open_play_3v2_counter(),
+        )
     )
 
 
