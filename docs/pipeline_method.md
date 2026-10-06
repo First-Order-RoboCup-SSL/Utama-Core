@@ -1,34 +1,12 @@
 # Pipeline method
 
+![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
+
 How vision, robot and referee data become one `Game` state, and how one tick turns that
 state into robot commands. Everything below runs inside `StrategyRunner`
-(`utama_core/run/strategy_runner.py`); the diagrams are Mermaid, so edit them here, in the same
-commit as the code they describe.
+(`utama_core/run/strategy_runner.py`).
 
 ## Data in
-
-```mermaid
-flowchart LR
-    subgraph sources[Sources, by mode]
-        net["Network (real, grSim):<br/>SSL-Vision, robot radio,<br/>official GameController"]
-        rsim["rsim: the simulator's frames<br/>and robot feedback"]
-        cref["CustomReferee<br/>(in-process)"]
-    end
-    vr[VisionReceiver] --> vb["vision buffers<br/>one per camera, deque maxlen=1"]
-    rr[RefereeMessageReceiver] --> rb["referee buffer<br/>deque maxlen=1"]
-    net --> vr
-    net --> rr
-    rsim --> vb
-    cref --> rb
-    ctl["robot controller<br/>(responses: IR has-ball)"]
-    subgraph refine[Refiners, in order, once per tick per side]
-        pos["PositionRefiner<br/>combines cameras, filters"] --> vel[VelocityRefiner] --> info["RobotInfoRefiner<br/>has-ball"] --> ref[RefereeRefiner]
-    end
-    vb --> pos
-    ctl --> info
-    rb --> ref
-    ref --> game["Game<br/>current GameFrame + history"]
-```
 
 The referee is one of three sources (`run/referee_source.py`): none, the official
 GameController over the network, or `CustomReferee`, which runs in the same process and is what
@@ -57,23 +35,11 @@ earlier drafts was never built; predictions are ad hoc per call site.
 
 ## One tick
 
-```mermaid
-flowchart TD
-    refstep["CustomReferee.step<br/>(if in-process)"] --> refine["refiners → GameFrame<br/>(per side)"]
-    refine --> rec["ReplayWriter, MatchStats<br/>record the frame"]
-    refine --> strat["AbstractStrategy.step"]
-    subgraph engine[Strategy layer]
-        strat --> kernel["Strategy.tick<br/>referee overrides, tactic slots"]
-        kernel --> tactics["Tactics<br/>(utama_core/tactics)"]
-        tactics --> skills["Skills<br/>(utama_core/skills)"]
-        skills --> mc["MotionController<br/>fpp · dwa · trajsample"]
-    end
-    mc --> cmd[RobotCommand per robot]
-    cmd --> out{robot controller}
-    out --> rsimc[rsim]
-    out --> grsim[grSim]
-    out --> real[real robots]
-```
+`CustomReferee` steps first (when in-process), then each side refines its frame, the replay
+writer and `MatchStats` record it, and `AbstractStrategy.step` runs the strategy layer:
+`Strategy.tick` (referee overrides, tactic slots), tactics, skills, then the `MotionController`
+(fpp, dwa or trajsample) turns targets into one `RobotCommand` per robot for rsim, grSim or the
+real robots.
 
 In rsim both teams run in one `StrategyRunner`: each side has its own refiners, strategy and
 motion controller and steps in turn, alternating which goes first. `MatchStats` and the replay
