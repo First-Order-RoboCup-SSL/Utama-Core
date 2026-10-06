@@ -70,7 +70,9 @@ off the second, and the teams change ends.
 game controller's field: taken from the side the teams start on, swapped at half-time.
 `StrategyRunner` follows it every tick, from `CustomReferee` or the real game controller: when it
 disagrees with the side a team plays on, both teams' frames, `Field`s and game history start
-again on the other side (tactic memory is already cleared by the stoppage it happens in). The
+again on the other side (tactic memory is already cleared by the stoppage it happens in). In the
+sim, every robot is also carried to the other end, turned half a turn about the centre spot, as
+people do in the break: driving there crosses both defense areas. The
 columnar replay stores the side on every tick (`side_is_right`; `ColumnarReplay.is_right_at`),
 and replay analyses read it per frame (`frame.my_team_is_right`), never once per file.
 `scenario_from_replay` turns a second-half frame half a turn, so a scenario is still played with

@@ -42,7 +42,8 @@ from utama_core.engine.match_log import MatchLog
 from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
-from utama_core.entities.game import Game, GameFrame, GameHistory
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game, GameFrame, GameHistory, Robot
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
@@ -257,6 +258,17 @@ def _build_robot_feedback_snapshot(
 
         snapshot.append(item)
     return snapshot
+
+
+def _turned(robot: Robot) -> Robot:
+    """`robot` half a turn about the centre spot, at rest: where it stands after changing ends."""
+    return dataclasses.replace(
+        robot,
+        p=Vector2D(-robot.p.x, -robot.p.y),
+        v=Vector2D(0.0, 0.0),
+        a=Vector2D(0.0, 0.0),
+        orientation=math.remainder(robot.orientation + math.pi, 2 * math.pi),
+    )
 
 
 @dataclass(slots=True)
@@ -1370,6 +1382,12 @@ class StrategyRunner:
         and history start again on the new side. Tactic memory is cleared by the stoppage the
         change happens in (`Strategy._barrier_reset`). A referee that doesn't say (None) changes
         nothing.
+
+        In the sim every robot is also carried to the other end, as people do in the half-time
+        break: turned half a turn about the centre spot, so it stands where it stood, in its new
+        half. Driving there instead takes every robot the length of the pitch through both
+        defense areas: the fouls escalated to a HALT, whose sim resume dropped the second
+        half's kick-off.
         """
         if referee_data is None or referee_data.blue_team_on_positive_half is None:
             return
@@ -1378,10 +1396,28 @@ class StrategyRunner:
             return
         self.logger.info("Teams change ends: my team now defends the %s goal", "right" if on_positive else "left")
         self.my_team_is_right = on_positive
+        carry = self.sim_controller is not None
+        if carry:
+            frame = self.my.current_game_frame
+            for robots, is_yellow in (
+                (frame.friendly_robots, self.my_team_is_yellow),
+                (frame.enemy_robots, not self.my_team_is_yellow),
+            ):
+                for r in robots.values():
+                    turned = _turned(r)
+                    self.sim_controller.teleport_robot(is_yellow, r.id, turned.p.x, turned.p.y, turned.orientation)
         for side, is_right in ((self.my, on_positive), (self.opp, not on_positive)):
             if side is None or side.game is None:
                 continue
             frame = dataclasses.replace(side.current_game_frame, my_team_is_right=is_right)
+            if carry:
+                frame = dataclasses.replace(
+                    frame,
+                    friendly_robots={i: _turned(r) for i, r in frame.friendly_robots.items()},
+                    enemy_robots={i: _turned(r) for i, r in frame.enemy_robots.items()},
+                )
+                side.position_refiner.reset()  # its filters would track the robots across the pitch
+                side.position_refiner.start_filtering()
             side.current_game_frame = frame
             side.game_history = GameHistory(MAX_GAME_HISTORY)
             side.game = Game(side.game_history, frame, field=Field(is_right, self.full_field_dims, self.field_bounds))

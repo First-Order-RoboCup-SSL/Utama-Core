@@ -18,7 +18,6 @@ from utama_core.strategy import kernel_strategy
 N_OUTFIELD = 2
 HALF_S = 3.0
 KEEPER = 0
-KEEPER_WALK_S = 15  # sim seconds for a keeper to cross the pitch to its new goal
 GOAL_AREA_X = 3.5  # the goal line is at |x| = 4.5; the defense area is 1 m deep
 
 
@@ -61,19 +60,17 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
         assert (kickoff.my_team_is_right, runner.my.game.field.my_team_is_right) == (False, False)
         assert (runner.opp.current_game_frame.my_team_is_right, runner.opp.game.field.my_team_is_right) == (True, True)
         assert kickoff.referee.blue_team_on_positive_half is True
-        # Kickoff positions: each team's outfield robots in its own half, which is now the other one.
         seen = _describe(kickoff, commands)
-        assert max(r.p.x for i, r in kickoff.friendly_robots.items() if i != KEEPER) < 0.1, seen
-        assert min(r.p.x for i, r in kickoff.enemy_robots.items() if i != KEEPER) > -0.1, seen
-        # The keepers walk the length of the pitch, so they may still be on the way at the
-        # kickoff (how far they got differs between CPUs); they reach their new goals.
-        for _ in range(KEEPER_WALK_S * 60):
-            runner.step_once()
-            frame = runner.my.current_game_frame
-            if frame.friendly_robots[KEEPER].p.x < -GOAL_AREA_X and frame.enemy_robots[KEEPER].p.x > GOAL_AREA_X:
-                break
-        assert frame.friendly_robots[KEEPER].p.x < -GOAL_AREA_X
-        assert frame.enemy_robots[KEEPER].p.x > GOAL_AREA_X
+        # The second half starts with its kick-off, taken by blue (yellow took the first).
+        second_half = [c for _, c, stage in commands if stage == "NORMAL_SECOND_HALF_PRE"]
+        assert "PREPARE_KICKOFF_BLUE" in second_half, seen
+        assert commands[-1][1] == "NORMAL_START", seen
+        # Each team in its own half, now the other one; the keepers were carried to their new
+        # goals (driving there crossed both defense areas, and the fouls ended in a HALT).
+        assert max(r.p.x for r in kickoff.friendly_robots.values()) < 0.1, seen
+        assert min(r.p.x for r in kickoff.enemy_robots.values()) > -0.1, seen
+        assert kickoff.friendly_robots[KEEPER].p.x < -GOAL_AREA_X, seen
+        assert kickoff.enemy_robots[KEEPER].p.x > GOAL_AREA_X, seen
     finally:
         runner.close()
 
