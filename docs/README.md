@@ -18,7 +18,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [tactic_model_design_decisions.md](tactic_model_design_decisions.md): why the strategy layer (engine, tactics, strategies) is shaped the way it is, and what was deliberately not built.
 - [scheduling_math_model.md](scheduling_math_model.md): a mathematical model of tactic scheduling and role allocation, a companion to the above.
 - [custom_referee_design_decisions.md](custom_referee_design_decisions.md): rule-by-rule decisions from auditing `CustomReferee` against the SSL rulebook.
-- [pipeline_method.md](pipeline_method.md): how vision, robot and referee data are refined into one `Game` state.
+- [pipeline_method.md](pipeline_method.md): system diagrams: how vision, robot and referee data are refined into one `Game` state, and one tick from state to robot commands.
 
 ## Current results
 

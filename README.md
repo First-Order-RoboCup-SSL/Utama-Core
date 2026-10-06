@@ -71,9 +71,8 @@ Scripts live in `tools/` (tournaments in `tools/tournament/`) and `examples/`; s
 
 ## System design
 
-![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
-
-How vision, robot and referee data become one `Game` state: [docs/pipeline_method.md](docs/pipeline_method.md).
+How vision, robot and referee data become one `Game` state, and how one tick turns it into robot
+commands, with diagrams: [docs/pipeline_method.md](docs/pipeline_method.md).
 
 ## Contributing
 
