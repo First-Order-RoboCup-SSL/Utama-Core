@@ -129,7 +129,9 @@ class ChanceTracker:
                 self._in_danger[defender] = in_third
 
     def _track_spell(self, side: Optional[str], ts: float, live: bool, live_since: float) -> None:
-        if self._spell is not None and side == self._spell["side"]:
+        # A stoppage ends the spell even if the same side has the ball after it: a shot from
+        # the restart is the restart's, not the open-play regain's.
+        if self._spell is not None and side == self._spell["side"] and live:
             return
         if self._spell is not None and self._spell["regain"]:
             spell = self._spell
@@ -138,7 +140,9 @@ class ChanceTracker:
                     {"side": spell["side"], "t": round(spell["t"], 2), "shot_after_s": spell["shot_after_s"]}
                 )
         regain = self._spell is not None and side is not None and live and ts - live_since > JUST_RESTARTED_S
-        self._spell = None if side is None else {"side": side, "t": ts, "regain": regain, "shot_after_s": None}
+        self._spell = (
+            None if side is None or not live else {"side": side, "t": ts, "regain": regain, "shot_after_s": None}
+        )
 
     def _track_free_kick(self, frame, cmd, ts: float, goal_x: dict[str, float]) -> None:
         if cmd in _FREE_KICKS:

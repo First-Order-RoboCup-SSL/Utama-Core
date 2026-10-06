@@ -61,7 +61,7 @@ Check these first: a broken strategy's other signals mean nothing.
 |---|---|---|---|---|
 | Shots | STRATEGIES `shots`; `chances.shots` | hard balls from the attacking third heading into the goal mouth (on target by construction) | 1.4 (`three_slot`) · 6.1 · 11.2 (`split_shape`) | Few shots with many entries: attacks stall in the final third |
 | Attacking-third entries | STRATEGIES `entries` | times the ball crossed into the attacking third | 6.6 (`shadow_switch`) · 11.9 · 17.2 (`split_shape`) | Few: the build-up never reaches the final third |
-| Regain to shot | CHANCES `regain>shot`, `secs`; `chances.regain_to_shot`, `regain_to_shot_s` | share of open-play regains (kept ≥ 1 s, not just after a restart) followed by a shot within 10 s, and how fast | 1% (`shadow_switch`) · 9% · 27% (`split_shape`); 2.0 s · 4.4 · 9.3 | Low: winning the ball leads nowhere. Slow: too many passes before the shot |
+| Regain to shot | CHANCES `regain>shot`, `secs`; `chances.regain_to_shot`, `regain_to_shot_s` | share of open-play regains (kept ≥ 1 s, not just after a restart) followed by a shot within 10 s, and how fast | 1% (`shadow_switch`) · 9% · 28% (`split_shape`); 2.0 s · 4.4 · 9.3 | Low: winning the ball leads nowhere. Slow: too many passes before the shot |
 | Free kick to shot | CHANCES `fk>shot`; `chances.free_kick_to_shot`, `attacking_free_kick_to_shot` | share of the side's free kicks (corner and goal kicks included) followed by a shot within 10 s | 0% (`three_slot`) · 12% · 38% (`split_shape`) | Low in the attacking third: set pieces are wasted |
 | Shot distance | CHANCES `dist`; `chances.shot_distance_m` | metres from the goal centre where the shooting side last held the ball | 2.2 · 2.5 · 3.0 m | Far: shooting because nothing better was found |
 | Open goal mouth | CHANCES `open`; `chances.shot_open_goal` | share of the goal mouth no opponent blocked at the shot. Tops out near 75%, the keeper always covers some | 43% · 50% · 68% | Low: shooting into bodies; the attack never opens a lane |
@@ -88,7 +88,7 @@ Check these first: a broken strategy's other signals mean nothing.
 | Danger conceded | CHANCES `danger`; `chances.danger_s_per_match`, `danger_spells_per_match` | seconds the enemy held the ball in the side's defensive third in live play, and how many separate spells | 50 (`overload_press`) · 78 · 167 s (`high_line_zone`) | High: the defense doesn't win the ball back near its goal or lets the enemy settle there. One stalled match can add hundreds of seconds |
 | Shots faced, open goal faced | `chances.shots_faced`, `faced_open_goal` | the enemy's shots and how open they were | open 37% · 49% · 66% (`give_and_go_solo`) | Open shots faced: nobody blocks the lane; usually everyone is upfield |
 | Save rate | CHANCES `save`; `chances.save_rate` | 1 - goals from shots / shots faced. Every strategy fields the same keeper, so this measures the shots the defense allows | 49% (`high_press`) · 64% · 74% (`split_shape`) | Low: see open goal faced |
-| Regains | `chances.regains` | open-play regains kept ≥ 1 s | 18 (`shadow_switch`) · 25 · 29 (`high_press`) | Few: the press or the marking doesn't win the ball |
+| Regains | `chances.regains` | open-play regains kept ≥ 1 s | 16 (`shadow_switch`) · 25 · 29 (`high_press`) | Few: the press or the marking doesn't win the ball |
 
 ## Restarts
 

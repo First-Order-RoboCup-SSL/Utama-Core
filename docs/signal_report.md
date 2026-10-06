@@ -19,7 +19,7 @@ Rows by points per match (the number after each name). Each column is coloured b
 22 strategies, green where the value usually helps; passes are blue because more is neither
 better nor worse. The printed number is the real value: per match, or a share.
 
-- **`split_shape` is green across attack**: most shots and entries, a shot after 27% of its
+- **`split_shape` is green across attack**: most shots and entries, a shot after 28% of its
   regains (2.0 s on average) and after 38% of its free kicks, 1.7 m gained per pass. It makes the
   fewest passes (15) and creates the most.
 - **The next three win by pressing, not passing.** `high_press`, `give_and_go_solo` and

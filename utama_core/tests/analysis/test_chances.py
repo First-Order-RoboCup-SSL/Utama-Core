@@ -123,6 +123,29 @@ def test_a_change_of_possession_just_after_a_restart_is_not_a_regain():
     assert [g for g in m.result()["regains"] if g["side"] == "friendly"] == []
 
 
+def test_a_shot_after_a_stoppage_is_not_credited_to_the_regain_before_it():
+    m = _Match()
+    m.poss = ("enemy", 0)
+    m.tick(2.0)
+    m.poss = ("friendly", 0)  # a real regain, then play stops with the friendly side still nearest
+    m.tick(REGAIN_MIN_HOLD_S + 0.5)
+    m.cmd = C.STOP
+    m.tick(1.0)
+    m.cmd = C.DIRECT_FREE_YELLOW
+    m.tick(1.0)
+    m.cmd = C.NORMAL_START
+    m.tick(1.0)
+    m.tick(shot="friendly")  # within CHANCE_WINDOW_S of the regain, but from the free kick
+    m.tick(2.0)
+    m.poss = ("enemy", 0)
+    m.tick()
+
+    r = m.result()
+
+    assert [g["shot_after_s"] for g in r["regains"] if g["side"] == "friendly"] == [None]
+    assert [k["shot_after_s"] is not None for k in r["free_kicks"]] == [True]
+
+
 def test_danger_is_live_time_the_opponent_holds_the_ball_in_the_defensive_third():
     m = _Match()
     m.poss, m.ball = ("enemy", 0), (HALF_LENGTH - 1.0, 0.0)  # near friendly's own goal
