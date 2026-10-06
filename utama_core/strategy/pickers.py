@@ -198,6 +198,13 @@ def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
     return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
 
 
+def holds_ball(game: Game, robot_id: RobotId) -> bool:
+    """True if `robot_id` is on the ball (dribbler contact) or is the kicker waiting at a
+    still ball: the robot `carrier_first` puts first."""
+    robot = game.friendly_robots.get(robot_id)
+    return robot is not None and (robot.has_ball or robot_id == _kicker_at_still_ball(game))
+
+
 def clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:
     """`ordered` (from `carrier_first`) with the robot that should clear first.
 
