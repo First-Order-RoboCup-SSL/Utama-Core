@@ -242,11 +242,16 @@ def test_sparse_sidecar_stores_only_changes_and_rebuilds_every_tick(tmp_path):
             referee_command=RefereeCommand.STOP if i < 60 else RefereeCommand.NORMAL_START,
             referee_command_timestamp=0.0 if i < 60 else 1.0,
             stage=Stage.NORMAL_FIRST_HALF_PRE,
-            stage_time_left=300.0 - ts if i < 100 else 200.0 - (ts - 100 * dt),  # a jump at tick 100
+            stage_time_left=_stage_clock(i),
             blue_team=blue,
             yellow_team=yellow,
             status_message="Ball left the field" if 30 <= i < 40 else None,
         )
+
+    def _stage_clock(i: int) -> float:
+        # stopped (paused) until tick 60, then counting down; a jump at tick 100
+        played = max(0, i - 60) * dt
+        return 300.0 - played if i < 100 else 200.0 - (i - 100) * dt
 
     writer = _make_writer(tmp_path)
     for i in range(120):  # one frame at a time, as in a match: the in-place score change lands at tick 90
@@ -272,7 +277,7 @@ def test_sparse_sidecar_stores_only_changes_and_rebuilds_every_tick(tmp_path):
         assert got.status_message == ("Ball left the field" if 30 <= i < 40 else None)
         assert got.yellow_team.score == (1 if i >= 90 else 0)
         assert got.time_sent == pytest.approx(ts)
-        assert got.stage_time_left == pytest.approx(300.0 - ts if i < 100 else 200.0 - (ts - 100 * dt))
+        assert got.stage_time_left == pytest.approx(_stage_clock(i))
 
 
 def test_state_arrays_are_stored_as_float32_and_read_back_as_float64(tmp_path):
@@ -340,3 +345,32 @@ def test_a_stage_clock_that_stops_at_zero_is_not_stored_every_tick(tmp_path, clo
     assert sorted(replay.sparse_referee) == stored
     for i in range(180):
         assert replay.frame_at(i).referee.stage_time_left == pytest.approx(clock(i * dt), abs=1e-6)
+
+
+def test_a_stage_clock_paused_in_a_stoppage_is_not_stored_every_tick(tmp_path):
+    """The match clock stands still in STOP, HALT, kick-off and penalty preparation and ball
+    placement (rulebook, Game Stages). Counting it down there made every stoppage tick a
+    change: 11259 of 47166 ticks stored in a two-half match."""
+    dt = 1.0 / 60
+    writer = _make_writer(tmp_path)
+    for i in range(120):
+        ts = i * dt
+        cmd = RefereeCommand.STOP if i < 60 else RefereeCommand.NORMAL_START
+        clock = 100.0 - max(0, i - 60) * dt
+        writer.write_frame(
+            GameFrame(
+                ts=ts,
+                my_team_is_yellow=True,
+                my_team_is_right=True,
+                friendly_robots={1: _robot(1, 0, 0, True)},
+                enemy_robots={},
+                ball=Ball(p=Vector3D(0, 0, 0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
+                referee=dataclasses.replace(_referee(cmd), time_sent=ts, time_received=ts, stage_time_left=clock),
+            )
+        )
+    writer.close()
+    replay = load_columnar_replay(writer.path)
+
+    assert sorted(replay.sparse_referee) == [0, 60]
+    for i in range(120):
+        assert replay.frame_at(i).referee.stage_time_left == pytest.approx(100.0 - max(0, i - 60) * dt)

@@ -25,7 +25,7 @@ import numpy as np
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.referee_command import CLOCK_RUNS, RefereeCommand
 from utama_core.entities.referee.stage import Stage
 
 
@@ -34,7 +34,9 @@ def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
     referee message changes every tick. The sparse sidecar stores a message only when the
     next one differs from this (see `columnar_writer`), and the reader rebuilds the rest."""
     remaining = referee.current_action_time_remaining
-    stage_left = referee.stage_time_left - dt
+    # The stage clock only runs while a team may play the ball (`CLOCK_RUNS`): in a stoppage
+    # it stands still, and counting it down would store every stoppage tick.
+    stage_left = referee.stage_time_left - (dt if referee.referee_command in CLOCK_RUNS else 0.0)
     if referee.stage_time_left >= 0:
         # The custom referee stops its stage clock at 0 (state_machine: max(0, ...)), and in a
         # round-robin nothing ends the 300 s first-half stage, so it reads 0 for the second

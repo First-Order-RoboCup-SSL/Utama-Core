@@ -15,7 +15,7 @@ from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.team_info import TeamInfo
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.referee_command import CLOCK_RUNS, RefereeCommand
 from utama_core.entities.referee.stage import Stage
 
 logger = logging.getLogger(__name__)
@@ -55,19 +55,6 @@ _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 _FREE_KICK_TIMEOUT_SECONDS = 10.0
 
 
-# Commands during which the match clock runs: the rulebook pauses it "whenever no team is
-# allowed to manipulate the ball", which "includes stop, halt and the preparation states of
-# kick-off and penalty kick. Additionally, it is paused during ball placement" (Game Stages).
-_CLOCK_RUNS = frozenset(
-    {
-        RefereeCommand.NORMAL_START,
-        RefereeCommand.FORCE_START,
-        RefereeCommand.DIRECT_FREE_YELLOW,
-        RefereeCommand.DIRECT_FREE_BLUE,
-        RefereeCommand.INDIRECT_FREE_YELLOW,
-        RefereeCommand.INDIRECT_FREE_BLUE,
-    }
-)
 _PLAYING_STAGES = frozenset({Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF})
 
 # A PRE stage and the stage it becomes when play starts.
@@ -129,7 +116,7 @@ class GameStateMachine:
         # Seeded by seed_clock() after the first valid game frame is available.
         self.stage_start_time: Optional[float] = None
         self.stage_duration = self._half_duration_seconds
-        # Playing time of the current stage: only the time spent under a `_CLOCK_RUNS` command.
+        # Playing time of the current stage: only the time spent under a `CLOCK_RUNS` command.
         self._stage_played = 0.0
         self._clock_time: Optional[float] = None  # when `_stage_played` was last brought up to date
 
@@ -249,7 +236,7 @@ class GameStateMachine:
         if self.stage_start_time is None:
             self.stage_start_time = current_time
         # The command in force since the last tick decides whether that time was playing time.
-        if self._clock_time is not None and self.command in _CLOCK_RUNS:
+        if self._clock_time is not None and self.command in CLOCK_RUNS:
             self._stage_played += current_time - self._clock_time
         self._clock_time = current_time
 
