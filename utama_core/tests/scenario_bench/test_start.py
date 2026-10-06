@@ -31,7 +31,9 @@ from utama_core.scenario_bench.start import (
     is_near_duplicate,
     jittered,
     load_bank,
+    matches_where,
     save_bank,
+    start_tags,
     static_screen,
 )
 
@@ -293,3 +295,71 @@ def test_drop_near_duplicates_renames_a_colliding_id():
     kept = drop_near_duplicates([_at("same_id", ball_dx=1.0)], keep=[_at("same_id")])
 
     assert [s.scenario_id for s in kept] == ["same_id_tournament_20260904_221937"]
+
+
+def _tagged(ball_x, ball_y, friendly=(), enemy=(), cmd=RefereeCommand.NORMAL_START):
+    def robots(points):
+        return tuple(RobotState(id=i, x=x, y=y, orientation=0.0, vx=0.0, vy=0.0) for i, (x, y) in enumerate(points))
+
+    scenario = Scenario(
+        sim_time=0.0,
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vx=0.0,
+        ball_vy=0.0,
+        friendly_robots=robots(friendly),
+        enemy_robots=robots(enemy),
+        referee_command=cmd,
+        source_replay=Path("t"),
+    )
+    provenance = ScenarioProvenance(
+        source_run_id="t",
+        evaluator_version="t",
+        trigger=ScenarioTrigger.HAND_AUTHORED,
+        family=ScenarioFamily.OPEN_PLAY_COUNTER,
+        anchor_tick=None,
+        source_replay=None,
+    )
+    return start_tags(BenchScenario(scenario_id="t", scenario=scenario, provenance=provenance))
+
+
+@pytest.mark.parametrize(
+    "ball_x, third",
+    [(1.51, "defensive"), (1.49, "middle"), (-1.49, "middle"), (-1.51, "attacking")],
+)
+def test_thirds_are_measured_from_the_candidate_s_own_goal_on_the_right(ball_x, third):
+    assert _tagged(ball_x, 0.0)["third"] == third
+
+
+@pytest.mark.parametrize(
+    "ball_y, lane", [(-1.01, "left_wing"), (-0.99, "centre"), (0.99, "centre"), (1.01, "right_wing")]
+)
+def test_left_is_minus_y_for_the_candidate_attacking_minus_x(ball_y, lane):
+    assert _tagged(0.0, ball_y)["lane"] == lane
+
+
+@pytest.mark.parametrize(
+    "cmd, restart",
+    [
+        (RefereeCommand.DIRECT_FREE_YELLOW, "ours"),
+        (RefereeCommand.BALL_PLACEMENT_BLUE, "theirs"),
+        (RefereeCommand.PREPARE_KICKOFF_BLUE, "theirs"),
+        (RefereeCommand.STOP, "stop"),
+        (RefereeCommand.FORCE_START, "live"),
+        (None, "live"),
+    ],
+)
+def test_the_restart_belongs_to_the_colour_the_command_names(cmd, restart):
+    assert _tagged(0.0, 0.0, cmd=cmd)["restart"] == restart
+
+
+def test_the_ball_is_held_by_the_nearest_robot_within_reach_and_near_counts_both_sides():
+    tags = _tagged(0.0, 0.0, friendly=[(0.15, 0.0), (1.5, 0.0), (1.6, 0.0)], enemy=[(0.0, 0.18), (0.0, 2.0)])
+    assert (tags["ball"], tags["near"]) == ("ours", "2v1")
+    assert _tagged(0.0, 0.0, friendly=[(0.21, 0.0)], enemy=[(0.0, -0.3)])["ball"] == "loose"
+
+
+def test_where_takes_any_of_the_listed_values_for_every_tag_given():
+    tags = {"third": "defensive", "ball": "loose"}
+    assert matches_where(tags, {"third": {"defensive"}, "ball": {"theirs", "loose"}})
+    assert not matches_where(tags, {"third": {"defensive"}, "ball": {"theirs"}})

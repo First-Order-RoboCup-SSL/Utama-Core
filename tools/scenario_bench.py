@@ -155,11 +155,14 @@ from utama_core.scenario_bench.scenario_scorer import (
     score_scenario,
 )
 from utama_core.scenario_bench.start import (
+    TAGS,
     BenchScenario,
     drop_near_duplicates,
     jittered,
     load_bank,
+    matches_where,
     save_bank,
+    start_tags,
 )
 
 SCHEMA_VERSION = 1
@@ -209,6 +212,8 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
     if args.families:
         wanted = set(args.families)
         scenarios = [s for s in scenarios if s.provenance.family.value in wanted]
+    if args.where:
+        scenarios = [s for s in scenarios if matches_where(start_tags(s), args.where)]
 
     if args.merge_into is not None:
         _bank_id, merged = load_bank(args.merge_into)
@@ -776,6 +781,16 @@ def _markdown_report(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def _parse_where(parser: argparse.ArgumentParser, terms: Optional[list[str]]) -> dict[str, set[str]]:
+    where: dict[str, set[str]] = {}
+    for term in terms or []:
+        key, sep, values = term.partition("=")
+        if not sep or key not in TAGS or not values:
+            parser.error(f"--where {term!r}: expected TAG=VALUE[,VALUE] with TAG one of {', '.join(TAGS)}")
+        where[key] = set(values.split(","))
+    return where
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--candidate", help="candidate strategy config, e.g. build_tiki_taka_kernel_strategy")
@@ -817,7 +832,17 @@ def parse_args() -> argparse.Namespace:
         "(see scenario_harvester.find_open_play_events; default 0)",
     )
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
-    parser.add_argument("--list-scenarios", action="store_true", help="print the loaded bank and exit")
+    parser.add_argument(
+        "--where",
+        nargs="+",
+        default=None,
+        metavar="TAG=VALUE[,VALUE]",
+        help="keep only starts whose situation tags match, e.g. third=defensive ball=theirs,loose "
+        f"(tags: {', '.join(TAGS)}; see start.start_tags and docs/pitch_zones.md)",
+    )
+    parser.add_argument(
+        "--list-scenarios", action="store_true", help="print the loaded bank with each start's tags, and exit"
+    )
     parser.add_argument(
         "--play",
         nargs="+",
@@ -882,6 +907,7 @@ def parse_args() -> argparse.Namespace:
         parser.error("--play shows starts for --candidate alone; it takes no baseline or --stop-at-t")
     if args.render is not None and args.play is None:
         parser.error("--render needs --play")
+    args.where = _parse_where(parser, args.where)
     if args.merge_into is not None and (args.harvest_from is None or args.save_bank is None):
         parser.error("--merge-into needs --harvest-from and --save-bank")
 
@@ -895,10 +921,9 @@ def main() -> int:
 
     if args.list_scenarios:
         for bs in scenarios:
-            print(
-                f"{bs.scenario_id:<45} {bs.provenance.family.value:<28} "
-                f"{bs.provenance.trigger.value:<14} lifecycle={bs.lifecycle.value}"
-            )
+            tags = " ".join(f"{k}={v}" for k, v in start_tags(bs).items())
+            print(f"{bs.scenario_id:<58} {bs.provenance.family.value:<22} {tags}")
+        print(f"{len(scenarios)} starts")
         if harvest_report:
             print(f"\nHarvest: {harvest_report}")
         return 0

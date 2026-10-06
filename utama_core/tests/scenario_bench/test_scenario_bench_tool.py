@@ -287,3 +287,12 @@ def test_play_takes_no_baseline(monkeypatch, capsys):
     with pytest.raises(SystemExit):
         scenario_bench.parse_args()
     assert "--play shows starts for --candidate alone" in capsys.readouterr().err
+
+
+def test_where_must_name_a_tag_and_a_value(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["scenario_bench.py", "--list-scenarios", "--where", "zone=defensive"])
+    with pytest.raises(SystemExit):
+        scenario_bench.parse_args()
+    assert "expected TAG=VALUE" in capsys.readouterr().err
+    monkeypatch.setattr(sys, "argv", ["scenario_bench.py", "--list-scenarios", "--where", "ball=theirs,loose"])
+    assert scenario_bench.parse_args().where == {"ball": {"theirs", "loose"}}

@@ -400,3 +400,61 @@ def drop_near_duplicates(
         kept.append(s)
         new.append(s)
     return new
+
+
+# --- Situation tags (docs/pitch_zones.md) ------------------------------------------------
+#
+# Where a start is and who it belongs to, from the candidate's point of view, so a start can
+# be found by situation (`scenario_bench.py --where`). Derived from the start's own state, not
+# stored in the bank. The candidate is friendly: yellow, defending the right goal, attacking -x.
+
+_ON_BALL_M = 0.2  # a robot centre this close to the ball has it
+NEAR_BALL_M = 1.5  # robots this close to the ball count in the `near` tag
+TAGS = ("third", "lane", "restart", "ball", "near")
+
+
+def start_tags(bench_scenario: "BenchScenario") -> dict[str, str]:
+    """`third`: defensive / middle / attacking. `lane`: left_wing / centre / right_wing (as the
+    candidate faces the goal it attacks). `restart`: ours / theirs (the team the referee command
+    gives the kickoff, free kick, penalty or ball placement to), stop, or live. `ball`: ours /
+    theirs (a robot within `_ON_BALL_M`) or loose. `near`: our and their robots within
+    `NEAR_BALL_M` of the ball, e.g. "2v3"."""
+    s = bench_scenario.scenario
+    half_length = STANDARD_FIELD_DIMS.full_field_half_length
+    progress = half_length - s.ball_x  # metres from our goal line toward the goal we attack
+    third = 2 * half_length / 3
+    left = -s.ball_y  # facing -x, our left is -y
+    centre = STANDARD_FIELD_DIMS.half_defense_area_width
+
+    cmd = s.referee_command
+    if cmd is None or cmd in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START):
+        restart = "live"
+    elif cmd.name.endswith("_YELLOW"):
+        restart = "ours"
+    elif cmd.name.endswith("_BLUE"):
+        restart = "theirs"
+    else:
+        restart = "stop"
+
+    def dists(robots):
+        return [math.hypot(r.x - s.ball_x, r.y - s.ball_y) for r in robots]
+
+    ours, theirs = dists(s.friendly_robots), dists(s.enemy_robots)
+    nearest_ours, nearest_theirs = min(ours, default=math.inf), min(theirs, default=math.inf)
+    if min(nearest_ours, nearest_theirs) > _ON_BALL_M:
+        ball = "loose"
+    else:
+        ball = "ours" if nearest_ours <= nearest_theirs else "theirs"
+
+    return {
+        "third": "defensive" if progress < third else "middle" if progress < 2 * third else "attacking",
+        "lane": "left_wing" if left > centre else "right_wing" if left < -centre else "centre",
+        "restart": restart,
+        "ball": ball,
+        "near": f"{sum(d <= NEAR_BALL_M for d in ours)}v{sum(d <= NEAR_BALL_M for d in theirs)}",
+    }
+
+
+def matches_where(tags: dict[str, str], where: dict[str, set[str]]) -> bool:
+    """`where` maps a tag to the values it may take (`--where third=defensive ball=theirs,loose`)."""
+    return all(tags[key] in values for key, values in where.items())
