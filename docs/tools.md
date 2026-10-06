@@ -33,7 +33,7 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 
 | Script | Purpose |
 |---|---|
-| `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of 20 s starts harvested from a round-robin; also builds new banks (`--harvest-from`) |
+| `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of 20 s starts harvested from a round-robin; also builds new banks (`--harvest-from`), and plays one start with a timeline and picture (`--play`) |
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
 | `tools/elo.py` / `tools/plot_elo.py` | Elo ratings from round-robin `summary.json` files, and plots of them (rating history, W/D/L matrix, goal difference) |
 | `tools/bench_vs_standings.py` | How far scenario-bench scores rank strategies the way round-robin standings do (Spearman) |

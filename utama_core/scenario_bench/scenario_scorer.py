@@ -39,11 +39,13 @@ from typing import Optional
 from utama_core.analysis.chances import ChanceTracker
 from utama_core.analysis.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.replay.scenario import apply_scenario
 from utama_core.run import StrategyRunner
 from utama_core.scenario_bench.start import BenchScenario
@@ -120,7 +122,11 @@ def _resolve_config_name(name: str) -> str:
     return name
 
 
-def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: str) -> StrategyRunner:
+def _build_runner(
+    candidate_config: str, opponent_config: str, *, stats_path: str, record: Optional[str] = None
+) -> StrategyRunner:
+    """`record`: a replay name relative to `REPLAY_BASE_PATH`; when set, the run writes
+    `<record>.npz` (the replay) and `<record>.intentions.jsonl` (the match log) there."""
     build_candidate = getattr(kernel_strategy, _resolve_config_name(candidate_config))
     build_opponent = getattr(kernel_strategy, _resolve_config_name(opponent_config))
     strategy_a = AbstractStrategy(build_kernel_strategy=build_candidate(OUTFIELD_ROBOT_IDS))
@@ -146,6 +152,14 @@ def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: st
         # a start played with another planner measures something those matches never did.
         control_scheme="fpp",
         stats_path=stats_path,
+        **(
+            {
+                "replay_writer_config": ColumnarReplayWriterConfig(replay_name=record, overwrite_existing=True),
+                "match_log_path": str(REPLAY_BASE_PATH / f"{record}.intentions.jsonl"),
+            }
+            if record is not None
+            else {}
+        ),
     )
 
 
@@ -215,6 +229,7 @@ def score_scenario(
     opponent_config: str,
     horizon_s: float = 20.0,
     stats_path: str = "/tmp/scenario_bench_stats.json",
+    record: Optional[str] = None,
 ) -> ScenarioScoreResult:
     """Run `bench_scenario` for `candidate_config` (as the candidate, always
     friendly/yellow/right) against `opponent_config`, ticking forward
@@ -231,7 +246,7 @@ def score_scenario(
     scenario = bench_scenario.to_scenario()
 
     try:
-        runner = _build_runner(candidate_config, opponent_config, stats_path=stats_path)
+        runner = _build_runner(candidate_config, opponent_config, stats_path=stats_path, record=record)
     except Exception as exc:  # noqa: BLE001 - report as a failed score, not a crash (e.g. unknown config name)
         return ScenarioScoreResult(
             scenario_id=bench_scenario.scenario_id,

@@ -236,7 +236,26 @@ never passes or shoots loses the ball least. Rank strategies by results (goals, 
 the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
-## A/B on the scenario bank
+## Play and watch one start
+
+A round-robin only tests a change in the situations its matches happen to reach, and some
+pairings rarely reach the one a change is about (a defensive change, say, against an opponent
+that seldom gets into our third). The bank's starts are real moments from a round-robin, so
+`--play` puts a strategy into one directly and shows what it did:
+
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
+        --play split_shape_vs_three_slot_t51.9_candidate_kicking --candidate high_press \
+        --opponent split_shape --render png
+
+It prints the start's outcome and signals and a timeline: the referee command, the ball, the
+robot of each side nearest it every 0.25 s, and each change in the candidate's tactic
+assignments. The replay, the candidate's match log, the timeline and the picture are kept in
+`replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). One start takes about
+12 s. `--repeats N` plays it from N slightly jittered positions, to see whether what happened
+holds up. `--list-scenarios` lists the starts; their family (kickoff, free kick, penalty, open
+play) and the match they came from are in the id. A start is robot and ball positions only: both
+strategies begin it with no memory.
+
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
 round-robin even with `--reuse`, or of a change too small to move match results, use

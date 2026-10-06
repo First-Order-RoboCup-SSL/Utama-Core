@@ -66,6 +66,15 @@ then costs nothing, and only the candidate plays. `--spot-check F` (default 0.05
 replays that fraction of the reusable starts and compares them with their records; a
 difference means the fingerprint missed a dependency, is printed loudly, evicts the
 records this run used, and makes the run exit non-zero.
+`--play ID [ID ...]` plays the given starts once each (per `--repeats` seed) for
+`--candidate` against `--opponent` and shows what happened, instead of scoring a bank:
+its outcome and signals, and a timeline of the referee, the ball, the robot of each side
+nearest it and every change in the candidate's tactic assignments. The replay
+(`.npz`) and the candidate's match log (`.intentions.jsonl`) are kept under
+`replays/scenario_play/<start id>/`, with the timeline as `.trace.txt` and, with
+`--render png|mp4`, a picture of the whole window. Use it to test a change in a
+situation the round-robin rarely reaches, or to watch a start a bench run flagged.
+
 Still not built: lifecycle promotion (candidate -> validated -> active) or a
 ladder (slow half).
 
@@ -90,6 +99,11 @@ Run from the repository root, for example:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \\
         --merge-into utama_core/scenario_bench/banks/bank_v5.json --save-bank utama_core/scenario_bench/banks/bank_v6.json \\
         --list-scenarios
+
+    # Play two starts and watch them (timeline printed, replay and picture kept):
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \\
+        --play kickoff_center_v1 split_shape_vs_three_slot_t51.9_candidate_kicking \\
+        --candidate high_press --opponent split_shape --render png
 
     # A/B a code change: record at commit A, compare at commit B.
     pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
@@ -118,10 +132,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Optional
 
+import numpy as np
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools.replay_trace import trace
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, bench_key
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
@@ -210,8 +228,95 @@ def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
         print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={bank_id})")
 
 
+PLAY_DIR = "scenario_play"  # under REPLAY_BASE_PATH: where --play keeps its replays
+
+
+def _intention_lines(records: Iterable[dict], t0: float) -> list[tuple[float, str]]:
+    """The candidate's tactic assignments from its match log, one line per change, on
+    the replay's clock (seconds from its first frame, `t0` in sim time)."""
+    out = []
+    for r in records:
+        if r.get("event") == "intention":
+            t = r["sim_time"] - t0
+            out.append((t, f"{t:7.2f} tactic {r['tactic_id']} = {r.get('note') or '?'} {r['robot_ids']}"))
+    return out
+
+
+def merge_timeline(trace_lines: list[str], intention_lines: list[tuple[float, str]]) -> list[str]:
+    """`replay_trace.trace` lines and `_intention_lines` in time order; at the same time,
+    the trace line (the state) comes before the tactic change it led to."""
+    rows = [(float(line.split()[0]), 0, line) for line in trace_lines]
+    rows += [(t, 1, line) for t, line in intention_lines]
+    return [line for _t, _k, line in sorted(rows, key=lambda r: (r[0], r[1]))]
+
+
+def play_start(
+    bench_scenario: BenchScenario,
+    *,
+    candidate: str,
+    opponent: str,
+    horizon_s: float,
+    seed: int = 0,
+    render: Optional[str] = None,
+    every: int = 15,
+) -> dict:
+    """Play one start (`jittered` by `seed`) with a replay and match log recorded, and
+    return its result, the timeline and where the files are."""
+    tag = f"{_resolve_config_name(candidate)[6:-16]}_vs_{_resolve_config_name(opponent)[6:-16]}_s{seed}"
+    name = f"{PLAY_DIR}/{bench_scenario.scenario_id}/{tag}"
+    r = score_scenario(
+        jittered(bench_scenario, seed),
+        candidate_config=candidate,
+        opponent_config=opponent,
+        horizon_s=horizon_s,
+        record=name,
+    )
+    out = {"scenario_id": bench_scenario.scenario_id, "seed": seed, "result": _result_dict(r), "timeline": []}
+    npz = REPLAY_BASE_PATH / f"{name}.npz"
+    if r.error is not None or not npz.exists():
+        return out
+    log = npz.with_suffix(".intentions.jsonl")
+    ts = np.load(npz)["ts"]
+    records = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+    timeline = merge_timeline(trace(npz, 0.0, math.inf, every), _intention_lines(records, float(ts[0])))
+    trace_path = npz.with_suffix(".trace.txt")
+    trace_path.write_text("\n".join(timeline) + "\n")
+    out.update(timeline=timeline, replay=str(npz), log=str(log), trace=str(trace_path))
+    # imported here: matplotlib and pygame's drawing aren't needed to score a bank
+    from utama_core.analysis.render_clip import render_clip
+    from utama_core.analysis.render_window import render_window
+
+    if render == "png":
+        out["render"] = render_window(npz, float(ts[0]), float(ts[-1]), npz.with_suffix(".png"))
+    elif render == "mp4":
+        out["render"] = render_clip(npz, float(ts[0]), float(ts[-1]), npz.with_suffix(".mp4"))
+    return out
+
+
+def _print_play(play: dict, lead_in_s: float) -> None:
+    r = play["result"]
+    print(f"\n=== {play['scenario_id']} (seed {play['seed']}) ===")
+    if r.get("error"):
+        print(f"error: {r['error']}")
+        return
+    print(
+        f"outcome {r['outcome']}{' (stalled)' if r.get('stalled') else ''}{' (foul)' if r.get('foul') else ''}; "
+        f"scored after a {lead_in_s:g} s lead-in"
+    )
+    print("signals: " + ", ".join(f"{k} {v:g}" for k, v in (r.get("signals") or {}).items()))
+    print("\n".join(play["timeline"]))
+    for key in ("replay", "log", "trace", "render"):
+        if key in play:
+            print(f"{key}: {play[key]}")
+
+
 def _start_result(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float) -> dict:
-    r = score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
+    return _result_dict(
+        score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
+    )
+
+
+def _result_dict(r) -> dict:
     return {
         "outcome": int(r.outcome),
         "foul": bool(r.foul),
@@ -714,6 +819,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
     parser.add_argument("--list-scenarios", action="store_true", help="print the loaded bank and exit")
     parser.add_argument(
+        "--play",
+        nargs="+",
+        default=None,
+        metavar="ID",
+        help="play these starts of the loaded bank (one per --repeats seed) for --candidate against --opponent, "
+        "print each one's outcome, signals and timeline, and keep its replay under replays/scenario_play/",
+    )
+    parser.add_argument(
+        "--render",
+        choices=("png", "mp4"),
+        default=None,
+        help="with --play, also draw each start's whole window: trails (png) or a clip (mp4, needs ffmpeg)",
+    )
+    parser.add_argument(
         "--load-bank",
         type=Path,
         default=None,
@@ -759,6 +878,10 @@ def parse_args() -> argparse.Namespace:
             parser.error(f"--{', --'.join(missing)} required unless --list-scenarios")
         if args.baseline and args.against_results:
             parser.error("--baseline and --against-results are alternatives")
+    if args.play is not None and (args.baseline or args.against_results or args.stop_at_t is not None):
+        parser.error("--play shows starts for --candidate alone; it takes no baseline or --stop-at-t")
+    if args.render is not None and args.play is None:
+        parser.error("--render needs --play")
     if args.merge_into is not None and (args.harvest_from is None or args.save_bank is None):
         parser.error("--merge-into needs --harvest-from and --save-bank")
 
@@ -783,6 +906,27 @@ def main() -> int:
     if not scenarios:
         print("No scenarios loaded (check --families / --harvest-from).", file=sys.stderr)
         return 1
+
+    if args.play is not None:
+        by_id = {bs.scenario_id: bs for bs in scenarios}
+        unknown = [sid for sid in args.play if sid not in by_id]
+        if unknown:
+            print(f"Not in the loaded bank: {', '.join(unknown)} (see --list-scenarios)", file=sys.stderr)
+            return 1
+        failed = False
+        for sid in args.play:
+            for seed in range(args.repeats):
+                play = play_start(
+                    by_id[sid],
+                    candidate=args.candidate,
+                    opponent=args.opponent,
+                    horizon_s=args.horizon,
+                    seed=seed,
+                    render=args.render,
+                )
+                _print_play(play, by_id[sid].lead_in_s)
+                failed |= play["result"]["error"] is not None
+        return 1 if failed else 0
 
     generated_at = datetime.now(timezone.utc)
     args.output_dir.mkdir(parents=True, exist_ok=True)

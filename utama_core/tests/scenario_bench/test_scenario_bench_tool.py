@@ -5,6 +5,8 @@ import math
 import sys
 from pathlib import Path
 
+import pytest
+
 from utama_core.scenario_bench.hand_authored_scenarios import (
     all_hand_authored_scenarios,
 )
@@ -236,3 +238,52 @@ def test_an_earlier_run_without_signals_still_pairs_outcomes():
     assert rows[0]["delta"] == 1.0
     assert rows[0]["signal_deltas"] is None
     assert scenario_bench._signal_report({"signals": scenario_bench._signal_summary(rows), "aggregates": []}) == []
+
+
+def test_a_tactic_change_is_placed_after_the_state_at_the_same_time():
+    trace_lines = ["   0.00 STOP ball", "   5.75 NORMAL_START ball", "   6.00 NORMAL_START ball"]
+    records = [
+        {"event": "referee", "sim_time": 0.0},
+        {"event": "intention", "sim_time": 5.77, "tactic_id": "attack", "note": "GiveAndGoTactic", "robot_ids": [1, 2]},
+        {"event": "trace", "sim_time": 5.9, "key": "x", "value": 1},
+    ]
+    intentions = scenario_bench._intention_lines(records, t0=0.02)
+
+    assert intentions == [(5.75, "   5.75 tactic attack = GiveAndGoTactic [1, 2]")]
+    assert scenario_bench.merge_timeline(trace_lines, intentions) == [
+        "   0.00 STOP ball",
+        "   5.75 NORMAL_START ball",
+        "   5.75 tactic attack = GiveAndGoTactic [1, 2]",
+        "   6.00 NORMAL_START ball",
+    ]
+
+
+def test_play_records_a_start_and_returns_its_timeline(tmp_path, monkeypatch):
+    from utama_core.replay import columnar_writer
+    from utama_core.scenario_bench import scenario_scorer
+
+    for module in (scenario_bench, scenario_scorer, columnar_writer):
+        monkeypatch.setattr(module, "REPLAY_BASE_PATH", tmp_path)
+    start = next(bs for bs in all_hand_authored_scenarios() if bs.scenario_id == "kickoff_center_v1")
+
+    play = scenario_bench.play_start(start, candidate="high_press", opponent="split_shape", horizon_s=1.0)
+
+    assert play["result"]["error"] is None
+    assert set(play["result"]["signals"]) == set(scenario_bench.SIGNALS)
+    folder = tmp_path / scenario_bench.PLAY_DIR / "kickoff_center_v1"
+    assert play["replay"] == str(folder / "high_press_vs_split_shape_s0.npz")
+    for suffix in (".npz", ".intentions.jsonl", ".trace.txt"):
+        assert (folder / f"high_press_vs_split_shape_s0{suffix}").exists()
+    assert "PREPARE_KICKOFF" in play["timeline"][0]
+    assert (folder / "high_press_vs_split_shape_s0.trace.txt").read_text().splitlines() == play["timeline"]
+
+
+def test_play_takes_no_baseline(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["scenario_bench.py", "--play", "x", "--candidate", "a", "--opponent", "b", "--baseline", "c"],
+    )
+    with pytest.raises(SystemExit):
+        scenario_bench.parse_args()
+    assert "--play shows starts for --candidate alone" in capsys.readouterr().err
