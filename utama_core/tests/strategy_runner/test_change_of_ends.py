@@ -42,9 +42,16 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
     try:
         assert runner.my.game.field.my_team_is_right is True
         kickoff = None
+        commands = []  # (sim time, command, stage) at each change, for the failure message
         for _ in range(60 * 60):
             runner.step_once()
             referee = runner.my.game.referee
+            if referee is not None and (
+                not commands or commands[-1][1:] != (referee.referee_command.name, referee.stage.name)
+            ):
+                commands.append(
+                    (round(runner.my.current_game_frame.ts, 2), referee.referee_command.name, referee.stage.name)
+                )
             if referee is not None and referee.stage == Stage.NORMAL_SECOND_HALF:
                 kickoff = runner.my.current_game_frame
                 break
@@ -55,8 +62,9 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
         assert (runner.opp.current_game_frame.my_team_is_right, runner.opp.game.field.my_team_is_right) == (True, True)
         assert kickoff.referee.blue_team_on_positive_half is True
         # Kickoff positions: each team's outfield robots in its own half, which is now the other one.
-        assert max(r.p.x for i, r in kickoff.friendly_robots.items() if i != KEEPER) < 0.1
-        assert min(r.p.x for i, r in kickoff.enemy_robots.items() if i != KEEPER) > -0.1
+        seen = _describe(kickoff, commands)
+        assert max(r.p.x for i, r in kickoff.friendly_robots.items() if i != KEEPER) < 0.1, seen
+        assert min(r.p.x for i, r in kickoff.enemy_robots.items() if i != KEEPER) > -0.1, seen
         # The keepers walk the length of the pitch, so they may still be on the way at the
         # kickoff (how far they got differs between CPUs); they reach their new goals.
         for _ in range(KEEPER_WALK_S * 60):
@@ -68,3 +76,10 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
         assert frame.enemy_robots[KEEPER].p.x > GOAL_AREA_X
     finally:
         runner.close()
+
+
+def _describe(frame, commands) -> str:
+    def where(robots):
+        return {i: (round(r.p.x, 2), round(r.p.y, 2)) for i, r in robots.items()}
+
+    return f"t={frame.ts:.2f} friendly={where(frame.friendly_robots)} enemy={where(frame.enemy_robots)} commands={commands}"
