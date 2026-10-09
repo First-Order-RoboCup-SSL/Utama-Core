@@ -53,7 +53,7 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
         active.append(GoalRule(cooldown_seconds=rules_cfg.goal_detection.cooldown_seconds))
 
     if rules_cfg.out_of_bounds.enabled:
-        active.append(OutOfBoundsRule())
+        active.append(OutOfBoundsRule(aimless_kick=rules_cfg.out_of_bounds.aimless_kick))
 
     if rules_cfg.ball_speed.enabled:
         active.append(BallSpeedRule(max_speed_mps=rules_cfg.ball_speed.max_speed_mps))

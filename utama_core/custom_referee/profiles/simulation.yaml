@@ -6,6 +6,7 @@ rules:
   out_of_bounds:
     enabled: true
     free_kick_assigner: "last_touch"
+    aimless_kick: true   # §6.2.3, Division B only
   defense_area:
     enabled: true
     max_defenders: 1

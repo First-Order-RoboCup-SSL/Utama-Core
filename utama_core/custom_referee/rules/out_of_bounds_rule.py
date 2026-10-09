@@ -8,7 +8,10 @@ from typing import Optional
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import CORNER_INFIELD_OFFSET, RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
-from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
+from utama_core.custom_referee.rules.last_touch import (
+    infer_last_touch_team,
+    touching_team,
+)
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 
@@ -26,14 +29,25 @@ _CORNER_INFIELD_OFFSET = CORNER_INFIELD_OFFSET
 
 
 class OutOfBoundsRule(BaseRule):
-    """Fires a free kick for the non-touching team when the ball leaves the field."""
+    """Fires a free kick for the non-touching team when the ball leaves the field.
 
-    def __init__(self) -> None:
+    With `aimless_kick` (§6.2.3, Division B only): a ball touched in a team's own
+    half that then crosses the opponent's goal line outside the goal, untouched by
+    anyone else, restarts from where it was touched instead of as a goal kick in
+    the opponent's corner. Without it a blind clearance cost nothing: in
+    tournament_20261005_170958, 388 of 1377 goal kicks were followed within
+    seconds by one at the other end, each team clearing the ball over the far line.
+    """
+
+    def __init__(self, aimless_kick: bool = True) -> None:
+        self._aimless_kick = aimless_kick
         # Last team to have the ball: True = friendly, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
         # The ball's velocity on the previous active-play frame (see `infer_last_touch_team`).
         self._prev_ball_v: Optional[tuple[float, float]] = None
+        # Where the ball was last touched in this spell of play, None if not since play restarted.
+        self._last_touch_at: Optional[tuple[float, float]] = None
 
     def check(
         self,
@@ -44,6 +58,7 @@ class OutOfBoundsRule(BaseRule):
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
+            self._last_touch_at = None
             return None
 
         ball = game_frame.ball
@@ -53,6 +68,8 @@ class OutOfBoundsRule(BaseRule):
         bx, by = ball.p.x, ball.p.y
 
         # Update last-touch tracking regardless of out-of-bounds state.
+        if touching_team(game_frame, self._prev_ball_v) is not None:
+            self._last_touch_at = (bx, by)
         self._last_touch_was_friendly = infer_last_touch_team(
             game_frame, self._last_touch_was_friendly, self._prev_ball_v
         )
@@ -67,6 +84,14 @@ class OutOfBoundsRule(BaseRule):
         # Over a goal line: a corner kick when the goal's own team touched it last.
         crossed_friendly_goal_line = (bx > 0) == game_frame.my_team_is_right
         corner_kick = self._last_touch_was_friendly == crossed_friendly_goal_line
+        if self._is_aimless(bx, geometry, corner_kick):
+            return RuleViolation(
+                rule_name="out_of_bounds",
+                suggested_command=RefereeCommand.STOP,
+                next_command=free_kick_cmd,
+                status_message="Aimless kick",
+                designated_position=self._kick_point(geometry),
+            )
         placement = self._nearest_infield_point(bx, by, geometry, corner_kick)
 
         return RuleViolation(
@@ -82,10 +107,31 @@ class OutOfBoundsRule(BaseRule):
     def reset(self) -> None:
         self._last_touch_was_friendly = None
         self._prev_ball_v = None
+        self._last_touch_at = None
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _is_aimless(self, bx: float, geometry: RefereeGeometry, corner_kick: bool) -> bool:
+        """§6.2.3: "after the ball touched a robot, it subsequently crossed the
+        halfline and then its opponent's goal line outside the goal without
+        touching another robot". A goal kick is the opponent's goal line; the last
+        touch on the far side of the halfway line is the crossing (strictly, so a
+        kick-off from the line itself "cannot be aimless")."""
+        if not self._aimless_kick or corner_kick or self._last_touch_at is None:
+            return False
+        if self._last_touch_was_friendly is None or abs(bx) <= geometry.half_length:
+            return False
+        return self._last_touch_at[0] * bx < 0
+
+    def _kick_point(self, geometry: RefereeGeometry) -> tuple[float, float]:
+        """Where the aimless kick was touched, made a legal free-kick spot (§5.3.3):
+        `_INFIELD_OFFSET` inside the lines and clear of both defense areas."""
+        x, y = self._last_touch_at
+        x = max(-(geometry.half_length - _INFIELD_OFFSET), min(geometry.half_length - _INFIELD_OFFSET, x))
+        y = max(-(geometry.half_width - _INFIELD_OFFSET), min(geometry.half_width - _INFIELD_OFFSET, y))
+        return geometry.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
     def _assign_free_kick(self, game_frame: GameFrame) -> Optional[RefereeCommand]:
         """Return the free-kick command for the non-touching team.

@@ -26,6 +26,8 @@ class GoalDetectionConfig:
 class OutOfBoundsConfig:
     enabled: bool = True
     free_kick_assigner: str = "last_touch"
+    # §6.2.3 (Division B only): an aimless kick restarts from where it was kicked.
+    aimless_kick: bool = True
 
 
 @dataclass
@@ -297,6 +299,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
     oob_cfg = OutOfBoundsConfig(
         enabled=ob.get("enabled", True),
         free_kick_assigner=ob.get("free_kick_assigner", "last_touch"),
+        aimless_kick=ob.get("aimless_kick", True),
     )
 
     da = rules_d.get("defense_area", {})
