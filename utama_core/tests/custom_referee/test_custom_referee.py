@@ -204,6 +204,21 @@ class TestOutOfBoundsRule:
         assert violation is not None
         assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE  # non-kicking team
 
+    def test_every_goal_kick_is_placed_at_the_same_spot(self):
+        """A ball over the goal line and a disallowed goal (and a penalty out of
+        time) are all goal kicks, so they share one spot: 0.5 m from the touch
+        line. The out-of-bounds goal kick sat 0.5 m from it, the others 0.2 m."""
+        rule = OutOfBoundsRule()
+        # Blue (enemy, on the right) kicks it over yellow's goal line on the left: a goal kick.
+        kicker = {0: _robot(0, -3.0, -2.0, is_friendly=False, has_ball=True)}
+        rule.check(_frame(ball=_ball(-3.0, -2.0), enemy_robots=kicker, ts=9.9), GEO, RefereeCommand.NORMAL_START)
+        violation = rule.check(_frame(ball=_ball(-4.55, -2.9), ts=10.0), GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+        spot = (-(GEO.half_length - 1.0), -(GEO.half_width - 0.5))
+        assert violation.designated_position == pytest.approx(spot)
+        assert GEO.goal_kick_position(-1.0, -2.9) == pytest.approx(spot)
+
     def test_unknown_last_touch_has_no_colour_bias(self):
         """No robots in the frame → no restart can be attributed; the rule
         must not default to a hardcoded colour."""

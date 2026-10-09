@@ -5,7 +5,18 @@ from dataclasses import dataclass
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.config.referee_constants import FREE_KICK_DEFENSE_AREA_DISTANCE
+from utama_core.config.referee_constants import (
+    FREE_KICK_DEFENSE_AREA_DISTANCE,
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+)
+
+# §6.2.1-2 place goal and corner kicks 0.2 m from the touch line (a corner kick also
+# 0.2 m from the goal line). Ours sit 0.5 m from both: at robot-body distance from two
+# lines an ordinary drift sent the ball straight back out, restarting in the same
+# corner for most of a match (`OutOfBoundsRule._nearest_infield_point`).
+CORNER_INFIELD_OFFSET = 0.5
+# §6.2.1: a goal kick sits 1 m from the goal line.
+GOAL_KICK_DISTANCE = 1.0
 
 
 @dataclass(frozen=True)
@@ -113,10 +124,13 @@ class RefereeGeometry:
     _KICKER_APPROACH_M = ROBOT_RADIUS + 0.03
 
     def goal_kick_position(self, goal_x_sign: float, ball_y: float) -> tuple[float, float]:
-        """SSL rulebook §6.2.1: a goal kick is placed "0.2 meters from the closest
-        touch line and 1 meter from the goal line", in front of the goal on the
-        `goal_x_sign` side and on the touch line nearer `ball_y`."""
-        return (goal_x_sign * (self.half_length - 1.0), math.copysign(self.half_width - 0.2, ball_y))
+        """SSL rulebook §6.2.1: a goal kick is placed 1 m from the goal line on the
+        `goal_x_sign` side, next to the touch line nearer `ball_y`
+        (`CORNER_INFIELD_OFFSET` from it, not the rulebook's 0.2 m). Every goal kick
+        uses this: a ball over the goal line, a disallowed goal, a penalty out of time."""
+        x = goal_x_sign * (self.half_length - GOAL_KICK_DISTANCE)
+        y = math.copysign(self.half_width - CORNER_INFIELD_OFFSET, ball_y)
+        return self.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
     def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
         """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for

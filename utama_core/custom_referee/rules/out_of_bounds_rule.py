@@ -6,7 +6,7 @@ import math
 from typing import Optional
 
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
-from utama_core.custom_referee.geometry import RefereeGeometry
+from utama_core.custom_referee.geometry import CORNER_INFIELD_OFFSET, RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
 from utama_core.entities.game.game_frame import GameFrame
@@ -22,9 +22,7 @@ _INFIELD_OFFSET = 0.25  # metres inside the boundary for a playable free-kick pl
 # offset above leaves only _INFIELD_OFFSET of clearance on EACH line simultaneously
 # (as little as 0.08m observed live, see _nearest_infield_point's docstring), which
 # is robot-body scale. Deeper offset used only when both axes are being clamped.
-_CORNER_INFIELD_OFFSET = 0.5
-# §6.2.1: a goal kick sits 1 m from the goal line.
-_GOAL_KICK_DISTANCE = 1.0
+_CORNER_INFIELD_OFFSET = CORNER_INFIELD_OFFSET
 
 
 class OutOfBoundsRule(BaseRule):
@@ -125,8 +123,8 @@ class OutOfBoundsRule(BaseRule):
 
         A ball over a goal line instead restarts in the corner nearer `by`, as
         §6.2.1–2 place goal and corner kicks: `_CORNER_INFIELD_OFFSET` from both
-        lines for a corner kick (`corner_kick`), `_GOAL_KICK_DISTANCE` from the
-        goal line for a goal kick. Placing it where it crossed, pushed 1 m off
+        lines for a corner kick (`corner_kick`), `RefereeGeometry.goal_kick_position`
+        for a goal kick. Placing it where it crossed, pushed 1 m off
         the box, gave the attackers a free kick 2 m in front of goal: 521 of them
         and 150 goals in tournament_20261004_204810.
 
@@ -171,8 +169,9 @@ class OutOfBoundsRule(BaseRule):
         """
         near_x_boundary = abs(bx) > geometry.half_length
         if near_x_boundary:
-            depth = _CORNER_INFIELD_OFFSET if corner_kick else _GOAL_KICK_DISTANCE
-            px = math.copysign(geometry.half_length - depth, bx)
+            if not corner_kick:
+                return geometry.goal_kick_position(math.copysign(1.0, bx), by)
+            px = math.copysign(geometry.half_length - _CORNER_INFIELD_OFFSET, bx)
             py = math.copysign(geometry.half_width - _CORNER_INFIELD_OFFSET, by)
             return geometry.legal_restart_position(px, py, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         near_y_boundary = abs(by) > geometry.half_width
