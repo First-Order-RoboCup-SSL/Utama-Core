@@ -107,6 +107,39 @@ resolved, replace it with a one-line pointer under "Done".
      budget, ladder at high) that also writes `docs/strategies.md`.
    - Build order: calibration tournament → bench on harvested states → ladder.
 
+2a. **Strategy evaluation v2 (direction agreed 2026-10-09, not started).** Builds the ladder
+    above and settles how matches vary.
+    - *Ladder:* a candidate plays a fixed reference pool (the current top 4-5) in several
+      sampled worlds, each world played twice with the teams swapped so luck cancels, both
+      kickoffs covered, stopping early once the result is clear; Elo anchored to the pool. The
+      full round-robin stays as the occasional full refresh after shared-code changes. Pure
+      Elo matchmaking over the whole league is not the plan: strategies counter each other, and
+      the round-robin's results table is what shows that.
+    - *Sampled worlds instead of restart fuzzing:* variation comes from realistic imperfection,
+      seeded so a world is reproducible: vision noise and dropped detections (`rsim_noise`,
+      `rsim_vanishing` already exist), then kick speed and direction spread and command delay
+      or lost packets (Python, in the sim's controller and `standard_ssl.py`), then per-robot
+      profiles once 10c has measurements, then dribbler loss (likely `vendor/rSim`). Both teams
+      face the same world with mirrored profiles. Ranges stay modest and written down until
+      measured. The distribution is fixed by the evaluator and out of reach of strategy
+      branches, so it is not something to tune toward. `RestartFuzzingReferee` stays as a
+      stall-testing tool, not an evaluation input.
+    - *Names:* one match runner with the schedule (round-robin, ladder) and match settings
+      (sides, kickoffs, world seed) as options, replacing round-robin / full-match tournament /
+      Elo as separate tools. `full_match_tournament.py` (both kickoffs) and `tools/elo.py`,
+      `plot_elo.py` are retired only once the ladder covers them.
+    - *Match cache:* a match's key (`replay/fingerprint.py` `match_key`) hashes the exact bytes
+      and paths of everything `tools/tournament/tournament_lib.py` imports, data files next to
+      them (not `.md`), both strategies' modules, and the match settings. New tools that call
+      `run_match`, and new settings added to the key only when switched on (as `fuzz_seed` is),
+      keep the cache. Renaming, moving or editing `tournament_lib.py` or anything it imports
+      (even a comment), or adding sim noise, reruns every match. So: build the ladder and world
+      settings as additions first, and do the renames in the same batch as the next change that
+      forces a full rerun anyway (the sim noise).
+    - *Order:* write the ladder (additions only) → switch on vision noise and dropouts as world
+      settings → kick spread and command delay, together with the naming unification, then one
+      full round-robin → per-robot profiles after calibration.
+
 3. **`BangBang1D` defects** — required-overshoot and `v0 > v_max` cases produce
    discontinuous trajectories (xfail-pinned in `utama_core/tests/motion_planning/
    implementation/bang_bang_edge_cases_test.py`). A correct fix (`b26a550`) was reverted (`90d068c`) because
