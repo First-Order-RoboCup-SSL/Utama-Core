@@ -178,6 +178,48 @@ resolved, replace it with a one-line pointer under "Done".
       importing them from the referee rules; decide whether to share one source.
     Expect each failing tactic to be a real fix with its own regression test.
 
+10c. **Real-robot profiles and calibration.** Each physical robot differs (top speed,
+    dribbler grip, kicker strength) in ways hardware can't fix soon; software should
+    correct what it can and use the rest. No measurements yet (2026-10-09), so nothing per
+    robot is built: this entry is the plan.
+    - *Known now:* the kicker is fixed power and will stay so for now (hardware team,
+      2026-10-09), so the sim gets no variable-kick option. Real robots are capped at
+      `MAX_VEL=1` m/s as a safety limit, not their top speed; rsim and grSim run at 2 m/s
+      (`config/robot_params.py`). The radio packet has 4-bit kick and chip power fields that
+      we always send as full (`real_robot_controller.py`, `kicker_byte`): ask whether the
+      firmware reads them.
+    - *What exists:* `StrategyRunner`'s `{yellow,blue}_vision_to_cmd_mapping` (vision ID to
+      firmware command ID, real mode only) is the robot roster. It is validated (one entry
+      per expected robot, integers, no command ID used by both teams on a shared transmitter,
+      every observed vision ID covered: `game_gater.py`) and filters vision to those IDs.
+      `*_trusted_ir_robots` (robots whose ball sensor is trusted, the rest infer possession
+      from vision) is the only per-robot capability today. There is no checked-in roster
+      file: whoever writes the run script passes the mapping. The command ID is fixed in the
+      robot's firmware, so it is the key a profile would use.
+    - *What can differ per robot:* driving (top speed, acceleration and braking, turning,
+      drift from a weaker motor, command delay, battery sag over a match); the ball (dribbler
+      grip while driving and turning, catching a pass, kick speed and its spread, kick
+      direction error, kicker recharge time, chip distance and height, ball sensor); other
+      (radio packet loss, breakdowns and substitutions).
+    - *Agreed:* correct in the real-robot controller what can be corrected (speed error,
+      drift, delay), capping the team to its weakest robot where needed, so strategies see
+      identical robots. Expose to tactics only what can't be corrected (kick strength, grip,
+      catching). Tactics ask about abilities ("who dribbles best", "where does this robot's
+      kick stop"), never name a robot ID. Profiles are measured, fixed for a run and out of
+      reach of strategy branches, so they are not something a search tunes.
+    - *Open, not yet:* one profile per match day vs updated while playing; kick-to-kick
+      spread in the sim (more realistic, but noisier round-robins).
+    - *Calibration routine (to write before measuring day):* per robot, at full battery on
+      the competition carpet: commanded vs measured speed at a few speeds, acceleration and
+      braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from
+      vision, direction error, roll distance) and ten chips; recharge time between kicks;
+      a dribble course at increasing speed until the ball is lost; ten passes received.
+      Output: one record per command ID.
+    - *Before measurements:* code that assumes kick or speed numbers should derive them from
+      `RobotParams` (e.g. `ClearBallTactic` assumes a 4.5 m clearance where a fixed-power kick
+      rolls ~17 m), so measured values change one file. No per-robot profile type until
+      measurements show robots differ enough to matter.
+
 11. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
