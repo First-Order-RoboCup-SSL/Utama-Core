@@ -37,11 +37,18 @@ Both directories are gitignored.
 
 ### Starting the external test environment
 
-With grSim, the GameController and AutoReferee set up, `./start_test_env.sh` launches all three
-and tears them down on Ctrl+C. It starts nothing from this repo: run your own strategy
-separately once they are up. Open the GameController's web UI at
-http://localhost:8081/#/match (its own port; this repo's dashboard is :8080). The comment block
-at the top of the script says what each process is for and its known rough edges.
+Only needed to test against the official referee software; the in-process `CustomReferee`
+needs none of this. With grSim, the GameController and AutoReferee set up, start each in its
+own terminal from the repository root:
+
+```bash
+grSim
+cd ssl-game-controller && ./ssl-game-controller
+cd AutoReferee && ./gradlew run
+```
+
+Then run your own strategy. The GameController's web UI is at http://localhost:8081/#/match
+(this repo's dashboard is :8080).
 
 ## SSL Vision for real testing (WSL)
 

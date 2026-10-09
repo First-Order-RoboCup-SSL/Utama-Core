@@ -33,7 +33,3 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
 - [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
 - [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.
-
-## Writing
-
-- [blog/strategy-tactics-orchestration.md](blog/strategy-tactics-orchestration.md): Strategy = Tactics × Orchestration, a post on the architecture of the strategy layer.

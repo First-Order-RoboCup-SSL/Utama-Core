@@ -68,4 +68,3 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
 | `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |
-| `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together; see [setup_external.md](setup_external.md) |
