@@ -10,6 +10,7 @@ from utama_core.custom_referee.geometry import CORNER_INFIELD_OFFSET, RefereeGeo
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.last_touch import (
     infer_last_touch_team,
+    touching_robot,
     touching_team,
 )
 from utama_core.entities.game.game_frame import GameFrame
@@ -48,6 +49,9 @@ class OutOfBoundsRule(BaseRule):
         self._prev_ball_v: Optional[tuple[float, float]] = None
         # Where the ball was last touched in this spell of play, None if not since play restarted.
         self._last_touch_at: Optional[tuple[float, float]] = None
+        # (is_friendly, robot id) of the last robot seen touching the ball in this spell of
+        # play: the foul log charges the exit to it, not to whoever stands nearest the line.
+        self._last_toucher: Optional[tuple[bool, int]] = None
 
     def check(
         self,
@@ -59,6 +63,7 @@ class OutOfBoundsRule(BaseRule):
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
             self._last_touch_at = None
+            self._last_toucher = None
             return None
 
         ball = game_frame.ball
@@ -68,8 +73,11 @@ class OutOfBoundsRule(BaseRule):
         bx, by = ball.p.x, ball.p.y
 
         # Update last-touch tracking regardless of out-of-bounds state.
-        if touching_team(game_frame, self._prev_ball_v) is not None:
+        team = touching_team(game_frame, self._prev_ball_v)
+        if team is not None:
             self._last_touch_at = (bx, by)
+            robot_id = touching_robot(game_frame, team)
+            self._last_toucher = (team, robot_id) if robot_id is not None else None
         self._last_touch_was_friendly = infer_last_touch_team(
             game_frame, self._last_touch_was_friendly, self._prev_ball_v
         )
@@ -91,6 +99,7 @@ class OutOfBoundsRule(BaseRule):
                 next_command=free_kick_cmd,
                 status_message="Aimless kick",
                 designated_position=self._kick_point(geometry),
+                offending_robots=self._offending_robots(game_frame),
             )
         placement = self._nearest_infield_point(bx, by, geometry, corner_kick)
 
@@ -102,12 +111,14 @@ class OutOfBoundsRule(BaseRule):
                 "Ball out of bounds" if free_kick_cmd is not None else "Ball out of bounds (last touch unknown)"
             ),
             designated_position=placement,
+            offending_robots=self._offending_robots(game_frame),
         )
 
     def reset(self) -> None:
         self._last_touch_was_friendly = None
         self._prev_ball_v = None
         self._last_touch_at = None
+        self._last_toucher = None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -124,6 +135,17 @@ class OutOfBoundsRule(BaseRule):
         if self._last_touch_was_friendly is None or abs(bx) <= geometry.half_length:
             return False
         return self._last_touch_at[0] * bx < 0
+
+    def _offending_robots(self, game_frame: GameFrame) -> tuple[tuple[bool, int], ...]:
+        """The robot that put the ball out, `(is_yellow, id)`, when it was seen touching
+        the ball and belongs to the team the restart is charged to. Empty otherwise (the
+        foul log then falls back to that team's robot nearest the ball)."""
+        if self._last_toucher is None:
+            return ()
+        is_friendly, robot_id = self._last_toucher
+        if is_friendly != self._last_touch_was_friendly:
+            return ()
+        return ((is_friendly == game_frame.my_team_is_yellow, robot_id),)
 
     def _kick_point(self, geometry: RefereeGeometry) -> tuple[float, float]:
         """Where the aimless kick was touched, made a legal free-kick spot (§5.3.3):

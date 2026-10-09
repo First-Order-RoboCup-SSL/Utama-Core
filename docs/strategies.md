@@ -63,7 +63,10 @@ Against the previous run (tournament_20261004_204810, same configs, before this 
 tactic fixes): goal-line exits now restart in the corner instead of 2 m in front of goal,
 `no_progress` restarts fell from 699 to 296 and keep-out fouls from 245 to 26, and
 `split_shape`'s lead over second place fell from 0.52 to 0.28 points per match.
-Out-of-bounds restarts rose from 2446 to 2938; not yet looked into. What each strategy does
+Out-of-bounds restarts rose from 2446 to 2938: a goal kick from the corner was cleared at full
+power over the far goal line, giving the other side a goal kick at its corner (388 of 1377 goal
+kicks were followed by one at the other end, median 4 s). The aimless-kick rule (§6.2.3, added
+after this run) makes such a clearance a free kick at the kick point. What each strategy does
 well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
@@ -127,10 +130,13 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
 - **`kick_upfield` clears at fixed power, so a clearance from our half leaves the pitch.** It is
   a boolean kick at one constant speed (about 4.7 m/s; the ball rolls about 17 m at 0.64 m/s²),
   longer than the pitch, so from our half it usually crosses the far goal line whichever way it
-  is aimed. Out-of-bounds fouls by tactic in tournament_20261005_170958: `PressAndContainTactic`
-  356, `ShadowAndMarkTactic` 252 (both call it on a robot that holds the ball). three_slot's case
-  (its picker handed the ball holder to those slots) is fixed in 44a6c05f. Selectable kick power
-  would need a `RobotCommand` and controller change; otherwise a tactic must stop clearing blind.
+  is aimed. `ClearBallTactic` picks landing points 4.5 m upfield (`_CLEAR_DISTANCE`). Out-of-bounds
+  fouls by tactic in tournament_20261005_170958 (`PressAndContainTactic` 356,
+  `ShadowAndMarkTactic` 252) were charged to the robot nearest the ball as it crossed the line,
+  not the one that kicked it; runs after that charge the last robot to touch it. three_slot's
+  case (its picker handed the ball holder to those slots) is fixed in 44a6c05f. The kicker is
+  fixed power on the real robots too (`docs/roadmap.md` 10c), so a tactic must stop clearing
+  blind: aim where a 17 m roll ends.
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. Both are baselines, so
   not worth fixing for its own sake.

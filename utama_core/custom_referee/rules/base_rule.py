@@ -44,7 +44,8 @@ class RuleViolation:
     `offending_robots`: `(is_yellow, robot_id)` for each robot the rule
     itself identified as the offender. Reporting only (`MatchStats` foul
     log); rules that only see a team or an area (keeper held ball, ball
-    speed, out of bounds, keep-out) leave it empty.
+    speed, keep-out) leave it empty. Out of bounds names the robot last seen
+    touching the ball.
     """
 
     rule_name: str

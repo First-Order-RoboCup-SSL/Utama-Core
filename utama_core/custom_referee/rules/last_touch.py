@@ -104,6 +104,18 @@ def touching_team(game_frame: GameFrame, previous_ball_v: Optional[tuple[float, 
     return None
 
 
+def touching_robot(game_frame: GameFrame, is_friendly: bool) -> Optional[int]:
+    """The id of the robot of that team touching the ball, for a frame where
+    `touching_team` named the team: its robot in contact closest to the ball, or with
+    no contact flag (the proximity fallback) its robot closest to the ball."""
+    ball = game_frame.ball
+    robots = list((game_frame.friendly_robots if is_friendly else game_frame.enemy_robots).values())
+    if ball is None or not robots:
+        return None
+    candidates = [r for r in robots if r.has_ball] or robots
+    return min(candidates, key=lambda r: math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y)).id
+
+
 def infer_last_touch_team(
     game_frame: GameFrame,
     previous: Optional[bool] = None,
