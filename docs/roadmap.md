@@ -253,6 +253,28 @@ resolved, replace it with a one-line pointer under "Done".
       rolls ~17 m), so measured values change one file. No per-robot profile type until
       measurements show robots differ enough to matter.
 
+10d. **Vision filter for real cameras.** Found 2026-10-09 reviewing `data_processing/`; rsim
+     (noise off) never exercises any of it. Needs logged SSL-Vision data from the real field
+     to tune, so it waits on the hardware team like 10c.
+     - *Velocity:* `KalmanFilter` tracks position only; `VelocityRefiner` differentiates
+       consecutive filtered positions and that velocity feeds the next prediction. With the
+       current noise settings (process noise twice the measurement noise) the steady-state
+       gain is about 0.73, so positions are barely smoothed. An estimate: 1 cm vision noise
+       gives roughly ±0.5 m/s velocity jitter at 60 Hz. The usual SSL design is one filter with
+       position and velocity in its state (constant velocity for robots; for the ball, rolling
+       friction, plus a chip/flight model later). The `VelocityRefiner` note that smoothing
+       velocity "broke control loops" was measured in noiseless rsim.
+     - *Lost objects:* a vanished ball or robot is predicted at its last velocity forever,
+       with no friction and no give-up time. The ball vanishes most often under a dribbling
+       robot, where it should stay at the dribbler. Vanished robots relate to substitutions,
+       issue #107.
+     - *Detections:* `CameraCombiner` ignores SSL-Vision confidence, so a low-confidence
+       false detection with a robot's ID is averaged into the real one.
+     - *Noise settings:* 1 cm and 5° match rsim's noise generator, not the real cameras.
+     - *First step once logs exist:* replay a recorded vision log through `PositionRefiner`
+       and compare velocity jitter and lag against a constant-velocity filter, before
+       changing anything.
+
 11. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
