@@ -94,11 +94,11 @@ resolved, replace it with a one-line pointer under "Done".
      matches only vs the top of the pool. **Not built.**
    - *Metrics — derive, don't invent:* `MatchStats` has both-sided turnovers, completed
      passes, attacking-third entries, possession-under-pressure, restart-to-entry. The first
-     correlation study (`tools/metric_correlation.py`, `benchmark_results/
+     correlation study (`tools/metric_correlation.py`, `git show 24ef2c3f:benchmark_results/
      metric_correlation_20260903.md`) found turnovers/passes/entries valid and reliable;
      possession and robot motion carry no signal; `ball_travel_m` is not a quality signal.
      Caveat: raw `turnovers` is mostly nearest-robot flicker on contested balls (1990 raw vs
-     1090 real losses over 231 matches, `benchmark_results/turnover_breakdown_20260923_211717.md`);
+     1090 real losses over 231 matches, `git show 24ef2c3f:benchmark_results/turnover_breakdown_20260923_211717.md`);
      prefer `summary.json["ball_losses"]["real_losses"]`.
      Goodhart guard: if the bench improves and the ladder doesn't, retire the proxy.
    - *Compute discipline:* paired comparison on common seeds, sequential stopping, short

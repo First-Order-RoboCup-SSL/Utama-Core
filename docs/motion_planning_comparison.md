@@ -2,7 +2,7 @@
 
 `tools/motion_planning_benchmark.py` runs `fpp`, `dwa` and `trajsample` through the same
 `StrategyRunner` + headless rsim path and writes raw JSON plus a Markdown table to
-`benchmark_results/`. It is a benchmark/regression report, not a replacement for unit tests of
+`benchmark_results/` (gitignored). It is a benchmark/regression report, not a replacement for unit tests of
 algorithm internals (bang-bang endpoint invariants, FPP collision-kernel equivalence, ...).
 
 ```bash
@@ -45,10 +45,11 @@ unless `--allow-failures`; `--output-dir PATH` redirects output.
 Opponents with a target or a moving target point drive with the selected scheme; the others stay
 put (`sudden_obstacle`'s is teleported into the corridor).
 
-Latest full run: `benchmark_results/motion_planning_20261004_222719.md` (about 1.5 min wall for all
+Latest full run: [`motion_planning_results.md`](motion_planning_results.md) (about 1.5 min wall for all
 57 cells). fpp and trajsample pass all 19; dwa collides in 9. `mirror_swap` used to time out for
 fpp because four targets sat on the opponent's defense-area edge, which planners keep outfield
-robots away from; its back-row targets are now at |x| = 2.9.
+robots away from; its back-row targets are now at |x| = 2.9. To record a new full run, copy its `.md`
+over `motion_planning_results.md`.
 
 ## Pass/fail and metrics
 

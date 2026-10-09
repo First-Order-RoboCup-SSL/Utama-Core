@@ -9,6 +9,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
 - [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.
 - [motion_planning_comparison.md](motion_planning_comparison.md): the motion-planning benchmark and how to read it.
+- [motion_planning_results.md](motion_planning_results.md): its latest full run.
 - [tools.md](tools.md): every script and pixi task, by purpose.
 - [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee, SSL Vision for real robots.
 - [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
