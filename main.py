@@ -1,52 +1,60 @@
-"""main.py — Great Exhibition Road Festival demo: solo GiveAndGoTactic on
-robot 1 (robot 0 is the pinned goalkeeper) against no opponent, over grsim,
-with the live web dashboard/referee-feedback panel attached.
+"""main.py — watch one match: two strategies play each other in rsim, refereed the way
+round-robin matches are.
 
 Run:
-    pixi run python main.py
-    # grSim must already be running (external process); open
-    # http://localhost:8080 for the dashboard/referee panel
+    pixi run main                          # split_shape vs high_press
+    pixi run main tiki_taka counter_flow   # any two names from docs/strategies.md
+    # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
+
+Yellow (the first strategy) starts on the right and kicks off. For many matches with
+results, use `tools/tournament/round_robin.py`.
 """
 
-from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
+import argparse
+
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.entities.game.field import FieldBounds
-from utama_core.replay import ReplayWriterConfig
-from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_give_and_go_solo_kernel_strategy
+from utama_core.strategy import kernel_strategy
+
+N_ROBOTS = 6  # per side: robot 0 keeps goal, robots 1-5 play outfield
+OUTFIELD_ROBOT_IDS = tuple(range(1, N_ROBOTS))
 
 
-def main():
+def _strategy(name: str) -> AbstractStrategy:
+    build = getattr(kernel_strategy, f"build_{name}_kernel_strategy", None)
+    if build is None:
+        raise SystemExit(f"Unknown strategy {name!r}: see docs/strategies.md for the names")
+    return AbstractStrategy(build_kernel_strategy=build(OUTFIELD_ROBOT_IDS))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("yellow", nargs="?", default="split_shape")
+    parser.add_argument("blue", nargs="?", default="high_press")
+    args = parser.parse_args()
+
     profile = load_profile("simulation")
-    referee = CustomReferee(profile, n_robots_yellow=3, n_robots_blue=3)
+    referee = CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
     server = attach_dashboard()
     referee_view.attach(server, referee, profile)
 
-    # Setup for real testing
-    # Custom field size based setup in real
-    # custom_bounds = FieldBounds(top_left=(-1.5, 1.125), bottom_right=(1.5, 1.125))
-
     runner = StrategyRunner(
-        # Robot 0 is the goalkeeper (pinned outside the kernel scheduler), so
-        # only robot 1 is an outfield tactic slot — a solo GiveAndGoTactic
-        # pool, since PassAndShootTactic hard-requires 2 outfield robots.
-        strategy=AbstractStrategy(build_kernel_strategy=build_give_and_go_solo_kernel_strategy((1,))),
+        strategy=_strategy(args.yellow),
+        opp_strategy=_strategy(args.blue),
         my_team_is_yellow=True,
         my_team_is_right=True,
-        mode="grsim",
-        exp_friendly=2,
-        exp_enemy=0,
-        replay_writer_config=ReplayWriterConfig(replay_name="test_replay", overwrite_existing=True),
-        # field_bounds=custom_bounds,
-        full_field_dims=GREAT_EXHIBITION_FIELD_DIMS,
-        show_live_status=True,
-        profiler_name=None,
+        mode="rsim",
+        exp_friendly=N_ROBOTS,
+        exp_enemy=N_ROBOTS,
+        exp_ball=True,
         referee=referee,
+        referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        show_live_status=True,
     )
     runner.run()
 
