@@ -306,13 +306,13 @@ def test_a_relative_import_of_another_strategy_is_reported(fingerprint, body):
     assert reach_problems("utama_core/strategy/c.py", "from .pickers import helper\n", fingerprint) == []
 
 
-def test_every_existing_strategy_but_overload_flow_passes_the_reach_check(fingerprint):
-    # overload_flow keeps a `global` possession streak, which both teams would share. Changing it
-    # on a strategy branch means moving that state into the factory's closure.
+def test_every_existing_strategy_passes_the_reach_check(fingerprint):
+    # overload_flow kept a `global` possession streak, which both teams shared; it is now in
+    # its picker's closure, so a strategy branch can change any existing strategy.
     failing = {
         p.name
         for p in (REPO_ROOT / "utama_core/strategy").glob("*.py")
         if p.name not in ("__init__.py", "kernel_strategy.py", "pickers.py")
         and reach_problems(p.name, p.read_text(), fingerprint)
     }
-    assert failing == {"overload_flow.py"}
+    assert failing == set()

@@ -386,8 +386,7 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     up by name -> the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
-#     possession/shield state: reset in StrategyRunner.__init__; overload_flow's
-#     _possession_streak: reset by its factory; the planner's _PERP_ROTATIONS: a memo of
+#     possession/shield state: reset in StrategyRunner.__init__; the planner's _PERP_ROTATIONS: a memo of
 #     pure values; robosim_wrapper's idle sims: a fresh native world per start.
 AUDIT = {
     "environment": [
@@ -403,7 +402,6 @@ AUDIT = {
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
         "utama_core.shared.pass_and_score_geometry",
         "utama_core.skills.src.shielding",
-        "utama_core.strategy.overload_flow",
     ],
     "opens files": [
         "utama_core.analysis.turnover_breakdown",
