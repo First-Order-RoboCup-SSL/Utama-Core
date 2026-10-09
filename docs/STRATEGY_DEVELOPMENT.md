@@ -179,7 +179,7 @@ whoever runs it.
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
-  committed clips: `demo_clips/README.md`.
+  committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
   strategies aren't meant to win; don't tune them to.
 - **`tools/tournament/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
