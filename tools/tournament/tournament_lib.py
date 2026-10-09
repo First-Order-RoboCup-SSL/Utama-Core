@@ -98,8 +98,8 @@ def _stats_to_dict(stats) -> dict:
 @dataclass
 class MatchResult:
     """One match's outcome. `a_is_right`/`a_kicks_off` default to the
-    `round_robin.py`'s fixed convention (config_a always right,
-    always kicks off) — `full_match_tournament.py`'s decoupled sweep passes
+    `round_robin.py`'s fixed convention (config_a starts on the right and
+    kicks off the first half; with halves the teams change ends at half-time) — `full_match_tournament.py`'s decoupled sweep passes
     both explicitly per cell.
     """
 

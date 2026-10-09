@@ -105,9 +105,9 @@ from utama_core.replay.fingerprint import CodeGraph, match_key
 
 # A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped
 # whenever no team may play the ball (`custom_referee/state_machine.py`), so about 710 s of
-# sim time (785 s in two measured matches, tournament_20261006_111922). config_a kicks off the first half and config_b the second; the teams don't change
-# ends (config_a stays on the right; `docs/custom_referee.md`, Known gaps). Matches are not
-# repeated with sides swapped. Shorter matches rank differently: 65s matches were
+# sim time (785 s in two measured matches, tournament_20261006_111922). config_a starts on the
+# right and kicks off the first half; at half-time the teams change ends and config_b kicks
+# off the second. Without `--both-sides` each pair plays once. Shorter matches rank differently: 65s matches were
 # 55% draws, and 16 of 40 full matches (replays/tournament_20261003_102921) changed
 # result after 180s, enough to reorder the top of the table. rsim is deterministic, so
 # a short match is exactly the start of the full one; it just stops before it's decided.
@@ -283,8 +283,8 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
-    # `--pair A B` plays exactly one fixture, A as config_a (yellow, right side,
-    # kickoff) -- e.g. to rerun one stalled match from a round-robin, which
+    # `--pair A B` plays exactly one fixture, A as config_a (yellow, right side
+    # and kickoff in the first half) -- e.g. to rerun one stalled match from a round-robin, which
     # reproduces exactly since rsim is deterministic.
     pair: Optional[tuple[str, str]] = None
     if "--pair" in args:
