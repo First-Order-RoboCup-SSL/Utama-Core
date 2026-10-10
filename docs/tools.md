@@ -21,7 +21,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 
 | Script | Purpose |
 |---|---|
-| `tools/evaluation/round_robin.py` | Every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`. `--pair A B` plays one match; `--reuse` replays only matches whose code changed. The ground truth for which strategy is better |
+| `tools/evaluation/round_robin.py` | Every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`. `--pair A B` plays one match; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. The ground truth for which strategy is better |
 | `tools/evaluation/ladder.py` | One candidate against a reference pool (default: the top 5 of the newest complete round-robin): mirrored pairs over side and kickoff, up to 8 matches per opponent, stopping once a pairing is clear (`decided`). Reuses and fills the round-robin's match cache; writes `replays/ladder_<id>/ladder.json`. A cheaper check of one strategy than a round-robin, not a ranking of all |
 | `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
 | `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |

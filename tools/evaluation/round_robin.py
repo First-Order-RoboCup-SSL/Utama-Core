@@ -590,7 +590,8 @@ def main() -> None:
                 cache, keys, _keys(), results, reused, spot_checked, stored, restarts_by_match, losses
             )
             # Kept in the summary, not only printed: a spot-check is also the run's check that
-            # rsim replays a match exactly (docs/roadmap.md 10a).
+            # rsim replays a match exactly. Mismatches were seen once (2026-09-23, under load
+            # ~30) and not reproduced since; a non-empty list is the evidence to chase.
             summary["reuse"]["mismatches"] = sorted(_tag(p) for p in mismatches)
         if losses:  # no replays saved (e.g. every match crashed): nothing to break down
             summary["ball_losses"] = turnover_breakdown.breakdown(losses)
