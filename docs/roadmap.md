@@ -107,7 +107,7 @@ resolved, replace it with a one-line pointer under "Done".
      budget, ladder at high) that also writes `docs/strategies.md`.
    - Build order: calibration tournament → bench on harvested states → ladder.
 
-2a. **Strategy evaluation v2 (direction agreed 2026-10-09, not started).** Builds the ladder
+2a. **Strategy evaluation v2 (direction agreed 2026-10-09; ladder built).** Builds the ladder
     above and settles how matches vary.
     - *Ladder:* a candidate plays a fixed reference pool (the current top 4-5) in several
       sampled worlds, each world played twice with the teams swapped so luck cancels, both
@@ -115,6 +115,10 @@ resolved, replace it with a one-line pointer under "Done".
       full round-robin stays as the occasional full refresh after shared-code changes. Pure
       Elo matchmaking over the whole league is not the plan: strategies counter each other, and
       the round-robin's results table is what shows that.
+      **Built (2026-10-09):** `tools/tournament/ladder.py`. Until worlds vary, a pairing has 8
+      distinct matches (4 side/kickoff settings, each mirrored); it stops at 4 or more once wins
+      minus losses reaches 3 either way or can no longer change sign. Not built: Elo anchoring
+      (points per match against the pool is the read for now) and spot-checks of reused records.
     - *Sampled worlds instead of restart fuzzing:* variation comes from realistic imperfection,
       seeded so a world is reproducible: vision noise and dropped detections (`rsim_noise`,
       `rsim_vanishing` already exist), then kick speed and direction spread and command delay
@@ -136,7 +140,7 @@ resolved, replace it with a one-line pointer under "Done".
       (even a comment), or adding sim noise, reruns every match. So: build the ladder and world
       settings as additions first, and do the renames in the same batch as the next change that
       forces a full rerun anyway (the sim noise).
-    - *Order:* write the ladder (additions only) → switch on vision noise and dropouts as world
+    - *Order:* write the ladder (additions only, done) → switch on vision noise and dropouts as world
       settings → kick spread and command delay, together with the naming unification, then one
       full round-robin → per-robot profiles after calibration.
 
