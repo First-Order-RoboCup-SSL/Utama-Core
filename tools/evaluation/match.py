@@ -40,15 +40,9 @@ TICKS_PER_SECOND = 60  # matches rsim's default step rate
 # build_default_kernel_strategy is excluded from the auto-discovered catalog:
 # despite the name, it isn't a competitive team — it's the kernel's minimal
 # single-tactic smoke-test scaffold (see its docstring), used across the test
-# suite with as few as zero outfield robots, and the arena-strategy stats
-# investigation confirmed it plays a real match with 3 of 5 outfield robots
-# never issued a command ("zombie" robots, 0.0 motion all match). Fixing that
-# would still only produce a deliberately-minimal team, not a useful
-# comparison point. build_tiki_taka_kernel_strategy — the strongest, most
-# complete team by the same stats investigation (live-state posture,
-# possession-backed wins, no losses) — is the de facto baseline other configs
-# get judged against instead; it needs no special-casing here since it's
-# already just another entry in the catalog.
+# suite with as few as zero outfield robots, and plays a real match with 3 of 5
+# outfield robots never issued a command. Every other factory is playable here;
+# which ones a round-robin plays by default is round_robin.RETIRED's business.
 _CONFIG_NAMES = [
     name
     for name in dir(kernel_strategy)

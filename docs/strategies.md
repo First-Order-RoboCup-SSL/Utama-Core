@@ -94,34 +94,6 @@ well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 | `overload_flow` | 1-3-17 | 21-91 | 0.29 |
 | `shadow_switch` | 2-0-19 | 19-122 | 0.29 |
 
-The full-match tables below predate the planner, referee and tactic fixes since 2026-09-02.
-Treat them as rough ordering, not current truth.
-
-**Full match** (2026-09-01, 5 configs x 4 side/kickoff cells, 40 matches,
-600s, `replays/tournament_20260901_193644/summary.json`):
-
-| Strategy | W-D (16 matches each) |
-|---|---|
-| `tiki_taka_plus` | 10-6 |
-| `counter_flow` | 5-8 |
-| `tiki_taka` | 4-7 |
-| `zone_fluid` | 1-10 |
-| `counter_press` | 0-9 |
-
-**Full match, 2026-09-02 additions** (5 configs, `--both-sides`, 40 matches, 600s,
-`tournament_20260902_065314`):
-
-| Strategy | W-D-L | GF-GA |
-|---|---|---|
-| `clear_press_plus` | 9-7-0 | 14-4 |
-| `overload_flow` | 3-10-3 | 12-11 |
-| `press_trigger_flow` | 2-9-5 | 5-10 |
-| `shadow_switch` | 1-12-3 | 3-5 |
-| `score_aware_counter_flow` | 0-12-4 | 1-5 |
-
-65s samples of the same five were ~80% draws and showed no spread; only full-length matches
-separated them. Prefer full-length results when ranking.
-
 ## Known open bugs
 
 Writeups of bugs since fixed were removed from this file; code comments that cite "Known open

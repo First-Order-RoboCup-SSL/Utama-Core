@@ -81,15 +81,15 @@ ladder (slow half).
 Run from the repository root, for example:
 
     pixi run python tools/scenario_bench.py \\
-        --candidate build_tiki_taka_kernel_strategy \\
+        --candidate build_split_shape_kernel_strategy \\
         --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy
+        --opponent build_high_press_kernel_strategy
 
     pixi run python tools/scenario_bench.py --list-scenarios
 
     pixi run python tools/scenario_bench.py \\
-        --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy --harvest-from replays/tournament_20260905_090000
+        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
+        --opponent build_high_press_kernel_strategy --harvest-from replays/tournament_20260905_090000
 
     # Freeze a bank from a harvest for reuse across sessions:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
@@ -107,15 +107,15 @@ Run from the repository root, for example:
 
     # A/B a code change: record at commit A, compare at commit B.
     pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy
+        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy
     pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy \\
+        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy \\
         --against-results scenario_bench_results/scenario_bench_<commit A>.json
 
     # Score against the frozen bank later, without re-harvesting:
     pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy
+        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
+        --opponent build_high_press_kernel_strategy
 """
 
 from __future__ import annotations
@@ -793,7 +793,7 @@ def _parse_where(parser: argparse.ArgumentParser, terms: Optional[list[str]]) ->
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--candidate", help="candidate strategy config, e.g. build_tiki_taka_kernel_strategy")
+    parser.add_argument("--candidate", help="candidate strategy config, e.g. build_split_shape_kernel_strategy")
     parser.add_argument("--baseline", help="baseline strategy config to diff against, run in this process")
     parser.add_argument(
         "--against-results",
