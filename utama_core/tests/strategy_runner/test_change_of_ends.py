@@ -10,9 +10,14 @@ import dataclasses
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.global_utils.math_utils import in_field_bounds
 from utama_core.run import StrategyRunner
+from utama_core.run.strategy_runner import _turned
 from utama_core.strategy import kernel_strategy
 
 N_OUTFIELD = 2
@@ -80,3 +85,19 @@ def _describe(frame, commands) -> str:
         return {i: (round(r.p.x, 2), round(r.p.y, 2)) for i, r in robots.items()}
 
     return f"t={frame.ts:.2f} friendly={where(frame.friendly_robots)} enemy={where(frame.enemy_robots)} commands={commands}"
+
+
+def _robot(x: float, y: float) -> Robot:
+    zero = Vector2D(0.0, 0.0)
+    return Robot(id=1, is_friendly=True, has_ball=False, p=Vector2D(x, y), v=zero, a=zero, orientation=0.5)
+
+
+def test_a_robot_turned_from_past_the_goal_line_stands_on_the_far_line():
+    # A robot in the run-off at x=-4.594 (a real one, clear_danger vs decoy_and_overload)
+    # turned to x=+4.594, and the sim refused the teleport: the match crashed at half-time.
+    bounds = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+    turned = _turned(_robot(-4.594, 2.399), bounds)
+    assert (turned.p.x, turned.p.y) == (4.5, -2.399)
+    assert in_field_bounds((turned.p.x, turned.p.y), bounds)
+    assert _turned(_robot(1.25, -3.2), bounds).p == Vector2D(-1.25, 3.0)
+    assert _turned(_robot(1.25, -0.5), bounds).p == Vector2D(-1.25, 0.5)  # inside: only turned

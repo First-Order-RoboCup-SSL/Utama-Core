@@ -260,11 +260,14 @@ def _build_robot_feedback_snapshot(
     return snapshot
 
 
-def _turned(robot: Robot) -> Robot:
-    """`robot` half a turn about the centre spot, at rest: where it stands after changing ends."""
+def _turned(robot: Robot, bounds: FieldBounds) -> Robot:
+    """`robot` half a turn about the centre spot, at rest: where it stands after changing ends.
+    Kept within `bounds`: a robot in the run-off past a line comes back onto it, since the sim
+    refuses to teleport a robot outside the field (a match crashed at half-time that way)."""
+    (left, top), (right, bottom) = bounds.top_left, bounds.bottom_right
     return dataclasses.replace(
         robot,
-        p=Vector2D(-robot.p.x, -robot.p.y),
+        p=Vector2D(min(max(-robot.p.x, left), right), min(max(-robot.p.y, bottom), top)),
         v=Vector2D(0.0, 0.0),
         a=Vector2D(0.0, 0.0),
         orientation=math.remainder(robot.orientation + math.pi, 2 * math.pi),
@@ -1423,7 +1426,7 @@ class StrategyRunner:
                 (frame.enemy_robots, not self.my_team_is_yellow),
             ):
                 for r in robots.values():
-                    turned = _turned(r)
+                    turned = _turned(r, self.field_bounds)
                     self.sim_controller.teleport_robot(is_yellow, r.id, turned.p.x, turned.p.y, turned.orientation)
         for side, is_right in ((self.my, on_positive), (self.opp, not on_positive)):
             if side is None or side.game is None:
@@ -1432,8 +1435,8 @@ class StrategyRunner:
             if carry:
                 frame = dataclasses.replace(
                     frame,
-                    friendly_robots={i: _turned(r) for i, r in frame.friendly_robots.items()},
-                    enemy_robots={i: _turned(r) for i, r in frame.enemy_robots.items()},
+                    friendly_robots={i: _turned(r, self.field_bounds) for i, r in frame.friendly_robots.items()},
+                    enemy_robots={i: _turned(r, self.field_bounds) for i, r in frame.enemy_robots.items()},
                 )
                 side.position_refiner.reset()  # its filters would track the robots across the pitch
                 side.position_refiner.start_filtering()
