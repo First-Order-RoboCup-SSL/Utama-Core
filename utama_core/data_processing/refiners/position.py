@@ -19,19 +19,6 @@ from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
 
 
-class AngleSmoother:
-    def __init__(self, alpha=0.3):
-        self.alpha = alpha  # Smoothing factor for angle
-        self.smoothed_angles = {}  # Stores last smoothed angle for each robot
-
-    def smooth(self, old_angle: float, new_angle: float) -> float:
-        # Compute the shortest angular difference
-        diff = np.atan2(np.sin(new_angle - old_angle), np.cos(new_angle - old_angle))
-        smoothed_angle = old_angle + self.alpha * diff
-
-        return smoothed_angle
-
-
 @dataclass
 class VisionBounds:
     x_min: float
@@ -70,8 +57,6 @@ class PositionRefiner(BaseRefiner):
         smooth_positions: Optional[bool] = None,
         impute_vanished: Optional[bool] = None,
     ):
-        # alpha=0 means no change in angle (inf smoothing), alpha=1 means no smoothing
-        self.angle_smoother = AngleSmoother(alpha=1)
         top_left = full_field_dims.full_field_bounds.top_left
         bottom_right = full_field_dims.full_field_bounds.bottom_right
 
@@ -294,17 +279,10 @@ class PositionRefiner(BaseRefiner):
 
     # Static methods
     @staticmethod
-    def _combine_robot_vision_data(
-        old_robot: Robot, robot_data: VisionRobotData, angle_smoother: AngleSmoother
-    ) -> Robot:
+    def _combine_robot_vision_data(old_robot: Robot, robot_data: VisionRobotData) -> Robot:
         assert old_robot.id == robot_data.id
         new_x, new_y = robot_data.x, robot_data.y
 
-        # Needs fixing the bounds are off oren becoming -3.9rad
-        # # Smoothing
-        # new_orientation = angle_smoother.smooth(
-        #     old_robot.orientation, robot_data.orientation
-        # )
         # Built directly rather than with `dataclasses.replace`: the same Robot, without
         # replace's per-call overhead (every robot, every frame).
         return Robot(
@@ -355,9 +333,7 @@ class PositionRefiner(BaseRefiner):
                 new_game_robots[robot.id] = PositionRefiner._robot_from_vision(robot, is_friendly=friendly)
             else:
                 # Update with smoothed data.
-                new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(
-                    new_game_robots[robot.id], robot, self.angle_smoother
-                )
+                new_game_robots[robot.id] = PositionRefiner._combine_robot_vision_data(new_game_robots[robot.id], robot)
         return new_game_robots
 
     def _combine_both_teams_game_vision_positions(
