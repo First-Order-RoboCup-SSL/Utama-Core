@@ -35,7 +35,7 @@ Root-cause chain:
    it into space) — not implemented. See `low_block`'s setup bug in `docs/strategies.md`.
 3. **Stop handing 5 robots to a 2-robot tactic in `default`** — not implemented (open bug in
    `docs/strategies.md`).
-4. **Kickoff ceremony for sim matches** — done: `tournament_lib.py` starts matches with a real
+4. **Kickoff ceremony for sim matches** — done: `match.py` starts matches with a real
    `PREPARE_KICKOFF_*`. `StrategyRunner` itself still defaults to `FORCE_START` in sim modes.
 
 Reproduce with `pixi run python tools/debug_match.py --strategy build_default_kernel_strategy --opponent build_low_block_kernel_strategy --dump-ticks ticks.jsonl` (per-tick dump) and render windows with `utama_core/analysis/render_window.py`.

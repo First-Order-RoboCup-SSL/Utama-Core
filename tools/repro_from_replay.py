@@ -53,11 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.tournament_lib import (
-    N_OUTFIELD,
-    OUTFIELD_ROBOT_IDS,
-    TICKS_PER_SECOND,
-)
+from tools.evaluation.match import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl

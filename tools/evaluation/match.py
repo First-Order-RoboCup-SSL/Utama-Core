@@ -1,7 +1,7 @@
-"""tournament_lib.py — shared match-construction/running mechanics for the
-tournament drivers (`round_robin.py`, `full_match_tournament.py`).
+"""match.py — shared match-construction/running mechanics for the
+evaluation drivers (`round_robin.py`, `ladder.py`).
 
-Why this exists: `round_robin.py`'s `run_match` and
+Why this exists: `round_robin.py`'s `run_match` and the since-retired
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
 two strategies from kernel_strategy factory names, construct a referee with
 the right kickoff-team/initial-command, wire up match_log/stats/replay paths,
@@ -99,8 +99,8 @@ def _stats_to_dict(stats) -> dict:
 class MatchResult:
     """One match's outcome. `a_is_right`/`a_kicks_off` default to the
     `round_robin.py`'s fixed convention (config_a starts on the right and
-    kicks off the first half; with halves the teams change ends at half-time) — `full_match_tournament.py`'s decoupled sweep passes
-    both explicitly per cell.
+    kicks off the first half; with halves the teams change ends at half-time) — `ladder.py` passes
+    both explicitly per match.
     """
 
     config_a: str
@@ -142,8 +142,7 @@ def run_match(
     `config_a` is always yellow (a fixed convention — colour is never varied
     separately, since no tactic reads it and there's no rule reason to test
     it as its own axis); `a_is_right`/`a_kicks_off` are independent axes
-    (see `full_match_tournament.py`'s module docstring for why side and
-    kickoff must be swept independently rather than blended into one
+    (side and kickoff are swept independently rather than blended into one
     "--both-sides" toggle: a live investigation found each one, isolated on
     its own, changes match outcomes on its own).
 
@@ -183,8 +182,7 @@ def run_match(
     # "simulation" profile's kickoff_team defaults to "yellow"; override it to
     # "blue" when B kicks off. Neither CustomReferee.from_profile_name nor
     # RestartFuzzingReferee.from_profile_name takes a kickoff_team override,
-    # so build the profile by hand the same way full_match_tournament.py's
-    # run_match_cell always did, then construct the referee from it directly.
+    # so build the profile by hand, then construct the referee from it directly.
     profile = load_profile("simulation")
     if not a_kicks_off:
         profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team="blue"))

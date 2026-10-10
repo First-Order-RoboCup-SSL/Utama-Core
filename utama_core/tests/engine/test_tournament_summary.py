@@ -1,4 +1,4 @@
-from tools.tournament.round_robin import foul_table, stall_incidents, strategy_table
+from tools.evaluation.round_robin import foul_table, stall_incidents, strategy_table
 
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:

@@ -1,13 +1,12 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
 `build_*_kernel_strategy` config against every other, one full match per pair
-(two halves, see `MAX_MATCH_SECONDS` below; `full_match_tournament.py` also sweeps side and kickoff).
+(two halves, see `MAX_MATCH_SECONDS` below; `ladder.py` also sweeps side and kickoff, for one candidate).
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
-ceremony, run_dir file layout) lives in `tournament_lib.py`, shared with
-`full_match_tournament.py` — see that module's own docstring for why.
+ceremony, run_dir file layout) lives in `match.py`, shared with `ladder.py`.
 
 Run:
-    pixi run python tools/tournament/round_robin.py [config ...] [flags]
+    pixi run python tools/evaluation/round_robin.py [config ...] [flags]
 
 Configs are short names (`tiki_taka`); none means every config. Flags:
     --pair A B              one match, A as config_a
@@ -88,7 +87,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for callers importing this module
+from tools.evaluation.match import (  # noqa: F401 -- re-exported for callers importing this module
     _CONFIG_NAMES,
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
@@ -97,7 +96,7 @@ from tools.tournament.tournament_lib import (  # noqa: F401 -- re-exported for c
     _short_name,
     _stats_to_dict,
 )
-from tools.tournament.tournament_lib import run_match as _lib_run_match
+from tools.evaluation.match import run_match as _lib_run_match
 from utama_core.analysis import chances, restart_outcomes, turnover_breakdown
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
@@ -125,8 +124,7 @@ def run_match(
 ) -> MatchResult:
     """Play one full match (capped at this module's `MAX_MATCH_SECONDS`), config_a
     fixed to the right side and kickoff (this module's historical, un-swept
-    convention — see `full_match_tournament.py` for the decoupled side/
-    kickoff sweep). Thin wrapper over `tournament_lib.run_match`; see its
+    convention — `ladder.py` sweeps side and kickoff). Thin wrapper over `match.run_match`; see its
     docstring for what each parameter does.
     """
     return _lib_run_match(
@@ -144,7 +142,7 @@ def main() -> None:
     # Optional CLI args: config names (with or without the `build_`/
     # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
-    # waiting on every pair, e.g. `python tools/tournament/round_robin.py default
+    # waiting on every pair, e.g. `python tools/evaluation/round_robin.py default
     # low_block`. `--sequential` forces the old one-process-at-a-time loop
     # (useful for debugging a specific match without pool noise); otherwise
     # matches run in a process pool since each `run_match` call is fully
@@ -403,21 +401,24 @@ def main() -> None:
             if line:
                 print(line, flush=True)
 
-    def _store_now(result: MatchResult) -> None:
-        # Stored as each match finishes, not only once the whole run ends, so a crash (WSL running out
-        # of memory killed two runs on 2026-10-09) loses only the matches still playing. A spot-checked
-        # match is left to `_store_played`, which compares it with its stored record; so is any match
-        # whose key changed since the run started (code edited mid-run).
+    # Each played match's restart and ball-loss analyses, made as it finishes: the end of the run
+    # reads them from here rather than replaying every saved match again.
+    analysed: dict[str, tuple[list[dict], dict]] = {}
+
+    def _analyse(result: MatchResult) -> None:
+        # Stored in the match cache straight away too, not only once the whole run ends, so a crash
+        # (WSL running out of memory killed two runs on 2026-10-09) loses only the matches still
+        # playing. A spot-checked match is left to `_store_played`, which compares it with its
+        # stored record; so is any match whose key changed since the run started (code edited mid-run).
         pair = (result.config_a, result.config_b)
         npz = run_dir / f"{_tag(pair)}.npz" if run_dir is not None else None
-        if not reuse or pair in spot_checked or npz is None or not npz.exists() or _keys()[pair] != keys[pair]:
+        if npz is None or not npz.exists():  # no run dir, or crashed without a replay
             return
-        record = {
-            "result": dataclasses.asdict(result),
-            "restarts": restart_outcomes.analyse_match(npz),
-            "losses": turnover_breakdown.analyse_match(str(npz)),
-        }
-        cache.put(keys[pair], record)
+        restarts = restart_outcomes.analyse_match(npz)
+        losses = turnover_breakdown.analyse_match(str(npz))
+        analysed[_tag(pair)] = (restarts, losses)
+        if reuse and pair not in spot_checked and _keys()[pair] == keys[pair]:
+            cache.put(keys[pair], {"result": dataclasses.asdict(result), "restarts": restarts, "losses": losses})
 
     for (a, b), rec in reused.items():
         _record(MatchResult(**rec["result"]))
@@ -433,7 +434,7 @@ def main() -> None:
                 fuzz_interval_s=fuzz_interval_s,
             )
             _record(result)
-            _store_now(result)
+            _analyse(result)
             if stop_at_first_stall and _stalled(result):
                 tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
                 print(f"\n--stop-at-first-stall: stopping after {tag}", flush=True)
@@ -451,7 +452,7 @@ def main() -> None:
             for future in as_completed(futures):
                 result = future.result()
                 _record(result)
-                _store_now(result)
+                _analyse(result)
                 if stop_at_first_stall and _stalled(result):
                     tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
                     print(
@@ -557,9 +558,7 @@ def main() -> None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
         # RESTARTS: what became of every restart -- taken, or voided/stopped/timed out.
-        restarts_by_match = {
-            path.name[: -len(".npz")]: restart_outcomes.analyse_match(path) for path in sorted(run_dir.glob("*.npz"))
-        }
+        restarts_by_match = {tag: restarts for tag, (restarts, _) in analysed.items()}
         restarts_by_match.update({_tag(p): rec["restarts"] for p, rec in reused.items()})
         summary["restarts"] = restart_outcomes.summarise(
             [e for m in sorted(restarts_by_match) for e in restarts_by_match[m]]
@@ -567,8 +566,8 @@ def main() -> None:
         _print_restarts(summary["restarts"])
         # BALL LOSSES: how the friendly side (config_a) gave the ball away, by kind, foul rule
         # and tactic — `MatchStats.turnovers` alone is mostly two robots on one ball flipping
-        # "nearest robot". Replays the saved matches, so it runs after summary.json is on disk.
-        losses = turnover_breakdown.analyse_run(run_dir, workers=max_workers_override or os.cpu_count() or 8)
+        # "nearest robot". Analysed as each match finished (`_analyse`).
+        losses = [loss for _, loss in analysed.values()]
         losses = sorted(losses + [rec["losses"] for rec in reused.values()], key=lambda r: r["match"])
         if reuse:
             mismatches = _store_played(
@@ -603,7 +602,7 @@ def main() -> None:
 
 
 def _tag(pair: tuple[str, str]) -> str:
-    """A match's file stem in a run directory (`tournament_lib.run_match`'s `match_tag`)."""
+    """A match's file stem in a run directory (`match.run_match`'s `match_tag`)."""
     return f"{_short_name(pair[0])}_vs_{_short_name(pair[1])}"
 
 

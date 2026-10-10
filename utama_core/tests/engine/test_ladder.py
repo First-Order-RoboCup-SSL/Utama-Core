@@ -1,4 +1,4 @@
-"""`tools/tournament/ladder.py`: the stopping rule, the reference pool and the fixtures. Pure:
+"""`tools/evaluation/ladder.py`: the stopping rule, the reference pool and the fixtures. Pure:
 no match is played."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from tools.tournament import ladder
+from tools.evaluation import ladder
 
 MAX = 2 * len(ladder.SETTINGS)
 

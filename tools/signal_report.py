@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.round_robin import strategy_table  # noqa: E402
+from tools.evaluation.round_robin import strategy_table  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
 
 

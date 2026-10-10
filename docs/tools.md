@@ -21,10 +21,9 @@ Every script in the repository, by what it is for. Run them from the repository 
 
 | Script | Purpose |
 |---|---|
-| `tools/tournament/round_robin.py` | Every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`. `--pair A B` plays one match; `--reuse` replays only matches whose code changed. The ground truth for which strategy is better |
-| `tools/tournament/ladder.py` | One candidate against a reference pool (default: the top 5 of the newest complete round-robin): mirrored pairs over side and kickoff, up to 8 matches per opponent, stopping once a pairing is clear (`decided`). Reuses and fills the round-robin's match cache; writes `replays/ladder_<id>/ladder.json`. A cheaper check of one strategy than a round-robin, not a ranking of all |
-| `tools/tournament/full_match_tournament.py` | Full-match round-robin among the `competitive`-tier strategies only, each pair played 4 times: both sides x both kickoffs, so a result can be attributed to side or kickoff |
-| `tools/tournament/tournament_lib.py` | Match construction shared by the three above (not run directly) |
+| `tools/evaluation/round_robin.py` | Every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`. `--pair A B` plays one match; `--reuse` replays only matches whose code changed. The ground truth for which strategy is better |
+| `tools/evaluation/ladder.py` | One candidate against a reference pool (default: the top 5 of the newest complete round-robin): mirrored pairs over side and kickoff, up to 8 matches per opponent, stopping once a pairing is clear (`decided`). Reuses and fills the round-robin's match cache; writes `replays/ladder_<id>/ladder.json`. A cheaper check of one strategy than a round-robin, not a ranking of all |
+| `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
 | `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |
 
 ## Evaluating strategies
@@ -36,7 +35,6 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 |---|---|
 | `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of 20 s starts harvested from a round-robin; also builds new banks (`--harvest-from`), and plays one start with a timeline and picture (`--play`) |
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
-| `tools/elo.py` / `tools/plot_elo.py` | Elo ratings from round-robin `summary.json` files, and plots of them (rating history, W/D/L matrix, goal difference) |
 | `tools/bench_vs_standings.py` | How far scenario-bench scores rank strategies the way round-robin standings do (Spearman) |
 | `tools/metric_correlation.py` | Offline study of which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |

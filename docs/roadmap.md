@@ -29,7 +29,7 @@ resolved, replace it with a one-line pointer under "Done".
 - **Sumatra-fidelity audit, top 3 findings** — acceptor leniency, escaping-grace clearance, full-window priority re-check.
 - **Tournament gate tooling** — `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED` (`405693c`).
 - **`metric_correlation.py` reads `.npz`**.
-- **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `tournament_lib` are now `tools/tournament/`, and `elo`, `plot_elo`, `debug_match` and `repro_from_replay` are in `tools/`. `main.py`, `conftest.py`, `dashboard_server.py` and `start_test_env.sh` stay at the root (pinned by pixi tasks, pytest and the README).
+- **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `match` are now `tools/evaluation/`, and `elo`, `plot_elo`, `debug_match` and `repro_from_replay` are in `tools/`. `main.py`, `conftest.py`, `dashboard_server.py` and `start_test_env.sh` stay at the root (pinned by pixi tasks, pytest and the README).
 
 ## Open
 
@@ -115,7 +115,7 @@ resolved, replace it with a one-line pointer under "Done".
       full round-robin stays as the occasional full refresh after shared-code changes. Pure
       Elo matchmaking over the whole league is not the plan: strategies counter each other, and
       the round-robin's results table is what shows that.
-      **Built (2026-10-09):** `tools/tournament/ladder.py`. Until worlds vary, a pairing has 8
+      **Built (2026-10-09):** `tools/evaluation/ladder.py`. Until worlds vary, a pairing has 8
       distinct matches (4 side/kickoff settings, each mirrored); it stops at 4 or more once wins
       minus losses reaches 3 either way or can no longer change sign. Not built: Elo anchoring
       (points per match against the pool is the read for now) and spot-checks of reused records.
@@ -133,10 +133,10 @@ resolved, replace it with a one-line pointer under "Done".
       Elo as separate tools. `full_match_tournament.py` (both kickoffs) and `tools/elo.py`,
       `plot_elo.py` are retired only once the ladder covers them.
     - *Match cache:* a match's key (`replay/fingerprint.py` `match_key`) hashes the exact bytes
-      and paths of everything `tools/tournament/tournament_lib.py` imports, data files next to
+      and paths of everything `tools/evaluation/match.py` imports, data files next to
       them (not `.md`), both strategies' modules, and the match settings. New tools that call
       `run_match`, and new settings added to the key only when switched on (as `fuzz_seed` is),
-      keep the cache. Renaming, moving or editing `tournament_lib.py` or anything it imports
+      keep the cache. Renaming, moving or editing `match.py` or anything it imports
       (even a comment), or adding sim noise, reruns every match. So: build the ladder and world
       settings as additions first, and do the renames in the same batch as the next change that
       forces a full rerun anyway (the sim noise).

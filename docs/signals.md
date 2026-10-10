@@ -11,7 +11,7 @@ never passes or shoots loses the ball least, so no signal is "better" on its own
 
 ## Where they come from
 
-Every saved `tools/tournament/round_robin.py` run prints its sections and writes the same data to
+Every saved `tools/evaluation/round_robin.py` run prints its sections and writes the same data to
 `replays/<run>/summary.json`:
 
 | Printed section | `summary.json` key | Computed by |

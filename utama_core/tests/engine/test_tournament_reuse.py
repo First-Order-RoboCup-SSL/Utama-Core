@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from tools.tournament import round_robin as tournament
+from tools.evaluation import round_robin as tournament
 from utama_core.replay.match_cache import MatchCache
 
 _CONFIGS = ["tiki_taka", "low_block", "high_press"]
@@ -42,10 +42,8 @@ def rig(tmp_path, monkeypatch):
             rig.on_play()
         return tournament.MatchResult(config_a=a, config_b=b, score_a=rig.score.get((a, b), 1), score_b=0, stats={})
 
-    def fake_losses(run_dir, workers=8):
-        return [
-            {"match": p.name[: -len(".npz")], "turnovers": [], "restarts": []} for p in sorted(run_dir.glob("*.npz"))
-        ]
+    def fake_losses(npz_path):
+        return {"match": npz_path.rsplit("/", 1)[-1][: -len(".npz")], "turnovers": [], "restarts": []}
 
     monkeypatch.setattr(tournament, "run_match", fake_run_match)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
@@ -53,7 +51,7 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(tournament, "match_key", lambda _g, a, b, **_kw: f"{a}{rig.version[a]}{b}{rig.version[b]}")
     monkeypatch.setattr(tournament.match_cache, "MatchCache", lambda: rig.cache)
     monkeypatch.setattr(tournament.restart_outcomes, "analyse_match", lambda path: [])
-    monkeypatch.setattr(tournament.turnover_breakdown, "analyse_run", fake_losses)
+    monkeypatch.setattr(tournament.turnover_breakdown, "analyse_match", fake_losses)
     monkeypatch.setattr(tournament.turnover_breakdown, "breakdown", lambda losses: {})
     monkeypatch.setattr(tournament.turnover_breakdown, "report", lambda *a: "")
     monkeypatch.setattr(tournament.turnover_breakdown, "real_loss_kinds", lambda r: {})
@@ -106,7 +104,10 @@ def test_a_spot_check_mismatch_evicts_the_run_s_records_and_fails_strict(rig):
     assert list(rig.cache.root.rglob("*.json")) == []  # the mismatch and the two it reused
 
 
-def test_a_run_whose_code_changes_while_it_plays_stores_nothing(rig):
+def test_a_match_is_stored_only_if_its_key_is_unchanged_when_it_finishes(rig):
+    # Matches are stored as they finish, so a crash keeps them. Editing tiki_taka during the first
+    # match (high_press vs low_block, sorted pairs played in order) leaves that match's key as it
+    # was: it is stored. Both tiki_taka matches finish under a changed key: neither is.
     def edit():
         rig.version["build_tiki_taka_kernel_strategy"] = 9
 
@@ -114,7 +115,10 @@ def test_a_run_whose_code_changes_while_it_plays_stores_nothing(rig):
 
     rig.run("--spot-check", "0")
 
-    assert list(rig.cache.root.rglob("*.json")) == []
+    stored = [json.loads(p.read_text())["result"] for p in rig.cache.root.rglob("*.json")]
+    assert [(r["config_a"], r["config_b"]) for r in stored] == [
+        ("build_high_press_kernel_strategy", "build_low_block_kernel_strategy")
+    ]
 
 
 def test_reuse_with_no_save_is_refused(monkeypatch):

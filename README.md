@@ -15,7 +15,7 @@ strategy layer that decides what every robot does.
 3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
 4. Play one headless match between two strategies and save its replay:
 
-       pixi run python tools/tournament/round_robin.py --pair tiki_taka low_block
+       pixi run python tools/evaluation/round_robin.py --pair tiki_taka low_block
 
 5. `pixi run python dashboard_server.py` and open http://localhost:8080 to watch replays and
    browse tournament results.
@@ -57,7 +57,7 @@ Everything lives under `utama_core/`:
 - `entities/`, `config/`, `global_utils/`: data classes, settings and constants, utilities
 - `tests/`: all tests
 
-Scripts live in `tools/` (tournaments in `tools/tournament/`) and `examples/`; see
+Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; see
 [docs/tools.md](docs/tools.md).
 
 ## Field conventions

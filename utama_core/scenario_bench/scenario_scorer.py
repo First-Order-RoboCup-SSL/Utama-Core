@@ -148,7 +148,7 @@ def _build_runner(
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        # The round-robins the banks are harvested from run fpp (tournament_lib.run_match);
+        # The round-robins the banks are harvested from run fpp (match.run_match);
         # a start played with another planner measures something those matches never did.
         control_scheme="fpp",
         stats_path=stats_path,

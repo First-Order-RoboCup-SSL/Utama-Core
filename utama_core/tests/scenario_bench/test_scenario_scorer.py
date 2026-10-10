@@ -103,20 +103,20 @@ def test_raw_turnovers_without_a_real_loss_do_not_score_turnover():
 
 
 def test_bench_plays_with_the_round_robins_motion_planner(monkeypatch):
-    """Banks are harvested from round-robins, which run `tournament_lib.run_match`'s
+    """Banks are harvested from round-robins, which run `match.run_match`'s
     control scheme (fpp). The scorer played every start with trajsample instead, so a
     bench A/B measured play under another planner, and a planner change made in fpp
     left every outcome unchanged."""
     import inspect
 
-    from tools.tournament import tournament_lib
+    from tools.evaluation import match
     from utama_core.scenario_bench import scenario_scorer
 
     seen = {}
     monkeypatch.setattr(scenario_scorer, "StrategyRunner", lambda **kwargs: seen.update(kwargs))
     scenario_scorer._build_runner("press_and_pass", "low_block", stats_path="unused")
 
-    assert seen["control_scheme"] == inspect.signature(tournament_lib.run_match).parameters["control_scheme"].default
+    assert seen["control_scheme"] == inspect.signature(match.run_match).parameters["control_scheme"].default
 
 
 def test_start_signals_are_the_candidate_s_side_only():

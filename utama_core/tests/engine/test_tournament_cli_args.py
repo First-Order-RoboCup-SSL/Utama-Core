@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from tools.tournament import round_robin as tournament
+from tools.evaluation import round_robin as tournament
 
 
 def _stub_result(config_a_name, config_b_name, **_kwargs):

@@ -29,7 +29,7 @@ a reception fails.
 The same pass feeds `chances.ChanceTracker` (shots, regains, danger, free kicks, both
 sides); its record is under `chances`.
 
-Friendly is always `config_a` (yellow): `tournament_lib.run_match` writes the intentions log,
+Friendly is always `config_a` (yellow): `match.run_match` writes the intentions log,
 used for tactic attribution, for that side only.
 """
 

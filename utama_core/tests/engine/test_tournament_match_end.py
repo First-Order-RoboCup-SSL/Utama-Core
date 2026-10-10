@@ -1,11 +1,11 @@
-"""`tournament_lib.run_match` plays until the referee calls full time, with the sim-time
+"""`match.run_match` plays until the referee calls full time, with the sim-time
 budget only as a cap. It used to step a fixed 600 s of sim time whatever the referee said."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from tools.tournament import tournament_lib
+from tools.evaluation import match
 from utama_core.entities.referee.stage import Stage
 
 
@@ -34,9 +34,9 @@ class _FakeRunner:
 
 
 def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
-    monkeypatch.setattr(tournament_lib, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
 
-    result = tournament_lib.run_match(
+    result = match.run_match(
         "build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy", duration_seconds=1200.0
     )
 
@@ -46,8 +46,8 @@ def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
 
 def test_the_cap_still_ends_a_match_that_never_reaches_full_time(monkeypatch):
     monkeypatch.setattr(_FakeRunner, "full_time_ticks", 10**9)
-    monkeypatch.setattr(tournament_lib, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
 
-    tournament_lib.run_match("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy", duration_seconds=1.0)
+    match.run_match("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy", duration_seconds=1.0)
 
-    assert _FakeRunner.last.ticks == tournament_lib.TICKS_PER_SECOND
+    assert _FakeRunner.last.ticks == match.TICKS_PER_SECOND

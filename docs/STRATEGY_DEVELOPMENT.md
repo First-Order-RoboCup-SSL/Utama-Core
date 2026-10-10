@@ -1,7 +1,7 @@
 # Strategy development
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, or `tools/tournament/`/`docs/strategies.md`. Assumes you've read the
+`utama_core/strategy/`, or `tools/evaluation/`/`docs/strategies.md`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
@@ -74,7 +74,7 @@ each gets. Most new strategies need no new tactic. When one does, add it as a ne
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
 the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` that module
-re-exports is discovered by name (`tournament_lib`), so it joins round-robins and the bench as
+re-exports is discovered by name (`match`), so it joins round-robins and the bench as
 `<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
 - `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
@@ -171,7 +171,7 @@ whoever runs it.
   intention row per slot-assignment *change*; call `ctx.match_log.trace(tick, sim_time, key,
   value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
   `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
-  `tactics/give_and_go.py`. Enable with `match_log_path=` or `tournament_lib.run_match(...,
+  `tactics/give_and_go.py`. Enable with `match_log_path=` or `match.run_match(...,
   run_dir=...)`; read back with `load_jsonl(path)`.
 - **`render_window()` / `render_around_event()`** (`analysis/render_window.py`) — PNG of
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
@@ -182,7 +182,7 @@ whoever runs it.
   committed clips: `demo_clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
   strategies aren't meant to win; don't tune them to.
-- **`tools/tournament/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+- **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).

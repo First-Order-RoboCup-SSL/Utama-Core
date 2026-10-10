@@ -13,7 +13,7 @@ matching `tournament.run_match`'s `my_team_is_right=True`. They were once return
 unmirrored, which put the candidate's keeper in the goal it attacks. Half length 4.5m, half width 3.0m
 (`STANDARD_FIELD_DIMS`). Robot 0 is the goalkeeper on each side (pinned
 separately by the kernel strategy, see `engine/strategy.py`); 1-5 are
-outfield, matching `tournament_lib`'s `OUTFIELD_ROBOT_IDS`.
+outfield, matching `match`'s `OUTFIELD_ROBOT_IDS`.
 
 Run this module directly to print the static-screen result for every
 scenario it defines (`pixi run python -m utama_core.scenario_bench.hand_authored_scenarios`).

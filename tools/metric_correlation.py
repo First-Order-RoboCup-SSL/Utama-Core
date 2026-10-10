@@ -26,7 +26,7 @@ It does not run the simulator, a tactic, or a strategy — it only reads
 `<a>_vs_<b>.pkl` frame-by-frame at a 10 Hz sample (`_SAMPLE_HZ`) to compute a second
 family of metrics `MatchStats` does not currently report.
 
-Side convention (see `tournament_lib.run_match`): `config_a` is always yellow AND
+Side convention (see `match.run_match`): `config_a` is always yellow AND
 starts on the right (`my_team_is_right=True`), `config_b` is always blue/left; the teams
 change ends at half-time, so each frame's own `my_team_is_right` gives its side. Every replay
 frame's `friendly_robots`/`ball` are recorded from `config_a`'s perspective
@@ -136,7 +136,7 @@ from utama_core.replay.replay_player import _load_replay  # noqa: E402
 
 # --- Sampling ---------------------------------------------------------------
 _SAMPLE_HZ = 10.0
-_TICK_HZ = 60.0  # rsim's fixed step rate (tournament_lib.TICKS_PER_SECOND)
+_TICK_HZ = 60.0  # rsim's fixed step rate (match.TICKS_PER_SECOND)
 _SAMPLE_STRIDE = max(1, round(_TICK_HZ / _SAMPLE_HZ))
 _DT = _SAMPLE_STRIDE / _TICK_HZ
 
@@ -868,7 +868,7 @@ def fit_logistic_with_side(x: np.ndarray, side_is_a_right: np.ndarray, y: np.nda
     only across the whole corpus, so instead we use, as the requested "side
     intercept", a coin-flip-free proxy that is still a real per-match binary
     covariate: none exists in this dataset since config_a=yellow=right on
-    every single match (see tournament_lib.run_match's hardcoded
+    every single match (see match.run_match's hardcoded
     my_team_is_yellow=True/my_team_is_right=True). We therefore fit x alone
     (intercept + slope) and report that the side covariate is degenerate
     (constant) rather than silently fitting a coefficient to an all-ones
@@ -1091,7 +1091,7 @@ def main() -> None:
     report_lines.append("")
     report_lines.append(
         "Side convention: `config_a` is always yellow and starts on the right "
-        "(`tournament_lib.run_match` hardcodes `my_team_is_yellow=True, my_team_is_right=True`; "
+        "(`match.run_match` hardcodes `my_team_is_yellow=True, my_team_is_right=True`; "
         "in runs with halves the teams change ends at half-time); "
         "`friendly` in stats/frame metrics always means `config_a`. All metrics below are reported "
         "as `a - b` differentials. Because config_a is right on literally every match in this corpus, "

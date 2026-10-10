@@ -1,7 +1,7 @@
 """ladder.py — one candidate strategy against a reference pool, instead of a full round-robin.
 
 Run:
-    pixi run python tools/tournament/ladder.py CANDIDATE [flags]
+    pixi run python tools/evaluation/ladder.py CANDIDATE [flags]
 
     --pool A B ...        opponents (short or factory names); default: the top POOL_SIZE of the
                           newest complete round-robin's standings, the candidate left out
@@ -43,12 +43,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.round_robin import (
+from tools.evaluation.match import _short_name, run_match
+from tools.evaluation.round_robin import (
     MAX_MATCH_SECONDS,
     _resolve_config_names,
     _run_metadata,
 )
-from tools.tournament.tournament_lib import _short_name, run_match
 from utama_core.analysis import restart_outcomes, turnover_breakdown
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
@@ -112,7 +112,7 @@ def fixtures(candidate: str, opponent: str, setting: tuple[bool, bool]) -> list[
 
 
 def _suffix(a_is_right: bool, a_kicks_off: bool) -> str:
-    """The match file tag's suffix, `full_match_tournament.py`'s cell tag, except none for the
+    """The match file tag's suffix (`_RK`, `_Lk`, ...), except none for the
     round-robin's own setting so its records and file names match a round-robin's."""
     if a_is_right and a_kicks_off:
         return ""
