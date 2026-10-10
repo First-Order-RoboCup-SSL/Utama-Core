@@ -190,10 +190,13 @@ resolved, replace it with a one-line pointer under "Done".
 
 10a. **rsim matches are not fully run-to-run deterministic.** Found 2026-09-23: in a
     56-match `--fuzz-restarts 1` run, 4 `press_and_pass` matches gave different results on
-    identical code, and a re-run flipped 3 of them back. Paired-seed evaluation (item 2) and
-    `--stop-at-first-stall` both assume determinism. Unexplored; first suspects are
-    `PYTHONHASHSEED` (set/dict iteration order) and wall-clock-dependent code under machine
-    load (load average was ~30).
+    identical code, and a re-run flipped 3 of them back (load average ~30). Not reproduced
+    2026-10-10: a 60 s split_shape vs high_press match gave identical stats under
+    `PYTHONHASHSEED` 0, 1 and 2 and in 14 concurrent copies, and nothing in the rsim path reads
+    the wall clock or unseeded randomness (the restart fuzzer seeds its own). Since-fixed rsim
+    state bugs (`vendor/rSim/FORK_NOTES.md`, reused-sim reset) may have been the cause. Every
+    `--reuse` round-robin now keeps its spot-check mismatches in `summary.json`
+    (`reuse.mismatches`): a non-empty list there is the evidence to chase.
 
 10b. **Ball-holding contract for every `Tactic`.** Most fouls fixed on 2026-09-24
     (`ShadowAndMark`, `PressAndContain`, `DecoyAndOverload` lure, keeper) were one pattern: a

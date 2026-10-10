@@ -73,7 +73,7 @@ def test_a_second_run_reuses_every_stored_match_and_reports_the_same_results(rig
     second = rig.run("--spot-check", "0")
 
     assert rig.played == []
-    assert second["reuse"] == {"reused": 3, "spot_checked": 0, "played": 0}
+    assert second["reuse"] == {"reused": 3, "spot_checked": 0, "played": 0, "mismatches": []}
     assert all(r["reused"] for r in second["results"])
     key = lambda r: (r["config_a"], r["config_b"])  # noqa: E731
     strip = lambda rs: sorted(({k: v for k, v in r.items() if k != "reused"} for r in rs), key=key)  # noqa: E731
@@ -102,6 +102,16 @@ def test_a_spot_check_mismatch_evicts_the_run_s_records_and_fails_strict(rig):
 
     assert len(rig.played) == 1  # one of three replayed as the spot-check
     assert list(rig.cache.root.rglob("*.json")) == []  # the mismatch and the two it reused
+
+
+def test_a_spot_check_mismatch_is_recorded_in_the_summary(rig):
+    rig.run("--spot-check", "0")
+    rig.score = _EVERY_PAIR_SCORES_5
+
+    summary = rig.run("--spot-check", "0.34")
+
+    (pair,) = rig.played
+    assert summary["reuse"]["mismatches"] == [tournament._tag(pair)]
 
 
 def test_a_match_is_stored_only_if_its_key_is_unchanged_when_it_finishes(rig):
