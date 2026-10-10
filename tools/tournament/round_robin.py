@@ -403,6 +403,22 @@ def main() -> None:
             if line:
                 print(line, flush=True)
 
+    def _store_now(result: MatchResult) -> None:
+        # Stored as each match finishes, not only once the whole run ends, so a crash (WSL running out
+        # of memory killed two runs on 2026-10-09) loses only the matches still playing. A spot-checked
+        # match is left to `_store_played`, which compares it with its stored record; so is any match
+        # whose key changed since the run started (code edited mid-run).
+        pair = (result.config_a, result.config_b)
+        npz = run_dir / f"{_tag(pair)}.npz" if run_dir is not None else None
+        if not reuse or pair in spot_checked or npz is None or not npz.exists() or _keys()[pair] != keys[pair]:
+            return
+        record = {
+            "result": dataclasses.asdict(result),
+            "restarts": restart_outcomes.analyse_match(npz),
+            "losses": turnover_breakdown.analyse_match(str(npz)),
+        }
+        cache.put(keys[pair], record)
+
     for (a, b), rec in reused.items():
         _record(MatchResult(**rec["result"]))
 
@@ -417,6 +433,7 @@ def main() -> None:
                 fuzz_interval_s=fuzz_interval_s,
             )
             _record(result)
+            _store_now(result)
             if stop_at_first_stall and _stalled(result):
                 tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
                 print(f"\n--stop-at-first-stall: stopping after {tag}", flush=True)
@@ -434,6 +451,7 @@ def main() -> None:
             for future in as_completed(futures):
                 result = future.result()
                 _record(result)
+                _store_now(result)
                 if stop_at_first_stall and _stalled(result):
                     tag = f"{_short_name(result.config_a)}_vs_{_short_name(result.config_b)}"
                     print(
