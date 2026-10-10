@@ -178,10 +178,17 @@ whoever runs it.
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
-  committed clips: `demo_clips/README.md`.
+<<<<<<< HEAD
+  committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every factory, whether a round-robin plays it or it is retired,
   and the latest results.
 - **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+=======
+  committed clips: `assets/clips/README.md`.
+- **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
+  strategies aren't meant to win; don't tune them to.
+- **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+>>>>>>> repo-cleanup
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).

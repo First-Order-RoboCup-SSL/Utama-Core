@@ -9,6 +9,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
 - [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.
 - [motion_planning_comparison.md](motion_planning_comparison.md): the motion-planning benchmark and how to read it.
+- [motion_planning_results.md](motion_planning_results.md): its latest full run.
 - [tools.md](tools.md): every script and pixi task, by purpose.
 - [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee, SSL Vision for real robots.
 - [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
@@ -33,7 +34,3 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
 - [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
 - [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.
-
-## Writing
-
-- [blog/strategy-tactics-orchestration.md](blog/strategy-tactics-orchestration.md): Strategy = Tactics × Orchestration, a post on the architecture of the strategy layer.

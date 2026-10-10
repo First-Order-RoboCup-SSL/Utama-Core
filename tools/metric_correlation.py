@@ -8,7 +8,7 @@ Run from the repository root, for example:
         replays/tournament_20260903_101521 \\
         replays/tournament_20260903_112025 \\
         replays/tournament_20260903_115838 \\
-        --out benchmark_results/metric_correlation_20260903.md
+        --out benchmark_results/metric_correlation.md
 
 Purpose
 -------

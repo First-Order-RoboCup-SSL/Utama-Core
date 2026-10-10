@@ -205,6 +205,7 @@ replays
 renders/
 scratch/
 scenario_bench_results/
+benchmark_results/
 
 # local agent-tool config dirs
 .codex/

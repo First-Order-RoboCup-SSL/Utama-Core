@@ -12,7 +12,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `test` | pytest over `utama_core/tests/` (pass `--headless` to pytest directly in agent loops) |
 | `lint` | the whole pre-commit stack (black, ruff, isort) on every file |
 | `precommit-install` / `precommit-uninstall` | install or remove the pre-commit hook |
-| `main` | `main.py`, the exhibition demo (below) |
+| `main` | `main.py`: watch one match between two strategies in rsim (below) |
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio |
@@ -60,11 +60,10 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 
 | Script | Purpose |
 |---|---|
-| `main.py` | Exhibition demo: one `GiveAndGoTactic` robot plus keeper over grSim, with the dashboard (grSim must be running) |
+| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `split_shape` vs `high_press` |
 | `examples/demo_custom_referee.py` | Every `CustomReferee` rule in a scripted scenario, in a pygame window; no simulator needed |
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
 | `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |
-| `start_test_env.sh` | Starts grSim, the GameController and AutoReferee together; see [setup_external.md](setup_external.md) |
