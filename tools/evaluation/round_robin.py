@@ -8,7 +8,7 @@ ceremony, run_dir file layout) lives in `match.py`, shared with `ladder.py`.
 Run:
     pixi run python tools/evaluation/round_robin.py [config ...] [flags]
 
-Configs are short names (`tiki_taka`); none means every config. Flags:
+Configs are short names (`tiki_taka`); none means every config not in RETIRED. Flags:
     --pair A B              one match, A as config_a
     --reuse                 take unchanged matches from replays/match_cache/; check the
                             "N reused ... M to play" line it prints before waiting on M
@@ -101,6 +101,22 @@ from utama_core.analysis import chances, restart_outcomes, turnover_breakdown
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
+
+# Left out of a round-robin unless named: the bottom ten of the 2026-10-05 full round-robin
+# (docs/strategies.md). Their code stays, since kept strategies and tests build on some of them.
+# Named here, outside the match cache key, so retiring one reruns nothing.
+RETIRED = {
+    "build_tiki_taka_kernel_strategy",
+    "build_counter_press_kernel_strategy",
+    "build_high_line_zone_kernel_strategy",
+    "build_three_slot_kernel_strategy",
+    "build_switch_of_play_kernel_strategy",
+    "build_low_block_kernel_strategy",
+    "build_zone_fluid_kernel_strategy",
+    "build_score_aware_zone_flow_kernel_strategy",
+    "build_overload_flow_kernel_strategy",
+    "build_shadow_switch_kernel_strategy",
+}
 
 # A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped
 # whenever no team may play the ball (`custom_referee/state_machine.py`), so about 710 s of
@@ -301,7 +317,7 @@ def main() -> None:
             if len(config_names) < 2:
                 raise SystemExit("Need at least 2 configs to play a round-robin.")
         else:
-            config_names = _CONFIG_NAMES
+            config_names = [name for name in _CONFIG_NAMES if name not in RETIRED]
 
         base_pairs = list(itertools.combinations(sorted(config_names), 2))
         # --both-sides plays (a, b) and (b, a) as distinct fixtures — see the

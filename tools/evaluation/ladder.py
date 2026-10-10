@@ -4,7 +4,8 @@ Run:
     pixi run python tools/evaluation/ladder.py CANDIDATE [flags]
 
     --pool A B ...        opponents (short or factory names); default: the top POOL_SIZE of the
-                          newest complete round-robin's standings, the candidate left out
+                          newest complete round-robin's standings, the candidate and
+                          round_robin.RETIRED left out
     --standings PATH      the round-robin to take the pool from (its summary.json or run dir)
     --no-reuse            play every match, even ones stored in replays/match_cache/
     --max-workers N, -h/--help
@@ -46,6 +47,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools.evaluation.match import _short_name, run_match
 from tools.evaluation.round_robin import (
     MAX_MATCH_SECONDS,
+    RETIRED,
     _resolve_config_names,
     _run_metadata,
 )
@@ -81,11 +83,11 @@ def standings(results: list[dict]) -> dict[str, dict]:
 
 
 def reference_pool(results: list[dict], candidate: str, size: int = POOL_SIZE) -> list[str]:
-    """The `size` best strategies in `results` other than `candidate`, by points per match,
-    then goal difference per match, then name."""
+    """The `size` best strategies in `results` other than `candidate` and the retired ones, by
+    points per match, then goal difference per match, then name."""
     table = standings(results)
     ranked = sorted(
-        (n for n in table if n != candidate),
+        (n for n in table if n != candidate and n not in RETIRED),
         key=lambda n: (
             -table[n]["points"] / table[n]["matches"],
             -table[n]["goal_difference"] / table[n]["matches"],

@@ -127,3 +127,26 @@ def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
         tournament.main()
         out = capsys.readouterr().out
         assert "--pair A B" in out and "--reuse" in out
+
+
+def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_still_plays(tmp_path, monkeypatch):
+    calls = []
+
+    def _fake_run_match(config_a_name, config_b_name, *_args, **_kwargs):
+        calls.append((config_a_name, config_b_name))
+        return _stub_result(config_a_name, config_b_name)
+
+    names = ["build_a_kernel_strategy", "build_b_kernel_strategy", "build_c_kernel_strategy"]
+    monkeypatch.setattr(tournament, "run_match", _fake_run_match)
+    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(tournament, "_CONFIG_NAMES", names)
+    monkeypatch.setattr(tournament, "RETIRED", {"build_c_kernel_strategy"})
+
+    monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save"])
+    tournament.main()
+    assert calls == [("build_a_kernel_strategy", "build_b_kernel_strategy")]
+
+    calls.clear()
+    monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save", "a", "c"])
+    tournament.main()
+    assert calls == [("build_a_kernel_strategy", "build_c_kernel_strategy")]

@@ -73,6 +73,11 @@ def test_pool_is_the_top_by_points_and_leaves_out_the_candidate():
     assert ladder.reference_pool(_RESULTS, "a", size=2) == ["c", "b"]
 
 
+def test_pool_leaves_out_retired_strategies(monkeypatch):
+    monkeypatch.setattr(ladder, "RETIRED", {"a"})
+    assert ladder.reference_pool(_RESULTS, "z", size=2) == ["c", "b"]
+
+
 def test_pool_breaks_a_points_tie_on_goal_difference_then_name():
     results = [_r("x", "y", 3, 0), _r("y", "z", 1, 0), _r("z", "x", 1, 0)]  # 3 points each
     # x GD +2, z GD 0, y GD -2

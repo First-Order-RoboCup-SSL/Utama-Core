@@ -86,8 +86,7 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
 
 `tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
 kernel invariants. Give its partitioner pure-function tests in `tests/strategy/test_<name>.py` (a
-`Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
-`experimental`.
+`Game` built by hand, no rsim), and add a row to `docs/strategies.md`'s round-robin table.
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
@@ -180,8 +179,8 @@ whoever runs it.
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `demo_clips/README.md`.
-- **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
-  strategies aren't meant to win; don't tune them to.
+- **`docs/strategies.md`** — every factory, whether a round-robin plays it or it is retired,
+  and the latest results.
 - **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
