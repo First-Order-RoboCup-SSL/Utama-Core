@@ -22,13 +22,23 @@ def _packet() -> bytes:
     return pkt.SerializeToString()
 
 
+class _OnePacketNet:
+    """Delivers one packet, then blocks the way a socket with no traffic does: a loop that
+    spun on `None` instead kept a thread busy for the rest of the test session."""
+
+    def __init__(self):
+        self._packets = [_packet()]
+
+    def receive_data(self):
+        if self._packets:
+            return self._packets.pop()
+        threading.Event().wait()
+
+
 def test_receive_loop_delivers_a_packet():
     # pull_referee_data held a non-reentrant lock while _update_data took it again, so the
     # thread hung on the first game-controller packet and the buffer never filled.
-    packets = iter([_packet()])
-    fake_net = mock.Mock()
-    fake_net.receive_data.side_effect = lambda: next(packets, None)
-    with mock.patch.object(referee_receiver.network_manager, "NetworkManager", return_value=fake_net):
+    with mock.patch.object(referee_receiver.network_manager, "NetworkManager", return_value=_OnePacketNet()):
         buffer = deque(maxlen=1)
         receiver = referee_receiver.RefereeMessageReceiver(buffer)
 
