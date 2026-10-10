@@ -35,7 +35,7 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | Rule | Active during | Notes |
 |---|---|---|
 | `GoalRule` | live play | Scoring team from `my_team_is_right`/`my_team_is_yellow`; 1s cooldown; `designated_position=(0,0)`. `CustomReferee.step` turns it into a goal kick (`invalid_goal`) when the scorer committed a non-stopping foul in the previous 2 s (§7). |
-| `OutOfBoundsRule` | live play | Free kick to the team that didn't touch last, placed 0.25m infield. Last touch: `rules/last_touch.py`'s colour-blind `infer_last_touch_team` (both teams' contact data; closest robot only when there is no prior attribution; unresolved rather than a default colour). |
+| `OutOfBoundsRule` | live play | Free kick to the team that didn't touch last, placed 0.25m infield; over a goal line, a corner or goal kick in the corner, or, for a ball last touched in the kicker's own half that crossed the opponent's goal line untouched, a free kick from where it was touched (aimless kick, §6.2.3, Division B; `out_of_bounds.aimless_kick`, on in both profiles). Last touch: `rules/last_touch.py`'s colour-blind `infer_last_touch_team` (both teams' contact data; closest robot only when there is no prior attribution; unresolved rather than a default colour). |
 | `BallSpeedRule` | live play | Ground speed > 6.5 m/s, edge-detected; same last-touch attribution. Non-stopping (§8.4.2). |
 | `DoubleTouchRule` | `NORMAL_START` after a restart | Only the restart kicker (first toucher after arming) is barred; disarms when any other robot touches. Open-play release-and-reacquire dribbling is legal. Keeps `_prev_command` across `reset()` because `reset()` runs on the very transition it must observe. |
 | `DefenseAreaRule` | live play | An extra defender (> `max_defenders`) touching the ball in its own area: penalty. An attacker touching the ball while at least partly in ours: non-stopping, 2 s re-raise (§8.4.2). |
@@ -53,10 +53,40 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | # | Transition | Trigger |
 |---|---|---|
 | 1 | `STOP` → queued restart | all robots ≥0.5m from ball (15s clear timeout) |
-| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position, held 2s |
+| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position (kick-off: and every robot in its own half, waited for at most 10 s), held 2s |
 | 3 | `DIRECT_FREE_*` → `NORMAL_START` | kicker ≤0.3m from ball, defenders ≥0.5m, held 2s |
 | 4 | `BALL_PLACEMENT_*` → next command | ball ≤0.15m from target, held 2s (10s placement timeout) |
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |
+| 6 | end of a half → second half, then `POST_GAME` | the half's playing time (`half_duration_seconds`) used up |
+
+Nothing leaves `HALT` on its own: a person or the game controller resumes it. In the sim,
+`StrategyRunner` resumes after 5 s with `resume_from_halt`, which goes to `STOP` and keeps the
+queued restart, so play continues into it (transition 1). A `HALT` that interrupts a restart in
+progress (a kick-off being prepared, a ball being placed, a free kick) queues that restart again.
+With nothing queued, the runner holds `STOP` for 4 s to clear robots, then `NORMAL_START`.
+
+The match clock (`stage_time_left`) counts playing time only: it runs under `NORMAL_START`,
+`FORCE_START` and free kicks and is paused in `STOP`, `HALT`, kick-off and penalty preparation and
+ball placement, as the rulebook's Game Stages section says. When the first half's time is up
+(transition 6), play stops, the stage becomes `NORMAL_SECOND_HALF_PRE` (half-time takes 0 s), the
+ball goes to the centre and the team that didn't kick off the first half (`kickoff_team`) kicks
+off the second, and the teams change ends.
+
+**Ends.** The referee says which team defends the +x goal in `blue_team_on_positive_half`, the
+game controller's field: taken from the side the teams start on, swapped at half-time.
+`StrategyRunner` follows it every tick, from `CustomReferee` or the real game controller: when it
+disagrees with the side a team plays on, both teams' frames, `Field`s and game history start
+again on the other side (tactic memory is already cleared by the stoppage it happens in). In the
+sim, every robot is also carried to the other end, turned half a turn about the centre spot, as
+people do in the break: driving there crosses both defense areas. The
+columnar replay stores the side on every tick (`side_is_right`; `ColumnarReplay.is_right_at`),
+and replay analyses read it per frame (`frame.my_team_is_right`), never once per file.
+`scenario_from_replay` turns a second-half frame half a turn, so a scenario is still played with
+config_a defending the right goal. Replays written before this have one side throughout.
+
+When the second half's time is up, the stage becomes `POST_GAME` with a plain
+`STOP` (no `designated_position`, so the sim runner doesn't restart play), and violations are
+ignored from then on. `round_robin.py` ends a match there.
 
 `force_start_after_goal` is a legacy path (STOP → FORCE_START after `stop_duration_seconds`).
 Scripts resume play with `referee.set_command(RefereeCommand.NORMAL_START, timestamp=...)`.
@@ -108,7 +138,7 @@ referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval
 
 Resolved (kept here so nobody re-reports them): the old friendly-first, ≤0.15m proximity
 last-touch heuristic and its yellow default (replaced by `infer_last_touch_team`), double touch,
-ball speed, full-episode reset,
+ball speed, full-episode reset, teams changing ends at half-time,
 `bt_nodes` → `debug_status` rename, auto-advance after goals/timeouts, keep-out during bare
 `STOP`, blue-perspective goal tests, `StrategyRunner` integration tests
 (`tests/strategy_runner/test_referee_rsim.py`, `test_ball_placement_rsim.py`),

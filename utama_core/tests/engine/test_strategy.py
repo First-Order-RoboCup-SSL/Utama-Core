@@ -313,6 +313,49 @@ def test_mem_resets_only_for_the_tactic_whose_robots_changed():
     assert tactic_b.mem_creations == 1
 
 
+@pytest.mark.parametrize("keeps_mem", [False, True])
+def test_keeps_mem_on_robot_change_survives_a_robot_leaving_but_not_a_release(keeps_mem):
+    tactic = RecordingTactic()
+    tactic.keeps_mem_on_robot_change = keeps_mem
+    partitions = iter([{"a": frozenset({1, 2, 3})}, {"a": frozenset({1, 2})}, {}, {"a": frozenset({1, 2})}])
+
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=lambda game, free_robots, prev, available_tactic_ids: next(partitions),
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    strategy.tick(_FakeGame())
+    strategy.tick(_FakeGame())  # robot 3 leaves the slot
+    assert tactic.mem_creations == (1 if keeps_mem else 2)
+    assert strategy._slots["a"].mem.tick_count == (2 if keeps_mem else 1)
+
+    strategy.tick(_FakeGame())  # slot released
+    strategy.tick(_FakeGame())  # and given robots again: always a fresh mem
+    assert tactic.mem_creations == (2 if keeps_mem else 3)
+    assert strategy._slots["a"].mem.tick_count == 1
+
+
+def test_keeps_mem_on_robot_change_starts_afresh_after_an_explicitly_empty_slot():
+    """Copilot on #141: a partition may give a slot an empty robot set, which releases it
+    like leaving it out; the kept memory survived that and was reused on reassignment."""
+    tactic = RecordingTactic()
+    tactic.keeps_mem_on_robot_change = True
+    partitions = iter([{"a": frozenset({1, 2})}, {"a": frozenset()}, {"a": frozenset({1, 2})}])
+
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=lambda game, free_robots, prev, available_tactic_ids: next(partitions),
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    for _ in range(3):
+        strategy.tick(_FakeGame())
+
+    assert tactic.mem_creations == 2
+    assert strategy._slots["a"].mem.tick_count == 1
+
+
 def test_committed_group_keeps_its_robots_while_other_group_still_reassigns():
     committed_tactic = RecordingTactic(committed=True)
     other_tactic = RecordingTactic(committed=False)

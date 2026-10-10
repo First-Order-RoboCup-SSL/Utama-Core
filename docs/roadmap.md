@@ -29,7 +29,7 @@ resolved, replace it with a one-line pointer under "Done".
 - **Sumatra-fidelity audit, top 3 findings** — acceptor leniency, escaping-grace clearance, full-window priority re-check.
 - **Tournament gate tooling** — `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED` (`405693c`).
 - **`metric_correlation.py` reads `.npz`**.
-- **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `tournament_lib` are now `tools/tournament/`, and `elo`, `plot_elo`, `debug_match` and `repro_from_replay` are in `tools/`. `main.py`, `conftest.py`, `dashboard_server.py` and `start_test_env.sh` stay at the root (pinned by pixi tasks, pytest and the README).
+- **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `match` are now `tools/evaluation/`, and `debug_match` and `repro_from_replay` are in `tools/` (`elo` and `plot_elo` were removed 2026-10-10). `main.py`, `conftest.py` and `dashboard_server.py` stay at the root (pinned by pixi tasks, pytest and the README); `start_test_env.sh` was removed 2026-10-09 (unused; its three commands are in `docs/setup_external.md`).
 
 ## Open
 
@@ -94,11 +94,11 @@ resolved, replace it with a one-line pointer under "Done".
      matches only vs the top of the pool. **Not built.**
    - *Metrics — derive, don't invent:* `MatchStats` has both-sided turnovers, completed
      passes, attacking-third entries, possession-under-pressure, restart-to-entry. The first
-     correlation study (`tools/metric_correlation.py`, `benchmark_results/
+     correlation study (`tools/metric_correlation.py`, `git show 24ef2c3f:benchmark_results/
      metric_correlation_20260903.md`) found turnovers/passes/entries valid and reliable;
      possession and robot motion carry no signal; `ball_travel_m` is not a quality signal.
      Caveat: raw `turnovers` is mostly nearest-robot flicker on contested balls (1990 raw vs
-     1090 real losses over 231 matches, `benchmark_results/turnover_breakdown_20260923_211717.md`);
+     1090 real losses over 231 matches, `git show 24ef2c3f:benchmark_results/turnover_breakdown_20260923_211717.md`);
      prefer `summary.json["ball_losses"]["real_losses"]`.
      Goodhart guard: if the bench improves and the ladder doesn't, retire the proxy.
    - *Compute discipline:* paired comparison on common seeds, sequential stopping, short
@@ -106,6 +106,43 @@ resolved, replace it with a one-line pointer under "Done".
    - **Not built:** one `evaluate <strategy> --budget` entry point (contracts + bench at low
      budget, ladder at high) that also writes `docs/strategies.md`.
    - Build order: calibration tournament → bench on harvested states → ladder.
+
+2a. **Strategy evaluation v2 (direction agreed 2026-10-09; ladder built).** Builds the ladder
+    above and settles how matches vary.
+    - *Ladder:* a candidate plays a fixed reference pool (the current top 4-5) in several
+      sampled worlds, each world played twice with the teams swapped so luck cancels, both
+      kickoffs covered, stopping early once the result is clear; Elo anchored to the pool. The
+      full round-robin stays as the occasional full refresh after shared-code changes. Pure
+      Elo matchmaking over the whole league is not the plan: strategies counter each other, and
+      the round-robin's results table is what shows that.
+      **Built (2026-10-09):** `tools/evaluation/ladder.py`. Until worlds vary, a pairing has 8
+      distinct matches (4 side/kickoff settings, each mirrored); it stops at 4 or more once wins
+      minus losses reaches 3 either way or can no longer change sign. Not built: Elo anchoring
+      (points per match against the pool is the read for now) and spot-checks of reused records.
+    - *Sampled worlds instead of restart fuzzing:* variation comes from realistic imperfection,
+      seeded so a world is reproducible: vision noise and dropped detections (`rsim_noise`,
+      `rsim_vanishing` already exist), then kick speed and direction spread and command delay
+      or lost packets (Python, in the sim's controller and `standard_ssl.py`), then per-robot
+      profiles once 10c has measurements, then dribbler loss (likely `vendor/rSim`). Both teams
+      face the same world with mirrored profiles. Ranges stay modest and written down until
+      measured. The distribution is fixed by the evaluator and out of reach of strategy
+      branches, so it is not something to tune toward. `RestartFuzzingReferee` stays as a
+      stall-testing tool, not an evaluation input.
+    - *Names:* one match runner with the schedule (round-robin, ladder) and match settings
+      (sides, kickoffs, world seed) as options, replacing round-robin / full-match tournament /
+      Elo as separate tools. `full_match_tournament.py` (both kickoffs) and `tools/elo.py`,
+      `plot_elo.py` are retired only once the ladder covers them.
+    - *Match cache:* a match's key (`replay/fingerprint.py` `match_key`) hashes the exact bytes
+      and paths of everything `tools/evaluation/match.py` imports, data files next to
+      them (not `.md`), both strategies' modules, and the match settings. New tools that call
+      `run_match`, and new settings added to the key only when switched on (as `fuzz_seed` is),
+      keep the cache. Renaming, moving or editing `match.py` or anything it imports
+      (even a comment), or adding sim noise, reruns every match. So: build the ladder and world
+      settings as additions first, and do the renames in the same batch as the next change that
+      forces a full rerun anyway (the sim noise).
+    - *Order:* write the ladder (additions only, done) → switch on vision noise and dropouts as world
+      settings → kick spread and command delay, together with the naming unification, then one
+      full round-robin → per-robot profiles after calibration.
 
 3. **`BangBang1D` defects** — required-overshoot and `v0 > v_max` cases produce
    discontinuous trajectories (xfail-pinned in `utama_core/tests/motion_planning/
@@ -151,13 +188,6 @@ resolved, replace it with a one-line pointer under "Done".
 10. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones.
 
-10a. **rsim matches are not fully run-to-run deterministic.** Found 2026-09-23: in a
-    56-match `--fuzz-restarts 1` run, 4 `press_and_pass` matches gave different results on
-    identical code, and a re-run flipped 3 of them back. Paired-seed evaluation (item 2) and
-    `--stop-at-first-stall` both assume determinism. Unexplored; first suspects are
-    `PYTHONHASHSEED` (set/dict iteration order) and wall-clock-dependent code under machine
-    load (load average was ~30).
-
 10b. **Ball-holding contract for every `Tactic`.** Most fouls fixed on 2026-09-24
     (`ShadowAndMark`, `PressAndContain`, `DecoyAndOverload` lure, keeper) were one pattern: a
     tactic written for its main job with no branch for "my robot now has the ball", so it held
@@ -178,10 +208,72 @@ resolved, replace it with a one-line pointer under "Done".
       importing them from the referee rules; decide whether to share one source.
     Expect each failing tactic to be a real fix with its own regression test.
 
+10c. **Real-robot profiles and calibration.** Each physical robot differs (top speed,
+    dribbler grip, kicker strength) in ways hardware can't fix soon; software should
+    correct what it can and use the rest. No measurements yet (2026-10-09), so nothing per
+    robot is built: this entry is the plan.
+    - *Known now:* the kicker is fixed power and will stay so for now (hardware team,
+      2026-10-09), so the sim gets no variable-kick option. Real robots are capped at
+      `MAX_VEL=1` m/s as a safety limit, not their top speed; rsim and grSim run at 2 m/s
+      (`config/robot_params.py`). The radio packet has 4-bit kick and chip power fields that
+      we always send as full (`real_robot_controller.py`, `kicker_byte`): ask whether the
+      firmware reads them.
+    - *What exists:* `StrategyRunner`'s `{yellow,blue}_vision_to_cmd_mapping` (vision ID to
+      firmware command ID, real mode only) is the robot roster. It is validated (one entry
+      per expected robot, integers, no command ID used by both teams on a shared transmitter,
+      every observed vision ID covered: `game_gater.py`) and filters vision to those IDs.
+      `*_trusted_ir_robots` (robots whose ball sensor is trusted, the rest infer possession
+      from vision) is the only per-robot capability today. There is no checked-in roster
+      file: whoever writes the run script passes the mapping. The command ID is fixed in the
+      robot's firmware, so it is the key a profile would use.
+    - *What can differ per robot:* driving (top speed, acceleration and braking, turning,
+      drift from a weaker motor, command delay, battery sag over a match); the ball (dribbler
+      grip while driving and turning, catching a pass, kick speed and its spread, kick
+      direction error, kicker recharge time, chip distance and height, ball sensor); other
+      (radio packet loss, breakdowns and substitutions).
+    - *Agreed:* correct in the real-robot controller what can be corrected (speed error,
+      drift, delay), capping the team to its weakest robot where needed, so strategies see
+      identical robots. Expose to tactics only what can't be corrected (kick strength, grip,
+      catching). Tactics ask about abilities ("who dribbles best", "where does this robot's
+      kick stop"), never name a robot ID. Profiles are measured, fixed for a run and out of
+      reach of strategy branches, so they are not something a search tunes.
+    - *Open, not yet:* one profile per match day vs updated while playing; kick-to-kick
+      spread in the sim (more realistic, but noisier round-robins).
+    - *Calibration routine (to write before measuring day):* per robot, at full battery on
+      the competition carpet: commanded vs measured speed at a few speeds, acceleration and
+      braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from
+      vision, direction error, roll distance) and ten chips; recharge time between kicks;
+      a dribble course at increasing speed until the ball is lost; ten passes received.
+      Output: one record per command ID.
+    - *Before measurements:* code that assumes kick or speed numbers should derive them from
+      `RobotParams` (e.g. `ClearBallTactic` assumes a 4.5 m clearance where a fixed-power kick
+      rolls ~17 m), so measured values change one file. No per-robot profile type until
+      measurements show robots differ enough to matter.
+
+10d. **Vision filter for real cameras.** Found 2026-10-09 reviewing `data_processing/`; rsim
+     (noise off) never exercises any of it. Needs logged SSL-Vision data from the real field
+     to tune, so it waits on the hardware team like 10c.
+     - *Velocity:* `KalmanFilter` tracks position only; `VelocityRefiner` differentiates
+       consecutive filtered positions and that velocity feeds the next prediction. With the
+       current noise settings (process noise twice the measurement noise) the steady-state
+       gain is about 0.73, so positions are barely smoothed. An estimate: 1 cm vision noise
+       gives roughly ±0.5 m/s velocity jitter at 60 Hz. The usual SSL design is one filter with
+       position and velocity in its state (constant velocity for robots; for the ball, rolling
+       friction, plus a chip/flight model later). The `VelocityRefiner` note that smoothing
+       velocity "broke control loops" was measured in noiseless rsim.
+     - *Lost objects:* a vanished ball or robot is predicted at its last velocity forever,
+       with no friction and no give-up time. The ball vanishes most often under a dribbling
+       robot, where it should stay at the dribbler. Vanished robots relate to substitutions,
+       issue #107.
+     - *Detections:* `CameraCombiner` ignores SSL-Vision confidence, so a low-confidence
+       false detection with a robot's ID is averaged into the real one.
+     - *Noise settings:* 1 cm and 5° match rsim's noise generator, not the real cameras.
+     - *First step once logs exist:* replay a recorded vision log through `PositionRefiner`
+       and compare velocity jitter and lag against a constant-velocity filter, before
+       changing anything.
+
 11. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
     - `@pytest.mark.engine` marker for kernel tests — wait for real CI bottleneck data.
     - `TickContext` responsibilities beyond `motion_controller`/`match_log`.
-    - `start_test_env.sh` has no inbound references and launches a gitignored `AutoReferee/`
-      — relic or live hardware script? Needs someone with the hardware.

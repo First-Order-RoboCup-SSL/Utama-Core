@@ -1,5 +1,5 @@
 """Tournament view — reads `replays/<run_id>/summary.json` written by
-`full_match_tournament.py` and exposes it to the dashboard.
+`round_robin.py` and exposes it to the dashboard.
 
 Fully standalone: no coupling to a running match or `StrategyRunner`. Just a
 `GET /tournament/runs` route returning every run's full summary inline
@@ -52,7 +52,8 @@ def _short(config: str) -> str:
 
 def _replay_path(run_dir: Path, result: dict) -> Optional[str]:
     """The result's replay, relative to `REPLAY_BASE_PATH`: `round_robin.py` writes
-    `<a>_vs_<b>.npz`, `full_match_tournament.py` `<a>_vs_<b>_<R|L><K|k>.pkl`."""
+    `<a>_vs_<b>.npz`, `ladder.py` `<a>_vs_<b>_<R|L><K|k>.npz` (the retired
+    `full_match_tournament.py` wrote the same tags as `.pkl`)."""
     stem = f"{_short(result['config_a'])}_vs_{_short(result['config_b'])}"
     names = [f"{stem}.npz", f"{stem}.pkl"]
     if "a_is_right" in result:

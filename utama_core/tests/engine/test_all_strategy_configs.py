@@ -153,6 +153,43 @@ def test_three_way_picker_splits_all_three_slots_when_all_applicable():
     assert frozenset().union(*partition.values()) == frozenset({1, 2, 3, 4, 5})
 
 
+def _holder_game(holder_id):
+    """A still ball in one robot's dribbler; nobody else near it."""
+    return SimpleNamespace(
+        ball=SimpleNamespace(p=SimpleNamespace(x=0.0, y=0.0), v=SimpleNamespace(x=0.0, y=0.0)),
+        friendly_robots={
+            rid: SimpleNamespace(has_ball=rid == holder_id, p=SimpleNamespace(x=-1.0 - rid, y=0.0))
+            for rid in range(1, 6)
+        },
+        enemy_robots={},
+    )
+
+
+def test_three_way_picker_gives_the_ball_holder_to_attack_not_press_or_mark():
+    # three_slot_vs_zone_fluid (2026-10-05) t=87.8: the taker of our free kick sat in "mark" and
+    # `kick_upfield` sent the ball the length of the pitch and out; 24 such kicks a match went to
+    # the presser or a shadow. The holder attacks, whichever slots are open.
+    for open_slots in ({"press", "mark", "attack"}, {"mark", "attack"}, {"press", "attack"}):
+        partition = _three_way_picker(
+            game=_holder_game(holder_id=5),
+            free_robots=frozenset({1, 2, 3, 4, 5}),
+            prev_partition=None,
+            available_tactic_ids=frozenset(open_slots),
+        )
+        assert 5 in partition["attack"], open_slots
+        assert frozenset().union(*partition.values()) == frozenset({1, 2, 3, 4, 5})
+
+
+def test_three_way_picker_keeps_the_holder_in_press_when_attack_is_unavailable():
+    partition = _three_way_picker(
+        game=_holder_game(holder_id=5),
+        free_robots=frozenset({1, 2, 3, 4, 5}),
+        prev_partition=None,
+        available_tactic_ids=frozenset({"press", "mark"}),
+    )
+    assert partition["press"] == frozenset({5})
+
+
 def test_three_way_picker_falls_back_to_attack_when_press_and_mark_inapplicable():
     partition = _three_way_picker(
         game=_NOBODY_ON_BALL,

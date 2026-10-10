@@ -26,6 +26,8 @@ class GoalDetectionConfig:
 class OutOfBoundsConfig:
     enabled: bool = True
     free_kick_assigner: str = "last_touch"
+    # §6.2.3 (Division B only): an aimless kick restarts from where it was kicked.
+    aimless_kick: bool = True
 
 
 @dataclass
@@ -181,6 +183,9 @@ class AutoAdvanceConfig:
     # NORMAL_START → FORCE_START after kickoff_timeout_seconds if ball hasn't
     # moved (catches a stuck kickoff).
     normal_start_to_force: bool = True
+    # A half's playing time run out → the second half (kicked off by the other team) or,
+    # after it, POST_GAME.
+    end_of_half: bool = True
 
 
 @dataclass
@@ -294,6 +299,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
     oob_cfg = OutOfBoundsConfig(
         enabled=ob.get("enabled", True),
         free_kick_assigner=ob.get("free_kick_assigner", "last_touch"),
+        aimless_kick=ob.get("aimless_kick", True),
     )
 
     da = rules_d.get("defense_area", {})
@@ -410,6 +416,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
         direct_free_to_normal=aa.get("direct_free_to_normal", True),
         ball_placement_to_next=aa.get("ball_placement_to_next", True),
         normal_start_to_force=aa.get("normal_start_to_force", True),
+        end_of_half=aa.get("end_of_half", True),
     )
     game = GameConfig(
         half_duration_seconds=game_d.get("half_duration_seconds", 300.0),

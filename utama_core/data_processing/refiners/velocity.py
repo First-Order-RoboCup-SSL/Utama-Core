@@ -39,6 +39,10 @@ class VelocityRefiner(BaseRefiner):
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
+    def __init__(self, compute_acceleration: bool = True):
+        # False leaves every `a` zero: for a frame whose acceleration nothing reads.
+        self.compute_acceleration = compute_acceleration
+
     def refine(self, game_history: GameHistory, game_frame: GameFrame) -> GameFrame:
         current_game_ts = game_frame.ts
 
@@ -102,7 +106,8 @@ class VelocityRefiner(BaseRefiner):
 
             new_a = zero_vector(twod)  # Default to zero
             try:
-                new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
+                if self.compute_acceleration:
+                    new_a = self._calculate_object_acceleration(game_history, robot_obj_key, twod)
             except Exception as e:
                 logger.warning(
                     f"Could not calculate acceleration for {team_type.name} robot {robot_id} (key: {robot_obj_key}), setting to zero: {e}"
@@ -142,7 +147,8 @@ class VelocityRefiner(BaseRefiner):
 
         new_ball_a = zero_vector(twod=False)  # Default to zero
         try:
-            new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
+            if self.compute_acceleration:
+                new_ball_a = self._calculate_object_acceleration(game_history, ball_obj_key, twod=False)
         except Exception as e:
             logger.warning(f"Could not calculate acceleration for ball (key: {ball_obj_key}), setting to zero: {e}")
 
@@ -196,15 +202,48 @@ class VelocityRefiner(BaseRefiner):
         except Exception as e:
             raise ValueError(f"Velocity data not available for acceleration for {object_key}: {e}") from e
 
-        # Plain floats, as `.tolist()` of the stacked arrays gave, without stacking them.
-        return self._windowed_average_derivative(
-            [float(ts) for ts, _ in entries],
-            [vec for _, vec in entries],
-            self.ACCELERATION_N_WINDOWS,
-            self.ACCELERATION_WINDOW_SIZE,
-            twod,
-            log_prefix="ACCEL",
-        )
+        return self._acceleration_from_entries(entries, twod)
+
+    def _acceleration_from_entries(self, entries: list, twod: bool) -> Union[Vector2D, Vector3D]:
+        """`_windowed_average_derivative` of the stored `(ts, velocity)` entries.
+
+        Robots (2-D, twelve per frame) read the entries in place, with the same additions in
+        the same order, so the result is the same float; the ball goes through the general
+        helper.
+        """
+        if not twod or any(len(vec) != 2 for _, vec in entries):
+            # Plain floats, as `.tolist()` of the stacked arrays gave, without stacking them.
+            return self._windowed_average_derivative(
+                [float(ts) for ts, _ in entries],
+                [vec for _, vec in entries],
+                self.ACCELERATION_N_WINDOWS,
+                self.ACCELERATION_WINDOW_SIZE,
+                twod,
+                log_prefix="ACCEL",
+            )
+        window = self.ACCELERATION_WINDOW_SIZE
+        averages = []  # (ts, vx, vy) per window
+        for start in range(len(entries) - self.ACCELERATION_N_WINDOWS * window, len(entries), window):
+            ts_sum = vx_sum = vy_sum = 0.0
+            for ts, (vx, vy) in entries[start : start + window]:
+                ts_sum += float(ts)
+                vx_sum += vx
+                vy_sum += vy
+            averages.append((ts_sum / window, vx_sum / window, vy_sum / window))
+
+        ax = ay = 0.0
+        valid_segments = 0
+        for (ts0, vx0, vy0), (ts1, vx1, vy1) in zip(averages, averages[1:]):
+            d_ts = ts1 - ts0
+            if d_ts <= 1e-9:
+                continue
+            valid_segments += 1
+            ax += (vx1 - vx0) / d_ts
+            ay += (vy1 - vy0) / d_ts
+        if valid_segments == 0:
+            logger.warning("ACCEL: All dt segments too small or zero. Returning zero.")
+            return zero_vector(True)
+        return Vector2D(ax / valid_segments, ay / valid_segments)
 
     def _extract_time_velocity_np_arrays(
         self, game_history: GameHistory, object_key: ObjectKey, num_points: int

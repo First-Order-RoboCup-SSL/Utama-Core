@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
-from utama_core.custom_referee.geometry import RefereeGeometry
+from utama_core.custom_referee.geometry import CORNER_INFIELD_OFFSET, RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
-from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
+from utama_core.custom_referee.rules.last_touch import (
+    infer_last_touch_team,
+    touching_robot,
+    touching_team,
+)
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 
@@ -21,18 +26,32 @@ _INFIELD_OFFSET = 0.25  # metres inside the boundary for a playable free-kick pl
 # offset above leaves only _INFIELD_OFFSET of clearance on EACH line simultaneously
 # (as little as 0.08m observed live, see _nearest_infield_point's docstring), which
 # is robot-body scale. Deeper offset used only when both axes are being clamped.
-_CORNER_INFIELD_OFFSET = 0.5
+_CORNER_INFIELD_OFFSET = CORNER_INFIELD_OFFSET
 
 
 class OutOfBoundsRule(BaseRule):
-    """Fires a free kick for the non-touching team when the ball leaves the field."""
+    """Fires a free kick for the non-touching team when the ball leaves the field.
 
-    def __init__(self) -> None:
+    With `aimless_kick` (§6.2.3, Division B only): a ball touched in a team's own
+    half that then crosses the opponent's goal line outside the goal, untouched by
+    anyone else, restarts from where it was touched instead of as a goal kick in
+    the opponent's corner. Without it a blind clearance cost nothing: in
+    tournament_20261005_170958, 388 of 1377 goal kicks were followed within
+    seconds by one at the other end, each team clearing the ball over the far line.
+    """
+
+    def __init__(self, aimless_kick: bool = True) -> None:
+        self._aimless_kick = aimless_kick
         # Last team to have the ball: True = friendly, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
         # The ball's velocity on the previous active-play frame (see `infer_last_touch_team`).
         self._prev_ball_v: Optional[tuple[float, float]] = None
+        # Where the ball was last touched in this spell of play, None if not since play restarted.
+        self._last_touch_at: Optional[tuple[float, float]] = None
+        # (is_friendly, robot id) of the last robot seen touching the ball in this spell of
+        # play: the foul log charges the exit to it, not to whoever stands nearest the line.
+        self._last_toucher: Optional[tuple[bool, int]] = None
 
     def check(
         self,
@@ -43,6 +62,8 @@ class OutOfBoundsRule(BaseRule):
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
+            self._last_touch_at = None
+            self._last_toucher = None
             return None
 
         ball = game_frame.ball
@@ -52,6 +73,11 @@ class OutOfBoundsRule(BaseRule):
         bx, by = ball.p.x, ball.p.y
 
         # Update last-touch tracking regardless of out-of-bounds state.
+        team = touching_team(game_frame, self._prev_ball_v)
+        if team is not None:
+            self._last_touch_at = (bx, by)
+            robot_id = touching_robot(game_frame, team)
+            self._last_toucher = (team, robot_id) if robot_id is not None else None
         self._last_touch_was_friendly = infer_last_touch_team(
             game_frame, self._last_touch_was_friendly, self._prev_ball_v
         )
@@ -63,7 +89,19 @@ class OutOfBoundsRule(BaseRule):
 
         # Determine which team gets the free kick (non-touching team).
         free_kick_cmd = self._assign_free_kick(game_frame)
-        placement = self._nearest_infield_point(bx, by, geometry)
+        # Over a goal line: a corner kick when the goal's own team touched it last.
+        crossed_friendly_goal_line = (bx > 0) == game_frame.my_team_is_right
+        corner_kick = self._last_touch_was_friendly == crossed_friendly_goal_line
+        if self._is_aimless(bx, geometry, corner_kick):
+            return RuleViolation(
+                rule_name="out_of_bounds",
+                suggested_command=RefereeCommand.STOP,
+                next_command=free_kick_cmd,
+                status_message="Aimless kick",
+                designated_position=self._kick_point(geometry),
+                offending_robots=self._offending_robots(game_frame),
+            )
+        placement = self._nearest_infield_point(bx, by, geometry, corner_kick)
 
         return RuleViolation(
             rule_name="out_of_bounds",
@@ -73,15 +111,49 @@ class OutOfBoundsRule(BaseRule):
                 "Ball out of bounds" if free_kick_cmd is not None else "Ball out of bounds (last touch unknown)"
             ),
             designated_position=placement,
+            offending_robots=self._offending_robots(game_frame),
         )
 
     def reset(self) -> None:
         self._last_touch_was_friendly = None
         self._prev_ball_v = None
+        self._last_touch_at = None
+        self._last_toucher = None
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _is_aimless(self, bx: float, geometry: RefereeGeometry, corner_kick: bool) -> bool:
+        """§6.2.3: "after the ball touched a robot, it subsequently crossed the
+        halfline and then its opponent's goal line outside the goal without
+        touching another robot". A goal kick is the opponent's goal line; the last
+        touch on the far side of the halfway line is the crossing (strictly, so a
+        kick-off from the line itself "cannot be aimless")."""
+        if not self._aimless_kick or corner_kick or self._last_touch_at is None:
+            return False
+        if self._last_touch_was_friendly is None or abs(bx) <= geometry.half_length:
+            return False
+        return self._last_touch_at[0] * bx < 0
+
+    def _offending_robots(self, game_frame: GameFrame) -> tuple[tuple[bool, int], ...]:
+        """The robot that put the ball out, `(is_yellow, id)`, when it was seen touching
+        the ball and belongs to the team the restart is charged to. Empty otherwise (the
+        foul log then falls back to that team's robot nearest the ball)."""
+        if self._last_toucher is None:
+            return ()
+        is_friendly, robot_id = self._last_toucher
+        if is_friendly != self._last_touch_was_friendly:
+            return ()
+        return ((is_friendly == game_frame.my_team_is_yellow, robot_id),)
+
+    def _kick_point(self, geometry: RefereeGeometry) -> tuple[float, float]:
+        """Where the aimless kick was touched, made a legal free-kick spot (§5.3.3):
+        `_INFIELD_OFFSET` inside the lines and clear of both defense areas."""
+        x, y = self._last_touch_at
+        x = max(-(geometry.half_length - _INFIELD_OFFSET), min(geometry.half_length - _INFIELD_OFFSET, x))
+        y = max(-(geometry.half_width - _INFIELD_OFFSET), min(geometry.half_width - _INFIELD_OFFSET, y))
+        return geometry.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
     def _assign_free_kick(self, game_frame: GameFrame) -> Optional[RefereeCommand]:
         """Return the free-kick command for the non-touching team.
@@ -111,9 +183,18 @@ class OutOfBoundsRule(BaseRule):
                 return RefereeCommand.DIRECT_FREE_BLUE
 
     @staticmethod
-    def _nearest_infield_point(bx: float, by: float, geometry: RefereeGeometry) -> tuple[float, float]:
+    def _nearest_infield_point(
+        bx: float, by: float, geometry: RefereeGeometry, corner_kick: bool = False
+    ) -> tuple[float, float]:
         """Return the nearest point on the field boundary, offset inward, and
         clear of both defense areas.
+
+        A ball over a goal line instead restarts in the corner nearer `by`, as
+        §6.2.1–2 place goal and corner kicks: `_CORNER_INFIELD_OFFSET` from both
+        lines for a corner kick (`corner_kick`), `RefereeGeometry.goal_kick_position`
+        for a goal kick. Placing it where it crossed, pushed 1 m off
+        the box, gave the attackers a free kick 2 m in front of goal: 521 of them
+        and 150 goals in tournament_20261004_204810.
 
         The boundary offset alone (`_INFIELD_OFFSET` = 0.25m) is shallower
         than a defense area's depth (`half_defense_depth`, 0.5m on the
@@ -155,6 +236,12 @@ class OutOfBoundsRule(BaseRule):
         whichever axis wasn't the "nearer" one at its raw clamped value.
         """
         near_x_boundary = abs(bx) > geometry.half_length
+        if near_x_boundary:
+            if not corner_kick:
+                return geometry.goal_kick_position(math.copysign(1.0, bx), by)
+            px = math.copysign(geometry.half_length - _CORNER_INFIELD_OFFSET, bx)
+            py = math.copysign(geometry.half_width - _CORNER_INFIELD_OFFSET, by)
+            return geometry.legal_restart_position(px, py, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         near_y_boundary = abs(by) > geometry.half_width
         # Corner detection must look at the RAW exit position on the axis
         # that wasn't clamped too, not just "was this axis itself out of
@@ -181,10 +268,9 @@ class OutOfBoundsRule(BaseRule):
         px = max(-geometry.half_length, min(geometry.half_length, bx))
         py = max(-geometry.half_width, min(geometry.half_width, by))
 
-        # If clamped on x boundary (or a corner pushed the offset deeper than
-        # the raw in-field x already sat from the goal line), offset inward
-        # along x.
-        if near_x_boundary or (near_corner and geometry.half_length - abs(bx) < offset):
+        # If a corner pushed the offset deeper than the raw in-field x already
+        # sat from the goal line, offset inward along x.
+        if near_corner and geometry.half_length - abs(bx) < offset:
             sign = 1.0 if bx > 0 else -1.0
             px = sign * (geometry.half_length - offset)
 

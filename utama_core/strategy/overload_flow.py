@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from utama_core.engine.context import TickContext
+from utama_core.engine.strategy import Partitioner
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
@@ -46,25 +47,40 @@ from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 _POSSESSION_STREAK_TICKS = 90
 
 
-# Consecutive-possession-tick counter, keyed by nothing (a single team only
-# ever runs one `_overload_flow_picker` instance per process, unlike
-# `shielding.py`'s per-robot-id state) -- a `Partitioner` is a plain
-# function with no `mem` of its own, and `prev_partition`'s type is fixed to
-# `dict[str, frozenset[RobotId]]`, which cannot carry a tick count without
-# inventing a fake tactic id (rejected: `Strategy._validate_partition`/
-# `_slot_for` both raise `KeyError` on any key absent from the tactic
-# registry -- confirmed by reading both directly -- so a smuggled key would
-# crash on tick 1, not silently no-op). Module-level state, same pattern
-# `shielding.py`'s `_COMMITTED_ROBOTS` already establishes for picker/skill
-# memory the kernel's own plumbing has no channel for.
-_possession_streak: int = 0
+def _overload_flow_picker() -> Partitioner:
+    """A fresh picker with its own possession streak.
+
+    A `Partitioner` has no `mem`, and `prev_partition` can't carry a tick count,
+    so the streak lives in this closure: one per strategy instance. It was a
+    module-level `global`, which both teams share when they play the same
+    strategy in one process, and which carried from one match to the next in a
+    round-robin worker unless the factory reset it.
+    """
+    streak = 0
+
+    def pick(
+        game: Game,
+        free_robots: frozenset[RobotId],
+        prev_partition: Optional[dict[str, frozenset[RobotId]]],
+        available_tactic_ids: frozenset[str],
+    ) -> dict[str, frozenset[RobotId]]:
+        nonlocal streak
+        ordered = carrier_first(game, free_robots)
+        if not ordered:
+            return {}
+        losing = friendly_closer_to_ball(game) is not True
+        streak = 0 if losing else min(streak + 1, _POSSESSION_STREAK_TICKS)
+        return _allocate(game, ordered, available_tactic_ids, losing, streak)
+
+    return pick
 
 
-def _overload_flow_picker(
+def _allocate(
     game: Game,
-    free_robots: frozenset[RobotId],
-    prev_partition: Optional[dict[str, frozenset[RobotId]]],
+    ordered: list[RobotId],
     available_tactic_ids: frozenset[str],
+    losing: bool,
+    streak: int,
 ) -> dict[str, frozenset[RobotId]]:
     """`_zone_flow_picker`'s allocation, with the own/mid-third give-and-go
     attacker count growing from 3 to 4 only once the possession edge has
@@ -77,16 +93,6 @@ def _overload_flow_picker(
     length -- the streak only ever affects the own/mid-third give-and-go
     count).
     """
-    global _possession_streak
-    ordered = carrier_first(game, free_robots)
-    if not ordered:
-        return {}
-
-    friendly_edge = friendly_closer_to_ball(game)
-    losing = friendly_edge is not True
-    _possession_streak = 0 if losing else min(_possession_streak + 1, _POSSESSION_STREAK_TICKS)
-    streak = _possession_streak
-
     defense_ok = "defense" in available_tactic_ids
     givego_ok = "givego" in available_tactic_ids
     overload_ok = "overload" in available_tactic_ids
@@ -131,17 +137,6 @@ def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     """
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        # `_possession_streak` is module-level, not per-`Strategy` state (see
-        # its own docstring for why) -- a tournament worker process reuses
-        # its process across many matches (`round_robin.py`'s
-        # `ProcessPoolExecutor`), so without this reset a match would start
-        # with whatever streak count the *previous* match on this worker
-        # ended at, silently giving `overload_flow` a false head start (or a
-        # false handicap) at kickoff. `_build` runs exactly once per match
-        # (`AbstractStrategy.__init__` calls it fresh every time), making
-        # this the natural per-match reset point.
-        global _possession_streak
-        _possession_streak = 0
         ctx = TickContext(motion_controller=motion_controller)
         return KernelSchedulerStrategy(
             tactics={
@@ -149,7 +144,7 @@ def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
                 "overload": DecoyOverloadTactic(),
                 "defense": ShadowAndMarkTactic(),
             },
-            partitioner=_overload_flow_picker,
+            partitioner=_overload_flow_picker(),
             outfield_robot_ids=outfield_robot_ids,
             ctx=ctx,
         )

@@ -66,21 +66,30 @@ then costs nothing, and only the candidate plays. `--spot-check F` (default 0.05
 replays that fraction of the reusable starts and compares them with their records; a
 difference means the fingerprint missed a dependency, is printed loudly, evicts the
 records this run used, and makes the run exit non-zero.
+`--play ID [ID ...]` plays the given starts once each (per `--repeats` seed) for
+`--candidate` against `--opponent` and shows what happened, instead of scoring a bank:
+its outcome and signals, and a timeline of the referee, the ball, the robot of each side
+nearest it and every change in the candidate's tactic assignments. The replay
+(`.npz`) and the candidate's match log (`.intentions.jsonl`) are kept under
+`replays/scenario_play/<start id>/`, with the timeline as `.trace.txt` and, with
+`--render png|mp4`, a picture of the whole window. Use it to test a change in a
+situation the round-robin rarely reaches, or to watch a start a bench run flagged.
+
 Still not built: lifecycle promotion (candidate -> validated -> active) or a
 ladder (slow half).
 
 Run from the repository root, for example:
 
     pixi run python tools/scenario_bench.py \\
-        --candidate build_tiki_taka_kernel_strategy \\
+        --candidate build_split_shape_kernel_strategy \\
         --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy
+        --opponent build_high_press_kernel_strategy
 
     pixi run python tools/scenario_bench.py --list-scenarios
 
     pixi run python tools/scenario_bench.py \\
-        --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy --harvest-from replays/tournament_20260905_090000
+        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
+        --opponent build_high_press_kernel_strategy --harvest-from replays/tournament_20260905_090000
 
     # Freeze a bank from a harvest for reuse across sessions:
     pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
@@ -91,17 +100,22 @@ Run from the repository root, for example:
         --merge-into utama_core/scenario_bench/banks/bank_v5.json --save-bank utama_core/scenario_bench/banks/bank_v6.json \\
         --list-scenarios
 
+    # Play two starts and watch them (timeline printed, replay and picture kept):
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \\
+        --play kickoff_center_v1 split_shape_vs_three_slot_t51.9_candidate_kicking \\
+        --candidate high_press --opponent split_shape --render png
+
     # A/B a code change: record at commit A, compare at commit B.
     pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy
+        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy
     pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --opponent build_low_block_kernel_strategy \\
+        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy \\
         --against-results scenario_bench_results/scenario_bench_<commit A>.json
 
     # Score against the frozen bank later, without re-harvesting:
     pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v5.json \\
-        --candidate build_tiki_taka_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy
+        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
+        --opponent build_high_press_kernel_strategy
 """
 
 from __future__ import annotations
@@ -118,10 +132,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Optional
 
+import numpy as np
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools.replay_trace import trace
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, bench_key
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
@@ -132,15 +150,19 @@ from utama_core.scenario_bench.hand_authored_scenarios import (
 )
 from utama_core.scenario_bench.scenario_harvester import harvest_run_dir
 from utama_core.scenario_bench.scenario_scorer import (
+    SIGNALS,
     _resolve_config_name,
     score_scenario,
 )
 from utama_core.scenario_bench.start import (
+    TAGS,
     BenchScenario,
     drop_near_duplicates,
     jittered,
     load_bank,
+    matches_where,
     save_bank,
+    start_tags,
 )
 
 SCHEMA_VERSION = 1
@@ -190,6 +212,8 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
     if args.families:
         wanted = set(args.families)
         scenarios = [s for s in scenarios if s.provenance.family.value in wanted]
+    if args.where:
+        scenarios = [s for s in scenarios if matches_where(start_tags(s), args.where)]
 
     if args.merge_into is not None:
         _bank_id, merged = load_bank(args.merge_into)
@@ -209,9 +233,102 @@ def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
         print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={bank_id})")
 
 
+PLAY_DIR = "scenario_play"  # under REPLAY_BASE_PATH: where --play keeps its replays
+
+
+def _intention_lines(records: Iterable[dict], t0: float) -> list[tuple[float, str]]:
+    """The candidate's tactic assignments from its match log, one line per change, on
+    the replay's clock (seconds from its first frame, `t0` in sim time)."""
+    out = []
+    for r in records:
+        if r.get("event") == "intention":
+            t = r["sim_time"] - t0
+            out.append((t, f"{t:7.2f} tactic {r['tactic_id']} = {r.get('note') or '?'} {r['robot_ids']}"))
+    return out
+
+
+def merge_timeline(trace_lines: list[str], intention_lines: list[tuple[float, str]]) -> list[str]:
+    """`replay_trace.trace` lines and `_intention_lines` in time order; at the same time,
+    the trace line (the state) comes before the tactic change it led to."""
+    rows = [(float(line.split()[0]), 0, line) for line in trace_lines]
+    rows += [(t, 1, line) for t, line in intention_lines]
+    return [line for _t, _k, line in sorted(rows, key=lambda r: (r[0], r[1]))]
+
+
+def play_start(
+    bench_scenario: BenchScenario,
+    *,
+    candidate: str,
+    opponent: str,
+    horizon_s: float,
+    seed: int = 0,
+    render: Optional[str] = None,
+    every: int = 15,
+) -> dict:
+    """Play one start (`jittered` by `seed`) with a replay and match log recorded, and
+    return its result, the timeline and where the files are."""
+    tag = f"{_resolve_config_name(candidate)[6:-16]}_vs_{_resolve_config_name(opponent)[6:-16]}_s{seed}"
+    name = f"{PLAY_DIR}/{bench_scenario.scenario_id}/{tag}"
+    r = score_scenario(
+        jittered(bench_scenario, seed),
+        candidate_config=candidate,
+        opponent_config=opponent,
+        horizon_s=horizon_s,
+        record=name,
+    )
+    out = {"scenario_id": bench_scenario.scenario_id, "seed": seed, "result": _result_dict(r), "timeline": []}
+    npz = REPLAY_BASE_PATH / f"{name}.npz"
+    if r.error is not None or not npz.exists():
+        return out
+    log = npz.with_suffix(".intentions.jsonl")
+    ts = np.load(npz)["ts"]
+    records = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+    timeline = merge_timeline(trace(npz, 0.0, math.inf, every), _intention_lines(records, float(ts[0])))
+    trace_path = npz.with_suffix(".trace.txt")
+    trace_path.write_text("\n".join(timeline) + "\n")
+    out.update(timeline=timeline, replay=str(npz), log=str(log), trace=str(trace_path))
+    # imported here: matplotlib and pygame's drawing aren't needed to score a bank
+    from utama_core.analysis.render_clip import render_clip
+    from utama_core.analysis.render_window import render_window
+
+    if render == "png":
+        out["render"] = render_window(npz, float(ts[0]), float(ts[-1]), npz.with_suffix(".png"))
+    elif render == "mp4":
+        out["render"] = render_clip(npz, float(ts[0]), float(ts[-1]), npz.with_suffix(".mp4"))
+    return out
+
+
+def _print_play(play: dict, lead_in_s: float) -> None:
+    r = play["result"]
+    print(f"\n=== {play['scenario_id']} (seed {play['seed']}) ===")
+    if r.get("error"):
+        print(f"error: {r['error']}")
+        return
+    print(
+        f"outcome {r['outcome']}{' (stalled)' if r.get('stalled') else ''}{' (foul)' if r.get('foul') else ''}; "
+        f"scored after a {lead_in_s:g} s lead-in"
+    )
+    print("signals: " + ", ".join(f"{k} {v:g}" for k, v in (r.get("signals") or {}).items()))
+    print("\n".join(play["timeline"]))
+    for key in ("replay", "log", "trace", "render"):
+        if key in play:
+            print(f"{key}: {play[key]}")
+
+
 def _start_result(bench_scenario: BenchScenario, config: str, opponent: str, horizon_s: float) -> dict:
-    r = score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
-    return {"outcome": int(r.outcome), "foul": bool(r.foul), "stalled": bool(r.stalled), "error": r.error}
+    return _result_dict(
+        score_scenario(bench_scenario, candidate_config=config, opponent_config=opponent, horizon_s=horizon_s)
+    )
+
+
+def _result_dict(r) -> dict:
+    return {
+        "outcome": int(r.outcome),
+        "foul": bool(r.foul),
+        "stalled": bool(r.stalled),
+        "error": r.error,
+        "signals": r.signals,
+    }
 
 
 def _runs(
@@ -236,25 +353,28 @@ def _runs(
         results.append(record["result"])
     return {
         "outcomes": [r["outcome"] for r in results],
+        "signals": [r.get("signals") for r in results],
         "fouls": sum(r["foul"] for r in results),
         "stalls": sum(r["stalled"] for r in results),
         "errors": [r["error"] for r in results if r["error"]],
     }
 
 
-def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) -> tuple[dict[str, list[int]], dict]:
-    """Baseline outcomes from an earlier run's JSON (typically another commit), keyed by
-    scenario id. Refuses a file scored against a different opponent/horizon/repeats:
+def _load_against(path: Path, *, opponent: str, horizon_s: float, repeats: int) -> tuple[dict[str, dict], dict]:
+    """Baseline outcomes and signals from an earlier run's JSON (typically another commit),
+    keyed by scenario id. Refuses a file scored against a different opponent/horizon/repeats:
     those outcomes are not comparable."""
     payload = json.loads(path.read_text())
     for key, want in (("opponent", opponent), ("horizon_s", horizon_s), ("repeats", repeats)):
         if payload.get(key) != want:
             raise SystemExit(f"--against-results {path}: {key} is {payload.get(key)!r}, this run uses {want!r}")
-    outcomes = {
-        row["scenario_id"]: row["candidate_outcomes"] for row in payload["results"] if not row.get("candidate_errors")
+    runs = {
+        row["scenario_id"]: {"outcomes": row["candidate_outcomes"], "signals": row.get("candidate_signals")}
+        for row in payload["results"]
+        if not row.get("candidate_errors")
     }
     source = {"path": str(path), "git_revision": payload.get("git_revision"), "candidate": payload.get("candidate")}
-    return outcomes, source
+    return runs, source
 
 
 def _score_one(
@@ -356,7 +476,7 @@ def _score(
     horizon_s: float,
     repeats: int,
     baseline: Optional[str] = None,
-    against: Optional[dict[str, list[int]]] = None,
+    against: Optional[dict[str, dict]] = None,
     workers: int = 1,
     stop_at_t: Optional[float] = None,
     check_every: int = 100,
@@ -438,11 +558,13 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
         index = len(rows) + 1
         sid = bench_scenario.scenario_id
         print(f"[{index}/{total}] {sid} ({bench_scenario.provenance.family.value})", flush=True)
-        base_outcomes = base["outcomes"] if base else (against or {}).get(sid)
-        delta = None
+        base_run = base or (against or {}).get(sid)
+        base_outcomes = base_run["outcomes"] if base_run else None
+        delta = signal_deltas = None
         # a run that errored (e.g. the start could not be set up) is not an outcome
         if base_outcomes is not None and not cand["errors"] and not (base and base["errors"]):
             delta = statistics.fmean(cand["outcomes"]) - statistics.fmean(base_outcomes)
+            signal_deltas = _signal_deltas(cand.get("signals"), base_run.get("signals"))
         print(
             f"  candidate={cand['outcomes']} baseline={base_outcomes}"
             + (f" delta={delta:+.2f}" if delta is not None else "")
@@ -458,6 +580,9 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
                 "candidate_outcomes": cand["outcomes"],
                 "baseline_outcomes": base_outcomes,
                 "delta": delta,
+                "candidate_signals": cand.get("signals"),
+                "baseline_signals": base_run.get("signals") if base_run else None,
+                "signal_deltas": signal_deltas,
                 "candidate_fouls": cand["fouls"],
                 "candidate_stalls": cand["stalls"],
                 "baseline_fouls": base["fouls"] if base else None,
@@ -466,6 +591,30 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
                 "baseline_errors": base["errors"] if base else [],
             }
         )
+
+
+def _signal_deltas(cand: Optional[list], base: Optional[list]) -> Optional[dict[str, float]]:
+    """Per signal, the candidate's mean over the jittered starts minus the baseline's; None
+    when either side has no signals (an older results file)."""
+    if not cand or not base or any(s is None for s in cand + base):
+        return None
+    return {name: statistics.fmean(s[name] for s in cand) - statistics.fmean(s[name] for s in base) for name in SIGNALS}
+
+
+def _signal_summary(rows: list[dict]) -> dict[str, dict]:
+    """Per signal: mean paired delta over the scenarios that have one, its t, and how many
+    scenarios it changed. Like the outcome delta, |t| under about 2 is within chance."""
+    paired = [r["signal_deltas"] for r in rows if r.get("signal_deltas")]
+    summary = {}
+    for name in SIGNALS:
+        deltas = [d[name] for d in paired]
+        summary[name] = {
+            "mean_delta": statistics.fmean(deltas) if deltas else None,
+            "t": _t(deltas) if len(deltas) > 1 else None,
+            "changed": sum(1 for d in deltas if d != 0),
+            "n_paired": len(deltas),
+        }
+    return summary
 
 
 def _aggregate_by_family(rows: list[dict]) -> list[dict]:
@@ -492,6 +641,7 @@ def _aggregate_by_family(rows: list[dict]) -> list[dict]:
                 # mean over scenarios of the candidate's outcome stdev across jittered starts
                 "seed_noise": statistics.fmean(statistics.pstdev(r["candidate_outcomes"]) for r in family_rows),
                 "candidate_stalls": sum(r["candidate_stalls"] for r in family_rows),
+                "signals": _signal_summary(family_rows),
             }
         )
     return sorted(aggregates, key=lambda a: a["family"])
@@ -517,6 +667,38 @@ def _overall(rows: list[dict]) -> Optional[str]:
 
 def _fmt(x: Optional[float], spec: str = "+.2f") -> str:
     return "-" if x is None else format(x, spec)
+
+
+def _signal_cell(summary: dict) -> str:
+    if summary["mean_delta"] is None:
+        return "-"
+    t = summary["t"]
+    if t is None or not math.isfinite(t):
+        return _fmt(summary["mean_delta"])
+    return f"{_fmt(summary['mean_delta'])} (t {t:+.1f})"
+
+
+def _signal_report(payload: dict) -> list[str]:
+    """The signals table: per signal, the mean paired delta per start and its t, overall and
+    per family."""
+    if not payload.get("signals") or not any(s["n_paired"] for s in payload["signals"].values()):
+        return []
+    families = payload["aggregates"]
+    lines = [
+        "",
+        "## Signals",
+        "",
+        "Mean paired delta per start (candidate minus baseline) of the candidate's signals over the "
+        "scored window, see `docs/signals.md`. Better is the direction that usually helps the candidate.",
+        "",
+        "| Signal | Better | All | " + " | ".join(a["family"] for a in families) + " |",
+        "|---|---|---:|" + "---:|" * len(families),
+    ]
+    for name, direction in SIGNALS.items():
+        cells = [_signal_cell(payload["signals"][name])]
+        cells += [_signal_cell(a["signals"][name]) for a in families]
+        lines.append(f"| {name} | {'more' if direction > 0 else 'less'} | " + " | ".join(cells) + " |")
+    return lines
 
 
 def _markdown_report(payload: dict) -> str:
@@ -556,6 +738,7 @@ def _markdown_report(payload: dict) -> str:
             f"{agg['wins']} | {agg['losses']} | {agg['ties']} | {agg['seed_noise']:.2f} | {agg['candidate_stalls']} |"
         )
 
+    lines.extend(_signal_report(payload))
     lines.extend(
         [
             "",
@@ -598,9 +781,19 @@ def _markdown_report(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def _parse_where(parser: argparse.ArgumentParser, terms: Optional[list[str]]) -> dict[str, set[str]]:
+    where: dict[str, set[str]] = {}
+    for term in terms or []:
+        key, sep, values = term.partition("=")
+        if not sep or key not in TAGS or not values:
+            parser.error(f"--where {term!r}: expected TAG=VALUE[,VALUE] with TAG one of {', '.join(TAGS)}")
+        where[key] = set(values.split(","))
+    return where
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--candidate", help="candidate strategy config, e.g. build_tiki_taka_kernel_strategy")
+    parser.add_argument("--candidate", help="candidate strategy config, e.g. build_split_shape_kernel_strategy")
     parser.add_argument("--baseline", help="baseline strategy config to diff against, run in this process")
     parser.add_argument(
         "--against-results",
@@ -639,7 +832,31 @@ def parse_args() -> argparse.Namespace:
         "(see scenario_harvester.find_open_play_events; default 0)",
     )
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
-    parser.add_argument("--list-scenarios", action="store_true", help="print the loaded bank and exit")
+    parser.add_argument(
+        "--where",
+        nargs="+",
+        default=None,
+        metavar="TAG=VALUE[,VALUE]",
+        help="keep only starts whose situation tags match, e.g. third=defensive ball=theirs,loose "
+        f"(tags: {', '.join(TAGS)}; see start.start_tags and docs/pitch_zones.md)",
+    )
+    parser.add_argument(
+        "--list-scenarios", action="store_true", help="print the loaded bank with each start's tags, and exit"
+    )
+    parser.add_argument(
+        "--play",
+        nargs="+",
+        default=None,
+        metavar="ID",
+        help="play these starts of the loaded bank (one per --repeats seed) for --candidate against --opponent, "
+        "print each one's outcome, signals and timeline, and keep its replay under replays/scenario_play/",
+    )
+    parser.add_argument(
+        "--render",
+        choices=("png", "mp4"),
+        default=None,
+        help="with --play, also draw each start's whole window: trails (png) or a clip (mp4, needs ffmpeg)",
+    )
     parser.add_argument(
         "--load-bank",
         type=Path,
@@ -686,6 +903,11 @@ def parse_args() -> argparse.Namespace:
             parser.error(f"--{', --'.join(missing)} required unless --list-scenarios")
         if args.baseline and args.against_results:
             parser.error("--baseline and --against-results are alternatives")
+    if args.play is not None and (args.baseline or args.against_results or args.stop_at_t is not None):
+        parser.error("--play shows starts for --candidate alone; it takes no baseline or --stop-at-t")
+    if args.render is not None and args.play is None:
+        parser.error("--render needs --play")
+    args.where = _parse_where(parser, args.where)
     if args.merge_into is not None and (args.harvest_from is None or args.save_bank is None):
         parser.error("--merge-into needs --harvest-from and --save-bank")
 
@@ -699,10 +921,9 @@ def main() -> int:
 
     if args.list_scenarios:
         for bs in scenarios:
-            print(
-                f"{bs.scenario_id:<45} {bs.provenance.family.value:<28} "
-                f"{bs.provenance.trigger.value:<14} lifecycle={bs.lifecycle.value}"
-            )
+            tags = " ".join(f"{k}={v}" for k, v in start_tags(bs).items())
+            print(f"{bs.scenario_id:<58} {bs.provenance.family.value:<22} {tags}")
+        print(f"{len(scenarios)} starts")
         if harvest_report:
             print(f"\nHarvest: {harvest_report}")
         return 0
@@ -710,6 +931,27 @@ def main() -> int:
     if not scenarios:
         print("No scenarios loaded (check --families / --harvest-from).", file=sys.stderr)
         return 1
+
+    if args.play is not None:
+        by_id = {bs.scenario_id: bs for bs in scenarios}
+        unknown = [sid for sid in args.play if sid not in by_id]
+        if unknown:
+            print(f"Not in the loaded bank: {', '.join(unknown)} (see --list-scenarios)", file=sys.stderr)
+            return 1
+        failed = False
+        for sid in args.play:
+            for seed in range(args.repeats):
+                play = play_start(
+                    by_id[sid],
+                    candidate=args.candidate,
+                    opponent=args.opponent,
+                    horizon_s=args.horizon,
+                    seed=seed,
+                    render=args.render,
+                )
+                _print_play(play, by_id[sid].lead_in_s)
+                failed |= play["result"]["error"] is not None
+        return 1 if failed else 0
 
     generated_at = datetime.now(timezone.utc)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -757,6 +999,7 @@ def main() -> int:
         "stopped": stopped,
         "reuse": reuse_report,
         "aggregates": aggregates,
+        "signals": _signal_summary(rows),
         "results": rows,
         "harvest_report": harvest_report,
     }

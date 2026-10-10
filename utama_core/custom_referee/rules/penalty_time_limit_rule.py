@@ -2,8 +2,8 @@
 
 "If the ball is still in play after 10 seconds, the game is stopped." A goal is
 then not awarded and "the game is continued by a goal kick for the defending
-team" -- §6.2.1 places a goal kick "0.2 meters from the closest touch line and
-1 meter from the goal line".
+team" (§6.2.1), placed by `RefereeGeometry.goal_kick_position` like every other
+goal kick.
 """
 
 from __future__ import annotations

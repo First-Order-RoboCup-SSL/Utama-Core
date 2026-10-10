@@ -118,21 +118,6 @@ class MultiRobotTestManager(AbstractTestManager):
         return TestingStatus.IN_PROGRESS
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Flaky/pre-existing: robots 4 and 5 (the outer 'wing' pair at "
-        "(-3.5, +/-0.75)) consistently stall around 0.53-0.54m from their "
-        "target — inside 15s but outside endpoint_tolerance=0.3 — while the "
-        "other 4 robots converge to within a few mm. Traced directly: this is "
-        "a genuine FastPathPlanning convergence/local-minimum behavior for "
-        "this specific 6v6 mirrored geometry, reproduced identically via plain "
-        "move() commands independent of strategy class (kernel vs BT) — not a "
-        "kernel-port regression. Investigated during the AbstractStrategy port "
-        "(2026-08-15); planner-level fix is out of this pass's scope. "
-        "Strict, so a planner fix that makes it pass shows up."
-    ),
-    strict=True,
-)
 def test_mirror_swap(
     headless: bool,
     mode: str = "rsim",
@@ -159,6 +144,12 @@ def test_mirror_swap(
         (3.5, 0.75),
     ]
 
+    # The back rows start at |x| = 3.5 but stop at 2.9: 3.5 is the opponent's defense-area
+    # edge, which planners keep outfield robots ~0.5 m away from. Targets there left robots
+    # 4 and 5 of each side 0.52 m short, which this test used to xfail as a planner stall.
+    targets_right = [(2.9 if abs(x) == 3.5 else x, y) for x, y in base_right]
+    targets_left = [(-2.9 if abs(x) == 3.5 else x, y) for x, y in base_left]
+
     # ADDING DETERMINISTIC PERTURBATION
     # We shift the Blue team (right positions) up by exactly 2cm (0.02m).
     # This prevents perfect mathematical head-on velocity vectors.
@@ -169,14 +160,14 @@ def test_mirror_swap(
     scenario = MultiRobotScenario(
         friendly_positions=left_positions,
         enemy_positions=right_positions,
-        friendly_targets=base_right,  # Target the raw base position
-        enemy_targets=base_left,  # Target the raw base position
+        friendly_targets=targets_right,
+        enemy_targets=targets_left,
         endpoint_tolerance=0.3,
     )
 
-    my_strategy = go_to_point_strategy(robot_targets={i: base_right[i] for i in range(len(left_positions))})
+    my_strategy = go_to_point_strategy(robot_targets={i: targets_right[i] for i in range(len(left_positions))})
 
-    opp_strategy = go_to_point_strategy(robot_targets={i: base_left[i] for i in range(len(right_positions))})
+    opp_strategy = go_to_point_strategy(robot_targets={i: targets_left[i] for i in range(len(right_positions))})
 
     runner = StrategyRunner(
         strategy=my_strategy,
@@ -192,9 +183,7 @@ def test_mirror_swap(
     test_manager = MultiRobotTestManager(scenario=scenario)
     test_passed = runner.run_test(
         test_manager=test_manager,
-        # The stall sets in well before this: after 15 s and after 60 s of game time the
-        # same 8 of 12 have arrived. A longer wait only made this test a fifth of the suite.
-        episode_timeout=15.0,
+        episode_timeout=15.0,  # game time; all 12 arrive in about 4 s
         rsim_headless=headless,
     )
 

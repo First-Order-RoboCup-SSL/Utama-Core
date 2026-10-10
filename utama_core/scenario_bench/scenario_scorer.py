@@ -23,6 +23,10 @@ CLI) can compute paired differentials against a baseline strategy on the
 same scenario+seed, not just look at one run in isolation — a single run's
 absolute outcome is not the bench's unit of comparison (see item 14's
 "always as differentials vs the opponent, never absolute").
+
+Each start also measures `SIGNALS`, the candidate's side of the signals in
+`docs/signals.md` over the scored window, from the same `ChanceTracker` the round-robin
+analysis uses: an outcome says how a start ended, these say what happened in it.
 """
 
 from __future__ import annotations
@@ -32,13 +36,16 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
+from utama_core.analysis.chances import ChanceTracker
 from utama_core.analysis.turnover_breakdown import ENEMY_RESTARTS, FLICKER_S, LIVE
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_stats import MatchStats
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.replay.scenario import apply_scenario
 from utama_core.run import StrategyRunner
 from utama_core.scenario_bench.start import BenchScenario
@@ -73,6 +80,36 @@ class ScenarioScoreResult:
     stats: MatchStats
     error: Optional[str] = None
     stalled: bool = False
+    signals: Optional[dict[str, float]] = None  # see `start_signals`
+
+
+# Signal -> +1 where more is usually better for the candidate, -1 where less is.
+SIGNALS = {
+    "shots": 1,
+    "open_shots": 1,  # shots weighted by the share of the goal mouth left open
+    "regains_to_shot": 1,
+    "entries": 1,
+    "real_losses": -1,
+    "shots_faced": -1,
+    "open_shots_faced": -1,
+    "danger_s": -1,  # seconds the opponent held the ball in the candidate's defensive third
+}
+
+
+def start_signals(chances: dict, *, real_losses: int, entries: int) -> dict[str, float]:
+    """The candidate's ("friendly") `SIGNALS` over one start, from `ChanceTracker.result()`."""
+    shots = [s for s in chances["shots"] if s["side"] == "friendly"]
+    faced = [s for s in chances["shots"] if s["side"] == "enemy"]
+    return {
+        "shots": len(shots),
+        "open_shots": round(sum(s["open_goal"] for s in shots), 2),
+        "regains_to_shot": sum(r["shot_after_s"] is not None for r in chances["regains"] if r["side"] == "friendly"),
+        "entries": entries,
+        "real_losses": real_losses,
+        "shots_faced": len(faced),
+        "open_shots_faced": round(sum(s["open_goal"] for s in faced), 2),
+        "danger_s": chances["danger"]["friendly"]["s"],
+    }
 
 
 def _resolve_config_name(name: str) -> str:
@@ -85,7 +122,11 @@ def _resolve_config_name(name: str) -> str:
     return name
 
 
-def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: str) -> StrategyRunner:
+def _build_runner(
+    candidate_config: str, opponent_config: str, *, stats_path: str, record: Optional[str] = None
+) -> StrategyRunner:
+    """`record`: a replay name relative to `REPLAY_BASE_PATH`; when set, the run writes
+    `<record>.npz` (the replay) and `<record>.intentions.jsonl` (the match log) there."""
     build_candidate = getattr(kernel_strategy, _resolve_config_name(candidate_config))
     build_opponent = getattr(kernel_strategy, _resolve_config_name(opponent_config))
     strategy_a = AbstractStrategy(build_kernel_strategy=build_candidate(OUTFIELD_ROBOT_IDS))
@@ -107,10 +148,18 @@ def _build_runner(candidate_config: str, opponent_config: str, *, stats_path: st
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        # The round-robins the banks are harvested from run fpp (tournament_lib.run_match);
+        # The round-robins the banks are harvested from run fpp (match.run_match);
         # a start played with another planner measures something those matches never did.
         control_scheme="fpp",
         stats_path=stats_path,
+        **(
+            {
+                "replay_writer_config": ColumnarReplayWriterConfig(replay_name=record, overwrite_existing=True),
+                "match_log_path": str(REPLAY_BASE_PATH / f"{record}.intentions.jsonl"),
+            }
+            if record is not None
+            else {}
+        ),
     )
 
 
@@ -180,6 +229,7 @@ def score_scenario(
     opponent_config: str,
     horizon_s: float = 20.0,
     stats_path: str = "/tmp/scenario_bench_stats.json",
+    record: Optional[str] = None,
 ) -> ScenarioScoreResult:
     """Run `bench_scenario` for `candidate_config` (as the candidate, always
     friendly/yellow/right) against `opponent_config`, ticking forward
@@ -196,7 +246,7 @@ def score_scenario(
     scenario = bench_scenario.to_scenario()
 
     try:
-        runner = _build_runner(candidate_config, opponent_config, stats_path=stats_path)
+        runner = _build_runner(candidate_config, opponent_config, stats_path=stats_path, record=record)
     except Exception as exc:  # noqa: BLE001 - report as a failed score, not a crash (e.g. unknown config name)
         return ScenarioScoreResult(
             scenario_id=bench_scenario.scenario_id,
@@ -233,19 +283,29 @@ def score_scenario(
         conceded_goal = False
         acc = runner.match_stats
         loss_watch = _RealLossWatch()
+        chance_tracker = ChanceTracker()
+        # Regains count only after a restart into live play, not after the start itself:
+        # an open-play start is already live, and isn't one.
+        live_since = -math.inf
+        prev_cmd = None
         horizon_ticks = int(horizon_s * TICKS_PER_SECOND)
         ticks_run = 0
         for _ in range(horizon_ticks):
+            shots_before = dict(acc._shots) if acc is not None else None
             runner.step_once()
             ticks_run += 1
             frame = runner.my.current_game_frame
             if acc is not None:
                 cmd = frame.referee.referee_command if frame.referee else None
+                if cmd in LIVE and prev_cmd is not None and prev_cmd not in LIVE:
+                    live_since = frame.ts
+                prev_cmd = cmd
                 loss_watch.step(ticks_run / TICKS_PER_SECOND, cmd, acc._turnovers, acc._poss_side)
+                chance_tracker.step(frame, acc, cmd, live_since, shots_before)
             if frame.ball is not None:
                 bx, by = frame.ball.p.x, frame.ball.p.y
-                # Friendly is always right-defending (my_team_is_right=True),
-                # so a ball in the RIGHT goal is conceded by friendly and a
+                # Friendly is always right-defending (my_team_is_right=True; a 20 s
+                # start never reaches half-time, where the teams change ends), so a ball in the RIGHT goal is conceded by friendly and a
                 # ball in the LEFT goal is scored by friendly.
                 if geometry.is_in_right_goal(bx, by):
                     conceded_goal = True
@@ -266,6 +326,11 @@ def score_scenario(
             ticks_run=ticks_run,
             stats=after,
             stalled=len(after.stall_events) > len(before.stall_events),
+            signals=start_signals(
+                chance_tracker.result(),
+                real_losses=loss_watch.losses,
+                entries=after.attacking_third_entries - before.attacking_third_entries,
+            ),
         )
     finally:
         runner.close()

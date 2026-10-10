@@ -29,6 +29,9 @@ def get_structured_object_key(obj: Any, team: TeamType) -> Optional[ObjectKey]:
     return None
 
 
+_BALL_KEY = ObjectKey(TeamType.NEUTRAL, ObjectType.BALL, 0)
+
+
 # Helper to convert a Vector to the stored form: a tuple of Python floats, the
 # values a float64 array of it would hold (and `np.array` of a list of them is
 # that array), without building an array per object per frame.
@@ -49,63 +52,36 @@ class GameHistory:
         # ObjectKey -> AttributeType -> deque[(timestamp: float, value: tuple of floats)]
         self.historical_data: Dict[ObjectKey, Dict[AttributeType, deque[Tuple[float, Tuple[float, ...]]]]] = {}
 
-    def _ensure_attribute_deque_exists(self, object_key: ObjectKey, attribute_type: AttributeType):
-        """Ensures a deque exists for the given object_key and attribute_type."""
-        if object_key not in self.historical_data:
-            self.historical_data[object_key] = {}
-        if attribute_type not in self.historical_data[object_key]:
-            self.historical_data[object_key][attribute_type] = deque(maxlen=self.max_history)
-
-    def _add_attribute_to_history(
-        self,
-        object_key: ObjectKey,
-        attribute_type: AttributeType,
-        timestamp: float,
-        value_vector_obj: Optional[Union[Vector2D, Vector3D]],
-    ):
-        """Adds a single attribute value (as a tuple of floats) to the history."""
-        if value_vector_obj is None:
-            return  # Don't store None values, or decide on a specific handling
-
-        self._ensure_attribute_deque_exists(object_key, attribute_type)
-        try:
-            self.historical_data[object_key][attribute_type].append((timestamp, _vector_to_floats(value_vector_obj)))
-        except TypeError as e:
-            logger.error(f"Error converting vector for {object_key}, {attribute_type}: {e}")
-
-    def _process_entity_for_history(self, entity: Any, entity_key: ObjectKey, timestamp: float):
-        """Helper to process position and velocity for a given entity."""
-        if not entity_key:
-            return
-
-        if hasattr(entity, "p"):
-            self._add_attribute_to_history(entity_key, AttributeType.POSITION, timestamp, entity.p)
-        if hasattr(entity, "v"):
-            self._add_attribute_to_history(entity_key, AttributeType.VELOCITY, timestamp, entity.v)
-        # If you pre-calculate and store acceleration:
-        # if hasattr(entity, "a"):
-        #     self._add_attribute_to_history(entity_key, AttributeType.ACCELERATION, timestamp, entity.a)
-
     def add_game_frame(self, game: GameFrame):
+        # Runs for every object of both teams' frames every tick: one key lookup per object.
         self.raw_games_history.append(game)
         current_ts = game.ts
 
-        # Process Ball
         if game.ball:
-            ball_key = get_structured_object_key(game.ball, TeamType.NEUTRAL)  # Ball is neutral
-            if ball_key:
-                self._process_entity_for_history(game.ball, ball_key, current_ts)
+            self._record(_BALL_KEY, game.ball, current_ts)
 
-        # Process Robots (Friendly and Enemy)
-        robot_groups = [
-            (game.friendly_robots, TeamType.FRIENDLY),
-            (game.enemy_robots, TeamType.ENEMY),
-        ]
-        for robots_dict, team_type in robot_groups:
-            for robot_instance in robots_dict.values():
-                robot_key = get_structured_object_key(robot_instance, team_type)
-                if robot_key:
-                    self._process_entity_for_history(robot_instance, robot_key, current_ts)
+        for robots_dict, team_type in ((game.friendly_robots, TeamType.FRIENDLY), (game.enemy_robots, TeamType.ENEMY)):
+            for robot in robots_dict.values():
+                if isinstance(robot, Robot) and isinstance(robot.id, int):
+                    self._record(ObjectKey(team_type, ObjectType.ROBOT, robot.id), robot, current_ts)
+                else:
+                    get_structured_object_key(robot, team_type)  # logs the warning; nothing is stored
+
+    def _record(self, key: ObjectKey, entity: Union[Robot, Ball], timestamp: float) -> None:
+        """Stores `entity`'s position and velocity, creating its deques on first use."""
+        attributes = self.historical_data.get(key)
+        for attribute_type, vector in ((AttributeType.POSITION, entity.p), (AttributeType.VELOCITY, entity.v)):
+            if vector is None:
+                continue
+            if attributes is None:
+                attributes = self.historical_data[key] = {}
+            history = attributes.get(attribute_type)
+            if history is None:
+                history = attributes[attribute_type] = deque(maxlen=self.max_history)
+            try:
+                history.append((timestamp, _vector_to_floats(vector)))
+            except TypeError as e:
+                logger.error(f"Error converting vector for {key}, {attribute_type}: {e}")
 
     def get_historical_attribute_entries(
         self,

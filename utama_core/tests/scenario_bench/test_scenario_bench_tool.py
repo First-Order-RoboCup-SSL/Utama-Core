@@ -5,6 +5,8 @@ import math
 import sys
 from pathlib import Path
 
+import pytest
+
 from utama_core.scenario_bench.hand_authored_scenarios import (
     all_hand_authored_scenarios,
 )
@@ -119,8 +121,8 @@ def test_an_earlier_run_s_errored_scenarios_are_not_a_baseline(tmp_path):
             }
         )
     )
-    outcomes, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
-    assert outcomes == {"fine": [1]}
+    runs, _ = scenario_bench._load_against(path, opponent="opp", horizon_s=20.0, repeats=1)
+    assert runs == {"fine": {"outcomes": [1], "signals": None}}
 
 
 def _many(n):
@@ -202,3 +204,95 @@ def test_a_clear_difference_is_detected_not_futile():
     deltas = [-1.0] * 30 + [0.0] * 70  # t far past 4
     assert scenario_bench._stop_reason(deltas, stop_at_t=4.0) == "detected"
     assert scenario_bench._stop_reason([0.0], stop_at_t=4.0) is None  # one delta decides nothing
+
+
+def _signals(**changed) -> dict:
+    return {name: 0 for name in scenario_bench.SIGNALS} | changed
+
+
+def test_signals_are_paired_per_start_and_summarised_with_their_t(monkeypatch):
+    # the candidate concedes 3 s more danger on every other start and is otherwise the same
+    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats, *_reuse):
+        worse = config == "cand" and int(bench_scenario.scenario_id[1:]) % 2 == 0
+        signals = _signals(danger_s=3.0 if worse else 0.0)
+        return {"outcomes": [0] * repeats, "signals": [signals] * repeats, "fouls": 0, "stalls": 0, "errors": []}
+
+    monkeypatch.setattr(scenario_bench, "_runs", fake_runs)
+    rows, _ = scenario_bench._score(
+        _many(10), candidate="cand", opponent="opp", horizon_s=1.0, repeats=1, baseline="base"
+    )
+
+    summary = scenario_bench._signal_summary(rows)
+    assert summary["danger_s"]["mean_delta"] == 1.5
+    assert summary["danger_s"]["changed"] == 5
+    assert summary["danger_s"]["t"] == 1.5 / (math.sqrt(2.5) / math.sqrt(10))
+    assert summary["shots"] == {"mean_delta": 0.0, "t": 0.0, "changed": 0, "n_paired": 10}
+
+
+def test_an_earlier_run_without_signals_still_pairs_outcomes():
+    rows = []
+    cand = {"outcomes": [1], "signals": [_signals(shots=1)], "fouls": 0, "stalls": 0, "errors": []}
+    against = {"s000": {"outcomes": [0], "signals": None}}
+    scenario_bench._score_batch(rows, _many(1), [(cand, None)], against, 1)
+
+    assert rows[0]["delta"] == 1.0
+    assert rows[0]["signal_deltas"] is None
+    assert scenario_bench._signal_report({"signals": scenario_bench._signal_summary(rows), "aggregates": []}) == []
+
+
+def test_a_tactic_change_is_placed_after_the_state_at_the_same_time():
+    trace_lines = ["   0.00 STOP ball", "   5.75 NORMAL_START ball", "   6.00 NORMAL_START ball"]
+    records = [
+        {"event": "referee", "sim_time": 0.0},
+        {"event": "intention", "sim_time": 5.77, "tactic_id": "attack", "note": "GiveAndGoTactic", "robot_ids": [1, 2]},
+        {"event": "trace", "sim_time": 5.9, "key": "x", "value": 1},
+    ]
+    intentions = scenario_bench._intention_lines(records, t0=0.02)
+
+    assert intentions == [(5.75, "   5.75 tactic attack = GiveAndGoTactic [1, 2]")]
+    assert scenario_bench.merge_timeline(trace_lines, intentions) == [
+        "   0.00 STOP ball",
+        "   5.75 NORMAL_START ball",
+        "   5.75 tactic attack = GiveAndGoTactic [1, 2]",
+        "   6.00 NORMAL_START ball",
+    ]
+
+
+def test_play_records_a_start_and_returns_its_timeline(tmp_path, monkeypatch):
+    from utama_core.replay import columnar_writer
+    from utama_core.scenario_bench import scenario_scorer
+
+    for module in (scenario_bench, scenario_scorer, columnar_writer):
+        monkeypatch.setattr(module, "REPLAY_BASE_PATH", tmp_path)
+    start = next(bs for bs in all_hand_authored_scenarios() if bs.scenario_id == "kickoff_center_v1")
+
+    play = scenario_bench.play_start(start, candidate="high_press", opponent="split_shape", horizon_s=1.0)
+
+    assert play["result"]["error"] is None
+    assert set(play["result"]["signals"]) == set(scenario_bench.SIGNALS)
+    folder = tmp_path / scenario_bench.PLAY_DIR / "kickoff_center_v1"
+    assert play["replay"] == str(folder / "high_press_vs_split_shape_s0.npz")
+    for suffix in (".npz", ".intentions.jsonl", ".trace.txt"):
+        assert (folder / f"high_press_vs_split_shape_s0{suffix}").exists()
+    assert "PREPARE_KICKOFF" in play["timeline"][0]
+    assert (folder / "high_press_vs_split_shape_s0.trace.txt").read_text().splitlines() == play["timeline"]
+
+
+def test_play_takes_no_baseline(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["scenario_bench.py", "--play", "x", "--candidate", "a", "--opponent", "b", "--baseline", "c"],
+    )
+    with pytest.raises(SystemExit):
+        scenario_bench.parse_args()
+    assert "--play shows starts for --candidate alone" in capsys.readouterr().err
+
+
+def test_where_must_name_a_tag_and_a_value(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["scenario_bench.py", "--list-scenarios", "--where", "zone=defensive"])
+    with pytest.raises(SystemExit):
+        scenario_bench.parse_args()
+    assert "expected TAG=VALUE" in capsys.readouterr().err
+    monkeypatch.setattr(sys, "argv", ["scenario_bench.py", "--list-scenarios", "--where", "ball=theirs,loose"])
+    assert scenario_bench.parse_args().where == {"ball": {"theirs", "loose"}}

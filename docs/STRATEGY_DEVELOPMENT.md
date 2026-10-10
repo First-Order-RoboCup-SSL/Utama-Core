@@ -1,7 +1,7 @@
 # Strategy development
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, or `tools/tournament/`/`docs/strategies.md`. Assumes you've read the
+`utama_core/strategy/`, or `tools/evaluation/`/`docs/strategies.md`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
@@ -68,13 +68,13 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 ## Writing and evaluating a strategy
 
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
-each gets. Most new strategies need no new tactic; if one does, propose the tactic first
-(see `AGENTS.md`, minimalism).
+each gets. Most new strategies need no new tactic. When one does, add it as a new module in
+`tactics/` (on a strategy branch, never by changing an existing tactic: see below).
 
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
 the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` that module
-re-exports is discovered by name (`tournament_lib`), so it joins round-robins and the bench as
+re-exports is discovered by name (`match`), so it joins round-robins and the bench as
 `<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
 - `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
@@ -86,8 +86,7 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
 
 `tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
 kernel invariants. Give its partitioner pure-function tests in `tests/strategy/test_<name>.py` (a
-`Game` built by hand, no rsim), and add a catalog row to `docs/strategies.md` with status
-`experimental`.
+`Game` built by hand, no rsim), and add a row to `docs/strategies.md`'s round-robin table.
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
@@ -136,21 +135,34 @@ reaches `main` by pull request:
 1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
    from the main checkout first: pixi needs the environment, and `--reuse` needs
    `replays/match_cache/`, or every match plays again.
-2. Change only `utama_core/strategy/`, `utama_core/tests/strategy/` and `docs/strategies.md`.
-   CI fails a `strategy/*` pull request that changes anything else
+2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
+   `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
+   `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
    (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
-   new tactic, is a separate change on an ordinary branch.
-3. Within that, change only your own strategy's module and its import line in
-   `kernel_strategy.py`. Editing another strategy or `pickers.py` changes the opponents you are
-   scored against; CI can't tell, so the reviewer checks.
+   skill or an engine primitive, is a separate change on an ordinary branch.
+3. Leave the opponents as they are on `main`: either add new strategy modules (plus their import
+   lines in `kernel_strategy.py`) or change exactly one existing strategy, never both, and never
+   `pickers.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
+   a new module and change the copy; making the improvement everyone's is a human change. Your
+   strategy's and tactics' code may not reach outside its module: no import-time effects,
+   no module-level state (keep state in the factory's closure), no imports of another strategy,
+   no changing attributes of what it imports. CI checks all of this statically, from `main`'s
+   copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
+   directly, not through `kernel_strategy.py`.
 4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger
    than your own matches means the cache is stale (shared code changed since it was filled).
-   Let it run anyway (a full round-robin is about 10 minutes on 15 workers): the other
+   Let it run anyway (a full round-robin of 600 s matches has taken from about 1 h 50 min, on 15 workers plugged in, to 4.7 h for `tournament_20261005_170958`; matches are now two halves of 300 s of playing time: about 710 s of sim time on average by the final run's stoppages, 785 s in two measured matches, so expect roughly 20-30% longer): the other
    strategies' matches run `main`'s code, so they refill the cache for everyone.
 5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
    ran one. An agent never merges: a person reviews and merges.
+
+Several branches can be worked on at once, each in its own worktree; they share
+`replays/match_cache/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
+concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
+more of them at once. How to organise a search (how many in parallel, which ideas) is up to
+whoever runs it.
 
 ## Observability — use these before adding a debug print
 
@@ -158,7 +170,7 @@ reaches `main` by pull request:
   intention row per slot-assignment *change*; call `ctx.match_log.trace(tick, sim_time, key,
   value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
   `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
-  `tactics/give_and_go.py`. Enable with `match_log_path=` or `tournament_lib.run_match(...,
+  `tactics/give_and_go.py`. Enable with `match_log_path=` or `match.run_match(...,
   run_dir=...)`; read back with `load_jsonl(path)`.
 - **`render_window()` / `render_around_event()`** (`analysis/render_window.py`) — PNG of
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
@@ -166,10 +178,17 @@ reaches `main` by pull request:
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
-  committed clips: `demo_clips/README.md`.
+<<<<<<< HEAD
+  committed clips: `assets/clips/README.md`.
+- **`docs/strategies.md`** — every factory, whether a round-robin plays it or it is retired,
+  and the latest results.
+- **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+=======
+  committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every factory's status and the latest results. `baseline`
   strategies aren't meant to win; don't tune them to.
-- **`tools/tournament/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+- **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
+>>>>>>> repo-cleanup
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
   `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).
@@ -211,26 +230,57 @@ tick, so a baseline recorded in one mode is only comparable with a candidate run
 
 ## Reading a tournament run
 
-Every saved `round_robin.py` run prints these sections and writes the same data to
-`replays/<run>/summary.json`. Look here before adding a new metric: it probably exists.
-
-| Printed section | `summary.json` key | What it tells you | Caveat |
-|---|---|---|---|
-| Standings, STRATEGIES | `strategies` | per strategy: W-D-L, goals, shots, passes, entries, fouls, real losses, `stalled` | a stalled match stays in W-D-L, flagged |
-| LOSS KINDS | `strategies[*].real_loss_kinds_as_a` | where each strategy gives the ball away: tackled, kicked out, shot saved, intercepted, loose ball lost, foul (`turnover_breakdown.TURNOVER_KINDS` and `RESTART_KINDS`) | config_a matches only (the side with an intentions log) |
-| BALL LOSSES | `ball_losses` | the same kinds over the run, fouls by rule, losses by the tactic holding the ball; full tables in `ball_losses.md` | raw `MatchStats.turnovers` is ~40% two robots on one ball flipping "nearest": use real losses |
-| `passes:` line | `ball_losses.receptions` | every pass to `received` / `missed_reception` (reached a teammate, no contact) / `intercepted` / `off_target`; catch rate by receiver facing | config_a only |
-| FOULS | `fouls` | every foul, both sides, by rule, then strategy/tactic of the offending robot | `*` rules name only a team: attributed to its robot nearest the ball |
-| STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `RESTART_STALL` with a one-line diagnosis, `COMMITTED_FROZEN` with the committed tactics; `stall_incidents` merges one freeze seen against two opponents (same kind and ticks, a shared strategy) | a stall may be the strategy, the planner, the referee or the sim |
-| RESTARTS | `restarts` | every kickoff, free kick and penalty: how many reached NORMAL_START and were `taken`, or were `voided` / `stopped_before_kick` / `timeout` / `match_ended` (`analysis/restart_outcomes.py`) | both sides' restarts |
-| — | `run` | git commit, dirty flag, argv | compare runs only at clean commits |
+Every saved `round_robin.py` run prints its sections and writes the same data to
+`replays/<run>/summary.json`. [`docs/signals.md`](signals.md) lists every signal it records
+(and the offline ones), grouped by the question each answers: is something broken, does it
+create chances, keep and move the ball, defend, take restarts. Each comes with where to find
+it, a reference range from the latest round-robin and what an off value usually means. Look
+there before adding a metric: it probably exists.
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that
 never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L), and use
 the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
-## A/B on the scenario bank
+## Play and watch one start
+
+A round-robin only tests a change in the situations its matches happen to reach, and some
+pairings rarely reach the one a change is about (a defensive change, say, against an opponent
+that seldom gets into our third). The bank's starts are real moments from a round-robin, so
+`--play` puts a strategy into one directly and shows what it did:
+
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
+        --play split_shape_vs_three_slot_t51.9_candidate_kicking --candidate high_press \
+        --opponent split_shape --render png
+
+It prints the start's outcome and signals and a timeline: the referee command, the ball, the
+robot of each side nearest it every 0.25 s, and each change in the candidate's tactic
+assignments. The replay, the candidate's match log, the timeline and the picture are kept in
+`replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). One start takes about
+12 s. `--repeats N` plays it from N slightly jittered positions, to see whether what happened
+holds up. A start is robot and ball positions only: both strategies begin it with no memory.
+
+To find starts, tag them by situation with `--where` (names from
+[pitch_zones.md](pitch_zones.md), all from the candidate's side):
+
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
+        --list-scenarios --where third=defensive ball=theirs
+
+| Tag | Values |
+|---|---|
+| `third` | `defensive`, `middle`, `attacking`: where the ball is |
+| `lane` | `left_wing`, `centre`, `right_wing` |
+| `restart` | `ours`, `theirs` (whose kickoff, free kick, penalty or ball placement), `stop`, `live` |
+| `ball` | `ours`, `theirs` (a robot within 0.2 m of it), `loose` |
+| `near` | robots of each side within 1.5 m of the ball, e.g. `2v3` |
+
+`TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`. Trust the
+`restart` tag over the id's `candidate_kicking`: kickoffs and penalties carry that label whoever
+kicks. In `bank_v7` the four hand-authored starts (`kickoff_center_v1`,
+`direct_free_*_near_box_v1`, `open_play_3v2_counter_v1`) are stored mirrored: the candidate's keeper
+starts in the goal it attacks. The anchors are fixed in code, so a bank saved from now on has them
+right; `bank_v7` stays as it is, so its results remain comparable.
+
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
 round-robin even with `--reuse`, or of a change too small to move match results, use

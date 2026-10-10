@@ -9,7 +9,7 @@ from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.pickers import carrier_first
+from utama_core.strategy.pickers import carrier_first, holds_ball
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
@@ -41,14 +41,20 @@ def _three_way_picker(
     remaining = list(ordered)
     partition: dict[str, frozenset[RobotId]] = {}
 
+    # The robot on the ball (a free-kick taker included) attacks. Handed to "press" or "mark"
+    # it clears the ball blind, straight upfield (`kick_upfield`), and the kick ran the length
+    # of the pitch and out over the far goal line: 24 a match, most of three_slot's out-of-bounds
+    # fouls (three_slot_vs_zone_fluid t=87.8: the taker of our free kick in "mark").
+    holder = [remaining.pop(0)] if attack_ok and holds_ball(game, remaining[0]) else []
+
     if press_ok and remaining:
         partition["press"] = frozenset([remaining.pop(0)])
     if mark_ok and len(remaining) >= 2:
         partition["mark"] = frozenset(remaining[:2])
         remaining = remaining[2:]
     if attack_ok:
-        if remaining:
-            partition["attack"] = frozenset(remaining)
+        if holder or remaining:
+            partition["attack"] = frozenset(holder + remaining)
     elif remaining:
         # "attack" unavailable too — nothing left to hand the rest to; leave
         # them off the partition only if every other slot already claimed

@@ -2,7 +2,7 @@
 
 `tools/motion_planning_benchmark.py` runs `fpp`, `dwa` and `trajsample` through the same
 `StrategyRunner` + headless rsim path and writes raw JSON plus a Markdown table to
-`benchmark_results/`. It is a benchmark/regression report, not a replacement for unit tests of
+`benchmark_results/` (gitignored). It is a benchmark/regression report, not a replacement for unit tests of
 algorithm internals (bang-bang endpoint invariants, FPP collision-kernel equivalence, ...).
 
 ```bash
@@ -32,6 +32,10 @@ unless `--allow-failures`; `--output-dir PATH` redirects output.
 | `overtaking` | Passing an opponent that follows a point ahead on the same line at 0.5 m/s | 20s | 0.20m |
 | `grid_intersection` | Four moving robots, four crossing points | 30s | 0.25m |
 | `mirror_swap` | Dense 6v6 yielding and convergence (2cm symmetry-breaking offset) | 45s | 0.30m |
+| `ball_scrum` | A run to a support spot just past three robots circling the ball at 0.5 m/s, a marker crossing the lane | 15s | 0.20m |
+| `recovery_run` | A run back past a 2v2 pack circling the ball, an opponent runner crossing in front | 15s | 0.20m |
+| `wing_switch` | Two teammates cross just ahead of a teammate on the ball, an opponent shuttling across | 15s | 0.20m |
+| `kickoff_reset` | Ten robots from a corner scramble to the kick-off formation (real positions from a replay) | 20s | 0.20m |
 | `narrow_passage` | Threading a 0.24m gap between two stationary robots | 10s | 0.15m |
 | `head_on_swap` | Two robots swap positions driving straight at each other | 10s | 0.20m |
 | `field_boundary_corner` | Target just inside a field corner | 10s | 0.15m |
@@ -45,9 +49,23 @@ unless `--allow-failures`; `--output-dir PATH` redirects output.
 Opponents with a target or a moving target point drive with the selected scheme; the others stay
 put (`sudden_obstacle`'s is teleported into the corridor).
 
-Latest full run: `benchmark_results/motion_planning_20261003_071923.md` (1.5 min wall for all 57
-cells). fpp passes 18 of 19 (`mirror_swap` times out, 8 of 12 robots home, no collision);
-trajsample fails `mirror_swap` with a collision; dwa collides in 9.
+The four crowd scenarios (`ball_scrum` to `kickoff_reset`) are built on where crowds form in a
+match. In the 2026-10-10 round-robin a moving robot had 3 or more robots within 1 m 40% of the
+time; those crowds were within 1.5 m of the ball 66% of the time, with the robot at about
+0.8 m/s and its neighbours at 0.5 m/s. `mirror_swap`, twelve robots head-on at full speed, is a
+stress test beyond that. In them robots circling the ball keep moving after they count as
+arrived, so the path ratio is not meaningful there; compare time and passes.
+
+The trajsample planner's random sampler is seeded with 0, so `--repeats` gives the same run each
+time: one seed is one draw. To compare two versions of that planner, run several seeds (the
+planner's `random.Random(0)`) and count passes; a single seed can flip a crowded scenario either
+way.
+
+Latest full run: [`motion_planning_results.md`](motion_planning_results.md) (about 1.5 min wall for all
+57 cells, before the crowd scenarios). fpp and trajsample pass all 19; dwa collides in 9. `mirror_swap` used to time out for
+fpp because four targets sat on the opponent's defense-area edge, which planners keep outfield
+robots away from; its back-row targets are now at |x| = 2.9. To record a new full run, copy its `.md`
+over `motion_planning_results.md`.
 
 ## Pass/fail and metrics
 

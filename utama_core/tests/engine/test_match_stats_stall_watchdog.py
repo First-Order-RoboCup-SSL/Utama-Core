@@ -465,3 +465,23 @@ def test_restart_stall_says_why(ball_xy, enemy_xy, expected):
 
     (event,) = [e for e in acc.finalize().stall_events if e.kind == "RESTART_STALL"]
     assert expected in event.diagnosis
+
+
+def test_committed_frozen_says_who_holds_the_ball():
+    """A COMMITTED_FROZEN stall used to carry no diagnosis, so overload_flow's 10 s freeze
+    (tournament_20261003_102921: a decoy chasing a ball the enemy held) read as just
+    "robots 3, 4 frozen"."""
+    acc = MatchStatsAccumulator()
+    for i in range(int(12 / TICK_DT)):
+        frame = _custom_frame(
+            (i + 1) * TICK_DT,
+            RefereeCommand.FORCE_START,
+            ball_xy=(1.0, 0.0),
+            friendly_xy=(1.5, 0.0),
+            enemy_xy=(1.1, 0.0),
+            enemy_has_ball=True,
+        )
+        acc.record_tick(frame, committed_tactics={"overload": (1,)})
+    (event,) = acc.finalize().stall_events
+    assert event.kind == "COMMITTED_FROZEN"
+    assert event.diagnosis == "enemy 2 holds the ball; committed 1: 0.50m"

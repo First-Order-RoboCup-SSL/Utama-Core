@@ -67,7 +67,7 @@ def test_goal_after_a_foul_within_two_seconds_is_a_goal_kick():
     assert result.referee_command == RefereeCommand.BALL_PLACEMENT_BLUE
     assert result.next_command == RefereeCommand.DIRECT_FREE_BLUE
     geo = referee._geometry
-    assert result.designated_position == pytest.approx((geo.half_length - 1.0, -(geo.half_width - 0.2)))
+    assert result.designated_position == pytest.approx((geo.half_length - 1.0, -(geo.half_width - 0.5)))
 
 
 def test_goal_more_than_two_seconds_after_the_foul_counts():

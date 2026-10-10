@@ -10,7 +10,7 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   the other configs' fingerprints alone; editing `pickers.py` moves every config that
   imports it.
 - `base_fingerprint(entry)`: everything both sides share, from the module that plays the
-  match (`tools.tournament.tournament_lib` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
+  match (`tools.evaluation.match` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
   bench): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
   next to that code (referee profiles), both pixi environments (every installed package's
   name, version and build), the installed robosim binary, the CPU model and the
@@ -45,7 +45,7 @@ from typing import Iterable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
-ROUND_ROBIN_ENTRY = "tools.tournament.tournament_lib"
+ROUND_ROBIN_ENTRY = "tools.evaluation.match"
 BENCH_ENTRY = "utama_core.scenario_bench.scenario_scorer"
 # `scenario_bench._runs` plays a start through these two; the bench CLI itself only reports.
 BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.start")
@@ -491,7 +491,7 @@ def match_key(
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     recorded: bool = True,
 ) -> str:
-    """Key of one `tournament_lib.run_match` call: same key, same result. `recorded` is
+    """Key of one `match.run_match` call: same key, same result. `recorded` is
     whether it ran with a `run_dir` (the match log and stats recorder are then live)."""
     settings = {
         "duration_seconds": duration_seconds,
@@ -533,5 +533,5 @@ def bench_key(graph: CodeGraph, start: dict, candidate: str, opponent: str, *, h
 
 
 def config_names(graph: CodeGraph) -> list[str]:
-    """The round-robin's configs, as `tournament_lib._CONFIG_NAMES` finds them, from source."""
+    """The round-robin's configs, as `match._CONFIG_NAMES` finds them, from source."""
     return sorted(n for n in graph.factory_modules if n != "build_default_kernel_strategy")

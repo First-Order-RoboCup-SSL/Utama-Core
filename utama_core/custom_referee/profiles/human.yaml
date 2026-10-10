@@ -6,6 +6,7 @@ rules:
   out_of_bounds:
     enabled: false
     free_kick_assigner: "last_touch"
+    aimless_kick: true   # §6.2.3, Division B only
   defense_area:
     enabled: false
     max_defenders: 1
@@ -67,3 +68,4 @@ game:
     direct_free_to_normal: false
     ball_placement_to_next: false
     normal_start_to_force: false
+    end_of_half: false              # Operator ends the halves

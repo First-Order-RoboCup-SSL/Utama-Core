@@ -8,6 +8,7 @@ import math
 from typing import Optional
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.referee_constants import PENALTY_MARK_HALF_FIELD_RATIO
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.profiles.profile_loader import AutoAdvanceConfig
@@ -15,7 +16,7 @@ from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.team_info import TeamInfo
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.referee_command import CLOCK_RUNS, RefereeCommand
 from utama_core.entities.referee.stage import Stage
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,9 @@ _BALL_CLEAR_DIST = 0.5  # metres — all robots must be this far from ball befor
 _KICKER_READY_DIST = 0.3  # metres — kicker must be within this distance to trigger free kick start
 _PLACEMENT_DONE_DIST = 0.15  # metres — ball within this dist of target → placement complete
 _AUTO_ADVANCE_DELAY = 2.0  # seconds — readiness must be sustained this long before play starts
+# A kickoff waits for every robot to be in its own half; a robot that can't get there (stuck,
+# lost by vision) holds it up at most this long past prepare_duration_seconds.
+_KICKOFF_POSITIONING_CAP_S = 10.0
 # Seconds a STOP can wait on _all_robots_clear() before advancing anyway. A
 # real GC operator would eventually force it through if a robot never backs
 # off; without this, one robot that fails to clear the ball (whatever the
@@ -54,6 +58,8 @@ _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 # even if nobody kicked it. A Defender Too Close foul (§8.4.3) restarts the clock.
 _FREE_KICK_TIMEOUT_SECONDS = 10.0
 
+
+_PLAYING_STAGES = frozenset({Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF})
 
 # A PRE stage and the stage it becomes when play starts.
 _PRE_TO_ACTIVE = {
@@ -109,11 +115,17 @@ class GameStateMachine:
         self.command = RefereeCommand.HALT
         self.command_counter = 0
         self.command_timestamp = 0.0
+        # Which team defends the +x goal, as the game controller's `blue_team_on_positive_half`:
+        # taken from the first frame seen, swapped when the teams change ends at half-time.
+        self.blue_team_on_positive_half: Optional[bool] = None
 
         self.stage = self._initial_stage
         # Seeded by seed_clock() after the first valid game frame is available.
         self.stage_start_time: Optional[float] = None
         self.stage_duration = self._half_duration_seconds
+        # Playing time of the current stage: only the time spent under a `CLOCK_RUNS` command.
+        self._stage_played = 0.0
+        self._clock_time: Optional[float] = None  # when `_stage_played` was last brought up to date
 
         self.yellow_team = TeamInfo(
             name="Yellow",
@@ -174,7 +186,7 @@ class GameStateMachine:
         self._advance2_ready_since: float = math.inf  # PREPARE_* → NORMAL_START
         self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
-        # Last Defender Too Close foul; restarts the free kick's clock.
+        # First Defender Too Close foul of the current free kick; restarts its clock.
         self._defender_too_close_at: float = -math.inf
 
         # Cooldown: don't process a new violation within this window.
@@ -230,6 +242,16 @@ class GameStateMachine:
         """Process one tick.  Apply violation if not in cooldown.  Return RefereeData."""
         if self.stage_start_time is None:
             self.stage_start_time = current_time
+        if self.blue_team_on_positive_half is None and game_frame is not None:
+            yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
+            self.blue_team_on_positive_half = not yellow_is_right
+        # The command in force since the last tick decides whether that time was playing time.
+        if self._clock_time is not None and self.command in CLOCK_RUNS:
+            self._stage_played += current_time - self._clock_time
+        self._clock_time = current_time
+
+        if self.stage == Stage.POST_GAME:
+            return self._generate_referee_data(current_time)
 
         if violation is not None and self._can_transition(current_time):
             self._apply_violation(violation, current_time)
@@ -282,13 +304,20 @@ class GameStateMachine:
         # ----------------------------------------------------------------
         # Auto-advance 2a: PREPARE_KICKOFF_* → NORMAL_START
         # Fires after prepare_duration_seconds AND one attacker is inside
-        # the centre circle, sustained for _AUTO_ADVANCE_DELAY seconds.
+        # the centre circle AND every robot is in its own half (or
+        # _KICKOFF_POSITIONING_CAP_S has passed), sustained for
+        # _AUTO_ADVANCE_DELAY seconds.
         # ----------------------------------------------------------------
         elif self._auto_advance.prepare_kickoff_to_normal and self.command in self._PREPARE_KICKOFF_COMMANDS:
+            waited = current_time - self._prepare_entered_time
             ready = (
-                (current_time - self._prepare_entered_time) >= self._prepare_duration_seconds
+                waited >= self._prepare_duration_seconds
                 and game_frame is not None
                 and self._kicker_in_centre_circle(self.command, game_frame)
+                and (
+                    waited >= self._prepare_duration_seconds + _KICKOFF_POSITIONING_CAP_S
+                    or self._all_robots_in_own_half(game_frame)
+                )
             )
             if ready:
                 if self._advance2_ready_since == math.inf:
@@ -473,7 +502,48 @@ class GameStateMachine:
             logger.info("Auto-advanced STOP → FORCE_START after goal (force-start profile mode)")
 
         self._start_half_if_play_started(current_time)
+        self._end_half_if_time_is_up(current_time)
         return self._generate_referee_data(current_time)
+
+    def _end_half_if_time_is_up(self, timestamp: float) -> None:
+        """When a half's playing time has run out: after the first half, a 0 s half-time and a
+        second half kicked off by the team that didn't kick off the first; after the second,
+        POST_GAME. At half-time the teams change ends: `blue_team_on_positive_half` swaps, and
+        `StrategyRunner` follows it."""
+        if (
+            not self._auto_advance.end_of_half
+            or self.stage not in _PLAYING_STAGES
+            or self._stage_played < self.stage_duration
+        ):
+            return
+        self.command = RefereeCommand.STOP
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self._stop_entered_time = timestamp
+        self._last_transition_time = timestamp
+        if self.stage == Stage.NORMAL_FIRST_HALF:
+            logger.info("First half over — half-time: the teams change ends, then the second half")
+            self.advance_stage(Stage.NORMAL_SECOND_HALF_PRE, timestamp)
+            if self.blue_team_on_positive_half is not None:
+                self.blue_team_on_positive_half = not self.blue_team_on_positive_half
+            kickoff = (
+                RefereeCommand.PREPARE_KICKOFF_BLUE
+                if self._kickoff_team_is_yellow
+                else RefereeCommand.PREPARE_KICKOFF_YELLOW
+            )
+            # As after a goal: the ball goes back to the centre, then the kick-off.
+            self.next_command = self._ball_placement_command_for(kickoff)
+            self._post_ball_placement_command = kickoff
+            self.ball_placement_target = (0.0, 0.0)
+            self.status_message = "Half-time"
+        else:
+            logger.info("Second half over — full time")
+            self.advance_stage(Stage.POST_GAME, timestamp)
+            self.next_command = None
+            self._post_ball_placement_command = None
+            # No position: StrategyRunner turns a STOP with one into a FORCE_START in the sim.
+            self.ball_placement_target = None
+            self.status_message = "Full time"
 
     def _start_half_if_play_started(self, timestamp: float) -> None:
         """A PRE stage becomes its playing stage once play starts, however it started:
@@ -491,6 +561,21 @@ class GameStateMachine:
         bx, by = ball.p.x, ball.p.y
         for r in list(game_frame.friendly_robots.values()) + list(game_frame.enemy_robots.values()):
             if math.hypot(r.p.x - bx, r.p.y - by) < _BALL_CLEAR_DIST:
+                return False
+        return True
+
+    def _all_robots_in_own_half(self, game_frame: "GameFrame") -> bool:
+        """Every robot in its own half, as the rulebook's kick-off requires: up to its radius over
+        the halfway line. After the teams change ends at half-time every robot has the length of
+        the pitch to cross, and the kick-off used to start as soon as the kicker reached the
+        circle, with robots of both teams still in the wrong half."""
+        yellow_is_right = game_frame.my_team_is_right == game_frame.my_team_is_yellow
+        for robots, is_yellow in (
+            (game_frame.friendly_robots, game_frame.my_team_is_yellow),
+            (game_frame.enemy_robots, not game_frame.my_team_is_yellow),
+        ):
+            own_sign = 1.0 if is_yellow == yellow_is_right else -1.0
+            if any(r.p.x * own_sign < -ROBOT_RADIUS for r in robots.values()):
                 return False
         return True
 
@@ -635,6 +720,7 @@ class GameStateMachine:
         """
         if self.stage_start_time is None:
             self.stage_start_time = timestamp
+        self._clock_time = timestamp
         self.command_timestamp = timestamp
         # Push all "entered-at" sentinels to the new timebase so that
         # cooldowns / durations are not immediately satisfied.
@@ -744,11 +830,29 @@ class GameStateMachine:
             self.next_command = None
         logger.info("Referee command force-set to: %s", command.name)
 
+    def resume_from_halt(self, timestamp: float) -> bool:
+        """Leave HALT for STOP, keeping the restart queued when the HALT came (`force_command`
+        clears it). STOP's own auto-advance then continues that restart once every robot is clear
+        of the ball. Returns whether a restart is queued; with none, the caller decides how play
+        resumes."""
+        self.command = RefereeCommand.STOP
+        self.command_counter += 1
+        self.command_timestamp = timestamp
+        self._stop_entered_time = timestamp
+        self.status_message = None
+        self._advance2_ready_since = math.inf
+        self._advance3_ready_since = math.inf
+        self._advance4_ready_since = math.inf
+        logger.info("Resuming from HALT (queued: %s)", self.next_command.name if self.next_command else "None")
+        return self.next_command in self._NEEDS_STOP_FIRST or self.next_command == RefereeCommand.FORCE_START
+
     def advance_stage(self, new_stage: Stage, timestamp: float) -> None:
         """Advance the game stage."""
         logger.info("Stage %s → %s", self.stage.name, new_stage.name)
         self.stage = new_stage
         self.stage_start_time = timestamp
+        self._stage_played = 0.0
+        self._clock_time = timestamp
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -817,13 +921,24 @@ class GameStateMachine:
             # command_counter bump reads as a real transition to every
             # other piece of code that watches it, e.g. rule.reset()).
             logger.info("Non-stopping foul detected: %s", violation.rule_name)
-            if violation.rule_name == "keep_out":
+            # §8.4.3 resets the timer on every Defender Too Close foul, and repeat fouls
+            # earn cards. Our cards never take a robot off, so a defender parked inside
+            # 0.5 m (keep_out re-raises every 2 s) held a free kick for the rest of a
+            # match. Only the first foul of each free kick restarts the clock.
+            if violation.rule_name == "keep_out" and self._defender_too_close_at < self.command_timestamp:
                 self._defender_too_close_at = current_time
             return
 
+        interrupted = self.command
         self.command = violation.suggested_command
         self.command_counter += 1
         self.command_timestamp = current_time
+        if violation.next_command is None and interrupted in self._NEEDS_STOP_FIRST:
+            # A stoppage with no restart of its own (DefenseAreaStoppageRule's HALT) in the middle
+            # of a restart: queue that restart again, so play resumes into it, not into open play.
+            if interrupted in self._BALL_PLACEMENT_COMMANDS:
+                self._post_ball_placement_command = self.next_command
+            self.next_command = interrupted
         if self.command == RefereeCommand.STOP:
             # Unlike _handle_goal and force_command, this path never recorded
             # when STOP was entered -- _stop_entered_time was left stale from
@@ -874,7 +989,7 @@ class GameStateMachine:
         )
 
     def _generate_referee_data(self, current_time: float) -> RefereeData:
-        stage_time_left = max(0.0, self.stage_duration - (current_time - self.stage_start_time))
+        stage_time_left = max(0.0, self.stage_duration - self._stage_played)
         return RefereeData(
             source_identifier="custom_referee",
             time_sent=current_time,
@@ -886,7 +1001,7 @@ class GameStateMachine:
             blue_team=copy.copy(self.blue_team),
             yellow_team=copy.copy(self.yellow_team),
             designated_position=self.ball_placement_target,
-            blue_team_on_positive_half=None,
+            blue_team_on_positive_half=self.blue_team_on_positive_half,
             next_command=self.next_command,
             current_action_time_remaining=None,
             status_message=self.status_message,

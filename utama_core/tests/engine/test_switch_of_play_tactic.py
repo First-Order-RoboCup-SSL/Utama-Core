@@ -27,6 +27,7 @@ helper.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from unittest.mock import patch
 
@@ -376,3 +377,58 @@ def test_relay_runner_meets_a_rolling_pass_instead_of_returning_to_its_spot():
     assert target.x == pytest.approx(-1.0)
     assert target.y == pytest.approx(0.0, abs=1e-6)
     assert commands[1].dribble
+
+
+def test_a_lone_carrier_at_the_ball_plays_it_instead_of_holding_it():
+    """Solo allocation (one robot in the slot), the live-traced stall: the robot
+    stopped 0.13 m from a stationary ball, facing it, inside the visual has_ball
+    box but short of contact, and "held" it where it stood for 10 s until
+    no_progress (tournament_20261005_170958, overload_press vs split_shape t=479).
+    With an open lane at the enemy goal it must shoot, not stand still."""
+    zv = Vector3D(0, 0, 0)
+    # my_team_is_right: we attack the goal at -x, so a robot east of the ball faces it and the goal
+    carrier = Robot(
+        id=3,
+        is_friendly=True,
+        has_ball=False,
+        p=Vector2D(0.13, 0.0),
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=math.pi,
+    )
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={3: carrier},
+        enemy_robots={},
+        ball=Ball(p=Vector3D(0.0, 0.0, 0.0), v=zv, a=zv),
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+
+    commands, mem = SwitchOfPlayTactic().tick(
+        game, TickContext(motion_controller=_NullMotionController()), (3,), SwitchOfPlayMem()
+    )
+
+    assert commands[3].kick
+    assert mem.phase == "assess"  # nothing to commit to with one robot
+
+
+def test_a_lone_robot_without_the_ball_fetches_it_even_with_no_shooting_lane():
+    """Copilot on #141: with no lane, `_score_goal` repositions for a shot before it checks
+    possession, so a lone robot 1 m from the ball walked to a shooting spot instead of
+    fetching the ball, and might never get it."""
+    game = _make_relay_game(source_pos=Vector2D(1.0, 0.0), source_has_ball=False)
+    with (
+        patch("utama_core.tactics._pass_and_score.find_best_shot", return_value=(None, None)),
+        patch("utama_core.tactics.switch_of_play.go_to_ball") as mock_go_to_ball,
+        patch("utama_core.tactics._pass_and_score.move") as mock_move,
+    ):
+        mock_go_to_ball.return_value = object()
+        SwitchOfPlayTactic().tick(game, TickContext(motion_controller=_NullMotionController()), (3,), SwitchOfPlayMem())
+
+    mock_go_to_ball.assert_called_once()
+    mock_move.assert_not_called()

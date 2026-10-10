@@ -25,7 +25,7 @@ import numpy as np
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
-from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.referee_command import CLOCK_RUNS, RefereeCommand
 from utama_core.entities.referee.stage import Stage
 
 
@@ -34,11 +34,21 @@ def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
     referee message changes every tick. The sparse sidecar stores a message only when the
     next one differs from this (see `columnar_writer`), and the reader rebuilds the rest."""
     remaining = referee.current_action_time_remaining
+    # The stage clock only runs while a team may play the ball (`CLOCK_RUNS`): in a stoppage
+    # it stands still, and counting it down would store every stoppage tick.
+    stage_left = referee.stage_time_left - (dt if referee.referee_command in CLOCK_RUNS else 0.0)
+    if referee.stage_time_left >= 0:
+        # The custom referee stops its stage clock at 0 (state_machine: max(0, ...)), and in a
+        # round-robin nothing ends the 300 s first-half stage, so it reads 0 for the second
+        # half of every match. Counting on past 0 made every one of those ticks a "change",
+        # and the sidecar stored about half of all ticks. A clock already negative (a real
+        # referee in overtime) keeps counting.
+        stage_left = max(0.0, stage_left)
     return dataclasses.replace(
         referee,
         time_sent=referee.time_sent + dt,
         time_received=referee.time_received + dt,
-        stage_time_left=referee.stage_time_left - dt,
+        stage_time_left=stage_left,
         current_action_time_remaining=None if remaining is None else remaining - round(dt * 1e6),
     )
 
@@ -46,7 +56,7 @@ def advance_clocks(referee: RefereeData, dt: float) -> RefereeData:
 @dataclass
 class ColumnarReplay:
     my_team_is_yellow: bool
-    my_team_is_right: bool
+    my_team_is_right: bool  # at the first tick; see `is_right_at`
     friendly_ids: np.ndarray
     enemy_ids: np.ndarray
     ts: np.ndarray
@@ -68,6 +78,7 @@ class ColumnarReplay:
     stage: np.ndarray
     designated_position: np.ndarray  # (n_ticks, 2), NaN when absent
     sparse_referee: dict[int, RefereeData]  # tick index -> full RefereeData, where it changed
+    side_is_right: Optional[np.ndarray] = None  # (n_ticks,) bool; None in replays from before it was recorded
 
     @property
     def n_ticks(self) -> int:
@@ -102,12 +113,17 @@ class ColumnarReplay:
         return GameFrame(
             ts=float(self.ts[tick]),
             my_team_is_yellow=self.my_team_is_yellow,
-            my_team_is_right=self.my_team_is_right,
+            my_team_is_right=self.is_right_at(tick),
             friendly_robots=friendly_robots,
             enemy_robots=enemy_robots,
             ball=ball,
             referee=referee,
         )
+
+    def is_right_at(self, tick: int) -> bool:
+        """Whether the recorded team defends the right goal at `tick`. Teams change ends at
+        half-time; a replay written before that was recorded has one side throughout."""
+        return self.my_team_is_right if self.side_is_right is None else bool(self.side_is_right[tick])
 
     def _referee_at(self, tick: int) -> Optional[RefereeData]:
         if not self.has_referee[tick]:
@@ -202,4 +218,5 @@ def load_columnar_replay(path: Union[str, Path]) -> ColumnarReplay:
         stage=arrays["stage"],
         designated_position=arrays["designated_position"],
         sparse_referee=sparse_referee,
+        side_is_right=arrays.get("side_is_right"),
     )

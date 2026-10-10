@@ -1,4 +1,4 @@
-from tools.tournament.round_robin import foul_table, stall_incidents, strategy_table
+from tools.evaluation.round_robin import foul_table, stall_incidents, strategy_table
 
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:
@@ -41,6 +41,30 @@ def test_strategy_table_reads_each_side_from_its_own_perspective():
     y = table["build_y_kernel_strategy"]
     assert (y["wins"], y["draws"], y["losses"]) == (0, 1, 1)
     assert (y["matches_as_a"], y["real_losses_as_a"]) == (1, 6)
+
+
+def test_strategy_table_reads_chances_and_pass_progress_for_both_sides():
+    """Chances are measured for both sides, so each config reads its own side of every
+    match; a match without a chances record (stored before they were measured) is left out."""
+    shot = lambda side, scored: {"side": side, "distance_m": 2.0, "open_goal": 0.5, "scored": scored}  # noqa: E731
+    record = {
+        "shots": [shot("friendly", True), shot("friendly", False), shot("enemy", False)],
+        "unshot_goals": {"friendly": 0, "enemy": 0},
+        "regains": [],
+        "danger": {"friendly": {"s": 4.0, "spells": 1}, "enemy": {"s": 8.0, "spells": 2}},
+        "free_kicks": [],
+    }
+    a, b = _result("x", "y", 1, 0), _result("y", "x", 0, 0)
+    a["stats"]["pass_progress_m"], a["stats"]["enemy_pass_progress_m"] = [2.0, 0.0], [-1.0]
+
+    table = strategy_table([a, b], chances_by_match={"x_vs_y": record})
+
+    x, y = table["build_x_kernel_strategy"]["chances"], table["build_y_kernel_strategy"]["chances"]
+    assert (x["matches"], x["shots"], x["conversion"], x["save_rate"]) == (1, 2, 0.5, 1.0)
+    assert (y["matches"], y["shots"], y["save_rate"], y["danger_s_per_match"]) == (1, 1, 0.5, 8.0)
+    assert table["build_x_kernel_strategy"]["pass_progress_m"] == 1.0
+    assert table["build_x_kernel_strategy"]["forward_pass_share"] == 0.5
+    assert table["build_y_kernel_strategy"]["pass_progress_m"] == -1.0
 
 
 def test_strategy_table_counts_stalled_matches_for_both_sides():

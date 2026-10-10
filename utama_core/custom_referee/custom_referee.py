@@ -53,7 +53,7 @@ def _build_active_rules(rules_cfg) -> List[BaseRule]:
         active.append(GoalRule(cooldown_seconds=rules_cfg.goal_detection.cooldown_seconds))
 
     if rules_cfg.out_of_bounds.enabled:
-        active.append(OutOfBoundsRule())
+        active.append(OutOfBoundsRule(aimless_kick=rules_cfg.out_of_bounds.aimless_kick))
 
     if rules_cfg.ball_speed.enabled:
         active.append(BallSpeedRule(max_speed_mps=rules_cfg.ball_speed.max_speed_mps))
@@ -391,6 +391,10 @@ class CustomReferee:
     ) -> None:
         """God-mode override — bypasses the STOP-first guard."""
         self._state.force_command(command, timestamp, ball_placement_target)
+
+    def resume_from_halt(self, timestamp: float) -> bool:
+        """HALT → STOP, keeping any queued restart (`GameStateMachine.resume_from_halt`)."""
+        return self._state.resume_from_halt(timestamp)
 
     def reset(self) -> None:
         """Restore this referee to its just-constructed state (score, command,

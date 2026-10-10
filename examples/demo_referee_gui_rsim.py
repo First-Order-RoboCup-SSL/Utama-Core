@@ -11,7 +11,7 @@ What it does:
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
   - build_tiki_taka_plus_kernel_strategy() builds the give-and-go +
-    final-third decoy-overload kernel strategy (competitive tier, see
+    final-third decoy-overload kernel strategy (see
     docs/strategies.md) so you can watch real tactic assignments in the
     dashboard's Live tab instead of an aimless wandering tactic, and watch
     RefereeOverride interrupt them when you issue commands from the

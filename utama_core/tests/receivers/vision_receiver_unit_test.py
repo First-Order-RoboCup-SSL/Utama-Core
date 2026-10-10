@@ -6,6 +6,9 @@ from utama_core.data_processing.receivers.vision_receiver import (
     RawRobotData,
     VisionReceiver,
 )
+from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+    SSL_WrapperPacket,
+)
 
 
 @dataclass
@@ -116,3 +119,30 @@ if __name__ == "__main__":
     test_process_packet_produces_raw_data()
     test_single_camera_takes_more_recent_frame()
     test_multiple_cameras_put_frames_to_buffer()
+
+
+def test_geometry_only_packet_adds_no_frame():
+    # SSL-Vision and grSim send geometry in packets without a detection. Buffering that absent
+    # detection put an empty camera-0 frame captured at t=0 next to the real frames, halving the
+    # combined frame's timestamp and sending the Kalman prediction across a huge time step.
+    buffers = [deque(maxlen=1) for _ in range(2)]
+    v = VisionReceiver(buffers)
+    geometry_only = SSL_WrapperPacket()
+    field = geometry_only.geometry.field
+    field.field_length, field.field_width, field.goal_width, field.goal_depth, field.boundary_width = (
+        12000,
+        9000,
+        1800,
+        180,
+        300,
+    )
+
+    assert v._handle_packet(SSL_WrapperPacket(), geometry_only.SerializeToString())
+    assert all(len(b) == 0 for b in buffers)
+
+    with_detection = SSL_WrapperPacket()
+    detection = with_detection.detection
+    detection.camera_id, detection.t_capture, detection.t_sent, detection.frame_number = 1, 5.0, 5.0, 1
+    assert v._handle_packet(SSL_WrapperPacket(), with_detection.SerializeToString())
+    assert len(buffers[0]) == 0
+    assert buffers[1][0].ts == 5.0

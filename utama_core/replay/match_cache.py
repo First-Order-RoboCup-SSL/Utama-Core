@@ -4,8 +4,10 @@ An rsim match is deterministic, so a result is a function of `fingerprint.match_
 both sides' code, the shared code and environment, and the run settings. A record holds
 everything `round_robin.py` reads from a played match: the result and its stats, the
 restart episodes (`restart_outcomes.analyse_match`) and the ball-loss record
-(`turnover_breakdown.analyse_match`). No replay is stored; `--pair A B` plays any match
-again, byte for byte.
+(`turnover_breakdown.analyse_match`, with its `chances`). No replay is stored; `--pair A B`
+plays any match again, byte for byte. The analysis code is not in the key: a record keeps
+the analysis it was stored with, so after changing it, refresh the records from a run's
+replays or the spot-check will report the difference.
 
 A fingerprint can miss a dependency (see `fingerprint.py`'s "Known gaps"), so a run also
 replays a sample of the matches it would reuse (`spot_check_sample`) and compares the
@@ -15,6 +17,7 @@ fresh record with the stored one (`differences`).
 from __future__ import annotations
 
 import json
+import os
 import random
 from pathlib import Path
 from typing import Iterable, Optional
@@ -46,7 +49,10 @@ class MatchCache:
     def put(self, key: str, record: dict) -> None:
         path = self.path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        # One temp file per process: several round-robins (one per strategy branch) can share
+        # this cache and store the same match at once. A shared temp file could be renamed away
+        # mid-write by one of them, leaving a torn record and failing the other's rename.
+        tmp = path.with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(json.dumps(_plain(record), sort_keys=True))
         tmp.replace(path)
 

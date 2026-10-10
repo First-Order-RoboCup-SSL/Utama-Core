@@ -10,7 +10,7 @@ asymmetric.
 
 Match-level trust gate, per that same design pass: a match's replay is only
 harvested from when its `<match_tag>.stats.json` (written by
-`tournament_lib.run_match`'s `stats_path`, see `MatchStats.to_json`) exists
+`match.run_match`'s `stats_path`, see `MatchStats.to_json`) exists
 and reports `stall_events == []`. A match with no stats file, or any stall
 event, contributes nothing — this is the gate that would have caught the
 925-file pre-fix contaminated replay run this session found (every one of

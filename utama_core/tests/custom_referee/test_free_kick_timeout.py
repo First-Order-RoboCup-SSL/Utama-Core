@@ -50,3 +50,26 @@ def test_defender_too_close_restarts_the_free_kick_clock():
     sm.step(6.0, keep_out, _frame(6.0))
     assert sm.step(15.9, None, _frame(15.9)).referee_command == RefereeCommand.DIRECT_FREE_YELLOW
     assert sm.step(16.0, None, _frame(16.0)).referee_command == RefereeCommand.FORCE_START
+
+
+def test_only_the_first_defender_too_close_foul_restarts_the_free_kick_clock():
+    """A defender parked inside 0.5 m re-raises keep_out every 2 s; when each foul
+    restarted the clock, the free kick was never forced and held the rest of a match."""
+    from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+    sm = GameStateMachine(half_duration_seconds=300.0, kickoff_team="yellow", n_robots_yellow=3, n_robots_blue=3)
+    sm.seed_clock(0.0)
+    sm.set_command(RefereeCommand.DIRECT_FREE_YELLOW, 0.0)
+    keep_out = RuleViolation(
+        rule_name="keep_out",
+        suggested_command=RefereeCommand.DIRECT_FREE_YELLOW,
+        next_command=None,
+        status_message="Defender too close to ball",
+        offending_teams=(False,),
+        is_stopping=False,
+    )
+    sm.step(2.0, keep_out, _frame(2.0))
+    for t in (4.0, 6.0, 8.0, 10.0):
+        assert sm.step(t, keep_out, _frame(t)).referee_command == RefereeCommand.DIRECT_FREE_YELLOW
+    assert sm.step(11.9, None, _frame(11.9)).referee_command == RefereeCommand.DIRECT_FREE_YELLOW
+    assert sm.step(12.0, None, _frame(12.0)).referee_command == RefereeCommand.FORCE_START

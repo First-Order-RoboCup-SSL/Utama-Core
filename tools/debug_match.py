@@ -1,13 +1,13 @@
 """debug_match.py — one-off ad hoc match runner for tactic debugging.
 
 Run:
-    pixi run python tools/debug_match.py --strategy build_counter_press_kernel_strategy \\
-        --opponent build_low_block_kernel_strategy --duration 90 --headless
+    pixi run python tools/debug_match.py --strategy build_counter_flow_kernel_strategy \\
+        --opponent build_high_press_kernel_strategy --duration 90 --headless
 
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
 bug (`trace_relay_stall.py`, `trace_finish_detail.py`, `check_keeper.py`,
 etc. from the 2026-08-23 `counter_press` investigation were all this same
-~25 lines of setup, copy-pasted and tweaked). Reuses `tournament_lib.py`'s own
+~25 lines of setup, copy-pasted and tweaked). Reuses `match.py`'s own
 match-setup constants/helpers (`N_OUTFIELD`, `OUTFIELD_ROBOT_IDS`,
 `TICKS_PER_SECOND`) rather than redefining them.
 
@@ -42,7 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.tournament_lib import (
+from tools.evaluation.match import (
     _CONFIG_NAMES,
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,

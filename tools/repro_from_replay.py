@@ -53,11 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.tournament.tournament_lib import (
-    N_OUTFIELD,
-    OUTFIELD_ROBOT_IDS,
-    TICKS_PER_SECOND,
-)
+from tools.evaluation.match import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
 from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl
@@ -102,10 +98,10 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         default=None,
-        help="override the friendly (config_a) strategy, e.g. build_tiki_taka_kernel_strategy",
+        help="override the friendly (config_a) strategy, e.g. build_split_shape_kernel_strategy",
     )
     parser.add_argument(
-        "--opponent", default=None, help="override the enemy (config_b) strategy, e.g. build_low_block_kernel_strategy"
+        "--opponent", default=None, help="override the enemy (config_b) strategy, e.g. build_high_press_kernel_strategy"
     )
     parser.add_argument(
         "--trace-out", default="/tmp/repro_from_replay.intentions.jsonl", help="where to write the match_log JSONL"

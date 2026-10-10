@@ -16,8 +16,8 @@ environment" section, item 1, for the dribbler-release writeup, and the
 was nowhere else to keep a rebuildable, git-trackable copy of the fixes.
 
 The patches themselves are also saved as plain diffs at
-`docs/patches/rSim-dribbler-release.diff` and
-`docs/patches/rSim-kick-direction.diff` — those are the reviewable
+`patches/rSim-dribbler-release.diff` and
+`patches/rSim-kick-direction.diff` — those are the reviewable
 artifacts. This directory is the actual buildable source they apply to, so
 whoever picks up the open regression (see roadmap TODO) doesn't have to
 re-clone upstream and re-apply the diffs by hand first.
@@ -34,7 +34,7 @@ re-clone upstream and re-apply the diffs by hand first.
    substep). Now also repositions the ball just clear of the kicker's
    collision envelope and gives it a small outward velocity.
 3. `src/robosim/sslrobot.cpp` — `Kicker::kick()` had two compounding
-   direction bugs (see `docs/patches/rSim-kick-direction.diff` and
+   direction bugs (see `patches/rSim-kick-direction.diff` and
    `docs/roadmap.md`'s "New blocker found, native-simulator-level" writeup
    for full detail):
    - It gated on `isTouchingBall()`, a razor-thin box check (~3cm forward,
@@ -109,7 +109,7 @@ proxy that reads as a failure, because the proxy's assumption (ball stays
 at center) doesn't hold in this particular scenario.
 
 **Verification method:** built genuinely-pristine upstream v1.2 source
-locally (docs/patches/rSim-dribbler-release.diff reverse-applied, plus only
+locally (patches/rSim-dribbler-release.diff reverse-applied, plus only
 the unrelated GCC-13 CMakeLists.txt compile-flag fix re-added to allow the
 build to complete) with the *same local toolchain* as the patched build,
 to rule out a PyPI-wheel-vs-local-build toolchain confound. The pristine

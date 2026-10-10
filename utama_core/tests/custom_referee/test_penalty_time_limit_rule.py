@@ -1,6 +1,6 @@
 """SSL rulebook §5.3.5: a penalty still in play 10 s after its normal start is
 stopped, no goal, and continued by a goal kick for the defending team (§6.2.1:
-0.2 m from the closest touch line, 1 m from the goal line).
+1 m from the goal line, next to the closest touch line).
 
 The referee had no such limit: a penalty's NORMAL_START turned into open play.
 """
@@ -46,7 +46,7 @@ def test_penalty_in_play_at_ten_seconds_becomes_a_goal_kick_for_the_defenders():
     assert v.suggested_command == RefereeCommand.STOP
     assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
     # Yellow on the left attacks the right goal; the ball is on the -y side.
-    assert v.designated_position == pytest.approx((GEO.half_length - 1.0, -(GEO.half_width - 0.2)))
+    assert v.designated_position == pytest.approx((GEO.half_length - 1.0, -(GEO.half_width - 0.5)))
 
 
 def test_blue_penalty_goal_kick_is_in_front_of_the_left_goal():
@@ -54,7 +54,7 @@ def test_blue_penalty_goal_kick_is_in_front_of_the_left_goal():
     _penalty(rule, RefereeCommand.PREPARE_PENALTY_BLUE)
     v = rule.check(_frame(10.0, y=0.3), GEO, RefereeCommand.NORMAL_START)
     assert v.next_command == RefereeCommand.DIRECT_FREE_YELLOW
-    assert v.designated_position == pytest.approx((-(GEO.half_length - 1.0), GEO.half_width - 0.2))
+    assert v.designated_position == pytest.approx((-(GEO.half_length - 1.0), GEO.half_width - 0.5))
 
 
 def test_clock_survives_the_force_start_auto_advance():
