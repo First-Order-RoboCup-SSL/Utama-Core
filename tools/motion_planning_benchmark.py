@@ -108,6 +108,46 @@ def _make_jitter_trajectory(center: Point, seed: int) -> TargetTrajectory:
     return _target
 
 
+def _circling(centre: Point, radius: float, speed: float, phase: float) -> TargetTrajectory:
+    """A point going round `centre` at `speed` m/s, starting at angle `phase`: a
+    robot jostling at the ball. In the round-robin, robots near a moving robot in
+    a crowd move at about 0.5 m/s (median; see `ball_scrum`)."""
+    omega = speed / radius
+    return lambda t: (
+        centre[0] + radius * math.cos(phase + omega * t),
+        centre[1] + radius * math.sin(phase + omega * t),
+    )
+
+
+def _on_circle(centre: Point, radius: float, phase: float) -> Point:
+    return (centre[0] + radius * math.cos(phase), centre[1] + radius * math.sin(phase))
+
+
+def _shuttling(a: Point, b: Point, speed: float) -> TargetTrajectory:
+    """A point going from `a` to `b` and back at `speed` m/s, for ever: a marker
+    or a runner crossing a lane."""
+    length = math.dist(a, b)
+
+    def _target(t: float) -> Point:
+        u = (speed * t / length) % 2.0
+        u = u if u <= 1.0 else 2.0 - u
+        return (a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1]))
+
+    return _target
+
+
+# Where a crowd forms in a match: robots around the ball. In the 2026-10-10
+# round-robin a moving robot had 3+ robots within 1 m 40% of the time and 5+ 13%
+# of the time; such crowds were within 1.5 m of the ball 66% of the time, the
+# moving robot going ~0.8 m/s and its neighbours ~0.5 m/s. `mirror_swap` (twelve
+# robots at full speed head-on) is a stress test beyond that.
+_SCRUM = (0.5, 0.0)
+_SCRUM_R = 0.35
+_THIRD = 2.0 * math.pi / 3.0
+_PACK = (0.0, 0.3)
+_PACK_R = 0.4
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -271,6 +311,95 @@ SCENARIOS = {
             ),
             timeout_s=45.0,
             endpoint_tolerance_m=0.3,
+        ),
+        Scenario(
+            name="ball_scrum",
+            description=(
+                "One robot runs to a support spot just past three robots jostling round the ball,"
+                " a marker crossing its lane."
+            ),
+            friendly_starts=((-2.5, 1.2), _on_circle(_SCRUM, _SCRUM_R, 2 * _THIRD)),
+            friendly_targets=((1.3, -0.4), _on_circle(_SCRUM, _SCRUM_R, 2 * _THIRD)),
+            friendly_target_trajectories={1: _circling(_SCRUM, _SCRUM_R, 0.5, 2 * _THIRD)},
+            enemy_starts=(_on_circle(_SCRUM, _SCRUM_R, 0.0), _on_circle(_SCRUM, _SCRUM_R, _THIRD), (-1.0, 1.0)),
+            enemy_targets=(_on_circle(_SCRUM, _SCRUM_R, 0.0), _on_circle(_SCRUM, _SCRUM_R, _THIRD), (-1.0, 1.0)),
+            enemy_target_trajectories={
+                0: _circling(_SCRUM, _SCRUM_R, 0.5, 0.0),
+                1: _circling(_SCRUM, _SCRUM_R, 0.5, _THIRD),
+                2: _shuttling((-1.0, 1.0), (-1.0, -1.0), 0.4),
+            },
+            timeout_s=15.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="recovery_run",
+            description=(
+                "A defender runs back past a two-against-two pack round the ball to its defensive spot,"
+                " an opponent runner crossing in front of it."
+            ),
+            friendly_starts=(
+                (2.0, 0.6),
+                _on_circle(_PACK, _PACK_R, 0.0),
+                _on_circle(_PACK, _PACK_R, math.pi),
+            ),
+            friendly_targets=(
+                (-2.5, 0.0),
+                _on_circle(_PACK, _PACK_R, 0.0),
+                _on_circle(_PACK, _PACK_R, math.pi),
+            ),
+            friendly_target_trajectories={
+                1: _circling(_PACK, _PACK_R, 0.5, 0.0),
+                2: _circling(_PACK, _PACK_R, 0.5, math.pi),
+            },
+            enemy_starts=(
+                _on_circle(_PACK, _PACK_R, math.pi / 2),
+                _on_circle(_PACK, _PACK_R, 3 * math.pi / 2),
+                (-1.2, -1.0),
+            ),
+            enemy_targets=(
+                _on_circle(_PACK, _PACK_R, math.pi / 2),
+                _on_circle(_PACK, _PACK_R, 3 * math.pi / 2),
+                (-1.2, -1.0),
+            ),
+            enemy_target_trajectories={
+                0: _circling(_PACK, _PACK_R, 0.5, math.pi / 2),
+                1: _circling(_PACK, _PACK_R, 0.5, 3 * math.pi / 2),
+                2: _shuttling((-1.2, -1.0), (-1.2, 1.0), 0.6),
+            },
+            timeout_s=15.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="wing_switch",
+            description=(
+                "Two teammates swap wings, crossing just ahead of a teammate on the ball"
+                " while an opponent shuttles across in front of it and another stands by it."
+            ),
+            friendly_starts=((1.0, 2.0), (1.1, -2.0), (0.0, 0.0)),
+            friendly_targets=((1.1, -2.0), (1.0, 2.0), (0.0, 0.0)),
+            enemy_starts=((0.6, 0.6), (-0.4, -0.3)),
+            enemy_targets=((0.6, 0.6), (-0.4, -0.3)),
+            enemy_target_trajectories={0: _shuttling((0.6, 0.6), (0.6, -0.6), 0.4)},
+            timeout_s=15.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="kickoff_reset",
+            description=(
+                "After a goal from a corner scramble, ten outfield robots go from the scramble to the"
+                " kick-off formation: real positions from a round-robin replay."
+            ),
+            # `clear_danger_vs_clear_press_plus` in tournament_20261010_090819: the
+            # positions at the goal (frame 10731) and at the kick-off 9.9 s later
+            # (frame 11323). Keepers left out; friendly defends the right goal. The
+            # first enemy is moved 5 cm (from (3.07, -2.32)): it touched the last one
+            # (0.18 m apart), which counts as a collision on the first tick.
+            friendly_starts=((2.57, -2.38), (2.77, -1.74), (2.91, -1.51), (2.58, -2.09), (3.07, -1.70)),
+            friendly_targets=((0.12, 0.0), (0.81, 0.49), (0.80, -0.50), (1.50, 0.80), (1.50, -0.80)),
+            enemy_starts=((3.09, -2.37), (3.38, -1.84), (2.90, -0.23), (2.79, 0.92), (3.01, -2.15)),
+            enemy_targets=((-0.80, 0.36), (-0.74, -0.45), (-1.50, 0.60), (-1.48, -0.61), (-2.50, 0.0)),
+            timeout_s=20.0,
+            endpoint_tolerance_m=0.2,
         ),
         Scenario(
             name="narrow_passage",
