@@ -99,16 +99,17 @@ well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 Writeups of bugs since fixed were removed from this file; code comments that cite "Known open
 bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still open:
 
-- **`kick_upfield` clears at fixed power, so a clearance from our half leaves the pitch.** It is
-  a boolean kick at one constant speed (about 4.7 m/s; the ball rolls about 17 m at 0.64 m/s²),
-  longer than the pitch, so from our half it usually crosses the far goal line whichever way it
-  is aimed. `ClearBallTactic` picks landing points 4.5 m upfield (`_CLEAR_DISTANCE`). Out-of-bounds
-  fouls by tactic in tournament_20261005_170958 (`PressAndContainTactic` 356,
-  `ShadowAndMarkTactic` 252) were charged to the robot nearest the ball as it crossed the line,
-  not the one that kicked it; runs after that charge the last robot to touch it. three_slot's
-  case (its picker handed the ball holder to those slots) is fixed in 44a6c05f. The kicker is
-  fixed power on the real robots too (`docs/roadmap.md` 10c), so a tactic must stop clearing
-  blind: aim where a 17 m roll ends.
+- **`kick_upfield` clears blind at fixed power.** The keeper, `PressAndContainTactic`'s presser
+  and `ShadowAndMarkTactic`'s markers kick straight upfield whenever they hold the ball, at the
+  kicker's one speed (about 4.7 m/s; the ball would roll about 17 m unobstructed, longer than the
+  pitch). Measured 2026-10-10 (8 matches of 300 s between round-robin strategies): 83 such kicks
+  (keeper 55, presser 21, marker 7), of which 14 (17%) were followed by the ball leaving the pitch
+  within 4 s; most hit a robot first. They explain at most 14 of the 58 times the ball went out,
+  so the larger sources of out-of-bounds restarts are elsewhere: round-robins after
+  tournament_20261005_170958 charge an out-of-bounds foul to the last robot to touch the ball
+  (that run charged the nearest one), so the next run's foul table names them. `ClearBallTactic` picks
+  landing points 4.5 m upfield (`_CLEAR_DISTANCE`). The kicker is fixed power on the real robots
+  too (`docs/roadmap.md` 10c).
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
   `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. `default` is the
   kernel's smoke-test scaffold and `low_block` is retired, so not worth fixing for its own sake.
