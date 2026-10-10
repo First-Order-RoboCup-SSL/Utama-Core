@@ -271,6 +271,23 @@ def _turned(robot: Robot) -> Robot:
     )
 
 
+def _mirrored(frame: GameFrame) -> GameFrame:
+    """`frame` as the other team sees it: the same absolute coordinates, friendly and enemy swapped."""
+
+    def flip(robots: dict[int, Robot]) -> dict[int, Robot]:
+        return {i: Robot(r.id, not r.is_friendly, r.has_ball, r.p, r.v, r.a, r.orientation) for i, r in robots.items()}
+
+    return GameFrame(
+        frame.ts,
+        not frame.my_team_is_yellow,
+        not frame.my_team_is_right,
+        flip(frame.enemy_robots),
+        flip(frame.friendly_robots),
+        frame.ball,
+        frame.referee,
+    )
+
+
 @dataclass(slots=True)
 class SideRuntime:
     """Encapsulates all per-side (my team / opponent) runtime state.
@@ -568,9 +585,11 @@ class StrategyRunner:
 
         # Acceleration is read only by the replay (no strategy, tactic or planner reads
         # `.a`), so the side the replay doesn't record skips it: about 7% of the runner's CPU.
+        # In sim PVP our refiners make both sides' frames (`_run_step`), so ours always keep it.
         if self.opp is not None:
             recorded_is_my = self.replay_writer is None or self.replay_writer.replay_configs.is_my_perspective
-            (self.opp if recorded_is_my else self.my).velocity_refiner.compute_acceleration = False
+            skips = self.opp if recorded_is_my or self.mode != Mode.REAL else self.my
+            skips.velocity_refiner.compute_acceleration = False
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
@@ -1849,6 +1868,13 @@ class StrategyRunner:
         # alternate between opp and friendly playing
         real = self.mode == Mode.REAL
         sim_opp_pairs = (sim_response_pairs[1], sim_response_pairs[0]) if sim_response_pairs is not None else None
+        # Sim PVP: both teams see the same vision, so it is refined once, for our side, and
+        # the opponent gets that frame mirrored (the two refinements were identical; see
+        # test_frame_once.py). About 10% of a match's time.
+        my_kinematics = opp_kinematics = None
+        if sim_response_pairs is not None:
+            my_kinematics = self._refine_kinematics(self.my, vision_frames)
+            opp_kinematics = _mirrored(my_kinematics)
         if self.toggle_opp_first:
             if self.opp:
                 self._step_game(
@@ -1857,6 +1883,7 @@ class StrategyRunner:
                     True,
                     real_responses=opp_res if real else None,
                     sim_response_pairs=sim_opp_pairs,
+                    kinematics=opp_kinematics,
                 )
             self._step_game(
                 vision_frames,
@@ -1864,6 +1891,7 @@ class StrategyRunner:
                 False,
                 real_responses=friendly_res if real else None,
                 sim_response_pairs=sim_response_pairs,
+                kinematics=my_kinematics,
             )
         else:
             self._step_game(
@@ -1872,6 +1900,7 @@ class StrategyRunner:
                 False,
                 real_responses=friendly_res if real else None,
                 sim_response_pairs=sim_response_pairs,
+                kinematics=my_kinematics,
             )
             if self.opp:
                 self._step_game(
@@ -1880,6 +1909,7 @@ class StrategyRunner:
                     True,
                     real_responses=opp_res if real else None,
                     sim_response_pairs=sim_opp_pairs,
+                    kinematics=opp_kinematics,
                 )
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
@@ -2256,6 +2286,12 @@ class StrategyRunner:
         ]
         self.rsim_env.draw_polygon(bounds_polygon, color="PINK", width=2)
 
+    @staticmethod
+    def _refine_kinematics(side: SideRuntime, vision_frames: List[RawVisionData]) -> GameFrame:
+        """`side`'s next frame from this tick's vision: positions, then velocities."""
+        frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
+        return side.velocity_refiner.refine(side.game_history, frame)
+
     def _step_game(
         self,
         vision_frames: List[RawVisionData],
@@ -2263,6 +2299,7 @@ class StrategyRunner:
         running_opp: bool,
         real_responses: Optional[List[RobotResponse]] = None,
         sim_response_pairs: Optional[Tuple[List[RobotResponse], List[RobotResponse]]] = None,
+        kinematics: Optional[GameFrame] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -2279,6 +2316,9 @@ class StrategyRunner:
                                                          DoubleTouchRule needs the opponent's
                                                          touches). `None` keeps the old per-side
                                                          controller pull (single-team sim).
+            kinematics (Optional[GameFrame]): This side's frame already through the position and
+                                              velocity refiners (sim PVP, see `_run_step`); `None`
+                                              refines `vision_frames` here.
         """
         side = self.opp if running_opp else self.my
 
@@ -2293,8 +2333,7 @@ class StrategyRunner:
             enemy_responses = None
 
         # Update game frame with refined information
-        new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
-        new_game_frame = side.velocity_refiner.refine(side.game_history, new_game_frame)  # , robot_frame.imu_data)
+        new_game_frame = kinematics if kinematics is not None else self._refine_kinematics(side, vision_frames)
         new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses, enemy_responses)
         new_game_frame = self.referee_refiner.refine(new_game_frame, referee_data)
 
