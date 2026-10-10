@@ -15,23 +15,23 @@ Run:
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
 only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
-**In the round-robin**, in order of the 2026-10-05 standings (below). A round-robin or a
+**In the round-robin**, in order of the 2026-10-10 standings (below). A round-robin or a
 ladder with no strategies named plays these.
 
 | Strategy | Description |
 |---|---|
 | `split_shape` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
-| `high_press` | Same pair as `press_and_pass`, fixed 80/20 attack-heavy split ignoring possession. |
-| `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
-| `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
-| `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
-| `press_and_pass` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
 | `counter_flow` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
 | `score_aware_counter_flow` | `counter_flow` plus a late-half scoreline shift (protect a lead / chase). |
-| `overload_press` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
+| `press_and_pass` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
 | `clear_press_plus` | `clear_danger` plus `tiki_taka_plus`'s final-third overload. |
+| `high_press` | Same pair as `press_and_pass`, fixed 80/20 attack-heavy split ignoring possession. |
 | `tiki_taka_plus` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
+| `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
+| `overload_press` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
+| `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
 | `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
+| `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
 
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
 or a ladder pool unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
@@ -55,44 +55,29 @@ against the round-robin's top.
 
 ## Latest results
 
-**Round-robin, full catalog** (2026-10-05, strategy-guard at b26f5b37, 22 configs, 231 matches,
-600s, `replays/tournament_20261005_170958/summary.json`). Points are 3 a win, 1 a draw; 33 of 231
-matches were draws. 10 matches stalled (9 committed-frozen, 1 restart stall).
+**Round-robin** (2026-10-10, strategy-guard at a17e2791, the 12 strategies above, 66 matches,
+600 s, `replays/tournament_20261010_090819/summary.json`). Points are 3 a win, 1 a draw; 8 of 66
+matches were draws. No match stalled; 99% of 1802 restarts reached NORMAL_START.
 
-Against the previous run (tournament_20261004_204810, same configs, before this PR's referee and
-tactic fixes): goal-line exits now restart in the corner instead of 2 m in front of goal,
-`no_progress` restarts fell from 699 to 296 and keep-out fouls from 245 to 26, and
-`split_shape`'s lead over second place fell from 0.52 to 0.28 points per match.
-Out-of-bounds restarts rose from 2446 to 2938: a goal kick from the corner was cleared at full
-power over the far goal line, giving the other side a goal kick at its corner (388 of 1377 goal
-kicks were followed by one at the other end, median 4 s). The aimless-kick rule (§6.2.3, added
-after this run) makes such a clearance a free kick at the kick point. What each strategy does
-well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
+Against the 2026-10-05 run: the retired ten are gone from the pool, so every strategy's record is
+now against the top 12 only; the teams change ends at half-time; and an aimless clearance is a free
+kick at the kick point. `split_shape` won all 11; `clear_danger`, fourth before, is last.
+What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 19-1-1 | 103-23 | 2.76 |
-| `high_press` | 17-1-3 | 89-40 | 2.48 |
-| `give_and_go_solo` | 16-2-3 | 84-28 | 2.38 |
-| `clear_danger` | 14-4-3 | 59-28 | 2.19 |
-| `press_trigger_flow` | 15-1-5 | 64-41 | 2.19 |
-| `press_and_pass` | 13-5-3 | 76-29 | 2.10 |
-| `counter_flow` | 14-2-5 | 62-27 | 2.10 |
-| `score_aware_counter_flow` | 13-3-5 | 64-29 | 2.00 |
-| `overload_press` | 13-2-6 | 55-40 | 1.95 |
-| `clear_press_plus` | 10-5-6 | 51-30 | 1.67 |
-| `tiki_taka_plus` | 9-6-6 | 48-32 | 1.57 |
-| `decoy_and_overload` | 10-0-11 | 59-52 | 1.43 |
-| `tiki_taka` | 6-5-10 | 34-41 | 1.10 |
-| `high_line_zone` | 5-3-13 | 34-54 | 0.86 |
-| `counter_press` | 5-3-13 | 35-69 | 0.86 |
-| `three_slot` | 3-8-10 | 10-33 | 0.81 |
-| `switch_of_play` | 4-4-13 | 23-58 | 0.76 |
-| `low_block` | 4-3-14 | 21-40 | 0.71 |
-| `zone_fluid` | 3-3-15 | 33-77 | 0.57 |
-| `score_aware_zone_flow` | 2-2-17 | 24-84 | 0.38 |
-| `overload_flow` | 1-3-17 | 21-91 | 0.29 |
-| `shadow_switch` | 2-0-19 | 19-122 | 0.29 |
+| `split_shape` | 11-0-0 | 80-26 | 3.00 |
+| `counter_flow` | 7-2-2 | 35-24 | 2.09 |
+| `score_aware_counter_flow` | 6-2-3 | 32-24 | 1.82 |
+| `press_and_pass` | 5-2-4 | 40-35 | 1.55 |
+| `clear_press_plus` | 5-2-4 | 34-31 | 1.55 |
+| `high_press` | 5-1-5 | 36-47 | 1.45 |
+| `tiki_taka_plus` | 5-1-5 | 33-48 | 1.45 |
+| `give_and_go_solo` | 5-0-6 | 44-51 | 1.36 |
+| `overload_press` | 4-0-7 | 52-51 | 1.09 |
+| `press_trigger_flow` | 2-2-7 | 26-35 | 0.73 |
+| `decoy_and_overload` | 2-2-7 | 38-55 | 0.73 |
+| `clear_danger` | 1-2-8 | 21-44 | 0.45 |
 
 ## Known open bugs
 
