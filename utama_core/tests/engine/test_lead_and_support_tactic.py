@@ -12,6 +12,7 @@ geometry.
 
 from __future__ import annotations
 
+import math
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,15 +21,18 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.shared.pass_and_score_geometry import enemy_defense_area_hold_point
+from utama_core.shared.pass_and_score_geometry import (
+    enemy_defense_area_hold_point,
+    enemy_goal_line,
+)
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 
 
-def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
+def _robot(rid: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
     return Robot(
         id=rid,
         is_friendly=is_friendly,
-        has_ball=False,
+        has_ball=has_ball,
         p=Vector2D(x, y),
         v=Vector2D(0, 0),
         a=Vector2D(0, 0),
@@ -104,3 +108,34 @@ def test_leader_chases_ball_directly_when_ball_is_not_in_enemy_defense_area():
     # go_to_ball targets at (or an overshoot past) the ball itself, not a
     # defense-area hold point far from it.
     assert target.distance_to(Vector2D(1.0, 0.0)) < 0.5
+
+
+def test_leader_shot_y_does_not_flip_between_tied_gaps():
+    """Two shot gaps tie (a centred blocker at x=-2 splits the goal symmetrically).
+
+    A tiny alternating nudge of that blocker used to flip the unhysteresised
+    `find_best_shot` choice between +y and -y every tick, so the leader turned
+    back and forth and never reached `oriented_towards` to kick. With the
+    switch margin the first choice is kept while the gaps stay within it.
+    """
+    leader = Vector2D(-0.11, 0.0)
+    goal_x, _goal_y1, _goal_y2 = enemy_goal_line(_game({}, {}, (0.0, 0.0)))
+    tactic = LeadAndSupportTactic()
+    mem = tactic.initial_mem()
+
+    target_ys = []
+    for tick in range(6):
+        nudge = 0.002 if tick % 2 == 0 else -0.002
+        friendly = {1: _robot(1, leader.x, leader.y, True, has_ball=True)}
+        enemy = {0: _robot(0, -2.0, nudge, False)}
+        game = _game(friendly, enemy, (leader.x - 0.1, 0.0))
+        ctx = _ctx()
+
+        commands, mem = tactic.tick(game, ctx, robot_ids=(1,), mem=mem)
+
+        assert 1 in commands
+        target_oren = ctx.motion_controller.calculate.call_args.kwargs["target_oren"]
+        target_ys.append(leader.y + (goal_x - leader.x) * math.tan(target_oren))
+
+    assert all(y > 0 for y in target_ys) or all(y < 0 for y in target_ys), target_ys
+    assert max(target_ys) - min(target_ys) < 0.05, target_ys
