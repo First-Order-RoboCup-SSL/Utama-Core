@@ -80,6 +80,13 @@ _LURE_MAX_TIME = 1.5  # seconds — cap so a marker that doesn't bite can't stal
 _LURE_MAX_TICKS = round(_LURE_MAX_TIME * CONTROL_FREQUENCY)
 _FINISH_TIMEOUT_TIME = 12.0  # seconds — same pass+shoot budget as pass_and_shoot._PHASE_TIMEOUT_TIME
 _FINISH_TIMEOUT_TICKS = round(_FINISH_TIMEOUT_TIME * CONTROL_FREQUENCY)
+# Release the finish phase when the ball hasn't moved for this long. 3 s is well under the
+# referee's 10 s no-progress STOP, so the tactic gives up before the match freezes. A decoy
+# body-to-body with a marker (tournament_20261011_205245, ~510.8 s) sat motionless in "finish"
+# for 10 s while the commitment held until the 12 s budget above.
+_FINISH_NO_PROGRESS_TIME = 3.0  # seconds
+_FINISH_NO_PROGRESS_TICKS = round(_FINISH_NO_PROGRESS_TIME * CONTROL_FREQUENCY)
+_FINISH_PROGRESS_DISTANCE = 0.05  # metres — same stillness tolerance as the stall watchdog (_STALL_BALL_STILL_TOL_M)
 _LURE_TOUCHLINE_MARGIN = 0.5  # metres in from the touchline — how close the decoy's lure run goes
 _OVERLOAD_STANDOFF = 0.4  # metres — how far past the marker's original shadow the overloader sits
 _LOOSE_BALL_SPEED = 0.3  # m/s — matches ball_is_loose's own threshold; see _teammate_already_has_ball
@@ -232,6 +239,8 @@ class DecoyOverloadMem:
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _pass_and_score.py
     carry_origin: Optional[Vector2D] = None  # see shared carry_origin; the lure ends before an excessive-dribbling foul
     enemy_ball_ticks: int = 0  # consecutive ticks an enemy robot has held the ball; see _ENEMY_BALL_RELEASE_TICKS
+    finish_anchor: Optional[Vector2D] = None  # ball position the finish-phase no-progress check measures from
+    finish_still_ticks: int = 0  # consecutive finish ticks the ball has stayed within _FINISH_PROGRESS_DISTANCE
 
 
 def _support_hold_point(game: Game, robot_id: int, index: int) -> Vector2D:
@@ -448,6 +457,17 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
         # was added to fix; apply the identical budget here.
         mem.finish_ticks += 1
         if mem.finish_ticks > _FINISH_TIMEOUT_TICKS or _enemy_held_ball_too_long(game, mem):
+            return {}, DecoyOverloadMem()
+        # No-progress release: the ball hasn't moved for _FINISH_NO_PROGRESS_TICKS, so the
+        # pass/shot isn't happening (e.g. the decoy is held body-to-body with a marker).
+        # Release now rather than holding the commitment to the 12 s budget above.
+        ball_xy = game.ball.p.to_2d()
+        if mem.finish_anchor is None or ball_xy.distance_to(mem.finish_anchor) > _FINISH_PROGRESS_DISTANCE:
+            mem.finish_anchor = ball_xy
+            mem.finish_still_ticks = 0
+        else:
+            mem.finish_still_ticks += 1
+        if mem.finish_still_ticks > _FINISH_NO_PROGRESS_TICKS:
             return {}, DecoyOverloadMem()
 
         if has_ball(game, mem.decoy_id, visual=True) and _decoy_shot_open(game, mem.decoy_id):

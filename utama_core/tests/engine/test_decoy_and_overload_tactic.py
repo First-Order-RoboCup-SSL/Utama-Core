@@ -30,6 +30,7 @@ import math
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Field, Game, GameHistory
@@ -290,3 +291,49 @@ def test_tactic_releases_its_robots_once_the_enemy_has_held_the_ball_1s(held_tic
     for _ in range(held_ticks):
         _commands, mem = tactic.tick(game, ctx, (1, 3), mem)
     assert tactic.is_committed(game, mem) is not released
+
+
+# ---------------------------------------------------------------------------
+# No-progress release in the "finish" phase
+# ---------------------------------------------------------------------------
+
+
+def test_finish_phase_releases_when_decoy_is_stuck_on_the_ball_with_an_enemy_at_0_12m():
+    """The decoy holds the ball body-to-body with an enemy marker 0.12 m away, and
+    the ball never moves. The planner then holds the decoy still, so nothing
+    progresses. Before the no-progress release, `is_committed()` stayed True until
+    the 12 s finish budget, longer than the referee's 10 s no-progress STOP
+    (tournament_20261011_205245, freeze ~510.8 s). The tactic must give up after
+    ~3 s of unchanged ball position: still committed at 2.9 s, released by 3.1 s."""
+    friendly = {1: _robot(1, 0.0, 0.0, True, has_ball=True), 3: _robot(3, -1.5, 1.5, True)}
+    enemy = {4: _robot(4, 0.12, 0.0, False)}
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots=enemy,
+        ball=Ball(p=Vector3D(0.09, 0.0, 0.0), v=zv, a=zv),
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+    tactic = DecoyOverloadTactic()
+    mem = DecoyOverloadMem(
+        decoy_id=1, overloader_id=3, marker_id=4, marker_start_y=0.0, phase="finish", carry_origin=Vector2D(0.0, 0.0)
+    )
+    ctx = TickContext(motion_controller=_NullMotionController())
+    for _ in range(round(2.9 * CONTROL_FREQUENCY)):
+        _commands, mem = tactic.tick(game, ctx, (1, 3), mem)
+    assert tactic.is_committed(game, mem) is True
+    # Stop at the first tick that releases. The released mem is fresh, so a later tick would
+    # re-enter the lure with the same robots and hide the release.
+    for _ in range(round(3.1 * CONTROL_FREQUENCY) - round(2.9 * CONTROL_FREQUENCY)):
+        _commands, mem = tactic.tick(game, ctx, (1, 3), mem)
+        if not tactic.is_committed(game, mem):
+            break
+    else:
+        pytest.fail("finish phase never released although the ball stayed still for 3.1 s")
+    assert mem.decoy_id is None
