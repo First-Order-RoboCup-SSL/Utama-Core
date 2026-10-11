@@ -7,6 +7,7 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
+from utama_core.global_utils.math_utils import rotate_vector
 from utama_core.skills.src.utils.move_utils import turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
@@ -135,3 +136,38 @@ def test_turn_on_spot_steers_away_from_a_wedged_teammate():
 
     final_call_kwargs = mc.calculate.call_args_list[-1].kwargs
     assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
+
+
+def test_turn_on_spot_blocked_pivot_drives_clear_instead_of_pushing_into_enemy():
+    """Regression: when the pivot push is blocked by an enemy, `move()` steers
+    toward an escape point away from it, but turn_on_spot used to overwrite
+    that lateral command with the pivot term (-angular_vel * PIVOT_RADIUS),
+    so the chassis pushed straight into the enemy and never moved clear
+    (COMMITTED_FROZEN stall, tournament_20261011_205245).
+
+    Geometry from the replay: friendly holding the ball at heading -35.4 deg,
+    enemy 0.185 m away on the pivot-push side.
+    """
+    orientation = math.radians(-35.4)
+    robot_p = Vector2D(2.883, -0.135)
+    enemy_p = Vector2D(3.06, -0.08)
+    friendly = {1: _robot(1, robot_p.x, robot_p.y, True, orientation=orientation, has_ball=True)}
+    enemy = {0: _robot(0, enemy_p.x, enemy_p.y, False)}
+    ball_xy = (robot_p.x + PIVOT_RADIUS * math.cos(orientation), robot_p.y + PIVOT_RADIUS * math.sin(orientation))
+    game = _game(friendly, enemy, ball_xy)
+
+    # Stub controller: rotation is commanded as-is; translation is a global
+    # velocity pointing from the robot toward the requested target.
+    mc = MagicMock()
+    mc.calculate.side_effect = lambda game, robot_id, target_pos, target_oren: (
+        Vector2D(target_pos.x - robot_p.x, target_pos.y - robot_p.y),
+        -1.0,  # pivot push (-angular_vel * PIVOT_RADIUS) points into the enemy here
+    )
+
+    cmd = turn_on_spot(game=game, motion_controller=mc, robot_id=1, target_oren=math.radians(-2.0))
+
+    # Convert the commanded local velocity back to the global frame.
+    gx, gy = rotate_vector(cmd.local_forward_vel, cmd.local_left_vel, -orientation)
+    to_enemy = enemy_p - robot_p
+    # Must not drive into the blocker: motion must have a component away from it.
+    assert to_enemy.x * gx + to_enemy.y * gy < 0.0
