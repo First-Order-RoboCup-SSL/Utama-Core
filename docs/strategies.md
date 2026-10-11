@@ -53,6 +53,26 @@ against the round-robin's top.
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
 
+## Strategy search, 2026-10-11
+
+Five `split_shape` variants, each one idea, in a 17-config round-robin with the 12 above
+(`replays/tournament_20261011_205245/summary.json`, 136 matches of 600 s, after the
+`LeadAndSupportTactic` shot-target fix). A single round-robin screen: not yet laddered, so the
+ranking among the top four is not settled (rsim is deterministic, one match per pairing).
+
+| Strategy | Idea | W-D-L | GF-GA | Points per match | vs `split_shape` |
+|---|---|---|---|---|---|
+| `split_outlet` | One robot held high on the weak side while defending (`OutletTactic`) | 14-2-0 | 123-74 | 2.75 | 8-8 |
+| `split_wall` | Two-robot wall at the opponent's direct free kicks (`referee_overrides`) | 13-1-2 | 118-62 | 2.50 | 11-6 |
+| `split_press` | Without the ball, a 2-robot `PressAndContainTactic` instead of a lone chaser | 13-0-3 | 125-75 | 2.44 | 3-10 |
+| `split_shape` | (reference) | 11-1-4 | 112-77 | 2.12 | |
+| `split_block` | `BlockShapeTactic` defense | 11-0-5 | 117-87 | 2.06 | 14-8 |
+| `split_sticky` | Possession hysteresis on the attack/defense split | 10-1-5 | 109-76 | 1.94 | 8-6 |
+
+`split_block` and `split_sticky` led a screen run on the code before the shot-target fix
+(2.67 and 2.60 against `split_shape`'s 2.40) and fell below it after: a one-match-per-pairing
+lead of that size is not evidence. 4 matches stalled (COMMITTED_FROZEN), down from 5.
+
 ## Latest results
 
 **Round-robin** (2026-10-10, strategy-guard at a17e2791, the 12 strategies above, 66 matches,
