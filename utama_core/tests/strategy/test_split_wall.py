@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.engine.referee_override import RefereeOverride
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
@@ -164,6 +165,41 @@ def test_opponent_kick_mirrors_on_the_left_side():
     wall = sorted((targets[1][0], targets[2][0]), key=lambda p: p.y)
     assert wall[0].x == pytest.approx(-0.9) and wall[0].y == pytest.approx(-0.1)
     assert wall[1].x == pytest.approx(-0.9) and wall[1].y == pytest.approx(0.1)
+
+
+def test_restart_targets_clamped_to_the_box_edge_stay_outside_the_keep_out_distance():
+    # Real foul state (split_outlet_vs_split_wall, t=66-69 s): ball 0.5 m out from our box's
+    # front edge. The wall points (0.9 m out on the goal line) fall behind the edge and the
+    # box clamp pulled robots 3 and 4 to 0.43-0.46 m from the ball, inside the 0.5 m foul radius.
+    ball = Vector2D(-2.5, 0.092)
+    game = _game(
+        (ball.x, ball.y),
+        friendly={1: (-1.0, 1.5), 2: (-1.2, -1.5), 3: (-2.6, 0.6), 4: (-2.4, -0.5), 5: (-1.5, 1.0)},
+        enemy={0: (-2.45, 0.1), 1: (-1.0, 0.0)},
+        my_team_is_right=False,
+    )
+    targets = split_wall.opponent_free_kick_targets(game, (1, 2, 3, 4, 5))
+    for rid in (3, 4):
+        point = targets[rid][0]
+        assert point.distance_to(ball) >= BALL_KEEP_OUT_DISTANCE - 1e-6, (rid, point)
+        # Still outside our defense area (x beyond its front edge at -3.5).
+        assert point.x > float(game.field.my_defense_area[1][0])
+
+
+def test_marker_inside_the_keep_out_distance_is_pushed_out_to_exactly_that_distance():
+    # Enemy 1 stands 0.2 m from the ball on our goal side; its marker (0.5 m goal-side of it)
+    # would land 0.7 m from the ball, inside BALL_KEEP_OUT_DISTANCE. It must sit on the circle.
+    game = _game(
+        (0.0, 0.0),
+        friendly={1: (-0.5, 0.5), 2: (-0.5, -0.5), 3: (2.0, 2.0)},
+        enemy={0: (-0.1, 0.0), 1: (0.2, 0.0)},
+    )
+    targets = split_wall.opponent_free_kick_targets(game, (1, 2, 3))
+    marker, _ = targets[3]
+    assert marker.distance_to(Vector2D(0.0, 0.0)) == pytest.approx(BALL_KEEP_OUT_DISTANCE)
+    # Moved onto the circle clear of the wall's spots (0.2 m apart), not stacked on them.
+    for rid in (1, 2):
+        assert marker.distance_to(targets[rid][0]) >= split_wall.WALL_SPACING_M - 1e-9
 
 
 # ---- dispatch: opponent's kick gets the wall, ours does not ---------------

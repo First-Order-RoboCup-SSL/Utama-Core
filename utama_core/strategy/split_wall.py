@@ -43,6 +43,9 @@ WALL_DISTANCE_M = BALL_KEEP_OUT_DISTANCE + 0.1
 WALL_SPACING_M = 0.2
 MARK_GOAL_SIDE_M = 0.5
 LEFTOVER_SPACING_M = 0.4
+# Every restart target stays at least this far from the ball (see `_legal_target`).
+TARGET_KEEP_OUT_M = BALL_KEEP_OUT_DISTANCE
+_RING_STEPS = 360
 
 
 def _possession_split_picker(
@@ -149,9 +152,34 @@ def leftover_points(ball: Vector2D, goal: Vector2D, front_x: float, count: int) 
     return [Vector2D(base.x + px * off, base.y + py * off) for off in _spread(count, LEFTOVER_SPACING_M)]
 
 
-def _legal_target(game: Game, point: Vector2D) -> Vector2D:
-    """Inside the field and outside our defense area (DefenseAreaRule)."""
-    return clamp_outside_own_defense_area(game, clamp_to_field(point, game))
+def _is_legal_spot(game: Game, point: Vector2D) -> bool:
+    """True when `point` is already inside the field and outside our defense area."""
+    return clamp_outside_own_defense_area(game, clamp_to_field(point, game)).distance_to(point) < 1e-9
+
+
+def _legal_target(game: Game, point: Vector2D, ball: Vector2D, taken: tuple[Vector2D, ...] = ()) -> Vector2D:
+    """Inside the field, outside our defense area (DefenseAreaRule), and TARGET_KEEP_OUT_M from the ball.
+
+    The box clamp can pull a point toward the ball. With the ball near the box front edge the
+    wall (0.9 m out on the goal line) lands behind the edge and is clamped to ~0.43 m from the
+    ball, inside the 0.5 m keep-out foul radius. So a target still inside the keep-out circle
+    moves to the nearest legal spot on that circle that no earlier target in `taken` claims
+    (WALL_SPACING_M apart). Several targets crowd the same stretch of box edge, so sliding
+    them all onto one line would stack robots on one spot.
+    """
+    legal = clamp_outside_own_defense_area(game, clamp_to_field(point, game))
+    if legal.distance_to(ball) >= TARGET_KEEP_OUT_M:
+        return legal
+    best, best_d = legal, math.inf
+    for step in range(_RING_STEPS):
+        angle = 2.0 * math.pi * step / _RING_STEPS
+        spot = Vector2D(ball.x + TARGET_KEEP_OUT_M * math.cos(angle), ball.y + TARGET_KEEP_OUT_M * math.sin(angle))
+        if not _is_legal_spot(game, spot) or any(spot.distance_to(t) < WALL_SPACING_M for t in taken):
+            continue
+        d = spot.distance_to(legal)
+        if d < best_d:
+            best, best_d = spot, d
+    return best
 
 
 def opponent_free_kick_targets(game: Game, outfield_ids) -> dict[RobotId, tuple[Vector2D, float]]:
@@ -179,7 +207,7 @@ def opponent_free_kick_targets(game: Game, outfield_ids) -> dict[RobotId, tuple[
         key=lambda rid: (game.friendly_robots[rid].p.x - ball.x) * px + (game.friendly_robots[rid].p.y - ball.y) * py,
     )
     for rid, point in zip(wall_ids, wall_points(ball, goal, len(wall_ids))):
-        legal = _legal_target(game, point)
+        legal = _legal_target(game, point, ball, tuple(p for p, _ in targets.values()))
         targets[rid] = (legal, legal.angle_to(ball))
 
     enemies = game.enemy_robots
@@ -193,14 +221,14 @@ def opponent_free_kick_targets(game: Game, outfield_ids) -> dict[RobotId, tuple[
             if not free:
                 break
             man = enemies[eid].p
-            mark = _legal_target(game, marker_point(man, goal))
+            mark = _legal_target(game, marker_point(man, goal), ball, tuple(p for p, _ in targets.values()))
             rid = min(free, key=lambda r: game.friendly_robots[r].p.distance_to(mark))
             free.remove(rid)
             targets[rid] = (mark, mark.angle_to(man))
 
     front_x = float(game.field.my_defense_area[1][0])
     for rid, point in zip(free, leftover_points(ball, goal, front_x, len(free))):
-        legal = _legal_target(game, point)
+        legal = _legal_target(game, point, ball, tuple(p for p, _ in targets.values()))
         targets[rid] = (legal, legal.angle_to(ball))
 
     return targets

@@ -7,6 +7,7 @@ from test_split_wall.py and run through the factory's own Strategy.
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.engine.referee_override import RefereeOverride
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
@@ -211,3 +212,19 @@ def test_wall_targets_are_the_split_wall_geometry_for_the_outlet_robot_too():
     assert targets[1][0].x == pytest.approx(0.9) and targets[1][0].y == pytest.approx(0.1)
     assert targets[2][0].x == pytest.approx(0.9) and targets[2][0].y == pytest.approx(-0.1)
     assert isinstance(targets[3][0], Vector2D)
+
+
+def test_restart_targets_clamped_to_the_box_edge_stay_outside_the_keep_out_distance():
+    # Same real foul state as test_split_wall: the box clamp used to pull wall robots to
+    # 0.43-0.46 m from a ball 0.5 m out from our box's front edge (the 0.5 m foul radius).
+    ball = Vector2D(-2.5, 0.092)
+    game = _game(
+        (ball.x, ball.y),
+        friendly={1: (-1.0, 1.5), 2: (-1.2, -1.5), 3: (-2.6, 0.6), 4: (-2.4, -0.5), 5: (-1.5, 1.0)},
+        enemy={0: (-2.45, 0.1), 1: (-1.0, 0.0)},
+        my_team_is_right=False,
+    )
+    targets = split_outlet_wall.opponent_free_kick_targets(game, (1, 2, 3, 4, 5))
+    for rid, (point, _) in targets.items():
+        assert point.distance_to(ball) >= BALL_KEEP_OUT_DISTANCE - 1e-6, (rid, point)
+        assert point.x > float(game.field.my_defense_area[1][0])
