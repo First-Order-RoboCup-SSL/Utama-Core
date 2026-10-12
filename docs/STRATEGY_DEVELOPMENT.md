@@ -344,6 +344,13 @@ penalty or free kick after a STOP the referee added, held until every robot was 
 ball, and every open-play `NORMAL_START` start (496 of `bank_v7`'s 860) inside that kickoff for up
 to 10 s. Bench results recorded before `b7ea54cf` are not comparable with later ones.
 
+Until the history fix below, every start also began with phantom speeds. Velocities are differenced over
+the runner's frame history, which still held the formation the bench runner was built in, so the first
+tick read the teleport as a jump from it: a ball at 130 m/s, robots faster. The filtered ball then
+overshot by up to half a metre: a goal from a ball the keeper held, or a ball out of play and a
+placement. The referee charged ball-speed fouls in almost every open-play start and crashing fouls,
+which stop play, in a third. `apply_scenario` now starts each side's history from the scenario.
+
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
 round-robin even with `--reuse`, or of a change too small to move match results, use

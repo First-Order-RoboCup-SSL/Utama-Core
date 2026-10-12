@@ -138,6 +138,30 @@ def test_apply_scenario_positions_match_within_tolerance():
     _assert_close_to_scenario(manager.post_apply_positions, _SCENARIO, tol=0.15)
 
 
+def test_a_start_begins_at_its_own_speeds_not_the_jump_from_the_runner_s_formation():
+    # Velocity is a finite difference over the runner's frame history. Left holding the
+    # formation the runner was built in, it read the teleport as a jump from there (the ball
+    # at 30 m/s here, robots far faster): the filtered ball then overshot into goals and out
+    # of play, and the referee charged ball-speed and crashing fouls no robot made. A bench
+    # runner applies its start right after construction, as here (`scenario_scorer`).
+    runner = _build_runner_and_scenario(_SCENARIO)
+    try:
+        apply_scenario(runner, _SCENARIO, verify=True)
+        ball_speed = robot_speed = 0.0
+        for _ in range(5):
+            runner.step_once()
+            frame = runner.my.current_game_frame
+            ball_speed = max(ball_speed, frame.ball.v.mag())
+            for robot in (*frame.friendly_robots.values(), *frame.enemy_robots.values()):
+                robot_speed = max(robot_speed, robot.v.mag())
+    finally:
+        runner.close()
+
+    # The scenario's ball is at rest and its robots idle: anything near 1 m/s is a phantom.
+    assert ball_speed < 1.0, f"ball reads {ball_speed:.1f} m/s after the start"
+    assert robot_speed < 1.0, f"a robot reads {robot_speed:.1f} m/s after the start"
+
+
 def _make_position_refiner():
     from utama_core.data_processing.refiners import PositionRefiner
 
@@ -350,13 +374,16 @@ def _bench_runner(frame):
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6)
     referee.seed_clock(frame.ts, RefereeCommand.PREPARE_KICKOFF_YELLOW)
-    return SimpleNamespace(
-        sim_controller=_NoopSim(),
-        my_team_is_yellow=True,
-        my=SimpleNamespace(current_game_frame=frame, position_refiner=_NoopRefiner()),
-        opp=SimpleNamespace(current_game_frame=frame, position_refiner=_NoopRefiner()),
-        referee=referee,
-    )
+
+    def side():
+        return SimpleNamespace(
+            current_game_frame=frame,
+            position_refiner=_NoopRefiner(),
+            game=SimpleNamespace(field=None),
+            strategy=SimpleNamespace(load_game=lambda game: None),
+        )
+
+    return SimpleNamespace(sim_controller=_NoopSim(), my_team_is_yellow=True, my=side(), opp=side(), referee=referee)
 
 
 def _penalty_start(command: RefereeCommand) -> Scenario:

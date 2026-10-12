@@ -91,8 +91,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from utama_core.config.settings import MAX_GAME_HISTORY
 from utama_core.entities.data.vector import Vector2D, Vector3D
-from utama_core.entities.game import Ball, GameFrame, Robot
+from utama_core.entities.game import Ball, Game, GameFrame, GameHistory, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import _load_replay, load_frames_in_range
 
@@ -484,13 +485,20 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     # scenario's positions via `dataclasses.replace`, THEN reset the
     # refiners — so the filter's first-ever seed for each robot is already
     # the teleport target, and the first blend is target-into-target.
-    _overwrite_current_game_frame(runner.my, scenario, my_is_friendly=True)
-    runner.my.position_refiner.reset()
-    runner.my.position_refiner.start_filtering()
-    if runner.opp is not None:
-        _overwrite_current_game_frame(runner.opp, scenario, my_is_friendly=False)
-        runner.opp.position_refiner.reset()
-        runner.opp.position_refiner.start_filtering()
+    # The same goes for the frame history velocities are differenced over: left holding the
+    # formation, the first tick reads the teleport as a jump from it (a ball 4 m away at
+    # 130 m/s), the ball filter overshoots by half a metre (a goal, or out of play, from a ball
+    # at rest) and the referee charges ball-speed and crashing fouls. So each side starts a new
+    # history from the scenario, as `StrategyRunner` does when the teams change ends.
+    for side, my_is_friendly in ((runner.my, True), (runner.opp, False)):
+        if side is None:
+            continue
+        _overwrite_current_game_frame(side, scenario, my_is_friendly=my_is_friendly)
+        side.position_refiner.reset()
+        side.position_refiner.start_filtering()
+        side.game_history = GameHistory(MAX_GAME_HISTORY)
+        side.game = Game(side.game_history, side.current_game_frame, field=side.game.field)
+        side.strategy.load_game(side.game)
 
     referee = getattr(runner, "referee", None)
     command = scenario.referee_command
