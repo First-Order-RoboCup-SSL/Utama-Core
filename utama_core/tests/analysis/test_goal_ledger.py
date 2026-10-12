@@ -10,7 +10,9 @@ from utama_core.analysis.goal_ledger import (
     find_restarts,
     fold_restart_takes,
     live_mask,
+    per_match,
     possession_spells,
+    situation_rates,
     situations,
     tables,
 )
@@ -34,6 +36,31 @@ def _restart(t, kind="free kick", side="friendly", third="attacking"):
 
 def _goal(t, side="friendly"):
     return {"t": t, "side": side}
+
+
+def test_situation_rates_are_per_team_per_live_minute_and_a_force_start_per_live_minute():
+    taken = {**_spell("friendly", 1.2, "attacking"), "takes_restart": True}
+    matches = [
+        {
+            "live_s": 120.0,
+            "restarts": [_restart(1.0), _restart(5.0, "force start", None, None)],
+            "spells": [taken, _spell("enemy", 3.0, "middle")],
+        },
+        {"live_s": 60.0, "restarts": [_restart(0.0, side="enemy")], "spells": []},
+    ]
+
+    rates = situation_rates(matches)
+
+    # 3 live minutes, 2 teams: two free kicks in the kicker's attacking third, whoever kicked
+    assert rates["live_min_per_match"] == 1.5
+    assert rates["per_team_live_min"]["free kick, attacking third"] == pytest.approx(2 / 6)
+    assert rates["per_team_live_min"]["ball won, middle third"] == pytest.approx(1 / 6)
+    assert rates["per_team_live_min"]["force start"] == pytest.approx(1 / 3)
+    assert rates["per_team_live_min"]["kickoff"] == 0.0
+    # either side's free kicks happen 1/3 x 1.5 = 0.5 times a match
+    assert per_match(rates, "own free kick, attacking third") == pytest.approx(0.5)
+    assert per_match(rates, "opponent free kick, attacking third") == pytest.approx(0.5)
+    assert per_match(rates, "force start") == pytest.approx(0.5)
 
 
 def test_a_goal_exactly_the_window_after_a_start_is_sustained_possession():

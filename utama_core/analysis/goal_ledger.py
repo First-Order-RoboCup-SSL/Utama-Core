@@ -38,6 +38,10 @@ Thirds are `chances.py`'s (`THIRD_DEPTH_M` from either goal line).
 
 Strategy names come from `--labels`, else the run's `summary.json`/`ladder.json` (config_a is
 friendly), else the referee's team names (an official log's teams).
+
+`--rates PATH` also writes how often each situation happens in the corpus, owner-neutral and
+per live minute (`situation_rates`): the weights `tools/scenario_bench.py` turns its
+per-situation results into goals per match with.
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ import bisect
 import collections
 import json
 import re
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -83,6 +88,8 @@ _SITUATIONS = [
 ]
 TYPES = [f"{owner} {s}" for owner in ("own", "opponent") for s in (*_SITUATIONS, "kickoff", "penalty")]
 TYPES += ["force start", SUSTAINED]
+# the same situations, whoever owns them (`situation_rates`)
+NEUTRAL_TYPES = [*_SITUATIONS, "kickoff", "penalty", "force start"]
 
 
 def third(x: float) -> str:
@@ -234,6 +241,7 @@ def match_ledger(npz_path, labels: Optional[tuple[str, str]] = None) -> dict:
     )
     fold_restart_takes(restarts, spells)
     match = {"match": path.name[: -len(".npz")], "path": str(path), "restarts": restarts, "spells": spells}
+    match["live_s"] = float(np.diff(ts, append=ts[-1])[live].sum())
     match["goals"] = find_goals(ts, live, replay.sparse_referee, replay.my_team_is_yellow)
     attribute(match["goals"], situations(match))
     match["labels"] = dict(zip(("friendly", "enemy"), labels or _referee_names(replay)))
@@ -274,6 +282,30 @@ def situation_type(situation: Optional[dict], side: str) -> str:
     if situation["kind"] in ("kickoff", "penalty"):
         return f"{owner} {situation['kind']}"
     return f"{owner} {situation['kind']}, {situation['third']} third"
+
+
+def situation_rates(matches: list[dict]) -> dict:
+    """How often each of `NEUTRAL_TYPES` happens per team per live minute (a force start, owned
+    by no one, per live minute), and live minutes per match. Per live minute, not per minute: a
+    real match is mostly stopped, and how long stoppages last is the referee's doing."""
+    live_min = sum(m["live_s"] for m in matches) / 60
+    counts = collections.Counter(
+        situation_type(s, s["side"]).removeprefix("own ") for m in matches for s in situations(m)
+    )
+    return {
+        "matches": len(matches),
+        "live_min_per_match": live_min / len(matches),
+        "per_team_live_min": {
+            typ: counts[typ] / (live_min if typ == "force start" else 2 * live_min) for typ in NEUTRAL_TYPES
+        },
+    }
+
+
+def per_match(rates: dict, typ: str) -> float:
+    """How often situation `typ` (one of `TYPES`, from either side's view) happens per match
+    under `rates` (`situation_rates`): a side's own situations and its opponent's have one rate."""
+    neutral = typ.removeprefix("own ").removeprefix("opponent ")
+    return rates["per_team_live_min"].get(neutral, 0.0) * rates["live_min_per_match"]
 
 
 def tables(matches: list[dict]) -> dict[str, dict]:
@@ -369,6 +401,7 @@ def main() -> None:
     parser.add_argument("paths", nargs="+", type=Path, help="run directories and/or replay .npz files")
     parser.add_argument("--labels", type=Path, help='JSON {"<stem>": ["<friendly>", "<enemy>"]}: who played')
     parser.add_argument("--out", type=Path, help="JSON output (default: goal_ledger.json beside the first input)")
+    parser.add_argument("--rates", type=Path, help="also write the corpus's situation rates here (situation_rates)")
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
 
@@ -380,6 +413,12 @@ def main() -> None:
     out = args.out or (first if first.is_dir() else first.parent) / "goal_ledger.json"
     out.write_text(json.dumps({"strategies": strategies, "matches": matches}, indent=1))
     print(f"wrote {out}: {len(matches)} matches, {sum(len(m['goals']) for m in matches)} goals")
+    if args.rates:
+        rates = situation_rates(matches)
+        rates["inputs"] = [p.name for p in args.paths]
+        rates["command"] = " ".join(["python -m utama_core.analysis.goal_ledger", *sys.argv[1:]])
+        args.rates.write_text(json.dumps(rates, indent=1) + "\n")
+        print(f"wrote {args.rates}: {rates['live_min_per_match']:.2f} live minutes per match")
 
 
 if __name__ == "__main__":
