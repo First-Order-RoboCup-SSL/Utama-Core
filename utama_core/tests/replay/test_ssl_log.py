@@ -154,7 +154,9 @@ def converted(tmp_path):
             blue_on_positive=True,
             designated_position=dict(x=1500.0, y=-1000.0),
         ),
-        _referee(T0 + S // 4, half, RefereeCommand.DIRECT_FREE_BLUE, 3, blue_on_positive=True),
+        _referee(
+            T0 + S // 4, half, RefereeCommand.DIRECT_FREE_BLUE, 3, blue_on_positive=True, stage_time_left=299_750_000
+        ),
         _referee(T0 + S, half, RefereeCommand.STOP, 4, score=(1, 0), blue_on_positive=True),
         _referee(T0 + S + S // 60, second, RefereeCommand.STOP, 4, score=(1, 0), blue_on_positive=False),
         _referee(T0 + 2 * S, Stage.POST_GAME, RefereeCommand.HALT, 5, score=(1, 0), blue_on_positive=False),
@@ -230,6 +232,13 @@ def test_a_free_kick_reads_normal_start_once_its_ball_is_in_play(converted):
     assert (command[15:30] == RefereeCommand.DIRECT_FREE_BLUE.value).all()
     assert (command[30:60] == RefereeCommand.NORMAL_START.value).all()
     assert command[60] == RefereeCommand.STOP.value
+
+
+def test_the_stage_clock_runs_on_through_the_free_kick_being_taken(converted):
+    # the free kick's message says 299.75 s left at tick 15; the clock runs in both commands
+    replay, *_ = converted
+    clock = np.array([replay.frame_at(k).referee.stage_time_left for k in range(15, 60)])
+    np.testing.assert_allclose(clock, 299.75 - (np.arange(15, 60) - 15) / 60, atol=1e-6)
 
 
 def test_the_source_sidecar_names_the_log_and_teams(converted, tmp_path):

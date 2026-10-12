@@ -490,15 +490,19 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         exp_enemy=int(seen[:, _BLUE].sum(axis=1).max(initial=0)),
         path=out_dir / f"{stem}.npz",
     )
-    base_key, base, base_ts = None, None, 0.0
+    # each tick's referee is the last kept message with its clocks run on from when it arrived
+    base_index, base, base_ts = -1, None, 0.0
     for k, i in enumerate(ref_index):
-        if (i, taken[k]) != base_key:
-            base_key, base_ts = (i, taken[k]), ts[k]
+        if i != base_index:
+            base_index, base_ts = i, (referee[i][0] - start_ns) / 1e9
             base = referee_data(referee[i][1], referee[i][0] / 1e9)
-            if taken[k]:  # see `free_kick_taken`
-                base = dataclasses.replace(
-                    base, referee_command=RefereeCommand.NORMAL_START, referee_command_timestamp=tick_ns[k] / 1e9
-                )
+        if taken[k] and base.referee_command != RefereeCommand.NORMAL_START:  # see `free_kick_taken`
+            base = dataclasses.replace(
+                advance_clocks(base, float(ts[k] - base_ts)),
+                referee_command=RefereeCommand.NORMAL_START,
+                referee_command_timestamp=tick_ns[k] / 1e9,
+            )
+            base_ts = ts[k]
         ball = Ball(p=Vector3D(*world.ball_p[k]), v=Vector3D(*world.ball_v[k]), a=Vector3D(*world.ball_a[k]))
         writer.write_frame(
             GameFrame(
@@ -508,7 +512,7 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
                 friendly_robots=_robots(world, k, _YELLOW, True),
                 enemy_robots=_robots(world, k, _BLUE, False),
                 ball=ball,
-                referee=base if ts[k] == base_ts else advance_clocks(base, float(ts[k] - base_ts)),
+                referee=advance_clocks(base, float(ts[k] - base_ts)),
             )
         )
     writer.close()
