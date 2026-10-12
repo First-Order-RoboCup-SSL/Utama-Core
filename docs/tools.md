@@ -35,6 +35,7 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 |---|---|
 | `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of 20 s starts harvested from a round-robin; also builds new banks (`--harvest-from`), and plays one start with a timeline and picture (`--play`) |
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
+| `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. See [signals.md](signals.md#where-do-goals-come-from) |
 | `tools/bench_vs_standings.py` | How far scenario-bench scores rank strategies the way round-robin standings do (Spearman) |
 | `tools/metric_correlation.py` | Offline study of which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
