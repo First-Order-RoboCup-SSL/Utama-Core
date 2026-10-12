@@ -149,3 +149,41 @@ def test_force_start_clock_runs_from_the_first_tick():
     # A forced start puts the ball in play at once, so the clock is not gated on movement.
     rule = NoProgressRule(max_seconds=10.0)
     assert _run(rule, [0.0, 10.0]) is not None
+
+
+# ---------------------------------------------------------------------------
+# No progress is not counted while the ball is inside either defense area
+# ---------------------------------------------------------------------------
+
+# Standard field: the left box is x <= -3.5, the right box x >= 3.5 (|y| <= 1.0).
+_LEFT_BOX_EDGE_X = -GEO.half_length + 2 * GEO.half_defense_depth
+
+
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+def test_ball_just_inside_a_defense_area_never_fires(side):
+    rule = NoProgressRule(max_seconds=10.0)
+    x = side * (abs(_LEFT_BOX_EDGE_X) + 0.01)  # 1 cm inside the box
+    for ts in (0.0, 5.0, 10.0, 15.0):
+        assert rule.check(_frame_at(ts, x=x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
+
+
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+def test_ball_just_outside_a_defense_area_still_fires(side):
+    rule = NoProgressRule(max_seconds=10.0)
+    x = side * (abs(_LEFT_BOX_EDGE_X) - 0.01)  # 1 cm outside the box
+    assert rule.check(_frame_at(0.0, x=x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
+    v = rule.check(_frame_at(10.0, x=x, y=0.0), GEO, RefereeCommand.FORCE_START)
+    assert v is not None and v.rule_name == "no_progress"
+
+
+def test_leaving_a_defense_area_restarts_the_clock():
+    rule = NoProgressRule(max_seconds=10.0)
+    inside_x = -(abs(_LEFT_BOX_EDGE_X) + 0.01)
+    for ts in (0.0, 5.0, 9.5):
+        assert rule.check(_frame_at(ts, x=inside_x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
+    # Out at 9.5 s (1 cm outside the box edge), then unmoved: the 10 s run starts from there.
+    outside_x = -(abs(_LEFT_BOX_EDGE_X) - 0.01)
+    assert rule.check(_frame_at(9.6, x=outside_x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
+    assert rule.check(_frame_at(19.5, x=outside_x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
+    v = rule.check(_frame_at(19.6, x=outside_x, y=0.0), GEO, RefereeCommand.FORCE_START)
+    assert v is not None and v.rule_name == "no_progress"

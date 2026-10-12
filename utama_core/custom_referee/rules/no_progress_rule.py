@@ -10,7 +10,9 @@ the same 0.05 m the rulebook uses for a ball coming into play (§5.4).
 
 The clock only runs while the ball is in play. After a NORMAL_START the ball is not
 in play until it moves 0.05 m or the kickoff/penalty auto-in-play (10 s, §5.4) fires,
-so the clock waits for one of those. A FORCE_START puts the ball in play at once.
+so the clock waits for one of those. A FORCE_START puts the ball in play at once. The
+clock is also held (and reset) while the ball is inside either defense area: officials
+never call no-progress there (the keeper-held-ball rule covers it).
 """
 
 from __future__ import annotations
@@ -33,6 +35,11 @@ _PROGRESS_DISTANCE_M = 0.05
 # Kickoff/penalty auto-in-play after the restart (§5.4): the ball is in play after this
 # long even if it has not moved.
 _AUTO_IN_PLAY_SECONDS = 10.0
+
+
+def _in_either_defense_area(point: tuple[float, float], geometry: RefereeGeometry) -> bool:
+    x, y = point
+    return geometry.is_in_left_defense_area(x, y) or geometry.is_in_right_defense_area(x, y)
 
 
 class NoProgressRule(BaseRule):
@@ -62,6 +69,9 @@ class NoProgressRule(BaseRule):
             return None
 
         here = (ball.p.x, ball.p.y)
+        if _in_either_defense_area(here, geometry):
+            self._anchor = None
+            return None
         ts = game_frame.ts
         if self._anchor is None:
             self._anchor = here
