@@ -10,7 +10,10 @@ after the sidecar's time for it, as a real replay's do.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import pytest
@@ -25,15 +28,18 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriterConfig,
 )
 from utama_core.scenario_bench import scenario_harvester
+from utama_core.scenario_bench.hand_authored_scenarios import (
+    all_hand_authored_scenarios,
+)
 from utama_core.scenario_bench.scenario_harvester import (
-    _PASS_LEAD_S,
-    OpenPlayEvent,
+    RestartTransition,
+    _kicking_is_yellow,
     find_restart_transitions,
     harvest_replay,
     harvest_run_dir,
     match_is_trustworthy,
-    open_play_events,
-    pick_events,
+    restart_situation,
+    sample_by_situation,
 )
 from utama_core.scenario_bench.start import ScenarioFamily, ScenarioTrigger
 
@@ -363,76 +369,109 @@ def test_a_start_whose_command_the_replay_never_shows_is_dropped(tmp_path):
     assert harvest_replay(replay_path, source_run_id="r", evaluator_version="abc") == []
 
 
-# --- open play ----------------------------------------------------------------
-
-_LIVE_FROM_5 = [
-    {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-    {"event": "referee", "sim_time": 5.0, "command": "NORMAL_START"},
-    {"event": "referee", "sim_time": 30.0, "command": "STOP"},
-]
+# --- situation types and the per-situation sample --------------------------------
 
 
-def _analysis(passes=(), turnovers=()) -> dict:
-    return {"passes": [{"t": t} for t in passes], "turnovers": list(turnovers), "restarts": []}
+@pytest.mark.parametrize(
+    "command, ball_x, situation",
+    [
+        # the candidate is yellow, defending the right goal: it attacks -x
+        (RefereeCommand.DIRECT_FREE_YELLOW, -3.0, "own free kick, attacking third"),
+        (RefereeCommand.DIRECT_FREE_YELLOW, 3.0, "own free kick, defensive third"),
+        (RefereeCommand.DIRECT_FREE_BLUE, 3.0, "opponent free kick, attacking third"),
+        (RefereeCommand.DIRECT_FREE_BLUE, 0.0, "opponent free kick, middle third"),
+        (RefereeCommand.PREPARE_KICKOFF_BLUE, 0.0, "opponent kickoff"),
+        (RefereeCommand.PREPARE_PENALTY_YELLOW, -3.0, "own penalty"),
+        (RefereeCommand.FORCE_START, 3.0, "force start"),
+    ],
+)
+def test_a_restart_start_is_typed_from_the_candidate_s_view(command, ball_x, situation):
+    transition = RestartTransition(10.0, RefereeCommand.STOP, command, _kicking_is_yellow(command))
+    assert restart_situation(transition, True, SimpleNamespace(ball_x=ball_x)) == situation
 
 
-def _loss(t: float, kind: str = "tackled", regained_after_s=None) -> dict:
-    return {"t": t, "kind": kind, "regained_after_s": regained_after_s}
-
-
-def test_a_pass_gives_a_possession_start_before_the_release():
-    events = open_play_events(_analysis(passes=[12.0]), _LIVE_FROM_5)
-
-    assert events == [
-        OpenPlayEvent(12.0 - _PASS_LEAD_S, ScenarioFamily.OPEN_PLAY_POSSESSION, "candidate_in_possession")
-    ]
-
-
-def test_a_pass_whose_lead_in_is_not_all_live_play_is_skipped():
-    # the start would fall before NORMAL_START (5.0), or span the STOP at 30.0
-    assert open_play_events(_analysis(passes=[5.0 + _PASS_LEAD_S - 0.01, 30.5]), _LIVE_FROM_5) == []
-    assert len(open_play_events(_analysis(passes=[5.0 + _PASS_LEAD_S]), _LIVE_FROM_5)) == 1
-
-
-def test_only_real_live_losses_give_counter_starts():
-    losses = [
-        _loss(10.0),
-        _loss(11.0, regained_after_s=0.5),  # flicker: won straight back
-        _loss(12.0, kind="during_stoppage"),
-        _loss(31.0),  # after the STOP
-    ]
-    events = open_play_events(_analysis(turnovers=losses), _LIVE_FROM_5)
-
-    assert events == [OpenPlayEvent(10.0, ScenarioFamily.OPEN_PLAY_COUNTER, "candidate_defending")]
-
-
-def test_pick_events_caps_each_family_and_is_reproducible():
-    events = [
-        OpenPlayEvent(float(t), ScenarioFamily.OPEN_PLAY_POSSESSION, "candidate_in_possession") for t in range(10)
-    ]
-    events += [OpenPlayEvent(20.0, ScenarioFamily.OPEN_PLAY_COUNTER, "candidate_defending")]
-
-    picked = pick_events(events, 2, seed="match_a")
-
-    assert len(picked) == 3
-    assert sum(e.family == ScenarioFamily.OPEN_PLAY_POSSESSION for e in picked) == 2
-    assert picked == pick_events(events, 2, seed="match_a")
-    assert [e.sim_time for e in picked] == sorted(e.sim_time for e in picked)
-
-
-def test_harvest_replay_adds_open_play_scenarios_when_asked(tmp_path, monkeypatch):
-    replay = _write_replay(tmp_path, "match", [t / 10 for t in range(0, 200)])
-    _write_sidecar(replay, _LIVE_FROM_5)
-    monkeypatch.setattr(
-        scenario_harvester, "analyse_match", lambda path: _analysis(passes=[12.0], turnovers=[_loss(15.0)])
+def test_a_harvested_restart_carries_its_situation(tmp_path):
+    ticks = [15.0 + k * _TICK for k in range(-2, 4)]
+    replay_path = _write_replay(tmp_path, "m", ticks, _placement_then_free_kick)
+    _write_sidecar(
+        replay_path,
+        [
+            {"event": "referee", "sim_time": 11.0, "command": "BALL_PLACEMENT_YELLOW"},
+            {"event": "referee", "sim_time": 15.0, "command": "DIRECT_FREE_YELLOW"},
+        ],
     )
 
-    assert harvest_replay(replay, source_run_id="run", evaluator_version="x") == []
-    scenarios = harvest_replay(replay, source_run_id="run", evaluator_version="x", open_play_per_match=1)
+    [start] = harvest_replay(replay_path, source_run_id="r", evaluator_version="abc")
 
-    assert [(s.provenance.family, s.provenance.trigger) for s in scenarios] == [
-        (ScenarioFamily.OPEN_PLAY_POSSESSION, ScenarioTrigger.EVENT),
-        (ScenarioFamily.OPEN_PLAY_COUNTER, ScenarioTrigger.EVENT),
+    assert start.scenario.ball_x == pytest.approx(1.0)  # 3.5 m from the goal the candidate attacks
+    assert start.provenance.situation == "own free kick, middle third"
+
+
+def test_a_ball_won_start_is_each_ledger_spell_not_taking_a_restart_in_live_play(tmp_path, monkeypatch):
+    replay = _write_replay(tmp_path, "m", [t / 10 for t in range(60)])
+    _write_sidecar(
+        replay,
+        [
+            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
+            {"event": "referee", "sim_time": 1.0, "command": "NORMAL_START"},
+        ],
+    )
+
+    def spell(t, side, third, takes_restart=False):
+        return {"t": t, "t_end": t + 0.5, "side": side, "third": third, "takes_restart": takes_restart}
+
+    spells = [
+        spell(0.5, "friendly", "middle"),  # before play went live
+        spell(1.2, "friendly", "middle", takes_restart=True),  # the kickoff being taken
+        spell(2.0, "friendly", "attacking"),
+        spell(3.0, "enemy", "defensive"),
     ]
-    assert scenarios[0].scenario.sim_time == 12.0 - _PASS_LEAD_S
-    assert scenarios[0].scenario_id == f"match_t{12.0 - _PASS_LEAD_S:.1f}_open_play_possession"
+    monkeypatch.setattr(scenario_harvester, "match_ledger", lambda path: {"spells": spells})
+
+    assert harvest_replay(replay, source_run_id="r", evaluator_version="x") == []  # the opening kickoff
+    starts = harvest_replay(replay, source_run_id="r", evaluator_version="x", ball_won=True)
+
+    assert [(s.provenance.anchor_tick, s.provenance.situation, s.provenance.family) for s in starts] == [
+        (2.0, "own ball won, attacking third", ScenarioFamily.OPEN_PLAY_POSSESSION),
+        (3.0, "opponent ball won, defensive third", ScenarioFamily.OPEN_PLAY_COUNTER),
+    ]
+    assert all(s.provenance.trigger == ScenarioTrigger.EVENT for s in starts)
+    assert starts[0].scenario_id == "m_t2.0_own_ball_won_attacking"
+
+
+def _typed(situation: str, match: str, k: int):
+    base = list(all_hand_authored_scenarios())[0]
+    return dataclasses.replace(
+        base,
+        scenario_id=f"{match}_{situation}_{k}",
+        # 1 m apart: no two are near-duplicates
+        scenario=dataclasses.replace(base.scenario, ball_x=-4.0 + k, ball_y=-2.0 + ord(match[-1]) - ord("a")),
+        provenance=dataclasses.replace(base.provenance, situation=situation, source_replay=Path(f"{match}.npz")),
+    )
+
+
+def test_the_sample_keeps_up_to_n_of_each_situation_spread_over_matches_and_half_as_many_kickoffs():
+    starts = [
+        _typed(situation, match, k)
+        for situation in ("own ball won, middle third", "own kickoff")
+        for match in ("match_a", "match_b", "match_c")
+        for k in range(5)
+    ]
+
+    sample = sample_by_situation(starts, 4, seed=0)
+
+    won = [s for s in sample if s.provenance.situation == "own ball won, middle third"]
+    assert len(won) == 4
+    assert {s.provenance.source_replay for s in won} == {Path(f"match_{m}.npz") for m in "abc"}
+    assert len([s for s in sample if s.provenance.situation == "own kickoff"]) == 2
+    assert [s.scenario_id for s in sample_by_situation(starts, 4, seed=0)] == [s.scenario_id for s in sample]
+    assert [s.scenario_id for s in sample_by_situation(starts, 4, seed=1)] != [s.scenario_id for s in sample]
+
+
+def test_the_sample_skips_a_near_duplicate_of_a_start_already_drawn():
+    first = _typed("own kickoff", "match_a", 0)
+    again = dataclasses.replace(
+        first, scenario_id="again", provenance=dataclasses.replace(first.provenance, source_replay=Path("match_b.npz"))
+    )
+
+    assert len(sample_by_situation([first, again], 40)) == 1
