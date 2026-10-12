@@ -72,6 +72,9 @@ Known limitations, stated here once rather than re-derived by every caller:
   such row at or before `t_seconds` is taken as the command in effect at
   that instant. Both `Scenario.referee_command` and the "if the fallback
   found nothing" case resolve to `None` without raising, either way.
+  A frame shows the referee's decision on the frame before it, one tick
+  after the sidecar's time for it: to start from a restart at the time the
+  sidecar gives, pass `showing=` (see `_first_frame_showing`).
 """
 
 from __future__ import annotations
@@ -87,12 +90,13 @@ from typing import Optional
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.replay.replay_player import _load_replay
+from utama_core.replay.replay_player import _load_replay, load_frames_in_range
 
 logger = logging.getLogger(__name__)
 
 _POSITION_TOLERANCE_M = 0.15  # mirrors teleport_position_accuracy_test.py's POSITION_TOLERANCE
 _VERIFY_MAX_TICKS = 10  # see apply_scenario's verify=True docstring for why more than 1 tick is needed
+_SHOWING_WINDOW_S = 0.5  # how far past `t_seconds` `scenario_from_replay(showing=...)` looks
 
 
 @dataclass(frozen=True)
@@ -255,21 +259,45 @@ def _config_names_from_summary(replay_path: Path) -> tuple[Optional[str], Option
     return None, None
 
 
-def scenario_from_replay(replay_path, t_seconds: float) -> Scenario:
+def _command_on(frame: GameFrame, replay_path: Path, t_seconds: float) -> Optional[RefereeCommand]:
+    """The command `frame` shows, or the sidecar's at `t_seconds` when it carries none."""
+    if frame.referee is not None:
+        return frame.referee.referee_command
+    return _referee_command_at(_sidecar_path(replay_path), t_seconds)
+
+
+def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCommand) -> GameFrame:
+    """The first frame from `t_seconds` on that shows `command`.
+
+    A replay frame carries the referee's decision on the frame before it (`StrategyRunner`
+    steps the referee on the frame it has, then writes the next one), so the match log's time
+    for a command is one tick before the first frame showing it: the frame at that time, the
+    nearest, still shows the command before.
+    """
+    for frame in load_frames_in_range(replay_path, t_seconds, t_seconds + _SHOWING_WINDOW_S):
+        if _command_on(frame, replay_path, frame.ts) == command:
+            return frame
+    raise ValueError(f"No frame in {replay_path} shows {command.name} within {_SHOWING_WINDOW_S}s of t={t_seconds}.")
+
+
+def scenario_from_replay(replay_path, t_seconds: float, *, showing: Optional[RefereeCommand] = None) -> Scenario:
     """Read the frame nearest `t_seconds` from `replay_path` and build a
     `Scenario` from it, merging in the referee command from the
     `.intentions.jsonl` sidecar (frames themselves carry no referee data —
     see module docstring) and the two strategy config names from the
     tournament directory's `summary.json`, when available.
+
+    `showing`: take instead the first frame from `t_seconds` on that shows this referee
+    command (raising `ValueError` if none does within `_SHOWING_WINDOW_S`): for a restart
+    at the time the match log gives it, see `_first_frame_showing`.
     """
     replay_path = Path(replay_path)
-    frame = _nearest_frame(replay_path, t_seconds)
-
-    referee_command = None
-    if frame.referee is not None:
-        referee_command = frame.referee.referee_command
+    if showing is None:
+        frame = _nearest_frame(replay_path, t_seconds)
+        referee_command = _command_on(frame, replay_path, t_seconds)
     else:
-        referee_command = _referee_command_at(_sidecar_path(replay_path), t_seconds)
+        frame = _first_frame_showing(replay_path, t_seconds, showing)
+        referee_command = showing
 
     config_a_name, config_b_name = _config_names_from_summary(replay_path)
 

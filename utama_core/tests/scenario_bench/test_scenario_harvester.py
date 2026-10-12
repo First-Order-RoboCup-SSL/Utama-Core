@@ -4,17 +4,22 @@ Uses a synthetic `.npz` replay (`ColumnarReplayWriter`, same writer
 `round_robin.py` uses) plus a hand-written `.intentions.jsonl` sidecar —
 referee-command info lives entirely in the sidecar here (frames carry
 `referee=None`), matching `scenario_from_replay`'s documented fallback path,
-so no real `RefereeData`/`TeamInfo`/`Stage` construction is needed to test
-the harvester's transition-detection and trust-gate logic.
+except in the free-kick tick tests, whose frames carry the command one tick
+after the sidecar's time for it, as a real replay's do.
 """
 
 from __future__ import annotations
 
 import json
+from typing import Optional
 
+import pytest
+
+from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
@@ -45,18 +50,33 @@ def _robot(id_: int, x: float, y: float, *, friendly: bool) -> Robot:
     )
 
 
-def _frame(ts: float) -> GameFrame:
+def _referee(command: RefereeCommand) -> RefereeData:
+    return RefereeData(
+        source_identifier=None,
+        time_sent=0.0,
+        time_received=0.0,
+        referee_command=command,
+        referee_command_timestamp=0.0,
+        stage=Stage.NORMAL_FIRST_HALF,
+        stage_time_left=0.0,
+        blue_team=None,
+        yellow_team=None,
+    )
+
+
+def _frame(ts: float, command: Optional[RefereeCommand] = None, ball_x: float = 0.0) -> GameFrame:
     return GameFrame(
         ts=ts,
         my_team_is_yellow=True,
         my_team_is_right=True,
         friendly_robots={0: _robot(0, -4.0, 0.0, friendly=True), 1: _robot(1, -1.0, 0.5, friendly=True)},
         enemy_robots={0: _robot(0, 4.0, 0.0, friendly=False), 1: _robot(1, 1.0, -0.5, friendly=False)},
-        ball=Ball(p=Vector3D(0.0, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+        ball=Ball(p=Vector3D(ball_x, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+        referee=_referee(command) if command is not None else None,
     )
 
 
-def _write_replay(tmp_path, name: str, ts_values: list[float]):
+def _write_replay(tmp_path, name: str, ts_values: list[float], frame=_frame):
     path = tmp_path / f"{name}.npz"
     writer = ColumnarReplayWriter(
         ColumnarReplayWriterConfig(replay_name=name, overwrite_existing=True),
@@ -66,7 +86,7 @@ def _write_replay(tmp_path, name: str, ts_values: list[float]):
         path=path,
     )
     for ts in ts_values:
-        writer.write_frame(_frame(ts))
+        writer.write_frame(frame(ts))
     writer.close()
     return path
 
@@ -86,7 +106,9 @@ def _write_stats(replay_path, stall_events: list) -> None:
 # --- find_restart_transitions -------------------------------------------------
 
 
-def test_finds_kickoff_transition(tmp_path):
+def test_a_kickoff_or_penalty_is_found_where_it_is_awarded_not_where_it_goes_live(tmp_path):
+    """The start is the restart's own command, as for a free kick. The NORMAL_START after it
+    could only be replayed as live play, the penalty or kickoff already over."""
     sidecar = tmp_path / "match.intentions.jsonl"
     sidecar.write_text(
         "\n".join(
@@ -94,13 +116,18 @@ def test_finds_kickoff_transition(tmp_path):
             for row in [
                 {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
                 {"event": "referee", "sim_time": 3.0, "command": "NORMAL_START"},
+                {"event": "referee", "sim_time": 10.0, "command": "STOP"},
+                {"event": "referee", "sim_time": 11.0, "command": "BALL_PLACEMENT_YELLOW"},
+                {"event": "referee", "sim_time": 13.0, "command": "PREPARE_PENALTY_BLUE"},
+                {"event": "referee", "sim_time": 18.0, "command": "NORMAL_START"},
             ]
         )
     )
     transitions = find_restart_transitions(sidecar)
-    assert len(transitions) == 1
-    assert transitions[0].sim_time == 3.0
-    assert transitions[0].command == RefereeCommand.NORMAL_START
+    assert [(t.sim_time, t.command, t.kicking_is_yellow) for t in transitions] == [
+        (0.0, RefereeCommand.PREPARE_KICKOFF_YELLOW, True),
+        (13.0, RefereeCommand.PREPARE_PENALTY_BLUE, False),
+    ]
 
 
 def test_finds_direct_free_transition(tmp_path):
@@ -120,9 +147,14 @@ def test_finds_direct_free_transition(tmp_path):
     assert transitions[0].kicking_is_yellow is False
 
 
-def test_prepare_states_alone_produce_no_transition(tmp_path):
+def test_live_play_and_stoppages_alone_produce_no_transition(tmp_path):
     sidecar = tmp_path / "match.intentions.jsonl"
-    sidecar.write_text(json.dumps({"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"}))
+    sidecar.write_text(
+        "\n".join(
+            json.dumps({"event": "referee", "sim_time": t, "command": c})
+            for t, c in [(0.0, "NORMAL_START"), (5.0, "STOP"), (6.0, "BALL_PLACEMENT_BLUE"), (9.0, "NORMAL_START")]
+        )
+    )
     assert find_restart_transitions(sidecar) == []
 
 
@@ -136,15 +168,16 @@ def test_duplicate_transitions_within_gap_are_deduplicated(tmp_path):
         "\n".join(
             json.dumps(row)
             for row in [
-                {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-                {"event": "referee", "sim_time": 3.0, "command": "NORMAL_START"},
-                {"event": "referee", "sim_time": 3.05, "command": "NORMAL_START"},
+                {"event": "referee", "sim_time": 0.0, "command": "STOP"},
+                {"event": "referee", "sim_time": 3.0, "command": "DIRECT_FREE_YELLOW"},
+                {"event": "referee", "sim_time": 3.05, "command": "DIRECT_FREE_YELLOW"},
+                {"event": "referee", "sim_time": 3.1, "command": "STOP"},
+                {"event": "referee", "sim_time": 3.2, "command": "DIRECT_FREE_YELLOW"},
             ]
         )
     )
-    # Second NORMAL_START row has the same prev_command as itself (NORMAL_START
-    # -> NORMAL_START is not a transition at all, so this also checks that
-    # re-emitting the same command isn't treated as a new restart).
+    # The repeated row (a score or stage change logs the same command again) is not a
+    # transition at all, and the free kick given again 0.2 s later is within the gap.
     transitions = find_restart_transitions(sidecar)
     assert len(transitions) == 1
 
@@ -182,8 +215,8 @@ def test_harvest_replay_extracts_scenario_at_transition(tmp_path):
     _write_sidecar(
         replay_path,
         [
-            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},
-            {"event": "referee", "sim_time": 0.5, "command": "NORMAL_START"},  # opening kickoff: skipped
+            {"event": "referee", "sim_time": 0.0, "command": "PREPARE_KICKOFF_YELLOW"},  # opening kickoff: skipped
+            {"event": "referee", "sim_time": 0.5, "command": "NORMAL_START"},
             {"event": "referee", "sim_time": 1.0, "command": "STOP"},
             {"event": "referee", "sim_time": 2.0, "command": "PREPARE_KICKOFF_BLUE"},
             {"event": "referee", "sim_time": 3.0, "command": "NORMAL_START"},
@@ -196,7 +229,10 @@ def test_harvest_replay_extracts_scenario_at_transition(tmp_path):
     bench_scenario = scenarios[0]
     assert bench_scenario.provenance.source_run_id == "test_run"
     assert bench_scenario.provenance.evaluator_version == "abc123"
-    assert bench_scenario.provenance.anchor_tick == 3.0
+    assert bench_scenario.provenance.anchor_tick == 2.0
+    assert bench_scenario.provenance.family == ScenarioFamily.KICKOFF
+    assert bench_scenario.provenance.perspective == "candidate_defending"  # blue kicks off; the candidate is yellow
+    assert bench_scenario.scenario.referee_command == RefereeCommand.PREPARE_KICKOFF_BLUE
     assert bench_scenario.scenario.friendly_robots
     assert bench_scenario.scenario.enemy_robots
 
@@ -276,7 +312,55 @@ def test_harvest_replay_skips_the_opening_kickoff(tmp_path):
         ],
     )
     scenarios = harvest_replay(replay_path, source_run_id="r", evaluator_version="abc")
-    assert [s.provenance.anchor_tick for s in scenarios] == [3.0]
+    assert [s.provenance.anchor_tick for s in scenarios] == [2.0]
+
+
+_TICK = 1 / 60
+
+
+def _placement_then_free_kick(ts: float) -> GameFrame:
+    """A replay frame shows the referee's decision on the frame before it: the match log puts
+    DIRECT_FREE_YELLOW at t=15.0, the replay first shows it one tick later. The ball moves
+    1 m a tick so the test can tell which tick a start was taken from."""
+    awarded = ts > 15.0 + _TICK / 2
+    command = RefereeCommand.DIRECT_FREE_YELLOW if awarded else RefereeCommand.BALL_PLACEMENT_YELLOW
+    return _frame(ts, command, ball_x=round((ts - 15.0) / _TICK))
+
+
+def test_a_free_kick_start_is_the_first_replay_tick_that_shows_the_free_kick(tmp_path):
+    """The nearest tick to the match log's time still showed BALL_PLACEMENT_*: replayed, the
+    free kick sat in ball placement and was never taken (bank_v7, 241 starts)."""
+    ticks = [15.0 + k * _TICK for k in range(-2, 4)]
+    replay_path = _write_replay(tmp_path, "m", ticks, _placement_then_free_kick)
+    _write_sidecar(
+        replay_path,
+        [
+            {"event": "referee", "sim_time": 10.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 11.0, "command": "BALL_PLACEMENT_YELLOW"},
+            {"event": "referee", "sim_time": 15.0, "command": "DIRECT_FREE_YELLOW"},
+        ],
+    )
+
+    [start] = harvest_replay(replay_path, source_run_id="r", evaluator_version="abc")
+
+    assert start.scenario.referee_command == RefereeCommand.DIRECT_FREE_YELLOW
+    assert start.scenario.frame_ts == pytest.approx(15.0 + _TICK, abs=1e-6)
+    assert start.scenario.ball_x == pytest.approx(1.0)
+    assert start.provenance.anchor_tick == 15.0
+
+
+def test_a_start_whose_command_the_replay_never_shows_is_dropped(tmp_path):
+    ticks = [15.0 + k * _TICK for k in range(-2, 4)]
+    replay_path = _write_replay(tmp_path, "m", ticks, lambda ts: _frame(ts, RefereeCommand.STOP))
+    _write_sidecar(
+        replay_path,
+        [
+            {"event": "referee", "sim_time": 10.0, "command": "STOP"},
+            {"event": "referee", "sim_time": 15.0, "command": "DIRECT_FREE_YELLOW"},
+        ],
+    )
+
+    assert harvest_replay(replay_path, source_run_id="r", evaluator_version="abc") == []
 
 
 # --- open play ----------------------------------------------------------------

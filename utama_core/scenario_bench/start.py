@@ -56,7 +56,7 @@ class ScenarioTrigger(Enum):
     """How this scenario's anchor moment was identified."""
 
     HAND_AUTHORED = "hand_authored"
-    RESTART = "restart"  # referee transition into live play (see item 14)
+    RESTART = "restart"  # a restart, from when the referee awards it (see scenario_harvester)
     EVENT = "event"  # MatchStats-detected: possession change, entry, etc.
     PERIODIC = "periodic"  # fallback sampling, not trigger-detected
 

@@ -1,12 +1,12 @@
 """Harvest restart-triggered `BenchScenario`s from a tagged tournament run.
 
-Implements the "restart is the moment agency starts" design from
-`docs/roadmap.md` item 14 (2026-09-04 design pass): a scenario's anchor is
-the transition INTO live play, not the PREPARE/STOP state that precedes it —
-`PREPARE_KICKOFF_*/PREPARE_PENALTY_* → NORMAL_START`,
-`STOP → DIRECT_FREE_*`, `STOP → FORCE_START`. Every restart yields two
-`BenchScenario`s (candidate kicking, candidate defending) — restarts are
-asymmetric.
+A restart start is the moment the referee awards it: `→ PREPARE_KICKOFF_*`,
+`→ PREPARE_PENALTY_*`, `STOP/BALL_PLACEMENT_* → DIRECT_FREE_*`, and `STOP → FORCE_START`.
+Played from there, the referee runs the restart as in the match (`apply_scenario`): the
+kickoff or penalty is prepared and goes live, the free kick is taken. Kickoffs and penalties
+were once anchored at the `NORMAL_START` that ends their preparation, which a bench runner
+could only replay as its own kickoff. Each start's perspective (candidate kicking or
+defending) is the colour the command names: restarts are asymmetric.
 
 Match-level trust gate, per that same design pass: a match's replay is only
 harvested from when its `<match_tag>.stats.json` (written by
@@ -55,10 +55,9 @@ logger = logging.getLogger(__name__)
 
 # Restart families keyed by the referee command that is transitioned INTO.
 # `perspective` is candidate-relative and resolved per-match against which
-# colour the candidate is playing — see `_family_and_perspective`.
-_KICKOFF_COMMANDS = frozenset({RefereeCommand.NORMAL_START})
-_PENALTY_PREV_COMMANDS = frozenset({RefereeCommand.PREPARE_PENALTY_YELLOW, RefereeCommand.PREPARE_PENALTY_BLUE})
-_KICKOFF_PREV_COMMANDS = frozenset({RefereeCommand.PREPARE_KICKOFF_YELLOW, RefereeCommand.PREPARE_KICKOFF_BLUE})
+# colour the candidate is playing — see `_perspective_family`.
+_PENALTY_COMMANDS = frozenset({RefereeCommand.PREPARE_PENALTY_YELLOW, RefereeCommand.PREPARE_PENALTY_BLUE})
+_KICKOFF_COMMANDS = frozenset({RefereeCommand.PREPARE_KICKOFF_YELLOW, RefereeCommand.PREPARE_KICKOFF_BLUE})
 _DIRECT_FREE_COMMANDS = frozenset({RefereeCommand.DIRECT_FREE_YELLOW, RefereeCommand.DIRECT_FREE_BLUE})
 _LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START})
 # A free kick follows STOP, or ball placement when the ball had to be moved first
@@ -75,19 +74,14 @@ _MIN_RESTART_GAP_S = 0.5
 
 @dataclass(frozen=True)
 class RestartTransition:
-    """One detected transition into live play, from a `.intentions.jsonl`
+    """One restart awarded (see module docstring), from a `.intentions.jsonl`
     sidecar's referee-event rows."""
 
     sim_time: float
     prev_command: Optional[RefereeCommand]
     command: RefereeCommand
-    # Which colour (True=yellow) the transition's restart favours — the
-    # kicking/placed team, derived from `prev_command`/`command` where
-    # possible (DIRECT_FREE_YELLOW/BLUE encode it directly; a plain
-    # NORMAL_START/FORCE_START from STOP does not, so this is None there
-    # and perspective falls back to "whoever the ball is nearest" — the
-    # harvester doesn't have ball position at this layer, so that
-    # fallback is resolved later via the loaded `Scenario`).
+    # Which colour (True=yellow) takes the restart, as `command` names it; None for a
+    # FORCE_START, which names no colour.
     kicking_is_yellow: Optional[bool]
 
 
@@ -111,18 +105,15 @@ def _referee_rows(sidecar_path: Path) -> list[dict]:
 
 
 def _kicking_is_yellow(command: RefereeCommand) -> Optional[bool]:
-    if command in (RefereeCommand.DIRECT_FREE_YELLOW,):
-        return True
-    if command in (RefereeCommand.DIRECT_FREE_BLUE,):
-        return False
+    if command in (_KICKOFF_COMMANDS | _PENALTY_COMMANDS | _DIRECT_FREE_COMMANDS):
+        return command.name.endswith("_YELLOW")
     return None
 
 
 def find_restart_transitions(sidecar_path: Path) -> list[RestartTransition]:
-    """Scan a `.intentions.jsonl` sidecar for transitions into live play or
-    into a DIRECT_FREE command, in the order the design calls out:
-    `PREPARE_KICKOFF_*/PREPARE_PENALTY_* -> NORMAL_START`,
-    `STOP/BALL_PLACEMENT_* -> DIRECT_FREE_*`, `STOP -> FORCE_START`.
+    """Scan a `.intentions.jsonl` sidecar for every restart awarded (see module docstring):
+    `-> PREPARE_KICKOFF_*/PREPARE_PENALTY_*`, `STOP/BALL_PLACEMENT_* -> DIRECT_FREE_*`,
+    `STOP -> FORCE_START`. A match's opening kickoff is its first row, after no command.
 
     Returns transitions in ascending `sim_time` order. A transition whose
     `sim_time` is within `_MIN_RESTART_GAP_S` of the previous one found is
@@ -143,12 +134,13 @@ def find_restart_transitions(sidecar_path: Path) -> list[RestartTransition]:
         except KeyError:
             continue
 
-        is_restart_into_live = (
-            command in _KICKOFF_COMMANDS and prev_command in (_KICKOFF_PREV_COMMANDS | _PENALTY_PREV_COMMANDS)
-        ) or (command == RefereeCommand.FORCE_START and prev_command == RefereeCommand.STOP)
-        is_restart_into_direct_free = command in _DIRECT_FREE_COMMANDS and prev_command in _DIRECT_FREE_PREV_COMMANDS
+        is_restart = (
+            (command in (_KICKOFF_COMMANDS | _PENALTY_COMMANDS) and prev_command != command)
+            or (command in _DIRECT_FREE_COMMANDS and prev_command in _DIRECT_FREE_PREV_COMMANDS)
+            or (command == RefereeCommand.FORCE_START and prev_command == RefereeCommand.STOP)
+        )
 
-        if (is_restart_into_live or is_restart_into_direct_free) and (ts - last_transition_ts) >= _MIN_RESTART_GAP_S:
+        if is_restart and (ts - last_transition_ts) >= _MIN_RESTART_GAP_S:
             transitions.append(
                 RestartTransition(
                     sim_time=float(ts),
@@ -165,9 +157,9 @@ def find_restart_transitions(sidecar_path: Path) -> list[RestartTransition]:
 
 
 def _family_for(transition: RestartTransition) -> ScenarioFamily:
-    if transition.command in _KICKOFF_COMMANDS and transition.prev_command in _KICKOFF_PREV_COMMANDS:
+    if transition.command in _KICKOFF_COMMANDS:
         return ScenarioFamily.KICKOFF
-    if transition.command in _KICKOFF_COMMANDS and transition.prev_command in _PENALTY_PREV_COMMANDS:
+    if transition.command in _PENALTY_COMMANDS:
         return ScenarioFamily.PENALTY
     if transition.command in _DIRECT_FREE_COMMANDS:
         # Perspective (attacking/defending) is resolved per-candidate by the
@@ -180,14 +172,13 @@ def _family_for(transition: RestartTransition) -> ScenarioFamily:
 def _perspective_family(
     transition: RestartTransition, family: ScenarioFamily, candidate_is_yellow: bool
 ) -> tuple[ScenarioFamily, str]:
-    if family != ScenarioFamily.DIRECT_FREE_ATTACKING:
-        return family, "candidate_kicking"
     if transition.kicking_is_yellow is None:
         return family, "candidate_kicking"
-    candidate_is_kicking = transition.kicking_is_yellow == candidate_is_yellow
-    if candidate_is_kicking:
-        return ScenarioFamily.DIRECT_FREE_ATTACKING, "candidate_kicking"
-    return ScenarioFamily.DIRECT_FREE_DEFENDING, "candidate_defending"
+    if transition.kicking_is_yellow == candidate_is_yellow:
+        return family, "candidate_kicking"
+    if family == ScenarioFamily.DIRECT_FREE_ATTACKING:
+        return ScenarioFamily.DIRECT_FREE_DEFENDING, "candidate_defending"
+    return family, "candidate_defending"
 
 
 def match_is_trustworthy(stats_path: Path) -> bool:
@@ -261,10 +252,11 @@ def pick_events(events: list[OpenPlayEvent], per_family: int, *, seed: str) -> l
     return sorted(picked, key=lambda e: e.sim_time)
 
 
-def _harvested(replay_path: Path, t: float) -> Optional[Scenario]:
-    """The replay's field state at `t`, or None if it can't be read or fails the static screen."""
+def _harvested(replay_path: Path, t: float, showing: Optional[RefereeCommand] = None) -> Optional[Scenario]:
+    """The replay's field state at `t` (at the first frame showing `showing`, when given; see
+    `scenario_from_replay`), or None if it can't be read or fails the static screen."""
     try:
-        scenario = scenario_from_replay(replay_path, t)
+        scenario = scenario_from_replay(replay_path, t, showing=showing)
     except ValueError:
         logger.warning("Could not load frame at t=%.3f from %s", t, replay_path)
         return None
@@ -303,7 +295,7 @@ def harvest_replay(
         # kickoff formation): harvested from a whole run it swamps the bank.
         if index == 0 and _family_for(transition) == ScenarioFamily.KICKOFF:
             continue
-        scenario = _harvested(replay_path, transition.sim_time)
+        scenario = _harvested(replay_path, transition.sim_time, showing=transition.command)
         if scenario is None:
             continue
 
