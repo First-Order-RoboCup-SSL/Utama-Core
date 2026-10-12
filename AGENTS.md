@@ -40,8 +40,8 @@ One term per thing; reuse these instead of coining new ones.
 - **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
   against a baseline on a bank, each start against the opponent it came from; it estimates the
   change in goals per match as Σ situations per match (real or sim weights) × the change in
-  P(goal within 10 s). A screen, not a ranking: it cannot see a candidate change how often
-  situations happen, so confirm with a round-robin.
+  P(goal within 10 s). A diagnostic, not a ranking: it cannot see a candidate change how often
+  situations happen or score from build-up longer than 10 s, so rank with matches.
 - **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
   how far the bench and cheap proxy metrics agree with round-robin results.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on

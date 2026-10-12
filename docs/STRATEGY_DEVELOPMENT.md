@@ -391,10 +391,15 @@ What the effect is and is not:
 - It over-counts goals. A goal counts for every situation that started in the 10 s before it,
   and situations overlap: summed over every situation, P(goal within 10 s) × count is 1.21× the
   goals actually scored under sim rates and 1.58× under real ones (measured with the ledger on
-  both corpora). Read the effect as a scaled estimate; the ranking of candidates is unaffected.
-- 10 s misses slow effects: on bank_v5 a 20 s horizon found passes aimed 10° off at t = -7.6
-  and a 10 s horizon did not (see the roadmap). `--horizon 20` lengthens it, but the weights are
-  for 10 s situations.
+  both corpora). Read the effect as a scaled estimate. The factor need not be the same for
+  every strategy, so it can reorder close candidates.
+- It does not see goals from build-up. A goal more than 10 s after the latest situation began
+  ("sustained possession" in the ledger) is outside every start's horizon, and strategies
+  differ widely in how many they score: in `tournament_20261011_230119`, 3-7% of the split_*
+  family's goals, but 19-40% of overload_press's, high_press's and press_and_pass's, and 60-68%
+  of score_aware_counter_flow's and counter_flow's. The bench under-rates the slow scorers.
+  `--horizon 20` sees more of them, but the weights are for 10 s situations. The same horizon
+  hid passes aimed 10° off on bank_v5 (t = -7.6 at 20 s, +0.8 at 10 s; see the roadmap).
 
 rsim is deterministic, so the same code gives the same outcomes, and a baseline recorded once
 serves every later candidate. A bench worker keeps its rsim subprocess between starts
@@ -421,7 +426,7 @@ view, with its source match, time, configs and type in its provenance. Restarts 
 the first tick showing their command; ball-won starts at the start of the ledger's possession
 spell. On this branch 293 of the 640 are playable: 347 come from matches against split_block,
 split_outlet, split_outlet_wall, split_press, split_sticky or split_wall, which live only on
-`strategy/search-20261011`. Per playable type that leaves 15-25 starts (kickoffs 6 and 9).
+`strategy/search-20261011`. Per playable type that leaves 11-25 starts (kickoffs 6 and 9).
 
 A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
 no simulation:
@@ -463,6 +468,16 @@ match per pair). With six candidates even an unbiased bench at this precision wo
 to correlate at only about +0.5. So at this size the bench detects a large difference
 (several goals a match) and says which situations it comes from; it cannot tell apart
 candidates within 2-3 goals of each other. Use it for that, and rank with matches.
+
+Noise is not the only reason. The round-robin's gap between each candidate and split_shape,
+split by the ledger into its parts (each candidate's situation counts and conversion against
+split_shape's, over all its matches), is mostly conversion: -4.8 to -6.8 goals a match per
+candidate. That is the part the bench measures, which is why it gets the level right. Between
+the candidates, though, three parts differ by similar amounts: conversion (spread about 2
+goals), how often situations happen (decoy_and_overload -2.7, the others within 0.7) and goals
+from build-up (+0.35 to +1.3 against split_shape). The bench sees only the first. Per second of
+simulation it is no more precise than matches either: it used about a third of the play time
+of the round-robin's matches for these candidates, for a standard error about √3 larger.
 
 Where the noise comes from: the frequent situations with rare goals. Defensive-third regains
 happen about 16 times a match per side under sim rates, so one goal in 17 starts moves the
