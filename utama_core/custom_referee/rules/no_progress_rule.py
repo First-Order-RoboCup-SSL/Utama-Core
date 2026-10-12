@@ -7,6 +7,10 @@ stopped and continued by a forced start."
 "Progress" is taken as the ball moving: the clock restarts whenever the ball has
 moved `_PROGRESS_DISTANCE_M` from where it was when the clock last restarted --
 the same 0.05 m the rulebook uses for a ball coming into play (§5.4).
+
+The clock only runs while the ball is in play. After a NORMAL_START the ball is not
+in play until it moves 0.05 m or the kickoff/penalty auto-in-play (10 s, §5.4) fires,
+so the clock waits for one of those. A FORCE_START puts the ball in play at once.
 """
 
 from __future__ import annotations
@@ -26,6 +30,9 @@ _ACTIVE_PLAY_COMMANDS = {
 }
 
 _PROGRESS_DISTANCE_M = 0.05
+# Kickoff/penalty auto-in-play after the restart (§5.4): the ball is in play after this
+# long even if it has not moved.
+_AUTO_IN_PLAY_SECONDS = 10.0
 
 
 class NoProgressRule(BaseRule):
@@ -38,6 +45,9 @@ class NoProgressRule(BaseRule):
         self._max_seconds = max_seconds
         self._anchor: Optional[tuple[float, float]] = None
         self._anchor_ts: float = 0.0
+        # The clock is running only once the ball is in play (see module docstring).
+        self._clock_running = False
+        self._restart_ts: float = 0.0
 
     def check(
         self,
@@ -52,11 +62,24 @@ class NoProgressRule(BaseRule):
             return None
 
         here = (ball.p.x, ball.p.y)
-        if self._anchor is None or math.dist(here, self._anchor) >= _PROGRESS_DISTANCE_M:
+        ts = game_frame.ts
+        if self._anchor is None:
             self._anchor = here
-            self._anchor_ts = game_frame.ts
+            self._anchor_ts = ts
+            self._restart_ts = ts
+            self._clock_running = current_command == RefereeCommand.FORCE_START
             return None
-        if game_frame.ts - self._anchor_ts < self._max_seconds:
+        if math.dist(here, self._anchor) >= _PROGRESS_DISTANCE_M:
+            self._anchor = here
+            self._anchor_ts = ts
+            self._clock_running = True
+            return None
+        if not self._clock_running:
+            if ts - self._restart_ts < _AUTO_IN_PLAY_SECONDS:
+                return None
+            self._clock_running = True
+            self._anchor_ts = self._restart_ts + _AUTO_IN_PLAY_SECONDS
+        if ts - self._anchor_ts < self._max_seconds:
             return None
 
         self._anchor = None
@@ -70,3 +93,4 @@ class NoProgressRule(BaseRule):
 
     def reset(self) -> None:
         self._anchor = None
+        self._clock_running = False

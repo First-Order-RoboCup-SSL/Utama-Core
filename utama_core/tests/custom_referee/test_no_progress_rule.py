@@ -109,3 +109,43 @@ def test_simulation_profile_stops_a_frozen_game():
     result = referee.step(_frame(10.1, friendly_robots=near), current_time=10.1)
     assert referee.last_violation.rule_name == "no_progress"
     assert result.referee_command == RefereeCommand.STOP
+
+
+# ---------------------------------------------------------------------------
+# The clock starts once the ball is in play (not at a NORMAL_START with the ball unmoved)
+# ---------------------------------------------------------------------------
+
+
+def _frame_at(ts: float, x: float = 1.0, y: float = 0.5) -> GameFrame:
+    return _frame(ts, x=x, y=y)
+
+
+def test_normal_start_with_unmoved_ball_does_not_fire_at_ten_seconds():
+    # Kickoff/penalty: the ball is not in play until it moves or auto-starts (10 s).
+    # Real matches: the old clock fired exactly 10 s after such a restart, 226 of 422 false alarms.
+    rule = NoProgressRule(max_seconds=10.0)
+    for ts in (0.0, 5.0, 10.5):
+        assert rule.check(_frame_at(ts), GEO, RefereeCommand.NORMAL_START) is None
+
+
+def test_ball_moved_four_point_nine_cm_is_not_in_play():
+    rule = NoProgressRule(max_seconds=10.0)
+    assert rule.check(_frame_at(0.0, x=1.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(2.0, x=1.049), GEO, RefereeCommand.NORMAL_START) is None
+    # Still not in play at 10.5 s: the clock starts at the 10 s auto-in-play, so no call yet.
+    assert rule.check(_frame_at(10.5, x=1.049), GEO, RefereeCommand.NORMAL_START) is None
+
+
+def test_ball_moved_five_point_one_cm_starts_the_clock():
+    rule = NoProgressRule(max_seconds=10.0)
+    assert rule.check(_frame_at(0.0, x=1.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(2.0, x=1.051), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(11.9, x=1.051), GEO, RefereeCommand.NORMAL_START) is None
+    v = rule.check(_frame_at(12.0, x=1.051), GEO, RefereeCommand.NORMAL_START)
+    assert v is not None and v.rule_name == "no_progress"
+
+
+def test_force_start_clock_runs_from_the_first_tick():
+    # A forced start puts the ball in play at once, so the clock is not gated on movement.
+    rule = NoProgressRule(max_seconds=10.0)
+    assert _run(rule, [0.0, 10.0]) is not None
