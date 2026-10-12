@@ -18,6 +18,7 @@ from utama_core.replay.ssl_log import (
     REFEREE,
     TRACKER,
     VISION_2014,
+    _colours_swapped,
     _contradicted_sides,
     _Scan,
     _sides_from_goalkeepers,
@@ -289,7 +290,7 @@ def test_the_source_sidecar_names_the_log_and_teams(converted, tmp_path):
 def test_teams_that_swap_colours_at_half_time_stay_friendly_and_enemy(tmp_path):
     # as in 2022 Div B: blue stays on +x, but the teams change markers at half time and the game
     # controller moves names and scores with them. Ones (yellow at kick-off) scored before the
-    # break and have a free kick after it, as blue.
+    # break and have a free kick a minute after it, as blue.
     half, second = Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF
     swapped = dict(names=("Twos", "Ones"), score=(0, 1), blue_on_positive=True)
     records = [
@@ -298,10 +299,10 @@ def test_teams_that_swap_colours_at_half_time_stay_friendly_and_enemy(tmp_path):
             T0 + S // 2, half, RefereeCommand.STOP, 2, score=(1, 0), blue_on_positive=True, names=("Ones", "Twos")
         ),
         _referee(T0 + S, second, RefereeCommand.STOP, 2, **swapped),
-        _referee(T0 + 3 * S // 2, second, RefereeCommand.DIRECT_FREE_BLUE, 3, **swapped),
-        _referee(T0 + 2 * S, Stage.POST_GAME, RefereeCommand.HALT, 4, **swapped),
+        _referee(T0 + 61 * S, second, RefereeCommand.DIRECT_FREE_BLUE, 3, **swapped),
+        _referee(T0 + 62 * S, Stage.POST_GAME, RefereeCommand.HALT, 4, **swapped),
     ]
-    for k in range(0, 2 * 60 + 1):
+    for k in range(0, 62 * 60 + 1):
         ones, twos = ((1, 1, -2.0, 0.0), (2, 4, 2.0, 0.0)) if k < 60 else ((2, 1, 2.0, 0.0), (1, 4, -2.0, 0.0))
         records.append(_tracked(T0 + k * S // 60, [ones, twos], ball=(0.0, 1.0)))
     records.sort(key=lambda r: r[0])
@@ -311,13 +312,26 @@ def test_teams_that_swap_colours_at_half_time_stay_friendly_and_enemy(tmp_path):
     replay = load_columnar_replay(tmp_path / "out" / "swap.npz")
 
     assert replay.friendly_ids.tolist() == [1] and replay.enemy_ids.tolist() == [4]
-    np.testing.assert_allclose(replay.friendly_p[[0, 59, 60, 119], 0, 0], [-2.0, -2.0, 2.0, 2.0])
+    np.testing.assert_allclose(replay.friendly_p[[0, 59, 60, -1], 0, 0], [-2.0, -2.0, 2.0, 2.0])
     assert not replay.side_is_right[:60].any() and replay.side_is_right[60:].all()
-    second_half = replay.frame_at(100).referee
+    second_half = replay.frame_at(61 * 60 + 10).referee
     assert (second_half.yellow_team.name, second_half.yellow_team.score) == ("Ones", 1)
     assert second_half.referee_command == RefereeCommand.DIRECT_FREE_YELLOW
     assert summary["yellow"] == "Ones" and summary["score"] == {"yellow": 1, "blue": 0}
     assert summary["colours_swapped"]
+
+
+def test_team_names_swapped_for_under_a_minute_are_an_operators_slip_not_a_colour_swap():
+    # 2018 Div A: the names swapped for 3 s mid-half and back, the robots kept their markers
+    def names_at(seconds, names):
+        ts_ns, _, payload = _referee(T0 + seconds * S, Stage.NORMAL_FIRST_HALF, RefereeCommand.STOP, 1, names=names)
+        return ts_ns, Referee.FromString(payload)
+
+    ab, ba = ("A", "B"), ("B", "A")
+    slip = [names_at(0, ab), names_at(100, ba), names_at(159, ab), names_at(300, ab)]
+    swap = [names_at(0, ab), names_at(100, ba), names_at(160, ab), names_at(300, ab)]
+    assert not _colours_swapped(slip).any()
+    np.testing.assert_array_equal(_colours_swapped(swap), [False, True, False, False])
 
 
 def test_a_match_played_against_the_referees_sides_is_converted_as_played(tmp_path):

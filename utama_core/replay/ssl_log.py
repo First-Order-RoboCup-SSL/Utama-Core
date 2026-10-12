@@ -99,6 +99,7 @@ _BALL_GATE_M = 1.0  # vision fallback: how far from the last tick's ball a detec
 _DIFF_TICKS = 3  # velocity and acceleration: central difference over +-3 ticks (0.1 s)
 _MAX_ID = 16  # robot ids 0-15 (the standard pattern set)
 _SIDE_CHECK_S = 10.0  # live play needed to judge the referee's sides by where the robots played
+_SWAP_MIN_S = 60.0  # team names swapped for less than this are an operator's slip, not a colour swap
 _DIV_B_WALLS = (4.8, 3.3)  # |x|, |y| of the walls of a 9 x 6 m field, for a log without geometry
 _YELLOW, _BLUE = 0, 1  # team index in the arrays below; the tracker's `Team` is 1 yellow, 2 blue
 _END_STAGES = frozenset({Stage.PENALTY_SHOOTOUT_BREAK.value, Stage.PENALTY_SHOOTOUT.value, Stage.POST_GAME.value})
@@ -384,10 +385,19 @@ def _vision_world(packets: list[tuple[int, bytes]], tick_ns: np.ndarray) -> tupl
 
 def _colours_swapped(referee: list[tuple[int, Referee]]) -> np.ndarray:
     """Per referee message, whether the teams wear each other's colours compared with kick-off:
-    its team names are those of the first message naming two teams, swapped."""
+    its team names are those of the first message naming two teams, swapped, and stay so for at
+    least `_SWAP_MIN_S` (a 2018 operator swapped them for 3 s and back, robots unchanged)."""
     names = [(msg.yellow.name, msg.blue.name) for _, msg in referee]
     first = next(((yellow, blue) for yellow, blue in names if yellow and blue and yellow != blue), None)
-    return np.array([first is not None and pair == first[::-1] for pair in names], dtype=bool)
+    swapped = np.array([first is not None and pair == first[::-1] for pair in names], dtype=bool)
+    times = np.array([t for t, _ in referee], dtype=np.int64)
+    for k0 in np.flatnonzero(swapped & ~np.r_[False, swapped[:-1]]):
+        k1 = k0 + 1
+        while k1 < len(swapped) and swapped[k1]:
+            k1 += 1
+        if times[min(k1, len(times) - 1)] - times[k0] < _SWAP_MIN_S * 1e9:
+            swapped[k0:k1] = False
+    return swapped
 
 
 def _robot_sides(world: _World, ticks: np.ndarray, keepers: np.ndarray) -> tuple[Optional[bool], Optional[bool]]:
