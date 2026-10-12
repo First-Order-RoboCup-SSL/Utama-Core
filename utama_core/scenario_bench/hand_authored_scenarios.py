@@ -96,7 +96,7 @@ def _kickoff_center() -> BenchScenario:
         ball_vy=0.0,
         friendly_robots=friendly,
         enemy_robots=enemy,
-        referee_command=RefereeCommand.NORMAL_START,
+        referee_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
         source_replay=Path("hand_authored"),
         config_a_name=None,
         config_b_name=None,

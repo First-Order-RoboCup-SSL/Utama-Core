@@ -57,7 +57,11 @@ Known limitations, stated here once rather than re-derived by every caller:
   them — but `AbstractSimController.teleport_robot` has no velocity
   parameter (only `teleport_ball` does), so `apply_scenario` cannot apply a
   robot's replayed velocity; robots always resume from rest. Ball velocity
-  *is* applied (`teleport_ball(x, y, vx, vy)`).
+  *is* applied (`teleport_ball(x, y, vx, vy)`). Nothing below it can set one
+  either: rsim's reset sends each robot as (x, y, theta) only, and the
+  physics fork's `SSLWorld::replace` (`vendor/rSim`) puts every robot it
+  places at rest. Adding it means changing those, which every cached
+  round-robin match depends on.
 - **Referee command**: most tournament `.pkl` replays *do* carry a live
   `RefereeData` on every frame (`_step_game` attaches whatever the
   `CustomReferee` returned that tick before writing it out) — confirmed by
@@ -97,6 +101,17 @@ logger = logging.getLogger(__name__)
 _POSITION_TOLERANCE_M = 0.15  # mirrors teleport_position_accuracy_test.py's POSITION_TOLERANCE
 _VERIFY_MAX_TICKS = 10  # see apply_scenario's verify=True docstring for why more than 1 tick is needed
 _SHOWING_WINDOW_S = 0.5  # how far past `t_seconds` `scenario_from_replay(showing=...)` looks
+# Restarts the referee only awards from STOP (`apply_scenario`).
+_RESTART_COMMANDS = frozenset(
+    {
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_BLUE,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_BLUE,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -403,12 +418,13 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     has no velocity parameter; robots resume from rest (see module
     docstring's Known limitations). Ball velocity is applied.
 
-    Sets the referee command via the runner's `CustomReferee.set_command`
-    when both `scenario.referee_command` is known and `runner.referee` is a
-    `CustomReferee` — except when the command is `NORMAL_START`, which is
-    left alone (the referee already reaches/holds `NORMAL_START` on its own
-    via `seed_clock`/normal play, and calling `set_command` would reset its
-    internal state-machine timers for no behavioural gain).
+    Puts the runner's `CustomReferee` (when it has one, and the scenario's
+    command is known) in `scenario.referee_command` from this tick, so the
+    start is played as what it was: a free kick, kickoff or penalty as that
+    restart, its preparation timed from now (a penalty goes live once its
+    kicker has been at the mark for the referee's prepare time), and
+    `NORMAL_START`/`FORCE_START` as live play. The runner's own starting
+    command (the bench seeds a yellow kickoff) is overwritten either way.
 
     When `verify` is True (the default), steps the runner (up to
     `_VERIFY_MAX_TICKS` times, stopping early once every position is
@@ -477,12 +493,16 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
         runner.opp.position_refiner.start_filtering()
 
     referee = getattr(runner, "referee", None)
-    if (
-        scenario.referee_command is not None
-        and isinstance(referee, CustomReferee)
-        and scenario.referee_command != RefereeCommand.NORMAL_START
-    ):
-        referee.set_command(scenario.referee_command, runner.my.current_game_frame.ts)
+    command = scenario.referee_command
+    if command is not None and isinstance(referee, CustomReferee):
+        ts = runner.my.current_game_frame.ts
+        if command in _RESTART_COMMANDS:
+            # From STOP, as the match awarded it: set from anything else, the referee would put
+            # a STOP of its own first and hold it until every robot, the kicker too, is clear.
+            referee.set_command(RefereeCommand.STOP, ts)
+            referee.set_command(command, ts, next_command=RefereeCommand.NORMAL_START)
+        else:
+            referee.set_command(command, ts)
 
     if not verify:
         return
