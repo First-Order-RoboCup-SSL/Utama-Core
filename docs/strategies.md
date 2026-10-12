@@ -55,23 +55,34 @@ against the round-robin's top.
 
 ## Strategy search, 2026-10-11
 
-Five `split_shape` variants, each one idea, in a 17-config round-robin with the 12 above
-(`replays/tournament_20261011_205245/summary.json`, 136 matches of 600 s, after the
-`LeadAndSupportTactic` shot-target fix). A single round-robin screen: not yet laddered, so the
-ranking among the top four is not settled (rsim is deterministic, one match per pairing).
+Six `split_shape` variants, each one idea, in an 18-config round-robin with the 12 above
+(`replays/tournament_20261012_095359/summary.json`, 153 matches of 600 s, after the
+`LeadAndSupportTactic` shot-target, `turn_on_spot` blocked-pivot, `DecoyOverloadTactic`
+finish-release and `split_wall` keep-out fixes). rsim is deterministic, so this is one match per
+pairing: the order among the six variants changed with every fix to shared code and is not
+evidence on its own. Every variant finished above `split_shape`, which beat none of them.
 
 | Strategy | Idea | W-D-L | GF-GA | Points per match | vs `split_shape` |
 |---|---|---|---|---|---|
-| `split_outlet` | One robot held high on the weak side while defending (`OutletTactic`) | 14-2-0 | 123-74 | 2.75 | 8-8 |
-| `split_wall` | Two-robot wall at the opponent's direct free kicks (`referee_overrides`) | 13-1-2 | 118-62 | 2.50 | 11-6 |
-| `split_press` | Without the ball, a 2-robot `PressAndContainTactic` instead of a lone chaser | 13-0-3 | 125-75 | 2.44 | 3-10 |
-| `split_shape` | (reference) | 11-1-4 | 112-77 | 2.12 | |
-| `split_block` | `BlockShapeTactic` defense | 11-0-5 | 117-87 | 2.06 | 14-8 |
-| `split_sticky` | Possession hysteresis on the attack/defense split | 10-1-5 | 109-76 | 1.94 | 8-6 |
+| `split_sticky` | Possession hysteresis on the attack/defense split | 15-0-2 | 136-83 | 2.65 | 8-7 |
+| `split_block` | `BlockShapeTactic` defense | 14-1-2 | 144-82 | 2.53 | 8-8 |
+| `split_wall` | Two-robot wall at the opponent's direct free kicks (`referee_overrides`) | 14-1-2 | 119-75 | 2.53 | 7-6 |
+| `split_outlet` | One robot held high on the weak side while defending (`OutletTactic`) | 14-0-3 | 127-85 | 2.47 | 8-7 |
+| `split_outlet_wall` | `split_outlet` plus `split_wall`'s free-kick wall | 13-1-3 | 127-74 | 2.35 | 7-2 |
+| `split_press` | Without the ball, a 2-robot `PressAndContainTactic` instead of a lone chaser | 12-2-3 | 138-73 | 2.24 | 8-8 |
+| `split_shape` | (reference) | 10-3-4 | 113-76 | 1.94 | |
 
-`split_block` and `split_sticky` led a screen run on the code before the shot-target fix
-(2.67 and 2.60 against `split_shape`'s 2.40) and fell below it after: a one-match-per-pairing
-lead of that size is not evidence. 4 matches stalled (COMMITTED_FROZEN), down from 5.
+**Ladder** (`tools/evaluation/ladder.py`, all 8 side/kickoff settings per pairing, scored on
+the matches the round-robin did not play):
+
+- `split_block` (`replays/ladder_20261012_094310/`, before the `split_wall` fix, which it does
+  not use): 12-2-4 held out, 3-0-0 against `split_shape`, 4-0-1 `split_outlet`, 2-1-0
+  `split_press`, 3-1-3 `split_sticky`. The one candidate whose screen lead held up.
+- `split_outlet` (`replays/ladder_20261011_223651/`, before the stall fixes): 12-3-13 in total,
+  0-1-3 against `split_shape`. Its 14-2-0 screen did not hold up.
+
+6 matches stalled (COMMITTED_FROZEN). All six are two carriers pinning the ball between them,
+ended by the referee's no-progress stop; the cause of the stuck turn is not yet found.
 
 ## Latest results
 
