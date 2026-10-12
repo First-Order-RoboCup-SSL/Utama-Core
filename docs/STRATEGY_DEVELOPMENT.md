@@ -258,7 +258,16 @@ robot of each side nearest it every 0.25 s, and each change in the candidate's t
 assignments. The replay, the candidate's match log, the timeline and the picture are kept in
 `replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). One start takes about
 12 s. `--repeats N` plays it from N slightly jittered positions, to see whether what happened
-holds up. A start is robot and ball positions only: both strategies begin it with no memory.
+holds up. A start is robot and ball positions and the referee command only: both strategies begin
+it with no memory, and every robot begins at rest (the ball keeps its speed). rsim has no way to
+place a moving robot: its reset sends a robot's position and heading, and the physics fork stops
+every robot it places, so adding one means changing code every cached match depends on.
+
+A restart start is the moment the referee awarded it: a free kick at the first tick the replay
+shows `DIRECT_FREE_*`, a kickoff or penalty at its `PREPARE_*`. The referee then runs it as in
+the match (`apply_scenario` puts it in that command from the first tick): a free kick goes live
+once its kicker is at the ball and the defenders clear for 2 s, a penalty about 5 s in. Any other
+start is live play from its first tick.
 
 To find starts, tag them by situation with `--where` (names from
 [pitch_zones.md](pitch_zones.md), all from the candidate's side):
@@ -274,12 +283,23 @@ To find starts, tag them by situation with `--where` (names from
 | `ball` | `ours`, `theirs` (a robot within 0.2 m of it), `loose` |
 | `near` | robots of each side within 1.5 m of the ball, e.g. `2v3` |
 
-`TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`. Trust the
-`restart` tag over the id's `candidate_kicking`: kickoffs and penalties carry that label whoever
-kicks. In `bank_v7` the four hand-authored starts (`kickoff_center_v1`,
-`direct_free_*_near_box_v1`, `open_play_3v2_counter_v1`) are stored mirrored: the candidate's keeper
-starts in the goal it attacks. The anchors are fixed in code, so a bank saved from now on has them
-right; `bank_v7` stays as it is, so its results remain comparable.
+`TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`.
+
+`bank_v7` was harvested before three fixes and is kept as it is; a new bank replaces it. In it:
+- Kickoffs and penalties carry `candidate_kicking` in their id whoever kicks: trust the `restart`
+  tag.
+- The four hand-authored starts (`kickoff_center_v1`, `direct_free_*_near_box_v1`,
+  `open_play_3v2_counter_v1`) are stored mirrored: the candidate's keeper starts in the goal it
+  attacks.
+- Restart starts were taken one tick early, on the frame nearest the match log's time, which
+  still shows the command before. 240 of its 242 free kicks are stored as ball placement and
+  replay as a STOP and a placement, never as the free kick; its kickoffs and penalties are stored
+  at the end of their preparation, so they replay it a second time.
+
+Until `b7ea54cf` every start was also played from the bench runner's own yellow kickoff: a
+penalty or free kick after a STOP the referee added, held until every robot was 0.5 m from the
+ball, and every open-play `NORMAL_START` start (496 of `bank_v7`'s 860) inside that kickoff for up
+to 10 s. Bench results recorded before `b7ea54cf` are not comparable with later ones.
 
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a

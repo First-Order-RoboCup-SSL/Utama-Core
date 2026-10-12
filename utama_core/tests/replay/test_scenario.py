@@ -7,6 +7,7 @@ fits alongside `MatchLog`/`render_window`/the stall watchdog.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 
@@ -289,3 +290,126 @@ def _assert_close_to_scenario(positions: dict, scenario, *, tol: float, context:
             f"enemy robot {robot.id}{label} at ({x:.3f}, {y:.3f}) deviates from scenario "
             f"({robot.x:.3f}, {robot.y:.3f}) by more than {tol}m"
         )
+
+
+# --- the referee state a start is played in ----------------------------------------------
+#
+# `scenario_scorer._build_runner` seeds every bench runner with PREPARE_KICKOFF_YELLOW. A start
+# must be played in its own restart (or live play), from the first tick, not in that kickoff.
+
+
+class _NoopSim:
+    def teleport_ball(self, *args, **kwargs):
+        pass
+
+    def teleport_robot(self, *args, **kwargs):
+        pass
+
+
+class _NoopRefiner:
+    def reset(self):
+        pass
+
+    def start_filtering(self):
+        pass
+
+
+def _referee_frame(scenario: Scenario):
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.entities.game import Ball, GameFrame, Robot
+
+    def robots(states, friendly):
+        return {
+            r.id: Robot(
+                id=r.id,
+                is_friendly=friendly,
+                has_ball=False,
+                p=Vector2D(r.x, r.y),
+                v=Vector2D(0, 0),
+                a=Vector2D(0, 0),
+                orientation=r.orientation,
+            )
+            for r in states
+        }
+
+    return GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=robots(scenario.friendly_robots, True),
+        enemy_robots=robots(scenario.enemy_robots, False),
+        ball=Ball(p=Vector3D(scenario.ball_x, scenario.ball_y, 0), v=Vector3D(0, 0, 0), a=Vector3D(0, 0, 0)),
+    )
+
+
+def _bench_runner(frame):
+    """What `apply_scenario` touches of a bench runner, with the referee `_build_runner` gives it."""
+    from types import SimpleNamespace
+
+    from utama_core.custom_referee import CustomReferee
+
+    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6)
+    referee.seed_clock(frame.ts, RefereeCommand.PREPARE_KICKOFF_YELLOW)
+    return SimpleNamespace(
+        sim_controller=_NoopSim(),
+        my_team_is_yellow=True,
+        my=SimpleNamespace(current_game_frame=frame, position_refiner=_NoopRefiner()),
+        opp=SimpleNamespace(current_game_frame=frame, position_refiner=_NoopRefiner()),
+        referee=referee,
+    )
+
+
+def _penalty_start(command: RefereeCommand) -> Scenario:
+    """Blue's penalty at the right goal (yellow, the candidate, defends it): blue's kicker 0.2 m
+    behind the ball on the penalty mark, as the referee hands the kick over after ball placement."""
+    return Scenario(
+        sim_time=207.2,
+        ball_x=2.25,
+        ball_y=0.0,
+        ball_vx=0.0,
+        ball_vy=0.0,
+        friendly_robots=_robots((4.3, 0.0), (3.0, 1.5), (3.0, -1.5)),
+        enemy_robots=_robots((-4.3, 0.0), (2.05, 0.0), (0.5, 1.0)),
+        referee_command=command,
+        source_replay=Path("hand-built"),
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        RefereeCommand.PREPARE_PENALTY_BLUE,
+        RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.PREPARE_KICKOFF_BLUE,
+        RefereeCommand.NORMAL_START,  # open play: a harvested open-play start is live play
+        RefereeCommand.FORCE_START,
+    ],
+)
+def test_a_start_is_played_in_its_own_referee_command_from_the_first_tick(command):
+    """A restart start kept the bench runner's PREPARE_KICKOFF_YELLOW (NORMAL_START was skipped)
+    or got a STOP inserted before it, which held it while the kicker stood at the ball."""
+    scenario = _penalty_start(command)
+    frame = _referee_frame(scenario)
+    runner = _bench_runner(frame)
+
+    apply_scenario(runner, scenario, verify=False)
+
+    assert runner.referee.step(frame, frame.ts).referee_command == command
+
+
+def test_a_penalty_start_goes_live_as_a_penalty_after_the_referee_s_own_preparation():
+    """PREPARE_PENALTY_* -> NORMAL_START once the kicker has been at the mark for the
+    referee's prepare time plus its readiness delay, both counted from the start."""
+    scenario = _penalty_start(RefereeCommand.PREPARE_PENALTY_BLUE)
+    frame = _referee_frame(scenario)
+    runner = _bench_runner(frame)
+
+    apply_scenario(runner, scenario, verify=False)
+    seen = []
+    for tick in range(int(6.0 * 60)):
+        command = runner.referee.step(dataclasses.replace(frame, ts=tick / 60), tick / 60).referee_command
+        if not seen or seen[-1][0] != command:
+            seen.append((command, tick / 60))
+
+    assert [c for c, _ in seen] == [RefereeCommand.PREPARE_PENALTY_BLUE, RefereeCommand.NORMAL_START]
+    assert 5.0 <= seen[1][1] <= 5.1
