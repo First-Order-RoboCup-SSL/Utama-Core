@@ -100,7 +100,8 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
    row of mostly draws, or you need to know which kind of start it changed. Run it against the
    nearest existing strategy, the one it differs from in a single idea, so the A/B tests that
    idea: `tools/scenario_bench.py --load-bank <newest bank> --candidate <name> --baseline
-   <nearest> --opponent <opp> --stop-at-t 4` (see below). Use an opponent outside the pair.
+   <nearest>` (see [The situation bench](#the-situation-bench)). Each start plays the opponent
+   it came from.
 
 A change to `tactics/`, `skills/` or `pickers.py` is the other way round: reuse saves little,
 because most strategies import the changed code and their matches all rerun. Screen it on the bench
@@ -118,14 +119,17 @@ difference evicts the records, says the fingerprint missed a dependency, and fai
 Use `--reuse` on every run: the bench's baseline side then costs
 nothing while its code is unchanged.
 
-**What counts as better.** Results: goals and W-D-L in matches, and the bench's outcome delta.
+**What counts as better.** Results: goals and W-D-L in matches, and the bench's effect on goals per match.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until results move: a change needs a reason in game
 terms, and a bench gain that matches don't confirm means distrust the bench, not that the
-strategy got better. The bench agreed with round-robin standings at Spearman +0.51 (two round-robins agree at +0.97),
-so it screens changes; it doesn't rank strategies, and a bench result alone never accepts a
-change. The +0.97 is not a ceiling: rsim is deterministic, so two round-robins of near-identical
-code agree largely because the code is near-identical.
+strategy got better. The situation bench on bank_v8 gets the size of a several-goal difference
+right but did not rank six candidates the way a round-robin does (Spearman -0.09; its standard
+error, about 2.3 goals a match, is wider than the spread between them: see
+[How far to trust it](#how-far-to-trust-it)). So it screens changes; it doesn't rank strategies,
+and a bench result alone never accepts a change. Two round-robins of near-identical code agree
+at Spearman +0.97, but that is not a ceiling: rsim is deterministic, so they agree largely
+because the code is near-identical.
 
 ### Strategy branches
 
@@ -292,30 +296,30 @@ pairings rarely reach the one a change is about (a defensive change, say, agains
 that seldom gets into our third). The bank's starts are real moments from a round-robin, so
 `--play` puts a strategy into one directly and shows what it did:
 
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
-        --play split_shape_vs_three_slot_t51.9_candidate_kicking --candidate high_press \
-        --opponent split_shape --render png
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \
+        --play counter_flow_vs_split_shape_t426.3_own_ball_won_attacking --candidate high_press --render png
 
-It prints the start's outcome and signals and a timeline: the referee command, the ball, the
-robot of each side nearest it every 0.25 s, and each change in the candidate's tactic
-assignments. The replay, the candidate's match log, the timeline and the picture are kept in
-`replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). One start takes about
-12 s. `--repeats N` plays it from N slightly jittered positions, to see whether what happened
-holds up. A start is robot and ball positions and the referee command only: both strategies begin
-it with no memory, and every robot begins at rest (the ball keeps its speed). rsim has no way to
-place a moving robot: its reset sends a robot's position and heading, and the physics fork stops
-every robot it places, so adding one means changing code every cached match depends on.
+It plays the start against the opponent it came from (`--opponent` to choose another) and
+prints its outcome and signals and a timeline: the referee command, the ball, the robot of each
+side nearest it every 0.25 s, and each change in the candidate's tactic assignments. The replay,
+the candidate's match log, the timeline and the picture are kept in
+`replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). `--repeats N` plays it
+from N slightly jittered positions, to see whether what happened holds up. A start is robot and
+ball positions and the referee command only: both strategies begin it with no memory, and every
+robot begins at rest (the ball keeps its speed). rsim has no way to place a moving robot: its
+reset sends a robot's position and heading, and the physics fork stops every robot it places,
+so adding one means changing code every cached match depends on.
 
 A restart start is the moment the referee awarded it: a free kick at the first tick the replay
 shows `DIRECT_FREE_*`, a kickoff or penalty at its `PREPARE_*`. The referee then runs it as in
 the match (`apply_scenario` puts it in that command from the first tick): a free kick goes live
-once its kicker is at the ball and the defenders clear for 2 s, a penalty about 5 s in. Any other
-start is live play from its first tick.
+once its kicker is at the ball and the defenders clear for 2 s, a penalty about 5 s in. A
+ball-won start is the frame nearest the start of a goal-ledger possession spell, in live play.
 
 To find starts, tag them by situation with `--where` (names from
 [pitch_zones.md](pitch_zones.md), all from the candidate's side):
 
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \
         --list-scenarios --where third=defensive ball=theirs
 
 | Tag | Values |
@@ -327,104 +331,144 @@ To find starts, tag them by situation with `--where` (names from
 | `near` | robots of each side within 1.5 m of the ball, e.g. `2v3` |
 
 `TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`.
+`--list-scenarios` also prints each start's situation type.
 
-`bank_v7` was harvested before three fixes and is kept as it is; a new bank replaces it. In it:
-- Kickoffs and penalties carry `candidate_kicking` in their id whoever kicks: trust the `restart`
-  tag.
-- The four hand-authored starts (`kickoff_center_v1`, `direct_free_*_near_box_v1`,
-  `open_play_3v2_counter_v1`) are stored mirrored: the candidate's keeper starts in the goal it
-  attacks.
-- Restart starts were taken one tick early, on the frame nearest the match log's time, which
-  still shows the command before. 240 of its 242 free kicks are stored as ball placement and
-  replay as a STOP and a placement, never as the free kick; its kickoffs and penalties are stored
-  at the end of their preparation, so they replay it a second time.
+Bench results recorded before `b7ea54cf` are not comparable with later ones: until then every
+start was played from the bench runner's own yellow kickoff. Nor are results recorded before
+`82d6eb66`: until then every start began with phantom speeds (velocities were differenced
+against the formation the runner was built in: a ball at 130 m/s, fouls in almost every
+open-play start). `apply_scenario` now starts each side's history from the scenario.
 
-Until `b7ea54cf` every start was also played from the bench runner's own yellow kickoff: a
-penalty or free kick after a STOP the referee added, held until every robot was 0.5 m from the
-ball, and every open-play `NORMAL_START` start (496 of `bank_v7`'s 860) inside that kickoff for up
-to 10 s. Bench results recorded before `b7ea54cf` are not comparable with later ones.
-
-Until the history fix below, every start also began with phantom speeds. Velocities are differenced over
-the runner's frame history, which still held the formation the bench runner was built in, so the first
-tick read the teleport as a jump from it: a ball at 130 m/s, robots faster. The filtered ball then
-overshot by up to half a metre: a goal from a ball the keeper held, or a ball out of play and a
-placement. The referee charged ball-speed fouls in almost every open-play start and crashing fouls,
-which stop play, in a third. `apply_scenario` now starts each side's history from the scenario.
-
+## The situation bench
 
 For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
 round-robin even with `--reuse`, or of a change too small to move match results, use
-`tools/scenario_bench.py` on the committed bank (`utama_core/scenario_bench/banks/`, newest version):
-every start harvested from one round-robin (kickoffs, free kicks, penalties, and open play: a
-pass about to be made, a ball just lost), near-duplicates dropped, each played 20 s once, the
-candidate against a fixed opponent. rsim is deterministic, so the same code gives the same
-outcomes, and a baseline recorded once serves every later candidate.
+`tools/scenario_bench.py` on the committed bank (`utama_core/scenario_bench/banks/`, newest
+version). It estimates how the change moves goals per match from short paired replays of the
+situations goals come from:
+
+    effect = Σ over situation types (how often it happens per match)
+                                     × (candidate's P(goal) from it − baseline's)
+
+- **Situations** are the goal ledger's ([signals.md](signals.md#where-do-goals-come-from)), from
+  the candidate's view: own or opponent ball won or free kick in each third, own or opponent
+  kickoff or penalty, force start. Each start of the bank carries its type.
+- **P(goal)** is the first goal within 10 s of the start (`--horizon`, the ledger's window): for,
+  against, or none. Both strategies play the same starts from config_a's side, so the change per
+  type is a mean of paired differences, with its standard error.
+- **Opponent:** each start is played against its source match's config_b, so the bank's
+  opponents are the round-robin's. A start whose opponent is not on the branch is skipped and
+  counted. `--opponent` plays every start against one config instead.
+- **How often** comes from a weights file of situation rates (`goal_ledger --rates`): per team
+  per live minute for each type, times live minutes per match. `--weights` picks it:
+  `banks/situation_rates_real.json` (default; the 118 published Division B matches 2022-2026, 7.4
+  live minutes a match) or `banks/situation_rates_sim.json` (`tournament_20261011_230119`, 153
+  matches, 9.0 live minutes). Real matches have fewer defensive-third regains and kickoffs, more
+  regains higher up, and far more free kicks and force starts per live minute than ours, so the
+  two weightings can disagree.
 
     # once, at the baseline commit
     pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
-        --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_base
+        --candidate split_shape --workers 15 --output-dir bench_base
     # per candidate commit
     pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
-        --candidate press_and_pass --opponent low_block --workers 15 --output-dir bench_new \
+        --candidate split_shape --workers 15 --output-dir bench_new \
         --against-results bench_base/scenario_bench_<timestamp>.json
 
-(or `--baseline <config>` to compare two strategies at one commit). The last line printed is
-the paired result: mean outcome delta per scenario, its standard error, and t = mean / stderr.
-|t| under about 2 is within chance. The sign says which side did better, and the per-family
-table says where. Treat it as a screen, then confirm a real improvement with matches.
+(or `--baseline <config>` to compare two strategies at one commit). The report has a row per
+situation type: n, the candidate's and baseline's P(for) and P(against), the paired change with
+its standard error, how often the type happens per match, and its contribution to goals scored,
+conceded and goal difference per match. The last line printed is the total: change in goal
+difference per match, ± its standard error (types independent; within a type, the standard
+error of the mean paired difference). Under 2 standard errors is within chance.
 
-A bench worker keeps its rsim subprocess between starts (`enable_sim_reuse` in
-`robosim_wrapper.py`), asking it for a new native world each time instead of paying about 0.4 s wall
-and 0.5 s CPU to start one: outcomes and every sim state are bit-identical to a fresh process per
-start, in exact and fast numerics (checked on 106 starts in two shuffled orders). Only the sim is
-kept: a `StrategyRunner` is still built per start, which costs about 0.2 s.
+What the effect is and is not:
 
-To screen many candidates, add `--stop-at-t 4` to the candidate run: it scores a shuffled sample 100
-starts at a time and stops once |t| reaches 4 (2 would give false alarms, since t is looked at
-repeatedly). Passes aimed 10° off stop after 100 of 846 starts, about 1.5 min. It also stops as
-futile once the mean delta is confidently under 0.15, that is once |mean| + 2.5 x stderr < 0.15
-(`FUTILE_BELOW`, `FUTILE_Z`). The printed summary and the JSON's `stopped` say which
-("detected" or "futile"; null when every start was scored). 0.15 is about the smallest mean delta a
-full bank_v5 pass detects at |t| >= 4 (per-start deltas have spread 1.02, and 4 x 1.02 / sqrt(846)
-= 0.14), and 2.5 is a one-sided 5% bound split over the 8 checks. Calibration on the recorded
-10°-off run (mean -0.27 over 845 starts), with 2000 simulated passes each:
+- It sees only what a strategy does from each situation. The bank's starts are fixed, so a
+  strategy that changes how often situations happen (wins the ball higher up, concedes fewer
+  free kicks, or is forced into more of its own defensive-third regains) gets no credit or
+  blame for that. A round-robin does; it remains the confirmation.
+- It over-counts goals. A goal counts for every situation that started in the 10 s before it,
+  and situations overlap: summed over every situation, P(goal within 10 s) × count is 1.21× the
+  goals actually scored under sim rates and 1.58× under real ones (measured with the ledger on
+  both corpora). Read the effect as a scaled estimate; the ranking of candidates is unaffected.
+- 10 s misses slow effects: on bank_v5 a 20 s horizon found passes aimed 10° off at t = -7.6
+  and a 10 s horizon did not (see the roadmap). `--horizon 20` lengthens it, but the weights are
+  for 10 s situations.
 
-| Simulated candidate | Stopped futile | Detected | Mean starts scored |
-|---|---:|---:|---:|
-| 10° off, resampled | 0% | 100% | ~295 |
-| half that effect (-0.13) | 4.5%, none a full pass would have detected | 39% | ~730 |
-| null, deltas as spread as 10° off (38% of starts changed) | 89% | 0% | ~565 |
-| null, 20% of starts changed | ~100% | 0% | ~320 |
-| null, 10% of starts changed | 100% | 0% | ~185 |
-| identical code (all deltas 0) | 100% | 0% | 100 |
+rsim is deterministic, so the same code gives the same outcomes, and a baseline recorded once
+serves every later candidate. A bench worker keeps its rsim subprocess between starts
+(`enable_sim_reuse` in `robosim_wrapper.py`), asking it for a new native world each time instead
+of paying about 0.4 s wall and 0.5 s CPU to start one: outcomes and every sim state are
+bit-identical to a fresh process per start, in exact and fast numerics (checked on 106 starts in
+two shuffled orders). Only the sim is kept: a `StrategyRunner` is still built per start, which
+costs about 0.2 s.
 
-On the recorded run in the bench's own order the futility bound never falls below 0.36. So a
-candidate no different from the baseline now costs a fifth to two thirds of a pass, less the
-fewer starts it changes. "Futile" means no difference of 0.15 or more, not no difference.
+Each start's record also keeps the scorer's ordinal outcome (goal against -3 ... goal for +3,
+`scenario_scorer.py`), its signals, fouls and stalls; the per-start table and `--stop-at-t` are
+on that ordinal, not on the effect. `--stop-at-t 4` scores a shuffled sample 100 starts at a
+time and stops once |t| of the mean ordinal delta reaches 4, or as futile once |mean| + 2.5 ×
+stderr < 0.15 (`FUTILE_BELOW`, `FUTILE_Z`); it was calibrated on bank_v5's 846 starts at a 20 s
+horizon (passes aimed 10° off detected after about 300 starts; a null candidate stopped futile
+after a fifth to two thirds of a pass) and has not been re-calibrated for the situation bank.
 
-The current bank is `bank_v7` (from `tournament_20261001_094103`, the first stall-free
-round-robin). Played with fpp, press_and_pass vs low_block against itself is identical on all 860
-scored starts, and passes aimed 10° off are detected after 500 (mean -0.280, t -4.94). The bench
-played every start with trajsample until `fb784192`; results recorded before it are not
-comparable. The calibration figures above were measured on bank_v5, under trajsample.
+### The bank
 
-How far to trust the bench (measured 2026-10-02, fpp, `tools/bench_vs_standings.py`): every one of
-the 22 strategies scored on the same 150 bank_v7 starts against counter_press ranks them with
-Spearman +0.51 against the points of `tournament_20261001_094103` (bootstrap 95% interval +0.14 to
-+0.77) and +0.43 against goal difference, where that run and the earlier `tournament_20261001_091050`
-agree at +0.97 (points) and +0.99 (goal difference). Dropping counter_press, which is the opponent
-and so plays itself, gives +0.56. This is weaker than the +0.66 measured on bank_v5 under
-trajsample, which was not re-measured against these standings; the interval is wide at 22
-strategies, so the two figures are not clearly different. Use the bench to screen a change against
-a baseline and confirm with matches, not to rank strategies.
+`bank_v8` (from `tournament_20261011_230119`, 147 trustworthy matches of 153) holds 640 starts:
+40 of each of the 15 other situation types and 20 of each kickoff type (every type had more). Each type
+is sampled spread over its source matches (seeded, near-duplicates dropped), from config_a's
+view, with its source match, time, configs and type in its provenance. Restarts are taken at
+the first tick showing their command; ball-won starts at the start of the ledger's possession
+spell. On this branch 293 of the 640 are playable: 347 come from matches against split_block,
+split_outlet, split_outlet_wall, split_press, split_sticky or split_wall, which live only on
+`strategy/search-20261011`. Per playable type that leaves 15-25 starts (kickoffs 6 and 9).
 
 A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
 no simulation:
 
-    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \
-        --save-bank utama_core/scenario_bench/banks/bank_vN+1.json --list-scenarios
+    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --per-situation 40 \
+        --workers 15 --save-bank utama_core/scenario_bench/banks/bank_vN+1.json --list-scenarios
 
-Starts where a robot is past the field lines are dropped (the sim can't place it there), and a
-scenario whose run errored on either side has no delta. There is no screen that plays starts
-forward to pick "informative" ones: the one tried varied the opponent, not the candidate, and
-threw away as many useful starts as it kept. A new bank needs a new baseline run.
+Restarts and ball-won moments both come from the goal ledger, so the bank and the weights use
+one definition of a situation. Starts where a robot is past the field lines are dropped (the
+sim can't place it there), and a start whose run errored on either side has no delta. A
+harvest has no hand-authored starts: they have no type or opponent. There is no screen that
+plays starts forward to pick "informative" ones: the one tried varied the opponent, not the
+candidate, and threw away as many useful starts as it kept. A new bank needs a new baseline run.
+
+### How far to trust it
+
+Measured 2026-10-12 with `tools/bench_vs_standings.py`: split_shape as the baseline, six
+candidates spread over the standings of `tournament_20261011_230119`, bank_v8's 293 playable
+starts (those against the candidate or the baseline left out, so 222-247 each), one run each.
+Round-robin is the candidate's mean goal difference per match minus split_shape's, against the
+same opponents (10 each, one match per pair).
+
+| Candidate | Round-robin | Bench, sim weights | Bench, real weights |
+|---|---:|---:|---:|
+| overload_press | -2.22 | -6.21 ± 2.25 | -6.43 ± 2.54 |
+| press_and_pass | -2.78 | -6.28 ± 2.28 | -7.18 ± 2.26 |
+| counter_flow | -4.00 | -6.03 ± 2.26 | -6.42 ± 2.48 |
+| clear_press_plus | -5.78 | -5.98 ± 2.48 | -6.49 ± 2.32 |
+| high_press | -6.11 | -5.95 ± 2.29 | -7.03 ± 2.39 |
+| decoy_and_overload | -7.89 | -7.24 ± 2.71 | -5.80 ± 2.71 |
+
+Over the six, sim weights: Pearson +0.49, Spearman -0.09; real weights (which describe other
+matches, so are not expected to fit this round-robin): Pearson -0.49, Spearman -0.31. The bench
+gets the level right: every candidate is worse than split_shape, by 6.3 a match on average,
+which is 5.2 after the 1.21× over-count against 4.8 in the round-robin. It does not rank the
+candidates: each estimate's standard error (about 2.3) is larger than the spread of the
+round-robin differences (SD 2.2, of which about 1.3 is the round-robin's own noise at one
+match per pair). With six candidates even an unbiased bench at this precision would be expected
+to correlate at only about +0.5. So at this size the bench detects a large difference
+(several goals a match) and says which situations it comes from; it cannot tell apart
+candidates within 2-3 goals of each other. Use it for that, and rank with matches.
+
+Where the noise comes from: the frequent situations with rare goals. Defensive-third regains
+happen about 16 times a match per side under sim rates, so one goal in 17 starts moves the
+effect by about 1 goal a match; the two defensive-third ball-won types make up about 70% of the
+variance. Kickoffs never led to a goal within 10 s in this run, for any strategy. Allocating
+starts in proportion to (situations per match × spread of the paired difference) instead of
+flat per type would give a standard error of about 1.45 with the same 293 starts, 1.0 with
+about 600, and 0.5 with about 2400 (estimated from this run). Making the split_* variants
+available here would more than double the playable starts of bank_v8.
