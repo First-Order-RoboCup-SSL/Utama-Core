@@ -22,8 +22,20 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 # machinery (last_touch.py), which answers a different question (which
 # *team*, colour-blind, across the whole field) than this rule needs
 # (which specific robot, already known to be inside its own box).
-def _defenders_touching_ball(robots: list[Robot]) -> bool:
-    return any(r.has_ball for r in robots)
+#
+# `keeper_id` is the team's goalkeeper from the referee's team info. The
+# goalkeeper may touch the ball inside its own box; only a non-keeper touch
+# is the Multiple Defenders foul (rulebook §8.4.1).
+def _defenders_touching_ball(robots: list[Robot], keeper_id: Optional[int]) -> bool:
+    return any(r.has_ball and r.id != keeper_id for r in robots)
+
+
+def _goalkeeper_ids(game_frame: GameFrame) -> tuple[Optional[int], Optional[int]]:
+    """(yellow keeper id, blue keeper id) from the referee data on the frame, or (None, None) if none is attached."""
+    ref = game_frame.referee
+    if ref is None:
+        return None, None
+    return ref.yellow_team.goalkeeper, ref.blue_team.goalkeeper
 
 
 # Rulebook §8.4.2: a non-stopping foul is not raised again within 2 s.
@@ -86,21 +98,20 @@ class DefenseAreaRule(BaseRule):
         yellow_robots, blue_robots = (list(g) for g in _split_by_color(game_frame))
 
         # --- Yellow defense area ---
-        # "Multiple Defenders" (rulebook §8.4.1): the rule as written is
-        # "any non-keeper robot touches the ball while entirely inside its
-        # own defense area" — it has nothing to do with occupancy count.
-        # This rule has no way to know which specific robot is the keeper
-        # (`TeamInfo.goalkeeper` isn't threaded into `BaseRule.check()`,
-        # only `game_frame`/`geometry`/`current_command`/
-        # `designated_position` are), so `max_defenders` (default 1) is
-        # used as-is, as an occupancy proxy for "at most the keeper is
-        # allowed in here" — the real fix is gating on ball-touch by
-        # whichever defender is *beyond* that allowance, not on ball-touch
-        # by any occupant (which could wrongly flag the keeper itself).
+        # "Multiple Defenders" (rulebook §8.4.1): "any non-keeper robot touches
+        # the ball while entirely inside its own defense area". The keeper's
+        # own touch is exempt, so the keeper is identified from the referee's
+        # team info (`game_frame.referee`). With no referee data attached the
+        # keeper is unknown and every touch counts, as before.
+        # `max_defenders` (default 1) is still used as an occupancy proxy: the
+        # touch only counts when more than that many robots are in the box.
         # Sanction is a penalty kick, not a free kick, and "the foul
         # counter is not increased" (counts_toward_foul_counter=False).
+        yellow_keeper, blue_keeper = _goalkeeper_ids(game_frame)
         yellow_in_own_area = [r for r in yellow_robots if in_yellow_defense(r.p.x, r.p.y)]
-        if len(yellow_in_own_area) > self._max_defenders and _defenders_touching_ball(yellow_in_own_area):
+        if len(yellow_in_own_area) > self._max_defenders and _defenders_touching_ball(
+            yellow_in_own_area, yellow_keeper
+        ):
             return RuleViolation(
                 rule_name="defense_area",
                 suggested_command=RefereeCommand.STOP,
@@ -113,7 +124,7 @@ class DefenseAreaRule(BaseRule):
         # --- Blue defense area --- (mirror of the yellow branch above; see
         # its comment for the ball-touch/occupancy-proxy reasoning.)
         blue_in_own_area = [r for r in blue_robots if in_blue_defense(r.p.x, r.p.y)]
-        if len(blue_in_own_area) > self._max_defenders and _defenders_touching_ball(blue_in_own_area):
+        if len(blue_in_own_area) > self._max_defenders and _defenders_touching_ball(blue_in_own_area, blue_keeper):
             return RuleViolation(
                 rule_name="defense_area",
                 suggested_command=RefereeCommand.STOP,
