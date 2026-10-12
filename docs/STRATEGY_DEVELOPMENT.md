@@ -242,6 +242,49 @@ never passes or shoots loses the ball least. Rank strategies by results (goals, 
 the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
+## Real matches
+
+`tools/convert_ssl_log.py` turns the league's official game logs
+(https://ssl.robocup.org/game-logs/) into replays in our format, so `load_columnar_replay`,
+`render_window`, `scenario_from_replay` and the analyses read a real match like one of ours:
+
+    pixi run python -I tools/convert_ssl_log.py --corpus 2022-2026 --jobs 2 --out <dir outside replays/>
+
+Only the converted files are kept: each raw log (up to 370 MB) is deleted once converted, and a
+converted match takes about 35 MB. The published Division B logs for 2022-2026 are 118
+matches.
+
+What a converted match holds, and where it differs from a sim replay (the details are in
+`utama_core/replay/ssl_log.py`'s docstring):
+
+- Yellow is the friendly team: the team that wore yellow at kick-off. `side_is_right` follows
+  the referee, so it flips at half time. Two things the converter corrects, both flagged in
+  `source.json`: teams that swap colours at half time instead of sides (`colours_swapped`),
+  and referee sides set the wrong way round (`sides_inverted_share`: where yellow's goalkeeper
+  and yellow's robots both played on the other half).
+- The score is the game controller's, so a revoked goal makes it fall. A penalty shoot-out is
+  dropped with the post-game stage: a match decided on penalties ends level here.
+- 60 Hz ticks from the first referee message to the end of play, with halts, timeouts and half
+  time left in. Real play is mostly stopped (live 9-24% of a 2022 match, median 14%), so count
+  per minute of `NORMAL_START`/`FORCE_START`, not per match.
+- Robots and ball are the autoref tracker's filtered world, in metres. Each robot id a team
+  used has its own column, NaN while that robot is off, so a substitution loses no robot; more
+  than 6 columns is normal, and teams often field fewer than 6 robots (one 2022 match was 1
+  against 2). Rebuilding a sim
+  start from a real moment needs those ids mapped onto the sim's 0-5: not done yet. A ball
+  seen beyond the walls (a spare ball, or a tracker's chip estimate gone wild) counts as
+  unseen and holds its last position.
+- `has_ball` is the vision-proximity rule (robot centre within 0.13 m of the ball): real logs
+  have no dribbler sensor. It is looser than rsim's contact flag, so compare possession signals
+  among real matches, not one to one with ours.
+- A real free kick goes live as soon as the ball moves: the game controller sends no
+  `NORMAL_START` and keeps `DIRECT_FREE_*` until the next stoppage. The converter switches it
+  to `NORMAL_START` once the ball has moved 0.05 m, as our referee does.
+- `<stem>.source.json` holds the teams, the final score, the tracker used and the field size.
+- Logs before 2020 have no tracker: the converter merges raw camera detections without
+  filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
+  `INDIRECT_FREE_*`. The corpus above starts in 2022.
+
 ## Play and watch one start
 
 A round-robin only tests a change in the situations its matches happen to reach, and some
