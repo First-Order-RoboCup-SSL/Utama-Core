@@ -52,7 +52,8 @@ class NoProgressRule(BaseRule):
         self._max_seconds = max_seconds
         self._anchor: Optional[tuple[float, float]] = None
         self._anchor_ts: float = 0.0
-        # The clock is running only once the ball is in play (see module docstring).
+        # The clock is running only once the ball is in play (see module docstring). Only a
+        # command change (`reset`) takes it out of play; the defense area merely holds the clock.
         self._clock_running = False
         self._restart_ts: float = 0.0
 
@@ -76,8 +77,10 @@ class NoProgressRule(BaseRule):
         if self._anchor is None:
             self._anchor = here
             self._anchor_ts = ts
-            self._restart_ts = ts
-            self._clock_running = current_command == RefereeCommand.FORCE_START
+            if not self._clock_running:
+                # Not yet in play (no movement since the restart): a forced start puts it in play.
+                self._restart_ts = ts
+                self._clock_running = current_command == RefereeCommand.FORCE_START
             return None
         if math.dist(here, self._anchor) >= _PROGRESS_DISTANCE_M:
             self._anchor = here

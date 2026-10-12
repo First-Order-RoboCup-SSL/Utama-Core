@@ -187,3 +187,19 @@ def test_leaving_a_defense_area_restarts_the_clock():
     assert rule.check(_frame_at(19.5, x=outside_x, y=0.0), GEO, RefereeCommand.FORCE_START) is None
     v = rule.check(_frame_at(19.6, x=outside_x, y=0.0), GEO, RefereeCommand.FORCE_START)
     assert v is not None and v.rule_name == "no_progress"
+
+
+def test_ball_in_play_stays_in_play_after_leaving_a_defense_area():
+    # Live play after a kickoff stays under NORMAL_START. Once the ball has moved it is in
+    # play; a pass through a defense area must not send it back to "waiting for the
+    # kickoff", which would hold the clock another 10 s (a 20 s no-progress).
+    rule = NoProgressRule(max_seconds=10.0)
+    inside_x = -(abs(_LEFT_BOX_EDGE_X) + 0.01)
+    outside_x = -(abs(_LEFT_BOX_EDGE_X) - 0.01)
+    assert rule.check(_frame_at(0.0, x=0.0, y=0.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(1.0, x=-1.0, y=0.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(2.0, x=inside_x, y=0.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(3.0, x=outside_x, y=0.0), GEO, RefereeCommand.NORMAL_START) is None
+    assert rule.check(_frame_at(12.9, x=outside_x, y=0.0), GEO, RefereeCommand.NORMAL_START) is None
+    v = rule.check(_frame_at(13.0, x=outside_x, y=0.0), GEO, RefereeCommand.NORMAL_START)
+    assert v is not None and v.rule_name == "no_progress"
