@@ -48,6 +48,10 @@ One term per thing; reuse these instead of coining new ones.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
+- **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
+  ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
+  the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
+  P(goal). See `docs/signals.md`.
 
 ## Repo map
 
