@@ -12,10 +12,18 @@ receive time [ns], int32 message type, int32 size and the serialized message. Ty
 pre-2014 wrapper, whose geometry layout differs) and 5 tracker (`TrackerWrapperPacket`).
 
 What a converted replay holds:
-- Perspective: yellow is the friendly team (`my_team_is_yellow`), blue the enemy.
+- Perspective: yellow is the friendly team (`my_team_is_yellow`), blue the enemy: the teams
+  as they were coloured at kick-off. Some matches swap colours at half time (both teams change
+  markers; the game controller moves names, scores and cards with them); from a swap on, the
+  converter swaps robots, team info, sides and coloured commands back (`_colours_swapped`), so
+  friendly stays one team and its score never falls. Only `game_events` keep the colours they
+  were sent with.
   `side_is_right[t]` (yellow defends the +x goal) is the referee's `blue_team_on_positive_half`
   negated; for a message without that field (logs before 2019) it is where yellow's goalkeeper
-  stood during that stage.
+  stood during that stage. The game controller's sides are set by hand, and one 2022 match ran
+  with them the wrong way round throughout: where yellow's goalkeeper and yellow's robots as a
+  whole both played on the other half (`_contradicted_sides`), the converter inverts the sides,
+  in `side_is_right` and the referee's `blue_team_on_positive_half` alike.
 - Time: 60 Hz ticks on the log's receive clock, `ts` 0 at the first referee message. The
   window ends where play ends: a penalty shoot-out and the post-game stage are dropped. Breaks,
   timeouts and halts stay in, so `ts` has no gaps; skip them by `stage`/`referee_command`.
@@ -24,7 +32,9 @@ What a converted replay holds:
   at or before it; after `_STALE_S` without one, robots are absent. Logs without a tracker
   (before 2020) merge the cameras' raw detections instead and difference positions over
   `_DIFF_TICKS` ticks for velocities. Accelerations are differenced velocities in both cases.
-  The ball holds its last position (at rest) while no ball is seen.
+  The ball holds its last position (at rest) while no ball is seen, or the one seen is beyond the
+  field's walls: a spare ball, or a tracker's chip estimate gone wild (some 2022 frames put the
+  ball tens of metres up and away for a few ticks).
 - Robot ids: one column per id a team used in the match (`friendly_ids`/`enemy_ids`, any of
   0-15), NaN while that robot is off the field, as in our own replays. A substitution is one id
   going NaN and another appearing, so no robot is lost; there is no fixed 6-slot layout, and
@@ -88,6 +98,8 @@ _CAMERA_STALE_S = 0.1  # a camera's detection older than this is not merged
 _BALL_GATE_M = 1.0  # vision fallback: how far from the last tick's ball a detection is the same ball
 _DIFF_TICKS = 3  # velocity and acceleration: central difference over +-3 ticks (0.1 s)
 _MAX_ID = 16  # robot ids 0-15 (the standard pattern set)
+_SIDE_CHECK_S = 10.0  # live play needed to judge the referee's sides by where the robots played
+_DIV_B_WALLS = (4.8, 3.3)  # |x|, |y| of the walls of a 9 x 6 m field, for a log without geometry
 _YELLOW, _BLUE = 0, 1  # team index in the arrays below; the tracker's `Team` is 1 yellow, 2 blue
 _END_STAGES = frozenset({Stage.PENALTY_SHOOTOUT_BREAK.value, Stage.PENALTY_SHOOTOUT.value, Stage.POST_GAME.value})
 FREE_KICKS = frozenset(
@@ -151,28 +163,37 @@ def _team_info(name: str, packet) -> TeamInfo:
     return info
 
 
-def referee_data(msg: Referee, received_s: float) -> RefereeData:
+def _recoloured(command: int, swapped: bool) -> RefereeCommand:
+    """A command id as a `RefereeCommand`, its team colour swapped if `swapped` (the coloured
+    commands come in yellow/blue pairs from 4 to 17)."""
+    if swapped and command >= RefereeCommand.PREPARE_KICKOFF_YELLOW.value:
+        command ^= 1
+    return RefereeCommand.from_id(command)
+
+
+def referee_data(msg: Referee, received_s: float, swapped: bool = False) -> RefereeData:
     """`msg` as `RefereeData`, field for field as `RefereeMessageReceiver._update_data`, but with
-    the protocol's units converted: `stage_time_left` us -> s, `designated_position` mm -> m."""
+    the protocol's units converted: `stage_time_left` us -> s, `designated_position` mm -> m.
+    `swapped`: the teams wear each other's colours, so swap them back (`_colours_swapped`)."""
+    yellow, blue = (msg.blue, msg.yellow) if swapped else (msg.yellow, msg.blue)
+    blue_on_positive = msg.blue_team_on_positive_half if msg.HasField("blue_team_on_positive_half") else None
     return RefereeData(
         source_identifier=msg.source_identifier,
         time_sent=msg.packet_timestamp / 1e6,
         time_received=received_s,
-        referee_command=RefereeCommand.from_id(msg.command),
+        referee_command=_recoloured(msg.command, swapped),
         referee_command_timestamp=msg.command_timestamp / 1e6,
         stage=Stage.from_id(msg.stage),
         stage_time_left=msg.stage_time_left / 1e6,
-        blue_team=_team_info("blue", msg.blue),
-        yellow_team=_team_info("yellow", msg.yellow),
+        blue_team=_team_info("blue", blue),
+        yellow_team=_team_info("yellow", yellow),
         designated_position=(
             (msg.designated_position.x / 1000, msg.designated_position.y / 1000)
             if msg.HasField("designated_position")
             else None
         ),
-        blue_team_on_positive_half=(
-            msg.blue_team_on_positive_half if msg.HasField("blue_team_on_positive_half") else None
-        ),
-        next_command=RefereeCommand.from_id(msg.next_command) if msg.HasField("next_command") else None,
+        blue_team_on_positive_half=None if blue_on_positive is None else blue_on_positive != swapped,
+        next_command=_recoloured(msg.next_command, swapped) if msg.HasField("next_command") else None,
         current_action_time_remaining=(
             msg.current_action_time_remaining if msg.HasField("current_action_time_remaining") else None
         ),
@@ -361,6 +382,28 @@ def _vision_world(packets: list[tuple[int, bytes]], tick_ns: np.ndarray) -> tupl
     return world, dropped
 
 
+def _colours_swapped(referee: list[tuple[int, Referee]]) -> np.ndarray:
+    """Per referee message, whether the teams wear each other's colours compared with kick-off:
+    its team names are those of the first message naming two teams, swapped."""
+    names = [(msg.yellow.name, msg.blue.name) for _, msg in referee]
+    first = next(((yellow, blue) for yellow, blue in names if yellow and blue and yellow != blue), None)
+    return np.array([first is not None and pair == first[::-1] for pair in names], dtype=bool)
+
+
+def _robot_sides(world: _World, ticks: np.ndarray, keepers: np.ndarray) -> tuple[Optional[bool], Optional[bool]]:
+    """Whether yellow defends +x judging by where its robots stood at `ticks`: by the median x of
+    yellow's goalkeeper, and by the mean x of yellow's robots against blue's (None: not seen)."""
+    keeper_x = world.robot_p[ticks, _YELLOW, np.minimum(keepers[ticks], _MAX_ID - 1), 0]
+    keeper_x = keeper_x[~np.isnan(keeper_x)]
+    yellow = world.robot_p[ticks, _YELLOW, :, 0]
+    blue = world.robot_p[ticks, _BLUE, :, 0]
+    keeper = bool(np.median(keeper_x) > 0) if len(keeper_x) else None
+    mass = (
+        bool(np.nanmean(yellow) > np.nanmean(blue)) if np.isfinite(yellow).any() and np.isfinite(blue).any() else None
+    )
+    return keeper, mass
+
+
 def _sides_from_goalkeepers(world: _World, stage: np.ndarray, keepers: np.ndarray) -> np.ndarray:
     """Per tick whether yellow defends +x, for logs whose referee does not say: within each
     stage, the side of the median x of yellow's goalkeeper (else of yellow's robots relative to
@@ -369,17 +412,25 @@ def _sides_from_goalkeepers(world: _World, stage: np.ndarray, keepers: np.ndarra
     previous = True
     for value in np.unique(stage):
         ticks = np.flatnonzero(stage == value)
-        keeper_x = world.robot_p[ticks, _YELLOW, np.minimum(keepers[ticks], _MAX_ID - 1), 0]
-        keeper_x = keeper_x[~np.isnan(keeper_x)]
-        if len(keeper_x):
-            previous = bool(np.median(keeper_x) > 0)
-        else:
-            yellow = world.robot_p[ticks, _YELLOW, :, 0]
-            blue = world.robot_p[ticks, _BLUE, :, 0]
-            if np.isfinite(yellow).any() and np.isfinite(blue).any():
-                previous = bool(np.nanmean(yellow) > np.nanmean(blue))
+        keeper, mass = _robot_sides(world, ticks, keepers)
+        previous = next((side for side in (keeper, mass) if side is not None), previous)
         sides[ticks] = previous
     return sides
+
+
+def _contradicted_sides(world: _World, side_is_right: np.ndarray, live: np.ndarray, keepers: np.ndarray) -> np.ndarray:
+    """Per tick, whether the referee's sides are the wrong way round: within each run of ticks with
+    the same `side_is_right`, yellow's goalkeeper and yellow's robots as a whole both stood on the
+    other half through the run's live play, of which there is at least `_SIDE_CHECK_S`."""
+    wrong = np.zeros(len(side_is_right), dtype=bool)
+    starts = np.flatnonzero(np.r_[True, side_is_right[1:] != side_is_right[:-1]])
+    for k0, k1 in zip(starts, np.r_[starts[1:], len(side_is_right)]):
+        ticks = k0 + np.flatnonzero(live[k0:k1])
+        if len(ticks) < round(_SIDE_CHECK_S / TICK_S):
+            continue
+        keeper, mass = _robot_sides(world, ticks, keepers)
+        wrong[k0:k1] = keeper is not None and keeper == mass != side_is_right[k0]
+    return wrong
 
 
 def free_kick_taken(command: np.ndarray, counter: np.ndarray, ball_xy: np.ndarray) -> np.ndarray:
@@ -456,6 +507,10 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
     ts = np.arange(0.0, (end_ns - start_ns) / 1e9, TICK_S)
     tick_ns = start_ns + np.round(ts * 1e9).astype(np.int64)
 
+    ref_index = np.searchsorted(np.array([t for t, _ in referee], dtype=np.int64), tick_ns, side="right") - 1
+    swapped_msg = _colours_swapped(referee)
+    swapped = swapped_msg[ref_index]
+
     tracker_frames = {name: len(frames) for name, frames in scan.trackers.items()}
     if scan.trackers:
         source = max(scan.trackers, key=lambda name: (len(scan.trackers[name]), name))
@@ -464,21 +519,33 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         source = "vision"
         vision = scan.vision[VISION_2014] or scan.vision[VISION_2010]
         world, dropped_ids = _vision_world(vision, tick_ns)
+    for robots in (world.robot_p, world.robot_v, world.robot_orientation):
+        robots[swapped] = robots[swapped][:, ::-1]  # back to the kick-off colours
+    field = _geometry(scan.geometry)
+    walls = (
+        (field["field_length"] / 2 + field["boundary_width"], field["field_width"] / 2 + field["boundary_width"])
+        if field
+        else _DIV_B_WALLS
+    )
+    world.ball_seen &= (np.abs(world.ball_p[:, 0]) <= walls[0]) & (np.abs(world.ball_p[:, 1]) <= walls[1])
     world.finish()
 
-    ref_index = np.searchsorted(np.array([t for t, _ in referee], dtype=np.int64), tick_ns, side="right") - 1
     stage = np.array([referee[i][1].stage for i in ref_index])
+    keepers = np.array([(msg.blue if s else msg.yellow).goalkeeper for (_, msg), s in zip(referee, swapped_msg)])
+    keepers = keepers[ref_index]
     blue_right = [
         msg.blue_team_on_positive_half if msg.HasField("blue_team_on_positive_half") else None for _, msg in referee
     ]
-    side_is_right = np.array([blue_right[i] is False for i in ref_index])
+    side_is_right = np.array([blue_right[i] is bool(swapped_msg[i]) for i in ref_index])
     unknown = np.array([blue_right[i] is None for i in ref_index])
     if unknown.any():
-        keepers = np.array([referee[i][1].yellow.goalkeeper for i in ref_index])
         side_is_right[unknown] = _sides_from_goalkeepers(world, stage, keepers)[unknown]
 
     command = np.array([referee[i][1].command for i in ref_index])
     counter = np.array([referee[i][1].command_counter for i in ref_index])
+    live = np.isin(command, (RefereeCommand.NORMAL_START.value, RefereeCommand.FORCE_START.value))
+    inverted = _contradicted_sides(world, side_is_right, live, keepers)
+    side_is_right ^= inverted
     taken = free_kick_taken(command, counter, world.ball_p[:, :2])
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -495,7 +562,9 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
     for k, i in enumerate(ref_index):
         if i != base_index:
             base_index, base_ts = i, (referee[i][0] - start_ns) / 1e9
-            base = referee_data(referee[i][1], referee[i][0] / 1e9)
+            base = referee_data(referee[i][1], referee[i][0] / 1e9, swapped=bool(swapped_msg[i]))
+            if inverted[k] and base.blue_team_on_positive_half is not None:  # see `_contradicted_sides`
+                base = dataclasses.replace(base, blue_team_on_positive_half=not base.blue_team_on_positive_half)
         if taken[k] and base.referee_command != RefereeCommand.NORMAL_START:  # see `free_kick_taken`
             base = dataclasses.replace(
                 advance_clocks(base, float(ts[k] - base_ts)),
@@ -517,12 +586,13 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         )
     writer.close()
 
-    last = referee[-1][1]
+    last = referee_data(referee[-1][1], referee[-1][0] / 1e9, swapped=bool(swapped_msg[-1]))
     summary = {
         "log": log_path.name,
-        "yellow": last.yellow.name,
-        "blue": last.blue.name,
-        "score": {"yellow": last.yellow.score, "blue": last.blue.score},
+        "yellow": last.yellow_team.name,
+        "blue": last.blue_team.name,
+        "score": {"yellow": last.yellow_team.score, "blue": last.blue_team.score},
+        "colours_swapped": bool(swapped_msg.any()),
         "start_unix_s": start_ns / 1e9,
         "duration_s": round(float(ts[-1]) if len(ts) else 0.0, 3),
         "world_source": source,
@@ -530,7 +600,8 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         "ball_unseen_share": round(float(1 - world.ball_seen.mean()) if len(ts) else 1.0, 4),
         "robot_ids_dropped": dropped_ids,
         "sides_from_goalkeepers": bool(unknown.any()),
-        "field": _geometry(scan.geometry),
+        "sides_inverted_share": round(float(inverted.mean()) if len(ts) else 0.0, 4),
+        "field": field,
     }
     (out_dir / f"{stem}.source.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary

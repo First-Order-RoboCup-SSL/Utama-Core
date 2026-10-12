@@ -18,6 +18,7 @@ from utama_core.replay.ssl_log import (
     REFEREE,
     TRACKER,
     VISION_2014,
+    _contradicted_sides,
     _Scan,
     _sides_from_goalkeepers,
     _World,
@@ -51,7 +52,9 @@ def _write_log(path, records) -> None:
     path.write_bytes(gzip.compress(data) if path.suffix == ".gz" else data)
 
 
-def _referee(ts_ns, stage, command, counter, score=(0, 0), blue_on_positive=None, **fields) -> tuple:
+def _referee(
+    ts_ns, stage, command, counter, score=(0, 0), blue_on_positive=None, names=("Yellows", "Blues"), **fields
+) -> tuple:
     msg = Referee(
         packet_timestamp=ts_ns // 1000,
         stage=stage.value,
@@ -60,7 +63,7 @@ def _referee(ts_ns, stage, command, counter, score=(0, 0), blue_on_positive=None
         command_timestamp=ts_ns // 1000,
         **fields,
     )
-    for team, name, goals in ((msg.yellow, "Yellows", score[0]), (msg.blue, "Blues", score[1])):
+    for team, name, goals in ((msg.yellow, names[0], score[0]), (msg.blue, names[1], score[1])):
         team.name, team.score, team.goalkeeper = name, goals, 0
         team.red_cards = team.yellow_cards = team.timeouts = team.timeout_time = 0
     if blue_on_positive is not None:
@@ -136,12 +139,38 @@ def test_sides_without_the_referee_field_follow_yellows_goalkeeper_per_stage():
     np.testing.assert_array_equal(_sides_from_goalkeepers(world, stage, keepers), [True, True, False, False])
 
 
+def test_referee_sides_are_inverted_per_run_where_yellows_keeper_and_robots_played_the_other_half():
+    # yellow plays on +x all along; the referee says -x for the first 10 s, then +x
+    live_s = 600  # 10 s at 60 Hz: the least live play judged
+    world = _World(2 * live_s)
+    world.robot_p[:, 0, 0] = (4.0, 0.0)  # yellow's goalkeeper
+    world.robot_p[:, 0, 1] = (1.0, 0.0)
+    world.robot_p[:, 1, 0] = (-4.0, 0.0)
+    keepers = np.zeros(2 * live_s, dtype=int)
+    side_is_right = np.r_[np.zeros(live_s, dtype=bool), np.ones(live_s, dtype=bool)]
+    live = np.ones(2 * live_s, dtype=bool)
+    np.testing.assert_array_equal(_contradicted_sides(world, side_is_right, live, keepers), ~side_is_right)
+    live[0] = False  # a tick short of enough live play to judge the first run
+    assert not _contradicted_sides(world, side_is_right, live, keepers).any()
+
+
+def test_referee_sides_stand_when_only_yellows_keeper_contradicts_them():
+    # e.g. a goalkeeper id the team never set: "keeper" 0 stands at +x, the team plays on -x
+    world = _World(600)
+    world.robot_p[:, 0, 0] = (4.0, 0.0)
+    world.robot_p[:, 0, 1:3] = (-3.0, 0.0)
+    world.robot_p[:, 1, 0] = (2.0, 0.0)
+    says_left = np.zeros(600, dtype=bool)
+    assert not _contradicted_sides(world, says_left, np.ones(600, dtype=bool), np.zeros(600, dtype=int)).any()
+
+
 @pytest.fixture
 def converted(tmp_path):
     """A 2 s match: first half for 1 s (blue on +x), second half for 1 s (blue on -x), then the
     post-game stage. Yellow 3 leaves after 0.5 s, yellow 7 plays throughout, blue 12 comes on
     at 1 s and a robot with id 16 is out of the pattern set. A second, sparser tracker source
-    puts everything elsewhere. The free kick at 0.25 s is taken at 0.5 s; yellow scores at 1 s."""
+    puts everything elsewhere. The free kick at 0.25 s is taken at 0.5 s; yellow scores at 1 s.
+    At 1.5 s the ball is beyond the walls (6.3 m from the centre on this field) for two ticks."""
     half, second = Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF
     records = [
         _referee(T0, half, RefereeCommand.STOP, 1, blue_on_positive=True, stage_time_left=300_000_000),
@@ -167,7 +196,8 @@ def converted(tmp_path):
         robots = (
             [(1, 7, 1.0, 0.5), (1, 16, 0.0, 0.0)] + [(1, 3, -1.0, 0.0)] * (k < 30) + [(2, 12, 2.0, 1.0)] * (k >= 60)
         )
-        records.append(_tracked(t, robots, ball=(0.0 if k < 30 else 0.5, 0.0)))
+        ball = {90: (35.0, -13.0), 91: (6.31, 0.0), 92: (6.29, 0.0)}.get(k, (0.0 if k < 30 else 0.5, 0.0))
+        records.append(_tracked(t, robots, ball=ball))
         if k % 2 == 0:
             records.append(_tracked(t, [(1, 5, -3.0, -3.0)], source="ER-Force"))
     records.sort(key=lambda r: r[0])
@@ -225,6 +255,14 @@ def test_referee_units_scores_and_the_window_end_at_the_post_game_stage(converte
     assert summary["field"]["field_length"] == 12.0
 
 
+def test_a_ball_beyond_the_walls_is_unseen_and_holds_its_last_position(converted):
+    # tick 90: a tracker's chip estimate tens of metres away; 91 just past the wall; 92 just inside
+    replay, summary, _ = converted
+    np.testing.assert_allclose(replay.ball_p[89:93, :2], [[0.5, 0], [0.5, 0], [0.5, 0], [6.29, 0]], atol=1e-6)
+    assert (replay.ball_v[90:92] == 0).all()
+    assert summary["ball_unseen_share"] == pytest.approx(2 / 120, abs=1e-4)
+
+
 def test_a_free_kick_reads_normal_start_once_its_ball_is_in_play(converted):
     replay, *_ = converted
     command = replay.referee_command
@@ -245,3 +283,58 @@ def test_the_source_sidecar_names_the_log_and_teams(converted, tmp_path):
     source = json.loads((tmp_path / "out" / "2026-07-01_Yellows-vs-Blues.source.json").read_text())
     assert (source["yellow"], source["blue"]) == ("Yellows", "Blues")
     assert source["tracker_frames"] == {"TIGERs": 121, "ER-Force": 61}
+    assert not source["colours_swapped"]
+
+
+def test_teams_that_swap_colours_at_half_time_stay_friendly_and_enemy(tmp_path):
+    # as in 2022 Div B: blue stays on +x, but the teams change markers at half time and the game
+    # controller moves names and scores with them. Ones (yellow at kick-off) scored before the
+    # break and have a free kick after it, as blue.
+    half, second = Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF
+    swapped = dict(names=("Twos", "Ones"), score=(0, 1), blue_on_positive=True)
+    records = [
+        _referee(T0, half, RefereeCommand.NORMAL_START, 1, blue_on_positive=True, names=("Ones", "Twos")),
+        _referee(
+            T0 + S // 2, half, RefereeCommand.STOP, 2, score=(1, 0), blue_on_positive=True, names=("Ones", "Twos")
+        ),
+        _referee(T0 + S, second, RefereeCommand.STOP, 2, **swapped),
+        _referee(T0 + 3 * S // 2, second, RefereeCommand.DIRECT_FREE_BLUE, 3, **swapped),
+        _referee(T0 + 2 * S, Stage.POST_GAME, RefereeCommand.HALT, 4, **swapped),
+    ]
+    for k in range(0, 2 * 60 + 1):
+        ones, twos = ((1, 1, -2.0, 0.0), (2, 4, 2.0, 0.0)) if k < 60 else ((2, 1, 2.0, 0.0), (1, 4, -2.0, 0.0))
+        records.append(_tracked(T0 + k * S // 60, [ones, twos], ball=(0.0, 1.0)))
+    records.sort(key=lambda r: r[0])
+    path = tmp_path / "swap.log.gz"
+    _write_log(path, records)
+    summary = convert_log(path, tmp_path / "out")
+    replay = load_columnar_replay(tmp_path / "out" / "swap.npz")
+
+    assert replay.friendly_ids.tolist() == [1] and replay.enemy_ids.tolist() == [4]
+    np.testing.assert_allclose(replay.friendly_p[[0, 59, 60, 119], 0, 0], [-2.0, -2.0, 2.0, 2.0])
+    assert not replay.side_is_right[:60].any() and replay.side_is_right[60:].all()
+    second_half = replay.frame_at(100).referee
+    assert (second_half.yellow_team.name, second_half.yellow_team.score) == ("Ones", 1)
+    assert second_half.referee_command == RefereeCommand.DIRECT_FREE_YELLOW
+    assert summary["yellow"] == "Ones" and summary["score"] == {"yellow": 1, "blue": 0}
+    assert summary["colours_swapped"]
+
+
+def test_a_match_played_against_the_referees_sides_is_converted_as_played(tmp_path):
+    # as 2022-07-13 Ri-one vs UBC Thunderbots: the referee says blue on +x, blue plays on -x
+    half = Stage.NORMAL_FIRST_HALF
+    records = [
+        _referee(T0, half, RefereeCommand.NORMAL_START, 1, blue_on_positive=True),
+        _referee(T0 + 12 * S, Stage.POST_GAME, RefereeCommand.HALT, 2, blue_on_positive=True),
+    ]
+    for k in range(12 * 60 + 1):
+        records.append(_tracked(T0 + k * S // 60, [(1, 0, 4.0, 0.0), (1, 1, 1.0, 0.0), (2, 0, -4.0, 0.0)]))
+    records.sort(key=lambda r: r[0])
+    path = tmp_path / "inverted.log.gz"
+    _write_log(path, records)
+    summary = convert_log(path, tmp_path / "out")
+    replay = load_columnar_replay(tmp_path / "out" / "inverted.npz")
+
+    assert replay.side_is_right.all()
+    assert replay.frame_at(100).referee.blue_team_on_positive_half is False
+    assert summary["sides_inverted_share"] == 1.0
