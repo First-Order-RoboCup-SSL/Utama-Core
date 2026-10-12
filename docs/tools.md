@@ -40,6 +40,12 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 | `tools/metric_correlation.py` | Offline study of which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
 
+## Real matches
+
+| Script | Purpose |
+|---|---|
+| `tools/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted. What a converted match holds and its limits: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md#real-matches) |
+
 ## Debugging a match
 
 | Script | Purpose |
