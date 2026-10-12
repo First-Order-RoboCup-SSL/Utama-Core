@@ -335,14 +335,16 @@ def test_team_names_swapped_for_under_a_minute_are_an_operators_slip_not_a_colou
 
 
 def test_a_match_played_against_the_referees_sides_is_converted_as_played(tmp_path):
-    # as 2022-07-13 Ri-one vs UBC Thunderbots: the referee says blue on +x, blue plays on -x
+    # as 2022-07-13 Ri-one vs UBC Thunderbots: the referee says blue on +x, blue plays on -x. The
+    # live play is a free kick taken at 1 s, which the game controller keeps as DIRECT_FREE_*.
     half = Stage.NORMAL_FIRST_HALF
     records = [
-        _referee(T0, half, RefereeCommand.NORMAL_START, 1, blue_on_positive=True),
+        _referee(T0, half, RefereeCommand.DIRECT_FREE_YELLOW, 1, blue_on_positive=True),
         _referee(T0 + 12 * S, Stage.POST_GAME, RefereeCommand.HALT, 2, blue_on_positive=True),
     ]
     for k in range(12 * 60 + 1):
-        records.append(_tracked(T0 + k * S // 60, [(1, 0, 4.0, 0.0), (1, 1, 1.0, 0.0), (2, 0, -4.0, 0.0)]))
+        robots = [(1, 0, 4.0, 0.0), (1, 1, 1.0, 0.0), (2, 0, -4.0, 0.0)]
+        records.append(_tracked(T0 + k * S // 60, robots, ball=(0.0 if k < 60 else 0.5, 0.0)))
     records.sort(key=lambda r: r[0])
     path = tmp_path / "inverted.log.gz"
     _write_log(path, records)

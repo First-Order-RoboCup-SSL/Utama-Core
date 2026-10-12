@@ -553,10 +553,10 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
 
     command = np.array([referee[i][1].command for i in ref_index])
     counter = np.array([referee[i][1].command_counter for i in ref_index])
-    live = np.isin(command, (RefereeCommand.NORMAL_START.value, RefereeCommand.FORCE_START.value))
+    taken = free_kick_taken(command, counter, world.ball_p[:, :2])
+    live = taken | np.isin(command, (RefereeCommand.NORMAL_START.value, RefereeCommand.FORCE_START.value))
     inverted = _contradicted_sides(world, side_is_right, live, keepers)
     side_is_right ^= inverted
-    taken = free_kick_taken(command, counter, world.ball_p[:, :2])
 
     out_dir.mkdir(parents=True, exist_ok=True)
     seen = ~np.isnan(world.robot_p[..., 0])
