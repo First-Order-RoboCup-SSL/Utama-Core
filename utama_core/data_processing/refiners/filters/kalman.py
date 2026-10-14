@@ -136,9 +136,6 @@ class KalmanFilter:
 
         """
 
-        # class Robot: id: int; is_friendly: bool; has_ball: bool
-        # p: Vector2D; v: Vector2D; a: Vector2D; orientation: float
-
         # x and y are filtered as two independent scalar Kalman filters (see __init__ for why
         # that's mathematically equivalent to the 2D matrix form here), using the same
         # closed-form update as _step_th below.
@@ -258,7 +255,6 @@ class KalmanFilter:
                 and orientation, packaged as a VisionRobotData object.
         """
 
-        # class VisionRobotData: id: int; x: float; y: float; orientation: float
         xy_tuple = (data.x, data.y) if data is not None else None
         x_f, y_f = self._step_xy(xy_tuple, last_frame, time_elapsed)
         th_f = self._step_th(
@@ -341,8 +337,6 @@ class KalmanFilterBall:
                 returned to the filter_data function for packaging.
         """
 
-        # class Ball: p: Vector3D; v: Vector3D; a: Vector3D
-
         # Phase 0: Initialised with the 1st valid GameFrame (only on initialisation)
         if self.state is None:
             self.state = np.array((last_ball.p.x, last_ball.p.y, last_ball.p.z))
@@ -406,7 +400,6 @@ class KalmanFilterBall:
                 acceleration.
         """
 
-        # class Ball: p: Vector3D, v: Vector3D, a: Vector3D
         if data is not None:
             new_data = (data.p.x, data.p.y, data.p.z)
             velocity, acceleration = data.v, data.a
