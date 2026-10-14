@@ -21,7 +21,7 @@ exists yet: say so in your change rather than guessing.
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
-| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `data_processing/` | `TODO` (see `team_controller/README.md`) | |
+| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
 
 ## Glossary
 
