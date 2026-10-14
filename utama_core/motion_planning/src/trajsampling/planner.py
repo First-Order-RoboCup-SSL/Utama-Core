@@ -1038,7 +1038,8 @@ class TrajectorySamplingPlanner:
             diff = abs(cand_angle - final_angle)
             return min(diff, 2 * math.pi - diff)
 
-        r = config.INTERMEDIATE_TARGET_RADIUS
+        dist_to_target = math.hypot(fx, fy)
+        r = min(config.INTERMEDIATE_TARGET_RADIUS, max(0.4, 0.7 * dist_to_target))
 
         last = None
         near_last: List[Tuple[float, float]] = []
