@@ -8,16 +8,18 @@ and the reference Python/Numba implementations for all core geometric functions:
 - sanitize_target
 - check_segment (recursive detour tree search)
 - smooth_path (lookahead carrot projection)
+
+The extension is built locally (`pixi run build-planner`) and is not built in CI,
+so the module is skipped when it is missing; the planner then uses the numba kernels.
 """
 
 import numpy as np
 import pytest
 
-from utama_core.motion_planning.src.fastpathplanning import (
-    _fastpathplanner,
-    numba_kernels,
-)
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+_fastpathplanner = pytest.importorskip("utama_core.motion_planning.src.fastpathplanning._fastpathplanner")
+
+from utama_core.motion_planning.src.fastpathplanning import numba_kernels  # noqa: E402
+from utama_core.motion_planning.src.fastpathplanning.planner import (  # noqa: E402
     HAS_CPP,
     FastPathPlanner,
 )
