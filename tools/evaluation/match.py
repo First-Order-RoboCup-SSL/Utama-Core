@@ -220,6 +220,8 @@ def run_match(
             replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
         )
 
+    resolved_scheme = None if control_scheme in (None, "auto") else control_scheme
+
     runner = StrategyRunner(
         strategy=strategy_a,
         opp_strategy=strategy_b,
@@ -232,7 +234,7 @@ def run_match(
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=initial_command,
-        control_scheme=control_scheme,
+        control_scheme=resolved_scheme,
         **extra_kwargs,
     )
 

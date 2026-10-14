@@ -82,7 +82,13 @@ class AbstractStrategy:
             `Strategy.referee_overrides`'s setter docstring for why this is a
             post-construction assignment rather than a constructor kwarg on
             `build_kernel_strategy` itself).
+        control_scheme: optional name of the preferred motion control scheme to
+            use (e.g. 'trajsample', 'fpp', 'dwa', 'pid'). If omitted, defaults to
+            class attribute `control_scheme` or `build_kernel_strategy.control_scheme`,
+            falling back to StrategyRunner's default ("fpp").
     """
+
+    control_scheme: Optional[str] = None
 
     def __init__(
         self,
@@ -90,12 +96,18 @@ class AbstractStrategy:
         goalkeeper_id: int = 0,
         exp_ball: bool = True,
         referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
+        control_scheme: Optional[str] = None,
     ):
         self.exp_ball = exp_ball
         self._build_kernel_strategy = build_kernel_strategy
         self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
         self._goalkeeper_id = goalkeeper_id
         self._referee_overrides = referee_overrides
+        self.control_scheme = (
+            control_scheme
+            if control_scheme is not None
+            else getattr(self, "control_scheme", None) or getattr(build_kernel_strategy, "control_scheme", None)
+        )
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: Optional[AbstractRobotController] = None
