@@ -39,9 +39,7 @@ def test_inapplicable_slots_fold_into_their_fallback():
 
 def test_counts_respect_fewer_free_robots():
     # committed slots shrink the free pool; the split still assigns what's left, in id order
-    assert allocate("build_up", frozenset({4, 5}), ALL_TACTICS) == {
-        "attack": frozenset({4, 5})
-    }
+    assert allocate("build_up", frozenset({4, 5}), ALL_TACTICS) == {"attack": frozenset({4, 5})}
     assert allocate("overload_support", frozenset({2, 3, 5}), ALL_TACTICS) == {
         "overload": frozenset({2, 3}),
         "attack": frozenset({5}),
@@ -64,14 +62,10 @@ class FakeClient:
     def decide(self, state: str, questions: dict) -> Decision:
         if self.fail:
             raise ConnectionError("no server")
-        assert state.startswith(
-            STATIC_TEXT
-        )  # static block must be a literal prefix (prefix-cache reuse)
+        assert state.startswith(STATIC_TEXT)  # static block must be a literal prefix (prefix-cache reuse)
         self.states.append(state)
         choice = "build_up" if '"side":"us"' in state else "press"
-        probs = {
-            k: (0.9 if k == choice else 0.1 / (len(SPLIT_KEYS) - 1)) for k in SPLIT_KEYS
-        }
+        probs = {k: (0.9 if k == choice else 0.1 / (len(SPLIT_KEYS) - 1)) for k in SPLIT_KEYS}
         return Decision(
             answers={
                 QUESTION_KEY: {
@@ -115,12 +109,8 @@ def test_match_runs_with_fake_client_at_requested_cadence(tmp_path):
     assert partitioner.n_fallback == 0 and rows
     assert all(r["choice"] in SPLIT_KEYS and r["fallback"] is None for r in rows)
     gaps = [b["t"] - a["t"] for a, b in zip(rows, rows[1:])]
-    assert (
-        min(gaps) >= 0.2 - 1e-6
-    )  # 5 Hz: never more often than every 0.2 s of sim time
-    assert {"score", "ball", "possession", "threat", "our_robots", "recent"} <= set(
-        rows[0]["live"]
-    )
+    assert min(gaps) >= 0.2 - 1e-6  # 5 Hz: never more often than every 0.2 s of sim time
+    assert {"score", "ball", "possession", "threat", "our_robots", "recent"} <= set(rows[0]["live"])
 
 
 def test_server_failure_falls_back_to_scripted_picker(tmp_path):

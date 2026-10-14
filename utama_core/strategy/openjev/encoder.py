@@ -21,8 +21,8 @@ from typing import Any, Optional
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
-from utama_core.strategy.pickers import CLOSER_TO_BALL_MARGIN
 from utama_core.strategy.openjev.splits import TACTIC_GLOSSARY, split_glossary
+from utama_core.strategy.pickers import CLOSER_TO_BALL_MARGIN
 from utama_core.tactics.clear_ball import in_danger
 
 STATIC_STATE: dict[str, Any] = {
@@ -37,10 +37,7 @@ STATIC_STATE: dict[str, Any] = {
     "to 0.5; counts are precomputed; `recent` lists the latest events, newest first.",
 }
 
-STATIC_TEXT = (
-    json.dumps({"static": STATIC_STATE}, ensure_ascii=False, separators=(",", ":"))
-    + "\n"
-)
+STATIC_TEXT = json.dumps({"static": STATIC_STATE}, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 QUESTION_KEY = "split"
 INSTRUCTIONS = "Which split of our 5 outfield robots should we use right now?"
@@ -94,11 +91,7 @@ def live_state(
     score: dict[str, Any] = {}
     referee: dict[str, Any] = {}
     if ref is not None:
-        us, them = (
-            (ref.yellow_team, ref.blue_team)
-            if game.my_team_is_yellow
-            else (ref.blue_team, ref.yellow_team)
-        )
+        us, them = (ref.yellow_team, ref.blue_team) if game.my_team_is_yellow else (ref.blue_team, ref.yellow_team)
         score = {"us": us.score, "them": them.score}
         referee = {
             "stage": ref.stage.name.lower(),
@@ -162,9 +155,7 @@ def live_state(
 
 
 def render(live: dict[str, Any]) -> str:
-    return STATIC_TEXT + json.dumps(
-        {"live": live}, ensure_ascii=False, separators=(",", ":")
-    )
+    return STATIC_TEXT + json.dumps({"live": live}, ensure_ascii=False, separators=(",", ":"))
 
 
 def question() -> dict[str, Any]:

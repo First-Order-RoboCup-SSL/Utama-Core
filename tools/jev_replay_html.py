@@ -54,9 +54,7 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
                     "latency_ms": row.get("latency_ms"),
                     "cached": row.get("cached"),
                     "fallback": row.get("fallback"),
-                    "possession": (row.get("live") or {})
-                    .get("possession", {})
-                    .get("side"),
+                    "possession": (row.get("live") or {}).get("possession", {}).get("side"),
                 }
             )
 
@@ -86,10 +84,7 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
         "ep": _r(rep.enemy_p[idx]),
         "eo": _r(rep.enemy_orientation[idx], 2),
         "bp": _r(rep.ball_p[idx][:, :2]),
-        "cmd": [
-            cmd_names.get(int(c), "") if c >= 0 else ""
-            for c in rep.referee_command[idx]
-        ],
+        "cmd": [cmd_names.get(int(c), "") if c >= 0 else "" for c in rep.referee_command[idx]],
         "scores": scores,
         "decisions": decisions,
         "split_keys": SPLIT_KEYS,
@@ -224,22 +219,14 @@ def main() -> None:
         default=None,
         help="output HTML (default: next to the replay)",
     )
-    ap.add_argument(
-        "--stride", type=int, default=2, help="keep every Nth tick (2 = 30 fps)"
-    )
+    ap.add_argument("--stride", type=int, default=2, help="keep every Nth tick (2 = 30 fps)")
     args = ap.parse_args()
 
-    log = args.log or args.npz.with_name(
-        args.npz.name.replace(".npz", ".openjev.jsonl")
-    )
+    log = args.log or args.npz.with_name(args.npz.name.replace(".npz", ".openjev.jsonl"))
     payload = build_payload(args.npz, log, args.stride)
     out = args.out or args.npz.with_suffix(".html")
-    out.write_text(
-        PAGE.replace("__PAYLOAD__", json.dumps(payload, separators=(",", ":")))
-    )
-    print(
-        f"wrote {out}  ({len(payload['ts'])} frames, {len(payload['decisions'])} decisions)"
-    )
+    out.write_text(PAGE.replace("__PAYLOAD__", json.dumps(payload, separators=(",", ":"))))
+    print(f"wrote {out}  ({len(payload['ts'])} frames, {len(payload['decisions'])} decisions)")
 
 
 if __name__ == "__main__":

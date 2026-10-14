@@ -131,10 +131,7 @@ def dynamic_state(n_history: int, verbose_robots: bool) -> dict[str, Any]:
         "our_robots": ours,
         "current_split": {"attack": [1, 2, 3], "defense": [4, 5]},
         "split_held_s": round(random.uniform(0, 10), 1),
-        "recent": [
-            f"{round(random.uniform(0.1, 9.9), 1)}s ago: {random.choice(EVENTS)}"
-            for _ in range(n_history)
-        ],
+        "recent": [f"{round(random.uniform(0.1, 9.9), 1)}s ago: {random.choice(EVENTS)}" for _ in range(n_history)],
     }
 
 
@@ -166,9 +163,7 @@ STATIC_STATE_WITH_SPLITS = {**STATIC_STATE, "splits": dict(OPTION_POOL)}
 class Client:
     def __init__(self, url: str):
         u = urlparse(url)
-        self.conn = http.client.HTTPConnection(
-            u.hostname or "127.0.0.1", u.port or 80, timeout=600
-        )
+        self.conn = http.client.HTTPConnection(u.hostname or "127.0.0.1", u.port or 80, timeout=600)
 
     def _req(self, method: str, path: str, body: Any = None) -> dict:
         data = json.dumps(body).encode() if body is not None else None
@@ -188,9 +183,7 @@ class Client:
 
     def decide(self, state: Any, questions: dict) -> tuple[dict, float]:
         t0 = time.perf_counter()
-        out = self._req(
-            "POST", "/v1/systemone", {"state": state, "questions": questions}
-        )
+        out = self._req("POST", "/v1/systemone", {"state": state, "questions": questions})
         return out, (time.perf_counter() - t0) * 1000
 
 
@@ -208,10 +201,7 @@ def summarize(ms: list[float]) -> dict:
 
 
 def static_text(static: dict, delim: str) -> str:
-    return (
-        json.dumps({"static": static}, ensure_ascii=False, separators=(",", ":"))
-        + delim
-    )
+    return json.dumps({"static": static}, ensure_ascii=False, separators=(",", ":")) + delim
 
 
 DELIMITERS = {"newline": "\n", "space": " ", "comma": ",", "double_newline": "\n\n"}
@@ -224,33 +214,22 @@ def bench_boundary(c: Client, reps: int) -> tuple[dict, str]:
     for name, delim in DELIMITERS.items():
         pw = c.prewarm(static_text(STATIC_STATE, delim))
         before = c.status()
-        ms = [
-            c.decide(
-                render(STATIC_STATE, dynamic_state(3, False), delim), question(16)
-            )[1]
-            for _ in range(3)
-        ]
+        ms = [c.decide(render(STATIC_STATE, dynamic_state(3, False), delim), question(16))[1] for _ in range(3)]
         d = delta(before, c.status())
         boundary[name] = {
             "static_prompt_tokens": pw["prompt_tokens"],
             **d,
             **summarize(ms),
         }
-        print(
-            f"  {name:15s} static={pw['prompt_tokens']:4d} tok  {d}  median={boundary[name]['median_ms']} ms"
-        )
+        print(f"  {name:15s} static={pw['prompt_tokens']:4d} tok  {d}  median={boundary[name]['median_ms']} ms")
     ok = [n for n, b in boundary.items() if b["partial_hits"] >= 3]
-    print(
-        f"  -> using delimiter {ok[0] if ok else 'newline (no variant reused the prefix!)'}"
-    )
+    print(f"  -> using delimiter {ok[0] if ok else 'newline (no variant reused the prefix!)'}")
     return boundary, DELIMITERS[ok[0] if ok else "newline"]
 
 
 def bench_sweep(c: Client, reps: int, delim: str) -> list[dict]:
     """2. Latency vs dynamic-part size x option count, static prefix cached."""
-    print(
-        "\n== 2. latency vs dynamic size x options (1 question, static prefix cached)"
-    )
+    print("\n== 2. latency vs dynamic size x options (1 question, static prefix cached)")
     static_tokens = c.prewarm(static_text(STATIC_STATE, delim))["prompt_tokens"]
     sweep = []
     for n_hist, verbose, label in [
@@ -294,10 +273,7 @@ def bench_questions(c: Client, reps: int, delim: str) -> dict:
         qs: dict = {}
         for i in range(nq):
             qs.update(question(16, key=f"q{i}"))
-        ms = [
-            c.decide(render(STATIC_STATE, dynamic_state(4, True), delim), qs)[1]
-            for _ in range(reps)
-        ]
+        ms = [c.decide(render(STATIC_STATE, dynamic_state(4, True), delim), qs)[1] for _ in range(reps)]
         qres[nq] = summarize(ms)
         print(f"  {nq} question(s): median={qres[nq]['median_ms']} ms")
     return qres
@@ -329,9 +305,7 @@ def bench_baselines(c: Client, reps: int, delim: str) -> dict:
 
 def bench_tail(c: Client, reps: int, delim: str) -> dict:
     """5. Question-tail size: described options vs keys-only with the glossary in the cached static block."""
-    print(
-        "\n== 5. question tail: described options vs keys-only + glossary in static prefix (medium dyn)"
-    )
+    print("\n== 5. question tail: described options vs keys-only + glossary in static prefix (medium dyn)")
     tail = {}
     for label, static, described in [
         ("described", STATIC_STATE, True),
@@ -372,9 +346,7 @@ def main() -> None:
     ap.add_argument("--url", default="http://127.0.0.1:3000")
     ap.add_argument("--reps", type=int, default=5, help="ticks per configuration")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument(
-        "--sections", default="1,2,3,4,5", help="comma-separated subset of 1-5 to run"
-    )
+    ap.add_argument("--sections", default="1,2,3,4,5", help="comma-separated subset of 1-5 to run")
     ap.add_argument("--out", default=None, help="write full results JSON here")
     args = ap.parse_args()
     random.seed(args.seed)

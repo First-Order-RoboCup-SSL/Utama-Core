@@ -91,11 +91,7 @@ def allocate(
     i = 0
     slots = _SPLIT_SLOTS[split_key]
     for n, (tactic_id, count) in enumerate(slots):
-        take = (
-            len(ordered) - i
-            if count is None or n == len(slots) - 1
-            else min(count, len(ordered) - i)
-        )
+        take = len(ordered) - i if count is None or n == len(slots) - 1 else min(count, len(ordered) - i)
         target = tactic_id
         while target not in applicable_tactic_ids and target in _FALLBACK:
             target = _FALLBACK[target]

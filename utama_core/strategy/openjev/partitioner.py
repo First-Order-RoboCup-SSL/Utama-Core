@@ -26,10 +26,10 @@ from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.tiki_taka import _tiki_taka_picker
 from utama_core.strategy.openjev import encoder
 from utama_core.strategy.openjev.client import OpenJevClient
 from utama_core.strategy.openjev.splits import SPLIT_KEYS, allocate, make_tactics
+from utama_core.strategy.tiki_taka import _tiki_taka_picker
 
 Partition = dict[str, frozenset[RobotId]]
 
@@ -45,9 +45,7 @@ class OpenJevPartitioner:
         self.client = client
         self.period = 1.0 / decision_hz
         self.fallback = fallback
-        self._log: Optional[IO[str]] = (
-            open(log_path, "w", buffering=1) if log_path else None
-        )
+        self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
         self.current_split: Optional[str] = None
         self._split_since: float = 0.0
         self._last_decision_t: Optional[float] = None
@@ -71,16 +69,10 @@ class OpenJevPartitioner:
         self._last_possession = possession
         ref = game.referee
         if ref is not None:
-            us, them = (
-                (ref.yellow_team, ref.blue_team)
-                if game.my_team_is_yellow
-                else (ref.blue_team, ref.yellow_team)
-            )
+            us, them = (ref.yellow_team, ref.blue_team) if game.my_team_is_yellow else (ref.blue_team, ref.yellow_team)
             score = (us.score, them.score)
             if self._last_score is not None and score != self._last_score:
-                self._note(
-                    t, "we scored" if score[0] > self._last_score[0] else "they scored"
-                )
+                self._note(t, "we scored" if score[0] > self._last_score[0] else "they scored")
             self._last_score = score
 
     def _recent_text(self, t: float) -> list[str]:
@@ -99,23 +91,16 @@ class OpenJevPartitioner:
         possession, _, _ = encoder.possession(game)
         self._track_events(game, t, possession)
 
-        due = (
-            self._last_decision_t is None
-            or t - self._last_decision_t >= self.period - 1e-9
-        )
+        due = self._last_decision_t is None or t - self._last_decision_t >= self.period - 1e-9
         if due:
             self._last_decision_t = t
-            fallback_partition = self._decide(
-                game, t, free_robots, prev_partition, applicable_tactic_ids
-            )
+            fallback_partition = self._decide(game, t, free_robots, prev_partition, applicable_tactic_ids)
             if fallback_partition is not None:
                 return fallback_partition
         if self.current_split is None:
             # No successful decision yet (server failing): stay on the scripted picker between
             # attempts instead of retrying the server every tick.
-            return self.fallback(
-                game, free_robots, prev_partition, applicable_tactic_ids
-            )
+            return self.fallback(game, free_robots, prev_partition, applicable_tactic_ids)
         return allocate(self.current_split, free_robots, applicable_tactic_ids)
 
     def _decide(
@@ -126,9 +111,7 @@ class OpenJevPartitioner:
         prev_partition: Optional[Partition],
         applicable: frozenset[str],
     ) -> Optional[Partition]:
-        robot_tactic = {
-            rid: tid for tid, rids in (prev_partition or {}).items() for rid in rids
-        }
+        robot_tactic = {rid: tid for tid, rids in (prev_partition or {}).items() for rid in rids}
         live = encoder.live_state(
             game,
             current_split=self.current_split,
@@ -141,9 +124,7 @@ class OpenJevPartitioner:
         self.n_decisions += 1
         try:
             d = self.client.decide(encoder.render(live), encoder.question())
-        except (
-            Exception
-        ) as e:  # server down / bad response: keep playing on the scripted picker
+        except Exception as e:  # server down / bad response: keep playing on the scripted picker
             self.n_fallback += 1
             partition = self.fallback(game, free_robots, prev_partition, applicable)
             row.update(
@@ -155,9 +136,7 @@ class OpenJevPartitioner:
 
         ans = d.answers[encoder.QUESTION_KEY]
         choice = ans["choice"]
-        if (
-            choice not in SPLIT_KEYS
-        ):  # defensive: server answered with a key we didn't offer
+        if choice not in SPLIT_KEYS:  # defensive: server answered with a key we didn't offer
             choice = self.current_split or SPLIT_KEYS[0]
         if choice != self.current_split:
             if self.current_split is not None:

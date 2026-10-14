@@ -53,14 +53,10 @@ CELLS = {
 def resolve_opponents(names: list[str]) -> list[str]:
     if names == ["all"]:
         return sorted(_CONFIG_NAMES)
-    full = [
-        n if n.startswith("build_") else f"build_{n}_kernel_strategy" for n in names
-    ]
+    full = [n if n.startswith("build_") else f"build_{n}_kernel_strategy" for n in names]
     unknown = [n for n in full if n not in _CONFIG_NAMES]
     if unknown:
-        raise SystemExit(
-            f"unknown strategies {unknown}; available: {sorted(_short_name(n) for n in _CONFIG_NAMES)}"
-        )
+        raise SystemExit(f"unknown strategies {unknown}; available: {sorted(_short_name(n) for n in _CONFIG_NAMES)}")
     return full
 
 
@@ -117,9 +113,7 @@ def play(
         "score_openjev": result.score_a,
         "score_opponent": result.score_b,
         "outcome": (
-            "win"
-            if result.score_a > result.score_b
-            else "loss" if result.score_a < result.score_b else "draw"
+            "win" if result.score_a > result.score_b else "loss" if result.score_a < result.score_b else "draw"
         ),
         "duration_s": duration,
         "decision_hz": decision_hz,
@@ -132,9 +126,7 @@ def play(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="OpenJev vs kernel strategies (rsim, offline)"
-    )
+    ap = argparse.ArgumentParser(description="OpenJev vs kernel strategies (rsim, offline)")
     ap.add_argument(
         "opponents",
         nargs="+",
@@ -174,18 +166,10 @@ def main() -> None:
     except Exception as e:
         raise SystemExit(f"FOR-Engine not reachable at {args.url}: {e}")
 
-    run_dir = (
-        Path(args.out_dir)
-        if args.out_dir
-        else REPLAY_BASE_PATH / f"jev_{datetime.now():%Y%m%d_%H%M%S}"
-    )
+    run_dir = Path(args.out_dir) if args.out_dir else REPLAY_BASE_PATH / f"jev_{datetime.now():%Y%m%d_%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "run.json").write_text(
-        json.dumps({"args": vars(args), "server": version}, indent=1)
-    )
-    print(
-        f"run dir: {run_dir}\nserver: {version.get('model_dir')} ({version.get('backend', {}).get('backend')})"
-    )
+    (run_dir / "run.json").write_text(json.dumps({"args": vars(args), "server": version}, indent=1))
+    print(f"run dir: {run_dir}\nserver: {version.get('model_dir')} ({version.get('backend', {}).get('backend')})")
 
     results = []
     n_total = len(opponents) * len(CELLS[args.cells])
@@ -196,9 +180,7 @@ def main() -> None:
             done = run_dir / f"{tag}.result.json"
             if done.exists():
                 r = json.loads(done.read_text())
-                print(
-                    f"  {tag:45s} (done) {r['score_openjev']}-{r['score_opponent']} {r['outcome']}"
-                )
+                print(f"  {tag:45s} (done) {r['score_openjev']}-{r['score_opponent']} {r['outcome']}")
             else:
                 r = play(
                     opponent,
@@ -219,22 +201,16 @@ def main() -> None:
 
     table: dict[str, dict[str, int]] = {}
     for r in results:
-        row = table.setdefault(
-            r["opponent"], {"W": 0, "D": 0, "L": 0, "GF": 0, "GA": 0}
-        )
+        row = table.setdefault(r["opponent"], {"W": 0, "D": 0, "L": 0, "GF": 0, "GA": 0})
         row[{"win": "W", "draw": "D", "loss": "L"}[r["outcome"]]] += 1
         row["GF"] += r["score_openjev"]
         row["GA"] += r["score_opponent"]
     total = {k: sum(v[k] for v in table.values()) for k in ("W", "D", "L", "GF", "GA")}
-    (run_dir / "summary.json").write_text(
-        json.dumps({"per_opponent": table, "total": total}, indent=1)
-    )
+    (run_dir / "summary.json").write_text(json.dumps({"per_opponent": table, "total": total}, indent=1))
     print("\nOpenJev vs            W  D  L   GF-GA")
     for name, v in sorted(table.items()):
         print(f"  {name:20s} {v['W']:2d} {v['D']:2d} {v['L']:2d}   {v['GF']}-{v['GA']}")
-    print(
-        f"  {'TOTAL':20s} {total['W']:2d} {total['D']:2d} {total['L']:2d}   {total['GF']}-{total['GA']}"
-    )
+    print(f"  {'TOTAL':20s} {total['W']:2d} {total['D']:2d} {total['L']:2d}   {total['GF']}-{total['GA']}")
 
 
 if __name__ == "__main__":

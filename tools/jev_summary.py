@@ -56,9 +56,7 @@ def main() -> None:
             f"  {missing if missing > 0 else ''}"
         )
     pts = 3 * total["W"] + total["D"]
-    print(
-        f"{'TOTAL':26s} {total['W']:2d} {total['D']:2d} {total['L']:2d}  {total['GF']:2d}-{total['GA']:<2d} {pts:4d}"
-    )
+    print(f"{'TOTAL':26s} {total['W']:2d} {total['D']:2d} {total['L']:2d}  {total['GF']:2d}-{total['GA']:<2d} {pts:4d}")
     print("\ncells: R/L = OpenJev plays right/left, k = OpenJev kicks off; score is OpenJev-opponent")
 
     (args.run_dir / "summary_all.json").write_text(

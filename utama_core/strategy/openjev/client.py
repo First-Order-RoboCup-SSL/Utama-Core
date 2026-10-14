@@ -45,9 +45,7 @@ class OpenJevClient:
         headers = {"Content-Type": "application/json"} if data is not None else {}
         for attempt in (0, 1):  # one reconnect on a dropped keep-alive connection
             if self._conn is None:
-                self._conn = http.client.HTTPConnection(
-                    self._host, self._port, timeout=self._timeout
-                )
+                self._conn = http.client.HTTPConnection(self._host, self._port, timeout=self._timeout)
             try:
                 self._conn.request(method, path, body=data, headers=headers)
                 resp = self._conn.getresponse()
@@ -70,17 +68,13 @@ class OpenJevClient:
         return self._request("POST", "/v1/prewarm", {"state": state})
 
     def decide(self, state: str, questions: dict[str, Any]) -> Decision:
-        key = hashlib.sha256(
-            (state + "\x00" + json.dumps(questions, sort_keys=True)).encode()
-        ).hexdigest()
+        key = hashlib.sha256((state + "\x00" + json.dumps(questions, sort_keys=True)).encode()).hexdigest()
         hit = self._cache.get(key)
         if hit is not None:
             self._cache.move_to_end(key)
             return Decision(answers=hit, latency_ms=0.0, cached=True)
         t0 = time.perf_counter()
-        out = self._request(
-            "POST", "/v1/systemone", {"state": state, "questions": questions}
-        )
+        out = self._request("POST", "/v1/systemone", {"state": state, "questions": questions})
         latency = (time.perf_counter() - t0) * 1000
         self._cache[key] = out["answers"]
         if len(self._cache) > self._cache_size:
