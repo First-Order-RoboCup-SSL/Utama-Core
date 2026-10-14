@@ -31,16 +31,19 @@ One term per thing; reuse these instead of coining new ones.
   (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
   "which strategy is better". Slow in full; with `--reuse` only matches whose code changed rerun.
 - **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
-  `bench_vs_standings.py` uses points per match (3 a win, 1 a draw) and goal difference.
-- **Start** — one starting situation (kickoff, free kick, penalty, or an open-play moment)
-  that the scenario bench replays for 20 s. In code: `BenchScenario` (`scenario_bench/start.py`),
-  and "scenario" in flags and enums.
+  `metric_correlation.py` uses points per match (3 a win, 1 a draw) and goal difference.
+- **Start** — one situation (see below) the scenario bench replays for 10 s, tagged with its
+  type from the candidate's view. In code: `BenchScenario` (`scenario_bench/start.py`), and
+  "scenario" in flags and enums.
 - **Bank** — a versioned list of starts (`utama_core/scenario_bench/banks/bank_vN.json`),
-  harvested from one round-robin's replays plus a few hand-authored anchors.
+  harvested from one round-robin's replays, up to 40 of each situation type.
 - **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
-  against a baseline on a bank. A screen, not a ranking: confirm with a round-robin.
+  against a baseline on a bank, each start against the opponent it came from; it estimates the
+  change in goals per match as Σ situations per match (real or sim weights) × the change in
+  P(goal within 10 s). A diagnostic, not a ranking: it cannot see a candidate change how often
+  situations happen or score from build-up longer than 10 s, so rank with matches.
 - **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
-  how far the bench and cheap proxy metrics agree with round-robin standings.
+  how far the bench and cheap proxy metrics agree with round-robin results.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to the scenario bench or any strategy.
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
@@ -48,6 +51,14 @@ One term per thing; reuse these instead of coining new ones.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
+- **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
+  ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
+  the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
+  P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
+  kickoff or penalty, force start. See `docs/signals.md`.
+- **Situation rates** — how often each situation type happens per team per live minute, from
+  real Division B matches or our round-robin (`banks/situation_rates_{real,sim}.json`,
+  `goal_ledger --rates`): the scenario bench's weights.
 
 ## Repo map
 

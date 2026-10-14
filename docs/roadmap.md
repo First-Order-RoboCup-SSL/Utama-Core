@@ -35,7 +35,7 @@ resolved, replace it with a one-line pointer under "Done".
 
 1. **Current stall count (2026-10-01, `fpp`, `e83a7466`): 0/231 matches** in the full strict
    65s round-robin (`replays/tournament_20261001_094103/`), none flagged by the possession
-   backstop; 93% of restarts reach NORMAL_START. `utama_core/scenario_bench/banks/bank_v7.json` is
+   backstop; 93% of restarts reach NORMAL_START. `bank_v7` (deleted 2026-10-12, replaced by `bank_v8`) was
    harvested from it. Earlier stall families (overload-slot COMMITTED_FROZEN, DIRECT_FREE
    restart stalls, low_block's PassAndShoot holding the ball) are fixed; see `git log`.
    Confirm any stall fix against the full round-robin: small-subset re-runs have repeatedly

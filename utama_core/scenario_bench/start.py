@@ -56,7 +56,7 @@ class ScenarioTrigger(Enum):
     """How this scenario's anchor moment was identified."""
 
     HAND_AUTHORED = "hand_authored"
-    RESTART = "restart"  # referee transition into live play (see item 14)
+    RESTART = "restart"  # a restart, from when the referee awards it (see scenario_harvester)
     EVENT = "event"  # MatchStats-detected: possession change, entry, etc.
     PERIODIC = "periodic"  # fallback sampling, not trigger-detected
 
@@ -98,6 +98,8 @@ class ScenarioProvenance:
     anchor_tick: Optional[float] = None  # sim_time of the anchor moment; None for hand-authored
     source_replay: Optional[Path] = None
     perspective: str = "candidate_kicking"  # or "candidate_defending" — restarts are asymmetric (see item 14)
+    # a harvested start's situation type from the candidate's view, one of `goal_ledger.TYPES`
+    situation: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +144,7 @@ class BenchScenario:
                 "anchor_tick": self.provenance.anchor_tick,
                 "source_replay": str(self.provenance.source_replay) if self.provenance.source_replay else None,
                 "perspective": self.provenance.perspective,
+                "situation": self.provenance.situation,
             },
             "scenario": {
                 "sim_time": s.sim_time,
@@ -189,6 +192,7 @@ class BenchScenario:
             anchor_tick=prov["anchor_tick"],
             source_replay=Path(prov["source_replay"]) if prov["source_replay"] else None,
             perspective=prov["perspective"],
+            situation=prov.get("situation"),
         )
         return BenchScenario(
             scenario_id=d["scenario_id"],
