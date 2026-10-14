@@ -35,6 +35,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import carry_exhausted, carry_origin
 from utama_core.shared.tolerance import Sticky
 from utama_core.tactics._pass_and_score import (
     PassAndScoreMem,
@@ -137,8 +138,15 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         else:
             passer_id, receiver_id = mem.assigned_pair
 
+        # A fresh attempt keeps `carry_origin`: the ball on the dribbler has
+        # carried as far as it has whatever attempt carried it, and dropping
+        # the origin let a held ball restart its 0.8m carry allowance on
+        # every phase timeout and foul (see run_setup_phase). It is at worst
+        # stale in the safe direction -- a carry that stops early.
         if mem.assigned_pair != (passer_id, receiver_id):
-            mem.pass_and_score = PassAndScoreMem()
+            mem.pass_and_score = PassAndScoreMem(
+                carry_origin=mem.pass_and_score.carry_origin, setup_attempt=mem.pass_and_score.setup_attempt
+            )
             mem.assigned_pair = (passer_id, receiver_id)
 
         if mem.pass_and_score.goal_scored:
@@ -171,7 +179,7 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
         # targets that just failed to converge.
         inner.phase_ticks += 1
         if inner.phase_ticks > _PHASE_TIMEOUT_TICKS:
-            inner = PassAndScoreMem()
+            inner = PassAndScoreMem(carry_origin=inner.carry_origin, setup_attempt=inner.setup_attempt + 1)
             mem.assigned_pair = None
 
         inner = _setup_positions(
@@ -183,7 +191,18 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             if complete:
                 inner.phase = "pass_then_score"
         elif inner.phase == "pass_then_score":
-            commands, pass_complete, lane_blocked = _pass_exec(game, ctx, passer_id, receiver_id)
+            # A passer holding the ball at the carry limit can't carry it to a
+            # better spot, so re-sampling setup spots (below) can't help it, and
+            # waiting for the receiver can outlast the referee's 10 s without
+            # progress. Once the lane has stayed blocked it kicks at the receiver
+            # as it stands. Re-sampled, every new lane was blocked too
+            # (low_block_vs_overload_press, tournament_20260929_171005, 16.3 s);
+            # kept waiting, the receiver never reached its receive point
+            # (low_block_vs_switch_of_play, tournament_20261001_091050, 38.1 s).
+            inner.carry_origin = carry_origin(game, passer_id, inner.carry_origin)
+            carry_spent = carry_exhausted(game, inner.carry_origin)
+            kick_now = carry_spent and inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS
+            commands, pass_complete, lane_blocked = _pass_exec(game, ctx, passer_id, receiver_id, kick_now=kick_now)
             # An enemy settling onto the direct passer-receiver line makes
             # this a bad pass to keep aiming (easily intercepted) — force
             # the existing phase timeout early (after a short sustained
@@ -195,7 +214,7 @@ class PassAndShootTactic(BaseTactic[PassAndShootMem]):
             # already reject a blocked lane via `score_pass_setup`, so this
             # re-sampling is where a genuinely open pairing gets picked.
             inner.lane_blocked_ticks = inner.lane_blocked_ticks + 1 if lane_blocked else 0
-            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS:
+            if inner.lane_blocked_ticks >= _LANE_BLOCKED_ABANDON_TICKS and not carry_spent:
                 inner.phase_ticks = max(inner.phase_ticks, _PHASE_TIMEOUT_TICKS + 1)
             if pass_complete:
                 inner.phase = "score"

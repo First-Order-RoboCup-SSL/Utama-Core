@@ -1,6 +1,6 @@
 """jev_tournament.py — OpenJev (via a running FOR-Engine server) vs kernel strategies, offline in rsim.
 
-OpenJev always plays yellow (tournament_lib's `config_a` convention); side and
+OpenJev always plays yellow (`tools/evaluation/match.py`'s `config_a` convention); side and
 kickoff are swept as independent cells. Matches run sequentially — the MLX
 backend serves one request at a time — and each finished match writes its own
 `<tag>.result.json`, so re-running the same command with the same `--out-dir`
@@ -29,7 +29,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from tournament_lib import _CONFIG_NAMES, _short_name, run_match
+from tools.evaluation.match import _CONFIG_NAMES, _short_name, run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.strategy.openjev import (
     OpenJevClient,

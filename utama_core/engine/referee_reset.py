@@ -18,10 +18,15 @@ argument):
    a barrier-reset trigger when arriving directly from a barrier-tier
    command (see `classify_transition`), not on every occurrence (a
    long-running tactic issues no restart command mid-play, so if the
-   command doesn't change there is nothing to classify).
+   command doesn't change there is nothing to classify). One more barrier
+   trigger: `FORCE_START` straight out of a pause (`HALT`/`STOP`).
+   FORCE_START restarts play with a free ball wherever it now is — in rsim
+   the referee may have teleported it during the stop — so a tactic that
+   resumed its pre-pause commitment would be acting on a ball that is no
+   longer where its `mem` thinks it is.
 
-2. Pause (SIGSTOP/CONT-style) — `HALT`/`STOP`. The game freezes and later
-   resumes from the *same* state. `mem` and `is_committed()` must survive this
+2. Pause (SIGSTOP/CONT-style) — `HALT`/`STOP`. The game freezes and may
+   later resume from the *same* state (anything but `FORCE_START`, see 1). `mem` and `is_committed()` must survive this
    untouched — a tactic mid-pass should pick up exactly where it left off
    once play resumes. The only thing that must change during a pause is that
    no tactic should be issuing live motion commands; that's a kernel-loop
@@ -32,16 +37,6 @@ argument):
    tick, or `TIMEOUT_*`, which pauses the clock but is not itself a restart
    of play). Deliberately conservative: if a command isn't recognized as a
    phase-starting restart, this module does not reset state for it.
-
-`AbstractStrategy._REFEREE_STOPPAGE_COMMANDS` (the existing BT-path reset
-list) resets on *every* stoppage command including plain `STOP`, once per
-distinct `(command, timestamp)` token. That is a deliberately different,
-more conservative choice than tier 2 here: this kernel's design explicitly
-wants a plain pause to preserve `mem`, on the reasoning that a tactic mid
-commitment should not lose its progress just because the referee paused
-play without restarting it. This is a considered divergence from the
-existing BT path, not an oversight — flagging it explicitly in case the two
-mechanisms are ever compared or unified.
 """
 
 from __future__ import annotations
@@ -80,18 +75,10 @@ _RESUME_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FORCE_
 # Commands that pause play without starting a new phase. `mem`/`is_committed()`
 # must survive these untouched; only live command issuance should stop.
 #
-# TIMEOUT_YELLOW/BLUE is NOT in this set, even though it pauses play the same
-# way STOP does: the old BT path dispatched it straight to `StopStep`
-# (`docs/referee_integration.md`'s tree diagram — `Timeout [Sequence] ->
-# CheckRefereeCommand(TIMEOUT_YELLOW | TIMEOUT_BLUE) -> StopStep`), the same
-# active "push any encroaching robot outside the ball keep-out radius" logic
-# STOP itself uses, not a passive freeze. So TIMEOUT_* is wired into
-# `referee_override.py`'s `_OVERRIDE_COMMANDS` alongside STOP instead of here
-# — see that module for the routing and the fuller history (this was
-# previously unhandled by either mechanism at all: three separate comments in
-# this codebase claimed `is_paused` already covered `TIMEOUT_*`, but it
-# didn't — a real regression from the BT port where a timeout left tactics
-# ticking and issuing ordinary motion commands instead of idling).
+# TIMEOUT_YELLOW/BLUE is NOT in this set: like STOP it needs the active "push
+# any encroaching robot outside the ball keep-out radius" `StopStep`, not a
+# passive freeze, so it is routed through `referee_override.py`'s
+# `_OVERRIDE_COMMANDS` instead.
 _PAUSE_COMMANDS = frozenset({RefereeCommand.HALT, RefereeCommand.STOP})
 
 
@@ -116,6 +103,9 @@ def classify_transition(previous: Optional[RefereeCommand], current: RefereeComm
         return ResetTier.BARRIER
 
     if current in _RESUME_COMMANDS and previous in _BARRIER_ENTRY_COMMANDS:
+        return ResetTier.BARRIER
+
+    if current == RefereeCommand.FORCE_START and previous in _PAUSE_COMMANDS:
         return ResetTier.BARRIER
 
     if current in _PAUSE_COMMANDS:

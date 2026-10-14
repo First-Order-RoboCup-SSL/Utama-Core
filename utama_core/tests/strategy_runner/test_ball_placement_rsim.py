@@ -279,17 +279,6 @@ class _CarryToTargetManager(AbstractTestManager):
         return TestingStatus.IN_PROGRESS
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Flaky: passes reliably in isolation but intermittently fails when run "
-        "alongside the other tests in this file, most likely rsim physics/timing "
-        "variance against _PROGRESS_THRESHOLD's tight margin — consistent with "
-        "this file's documented gap around rsim IR/motion-controller unreliability "
-        "for the carry phase (see _CarryToTargetManager's docstring), not a real "
-        "regression. Investigated during the AbstractStrategy port (2026-08-15)."
-    ),
-    strict=False,
-)
 def test_placer_moves_toward_designated_position(headless: bool) -> None:
     """After capturing the ball, the placer robot moves toward the designated position."""
     referee = CustomReferee.from_profile_name("simulation")

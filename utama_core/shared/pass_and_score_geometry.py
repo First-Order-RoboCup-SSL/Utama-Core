@@ -78,8 +78,10 @@ _RELEASE_FORWARD_MAX = 0.17
 _RELEASE_LATERAL_MAX = 0.065
 
 # Per-robot "did the last tick's visual has_ball read True" state, keyed by
-# robot_id only (matching `shielding.py`'s `_COMMITTED_ROBOTS` — friendly-only
-# callers, so no team key needed). This is a deliberate departure from this
+# (team, robot_id): both teams' strategies run in one process with the same
+# robot ids, and keyed by id alone one team's possession widened the other's
+# box. A new match clears it (`StrategyRunner` calls `reset_possession_state()`),
+# since a round-robin worker plays many matches. This is a deliberate departure from this
 # module's "no hidden state" rule, for the same reason `shielding.py` made
 # the same departure (see its `_COMMITTED_ROBOTS` docstring): a bare
 # stateless threshold cannot implement hysteresis, because the decision must
@@ -88,11 +90,12 @@ _RELEASE_LATERAL_MAX = 0.065
 # tick-to-tick (this fallback's whole reason for existing — see the
 # docstring's flicker paragraph). Never grows unboundedly: at most one entry
 # per robot ID actually in play.
-_POSSESSION_STATE: dict[int, bool] = {}
+_POSSESSION_STATE: dict[tuple[bool, int], bool] = {}
 
 
-def reset_possession_state(robot_id: int) -> None:
-    """Forget any held-ball hysteresis state for `robot_id`.
+def reset_possession_state(robot_id: Optional[int] = None) -> None:
+    """Forget any held-ball hysteresis state for `robot_id` (either team's), or for every
+    robot when None.
 
     Call this wherever a robot's ball possession is being reset for an
     unrelated reason (role reassignment, a fresh acquisition attempt after
@@ -100,7 +103,10 @@ def reset_possession_state(robot_id: int) -> None:
     widen the acquire box to the release box on the next tick. Safe to call
     even if no state is held (no-op). Mirrors `shielding.reset_shield_state`.
     """
-    _POSSESSION_STATE.pop(robot_id, None)
+    if robot_id is None:
+        _POSSESSION_STATE.clear()
+    for team_is_yellow in (True, False):
+        _POSSESSION_STATE.pop((team_is_yellow, robot_id), None)
 
 
 def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: float = _ACQUIRE_FORWARD_MAX) -> bool:
@@ -181,7 +187,8 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     forward = dx * cos_o + dy * sin_o
     lateral = -dx * sin_o + dy * cos_o
 
-    already_had_it = _POSSESSION_STATE.get(robot_id, False)
+    key = (game.my_team_is_yellow, robot_id)
+    already_had_it = _POSSESSION_STATE.get(key, False)
     # A caller-supplied `capture_distance` only ever sets the *acquire*
     # forward reach (see docstring) — once already committed (hysteresis),
     # the release box is fixed, matching `shielding.py`'s pattern of not
@@ -190,8 +197,45 @@ def has_ball(game: Game, robot_id: int, visual: bool = False, capture_distance: 
     lateral_max = _RELEASE_LATERAL_MAX if already_had_it else _ACQUIRE_LATERAL_MAX
 
     result = (_ACQUIRE_FORWARD_MIN <= forward <= forward_max) and (abs(lateral) <= lateral_max)
-    _POSSESSION_STATE[robot_id] = result
+    _POSSESSION_STATE[key] = result
     return result
+
+
+# `ExcessiveDribblingRule` fouls a carry of more than 1.0m; the margin covers
+# the ball swinging round the dribbler while the carrier turns to kick.
+CARRY_LIMIT_M = 0.8
+# Braking deceleration for the stopping-distance term in `carry_exhausted`.
+# Measured, not `MAX_ACCELERATION` (4.0): a DecoyOverload carrier in rsim
+# braked 1.45 -> 0.6m/s in 0.3s (~2.9m/s^2) with the ball on the dribbler.
+_CARRY_BRAKE_DECEL_MPS2 = 2.5
+
+
+def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> Optional[Vector2D]:
+    """Where `robot_id`'s current dribble began: the ball position when
+    `robot.has_ball` last went True, the same signal and point
+    `ExcessiveDribblingRule` measures from. None while not holding the ball.
+    Call once per tick with the previous return value."""
+    robot = game.friendly_robots.get(robot_id)
+    if robot is None or not robot.has_ball or game.ball is None:
+        return None
+    return prev_origin if prev_origin is not None else game.ball.p.to_2d()
+
+
+def carry_exhausted(game: Game, origin: Optional[Vector2D], stops_after: bool = False) -> bool:
+    """True once the ball reaches `CARRY_LIMIT_M` from `origin` (see `carry_origin`):
+    carrying further risks an excessive-dribbling foul, so release the ball.
+
+    `stops_after`: the carrier brakes to a halt with the ball still on the dribbler
+    once this fires (DecoyOverload's lure), so count the stopping distance too --
+    without it a ~1.4m/s lure braked another ~0.4m and fouled at 1.01m anyway. Leave
+    False for a carrier that kicks while moving (GiveAndGo): counting it there ended
+    carries ~0.5m early and cost give_and_go_solo half its goals in an A/B
+    (tournament_20260924_092119 bisect)."""
+    if origin is None or game.ball is None:
+        return False
+    speed = math.hypot(game.ball.v.x, game.ball.v.y) if stops_after else 0.0
+    stopping = speed**2 / (2 * _CARRY_BRAKE_DECEL_MPS2)
+    return game.ball.p.to_2d().distance_to(origin) + stopping >= CARRY_LIMIT_M
 
 
 def at_target(game: Game, robot_id: int, target: Vector2D, tolerance: float = 0.08) -> bool:
@@ -232,6 +276,25 @@ def intercept_point(
 
     intercept_orientation = math.atan2(ball_pos.y - receiver.p.y, ball_pos.x - receiver.p.x)
     return intercept_position, intercept_orientation
+
+
+_PASS_ROLLING_MPS = 0.5
+
+
+def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
+    """Where `receiver_id` meets a ball already rolling towards it: its own position
+    projected onto the ball's actual path. None while the ball is slower than
+    `_PASS_ROLLING_MPS` or moving away from the receiver."""
+    ball = game.ball
+    velocity = Vector2D(ball.v.x, ball.v.y)
+    speed = velocity.mag()
+    if speed < _PASS_ROLLING_MPS:
+        return None
+    ball_pos = ball.p.to_2d()
+    along = (game.friendly_robots[receiver_id].p - ball_pos).dot(velocity) / speed
+    if along <= 0.0:
+        return None
+    return ball_pos + velocity * (along / speed)
 
 
 def enemy_positions(game: Game) -> list[Vector2D]:
@@ -438,6 +501,14 @@ def ball_in_enemy_defense_area(game: Game) -> bool:
     return in_enemy_defense_area(game, game.ball.p.to_2d())
 
 
+def _beside_defense_area(game: Game, point: Vector2D, margin: float) -> bool:
+    """True when `point` is wider than the box by more than `margin`: already legal and
+    clear of the planner's ring, so the x clamp below must not pull it off its line
+    (a receive point at (-3.41, 2.7) was dragged to x = -2.95, high_line_zone_vs_low_block
+    2026-09-28)."""
+    return abs(point.y) > game.field.half_defense_area_width + margin
+
+
 def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
     """Clamp a target point to just outside our own defense area's front edge.
 
@@ -449,6 +520,8 @@ def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 
     `half_defense_area_width`, so a clamped x alone is already outside).
     """
     defense_area = game.field.my_defense_area
+    if _beside_defense_area(game, point, margin):
+        return point
     front_x = float(defense_area[1][0])
     sign = 1.0 if game.my_team_is_right else -1.0
     exit_x = front_x - sign * margin
@@ -491,6 +564,8 @@ def clamp_outside_enemy_defense_area(
     `sign`.
     """
     defense_area = game.field.enemy_defense_area
+    if _beside_defense_area(game, point, margin):
+        return point
     front_x = float(defense_area[1][0])
     sign = -1.0 if game.my_team_is_right else 1.0
     exit_x = front_x - sign * margin

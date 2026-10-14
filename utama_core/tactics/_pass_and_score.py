@@ -25,6 +25,9 @@ from utama_core.entities.game import Game
 from utama_core.shared.field_scaling import scale_point_from_standard_field
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    ball_line_receive_point,
+    carry_exhausted,
+    carry_origin,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -103,6 +106,8 @@ class PassAndScoreMem:
     setup_ticks_without_ball: int = 0  # consecutive setup ticks the passer has read has_ball=False
     prev_best_shot_y: Optional[float] = None  # feeds _score_goal's switch-margin hysteresis; see _score_goal below
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early phase timeout
+    carry_origin: Optional[Vector2D] = None  # see shared carry_origin; caps the setup carry
+    setup_attempt: int = 0  # phase timeouts so far; seeds the re-sample so a timeout picks new positions
 
 
 def _setup_positions(
@@ -130,7 +135,7 @@ def _setup_positions(
         # never converges on anything. Seeding on (passer_id, receiver_id)
         # makes repeated re-initialization re-derive the *same* candidate
         # position instead of a new random one each time.
-        rng = random.Random(hash(assignment))
+        rng = random.Random(hash(assignment) if mem.setup_attempt == 0 else hash((assignment, mem.setup_attempt)))
         passer_pos, receiver_pos = choose_setup_positions(game, base_passer, base_receiver, rng)
     else:
         passer_pos, receiver_pos = base_passer, base_receiver
@@ -141,7 +146,9 @@ def _setup_positions(
     return mem
 
 
-def _move_to(game: Game, ctx: TickContext, robot_id: int, target: Vector2D) -> tuple[RobotCommand, bool]:
+def _move_to(
+    game: Game, ctx: TickContext, robot_id: int, target: Vector2D, dribbling: bool = False
+) -> tuple[RobotCommand, bool]:
     robot = game.friendly_robots[robot_id]
     target_oren = robot.p.angle_to(game.ball.p.to_2d())
     arrived = at_target(game, robot_id, target)
@@ -151,6 +158,7 @@ def _move_to(game: Game, ctx: TickContext, robot_id: int, target: Vector2D) -> t
         robot_id=robot_id,
         target_coords=target,
         target_oren=target_oren,
+        dribbling=dribbling,
     )
     return command, arrived
 
@@ -191,13 +199,38 @@ def run_setup_phase(
     # scratch and discards all progress toward passer_position, so the
     # passer never made net progress. Only fall back to re-acquisition once
     # the ball has actually been away for several consecutive ticks.
-    if has_ball(game, passer_id, visual=True):
+    #
+    # The carry needs the dribbler on: without it the passer drove off its
+    # own ball, lost it after the grace, walked back, and repeated -- a
+    # restart held like this was never kicked (tournament_20260929_163151:
+    # low_block's free kicks ran out the referee's 10s, twice into a
+    # COMMITTED_FROZEN stall). And passer_position can be metres from the
+    # ball, so the carry stops at the shared excessive-dribbling limit: the
+    # passer brakes, holds the ball there and counts as set up. It brakes
+    # with the ball on the dribbler, so the limit counts the stopping
+    # distance (without it a 1.5m/s carry fouled at 1.0m anyway).
+    #
+    # Only a ball actually on the dribbler (the strict sensor) is carried.
+    # The visual box reaches a few cm past contact, and a passer that set
+    # off from there drove away from a ball it never touched, came back and
+    # repeated until the referee's 10s ran out (the same fixture, rerun with
+    # the dribbler on). From the visual box it closes that gap first, as
+    # `_pass_exec` does for its kick.
+    mem.carry_origin = carry_origin(game, passer_id, mem.carry_origin)
+    if carry_exhausted(game, mem.carry_origin, stops_after=True):
         mem.setup_ticks_without_ball = 0
-        passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position)
+        passer_cmd, passer_arrived = empty_command(dribbler_on=True), True
+    elif has_ball(game, passer_id):
+        mem.setup_ticks_without_ball = 0
+        passer_cmd, passer_arrived = _move_to(game, ctx, passer_id, mem.passer_position, dribbling=True)
+    elif has_ball(game, passer_id, visual=True):
+        mem.setup_ticks_without_ball = 0
+        passer_cmd, _ = _move_to(game, ctx, passer_id, game.ball.p.to_2d(), dribbling=True)
+        passer_arrived = False
     else:
         mem.setup_ticks_without_ball += 1
         if mem.setup_ticks_without_ball <= _SETUP_BALL_LOSS_GRACE_TICKS:
-            passer_cmd, _ = _move_to(game, ctx, passer_id, mem.passer_position)
+            passer_cmd, _ = _move_to(game, ctx, passer_id, mem.passer_position, dribbling=True)
         else:
             passer_cmd = _hold_or_acquire_ball(game, ctx, passer_id)
         passer_arrived = False
@@ -219,8 +252,13 @@ def _pass_exec(
     ctx: TickContext,
     passer_id: int,
     receiver_id: int,
+    kick_now: bool = False,
 ) -> tuple[dict[int, RobotCommand], bool, bool]:
     """Synchronized aiming, intercept positioning, and kick.
+
+    `kick_now`: aim at the receiver as it stands and kick once aimed, without
+    waiting for it to reach the receive point (a passer that can't carry the
+    ball anywhere better and can't wait for a lane to open).
 
     Returns (commands, pass_complete, lane_blocked) — `lane_blocked` is True
     when an enemy sits on the ball-to-receive-point line this tick; the
@@ -273,7 +311,18 @@ def _pass_exec(
         round(intercept_pos.y / _INTERCEPT_SNAP_M) * _INTERCEPT_SNAP_M,
     )
 
-    passer_target_oren = game.friendly_robots[passer_id].p.angle_to(intercept_pos)
+    # Once the receiver is in place, aim at the receiver itself, not the receive point
+    # it only has to be within 0.08m of: at a 0.45m pass that offset is a 10 degree
+    # miss, the ball strikes the side of the dribbler and deflects. Receivers facing
+    # within 10 degrees of the incoming ball caught 95% of passes that reached them,
+    # 10-20 degrees 7% (tournament_20260924_092119, turnover_breakdown receptions).
+    receiver_pos = game.friendly_robots[receiver_id].p
+    aim_point = receiver_pos if kick_now or at_target(game, receiver_id, intercept_pos) else intercept_pos
+    # Aim from the ball, not the passer's centre: the kick sends the ball along the heading
+    # from wherever it sits on the dribbler, often 2-4 cm off-centre. Aimed from the centre,
+    # that offset and the heading tolerance added on the same side in 27 of 29 missed short
+    # passes, which passed ~7 cm beside the receiver (tournament_20260928_221404).
+    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can
     # stay False while the robot is visually on the ball, which would
@@ -326,7 +375,21 @@ def _pass_exec(
     receiver_facing_pass = oriented_towards(game, receiver_id, intercept_oren)
     receiver_ready = receiver_at_intercept and receiver_facing_pass
 
-    if not receiver_at_intercept:
+    # Once the pass is rolling, meet it on its actual path: the receive point above
+    # follows the passer's heading, not the ball, and `at_target`'s 0.08 m lets the
+    # receiver stop beside the path. Well-faced misses met the ball a median 0.08 m
+    # off-centre, catches 0.025 m (tournament_20260924_124033).
+    rolling_spot = ball_line_receive_point(game, receiver_id)
+    if rolling_spot is not None:
+        commands[receiver_id] = move(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=receiver_id,
+            target_coords=clamp_outside_enemy_defense_area(game, clamp_outside_own_defense_area(game, rolling_spot)),
+            target_oren=intercept_oren,
+            dribbling=True,
+        )
+    elif not receiver_at_intercept:
         commands[receiver_id] = move(
             game=game,
             motion_controller=ctx.motion_controller,
@@ -358,7 +421,7 @@ def _pass_exec(
     # just means "don't kick yet, try again next tick", which is harmless;
     # it's the false-positive from the looser check that silently wastes the
     # whole window.
-    ready_to_kick = passer_has_ball and passer_aimed and receiver_ready and has_ball(game, passer_id)
+    ready_to_kick = passer_has_ball and passer_aimed and (receiver_ready or kick_now) and has_ball(game, passer_id)
     if ready_to_kick:
         commands[passer_id] = kick()
 

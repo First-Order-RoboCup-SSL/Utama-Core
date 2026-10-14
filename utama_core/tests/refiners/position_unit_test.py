@@ -16,13 +16,11 @@ def test_combining_single_team_combines_single_robot():
     vision_robots = [VisionRobotData(0, 1, 2, 3)]
     result = position_refiner._combine_single_team_positions(game_robots, vision_robots, friendly=True)
 
-    expected_orientation = position_refiner.angle_smoother.smooth(0, 3)
-
     assert len(result) == 1
     rb = result[0]
     assert rb.p.x == 1
     assert rb.p.y == 2
-    assert rb.orientation == expected_orientation
+    assert rb.orientation == 3
 
 
 def test_combining_with_robot_not_in_game_adds():

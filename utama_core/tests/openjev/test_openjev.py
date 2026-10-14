@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from tournament_lib import run_match
+from tools.evaluation.match import run_match
 from utama_core.strategy.openjev import build_openjev_kernel_strategy
 from utama_core.strategy.openjev.client import Decision
 from utama_core.strategy.openjev.encoder import QUESTION_KEY, STATIC_TEXT

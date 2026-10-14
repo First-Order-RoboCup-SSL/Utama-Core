@@ -26,7 +26,10 @@ import math
 
 import pytest
 
-from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    PENALTY_BEHIND_MARK_DISTANCE,
+)
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
@@ -84,6 +87,11 @@ def _set_referee_command(runner, command: RefereeCommand, designated_position=No
     object.__setattr__(runner.my.current_game_frame, "referee", referee_data)
 
 
+# Centre-to-centre distance that keeps a teleported robot off the ball
+# (ROBOT_RADIUS + BALL_RADIUS is about 0.11 m) and inside the keep-out zone.
+_CLEAR_OF_BALL = 0.2
+
+
 def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_runner):
     """During the opponent's ball placement, a robot starting inside the
     keep-out zone around the ball moves outside it — a plain tactic tick has
@@ -92,7 +100,7 @@ def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_r
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()  # let the teleport land in game state
 
     designated = (1.5, 0.0)
@@ -115,7 +123,9 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
     game = split_shape_runner.my.game
     split_shape_runner.step_once()
 
-    split_shape_runner.sim_controller.teleport_robot(True, 1, 0.05, 0.0, 0.0)
+    # Inside the keep-out radius but clear of the ball: a robot teleported onto
+    # the ball knocks it off the spot, and where it stops then decides the test.
+    split_shape_runner.sim_controller.teleport_robot(True, 1, _CLEAR_OF_BALL, 0.0, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
@@ -124,6 +134,7 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
         split_shape_runner.step_once()
 
     ball = game.ball.p
+    assert math.hypot(ball.x, ball.y) < 0.05, "ball left the centre spot"
     for robot_id, robot in game.friendly_robots.items():
         dist_to_ball = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} inside centre keep-out zone"
@@ -132,10 +143,11 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
 def test_override_ends_and_tactics_resume_on_normal_start(split_shape_runner):
     """Once NORMAL_START arrives after a restart, tactics tick again (mem was
     reset by the barrier transition on the way in) instead of the override
-    continuing to hold every robot in place forever."""
+    continuing to hold every robot in place forever. Our own kick-off: after
+    the opponent's, the hold lasts until their kicker moves the ball (5.4)."""
     strategy = split_shape_runner.my.strategy
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW)
     for _ in range(50):
         split_shape_runner.step_once()
 
@@ -190,7 +202,7 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.STOP)
@@ -206,16 +218,15 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
 
 def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
     """TIMEOUT_YELLOW/BLUE is also an override command, routed to `StopStep`
-    exactly like STOP (see `referee_override.py`'s module docstring) — the
-    old BT path dispatched it the same way (`docs/referee_integration.md`'s
-    tree diagram), but the kernel port had never wired it into either
-    `is_paused` or `is_override_command` at all, so a timeout left tactics
-    ticking and issuing ordinary motion commands straight through it."""
+    exactly like STOP (see `referee_override.py`'s module docstring). It was
+    once wired into neither `is_paused` nor `is_override_command`, so a
+    timeout left tactics ticking and issuing ordinary motion commands
+    straight through it."""
     game = split_shape_runner.my.game
     split_shape_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 0.1, ball_y, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
     split_shape_runner.step_once()
 
     _set_referee_command(split_shape_runner, RefereeCommand.TIMEOUT_YELLOW)
@@ -251,13 +262,8 @@ def test_goalkeeper_stops_during_halt(split_shape_runner):
 
 # ---------------------------------------------------------------------------
 # Penalty and direct-free routing — RefereeOverride._step_for's "ours"/"theirs"
-# dispatch for these four command families had zero test coverage until now:
-# the only place it was ever exercised was the BT path's
-# TestDispatcherRouting (utama_core/tests/referee/test_referee_unit.py),
-# deleted alongside strategy/referee/tree.py since it tested the BT
-# dispatcher classes directly, not the kernel's _step_for. Ball placement and
-# kickoff (both directions) are covered above; these four fill the gap for
-# penalty and direct-free.
+# dispatch for these four command families. Ball placement and kickoff (both
+# directions) are covered above.
 # ---------------------------------------------------------------------------
 
 
@@ -296,8 +302,38 @@ def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runne
     assert dist_keeper_to_goal < 0.3, f"goalkeeper did not reach our goal line: dist={dist_keeper_to_goal:.3f}m"
 
     non_keeper = game.friendly_robots[1]
-    dist_to_line = abs(non_keeper.p.x - penalty_mark_x)
+    dist_to_line = abs(non_keeper.p.x - (penalty_mark_x - PENALTY_BEHIND_MARK_DISTANCE))
     assert dist_to_line < 0.5, f"robot 1 did not reach the behind-the-line formation: dist_x={dist_to_line:.3f}m"
+
+
+def test_their_penalty_defenders_never_enter_the_keep_out_circle(split_shape_runner):
+    """RR#6 low_block_vs_three_slot (2026-09-28, t=38.6): with the ball on the
+    opponent's mark, four of our robots stood goal-side of it and had to reach
+    the line 1 m behind. Robot 5 cut to 0.38 m from the ball and KeepOutRule
+    (0.5 m) voided the penalty. Start positions are the recorded ones."""
+    game = split_shape_runner.my.game
+    split_shape_runner.step_once()
+
+    mark = (2.25, 0.0)
+    split_shape_runner.sim_controller.teleport_ball(*mark)
+    recorded = {0: (4.39, 0.04), 2: (3.39, 0.81), 3: (3.04, 1.01), 4: (3.64, 1.71), 5: (2.81, 0.96)}
+    for robot_id, (x, y) in recorded.items():
+        split_shape_runner.sim_controller.teleport_robot(True, robot_id, x, y, math.pi)
+    split_shape_runner.sim_controller.teleport_robot(False, 1, 3.24, 1.63, 0.0)
+    split_shape_runner.sim_controller.teleport_robot(False, 2, 3.09, -1.49, 0.0)
+    split_shape_runner.step_once()
+
+    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
+
+    closest = {}
+    for _ in range(300):
+        split_shape_runner.step_once()
+        ball = game.ball.p
+        for robot_id, robot in game.friendly_robots.items():
+            d = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
+            closest[robot_id] = min(closest.get(robot_id, math.inf), d)
+
+    assert min(closest.values()) >= 0.5, f"closest approach to the ball per robot: {closest}"
 
 
 def test_our_penalty_moves_kicker_to_the_penalty_mark(split_shape_runner):

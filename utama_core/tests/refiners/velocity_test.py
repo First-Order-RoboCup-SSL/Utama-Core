@@ -155,3 +155,47 @@ def test_acceleration_calculation_implements_expected_formula():
     assert game.ball.a.x == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
     assert game.ball.a.y == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
     assert game.ball.a.z == pytest.approx(acc / VelocityRefiner.ACCELERATION_WINDOW_SIZE)
+
+
+def test_acceleration_left_zero_when_not_computed():
+    game_history = GameHistory(20)
+    for ts in range(VelocityRefiner.ACCELERATION_N_WINDOWS * VelocityRefiner.ACCELERATION_WINDOW_SIZE):
+        game_history.add_game_frame(create_ball_only_game(ts, ts, 0, 0, ts, ts, ts))
+
+    game = VelocityRefiner(compute_acceleration=False).refine(game_history, create_ball_only_game(15, 15, 0, 0))
+
+    assert game.ball.v.x == pytest.approx(1)
+    assert (game.ball.a.x, game.ball.a.y, game.ball.a.z) == (0, 0, 0)
+
+
+def _velocity_entries(dts, velocities):
+    ts, entries = 10.0, []
+    for dt, v in zip(dts, velocities):
+        ts += dt
+        entries.append((ts, v))
+    return entries
+
+
+@pytest.mark.parametrize(
+    "dts, velocities",
+    [
+        ([1 / 60] * 15, [(0.1 * i, -0.05 * i * i) for i in range(15)]),  # accelerating
+        ([1 / 60] * 5 + [0.0] * 5 + [1 / 60] * 5, [(1.0, 2.0)] * 7 + [(1.5, -0.0)] * 8),  # one zero-dt segment
+        ([0.0] * 15, [(1.0, 1.0)] * 15),  # every segment too short: zero, with a warning
+        ([1 / 60] * 15, [(-0.0, 0.0)] * 15),  # signed zeros keep their sign
+    ],
+)
+def test_robot_acceleration_fast_path_is_the_general_helper_bit_for_bit(dts, velocities):
+    # Robots read their velocity history in place instead of through
+    # `_windowed_average_derivative`: the same additions in the same order, so the same floats.
+    entries = _velocity_entries(dts, velocities)
+    general = velocity_refiner._windowed_average_derivative(
+        [float(ts) for ts, _ in entries],
+        [vec for _, vec in entries],
+        VelocityRefiner.ACCELERATION_N_WINDOWS,
+        VelocityRefiner.ACCELERATION_WINDOW_SIZE,
+        True,
+        log_prefix="ACCEL",
+    )
+    fast = velocity_refiner._acceleration_from_entries(entries, True)
+    assert (repr(fast.x), repr(fast.y)) == (repr(general.x), repr(general.y))

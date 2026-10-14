@@ -20,8 +20,16 @@ class ProximityLookup:
     ):
         """Initialize the proximity map with a set of points.
 
-        :param point_array: A 2D numpy array where each row is a point in the format [x, y].
+        Built on the first query, not here: every frame of both teams makes one, and most are
+        never queried (about half the frames of a match).
         """
+        self._objects = (friendly_robots, enemy_robots, ball)
+
+    def _build(self) -> None:
+        if self._objects is None:
+            return
+        friendly_robots, enemy_robots, ball = self._objects
+        self._objects = None
         self.friendly_end_idx = len(friendly_robots) if friendly_robots else 0
         self.enemy_end_idx = self.friendly_end_idx + len(enemy_robots) if enemy_robots else self.friendly_end_idx
         self.object_keys, self.point_array = self._get_object_keys_and_point_array(friendly_robots, enemy_robots, ball)
@@ -101,6 +109,7 @@ class ProximityLookup:
         return self.object_keys[closest_absolute_index], closest_distance
 
     def closest_to_ball(self, team_type_filter: Optional[TeamType] = None) -> Tuple[Optional[ObjectKey], float]:
+        self._build()
         if not self.object_keys or self.object_keys[-1].object_type != ObjectType.BALL:
             warnings.warn("Invalid closest_to_ball query: cannot find ball in proximity lookup.")
             return (None, np.inf)
@@ -111,6 +120,7 @@ class ProximityLookup:
     def closest_to_robot(
         self, robot_key: ObjectKey, team_type_filter: Optional[TeamType] = None
     ) -> Tuple[Optional[ObjectKey], float]:
+        self._build()
         if robot_key not in self.key_index_map:
             warnings.warn(f"Robot {robot_key} not found in proximity lookup.")
             return (None, np.inf)

@@ -114,3 +114,17 @@ def test_chases_ball_directly_when_ball_is_not_in_enemy_defense_area():
 
     target = mc.calculate.call_args.kwargs["target_pos"]
     assert target.distance_to(Vector2D(1.0, 0.0)) < 0.5
+
+
+@pytest.mark.parametrize("robot_xy", [(0.0, 0.0), (2.0, 1.0), (1.0, -1.5)])
+def test_approaches_facing_the_ball(monkeypatch, robot_xy):
+    """The kicker and dribbler are on the front: the robot faces the ball on its way in."""
+    from utama_core.skills.src import go_to_ball as module
+
+    captured = {}
+    monkeypatch.setattr(module, "move", lambda **kwargs: captured.update(kwargs))
+    game = _game({1: _robot(1, *robot_xy, True)}, {}, (1.0, 0.0))
+
+    go_to_ball(game=game, motion_controller=_motion_controller(), robot_id=1, shield=False)
+
+    assert captured["target_oren"] == pytest.approx(math.atan2(0.0 - robot_xy[1], 1.0 - robot_xy[0]))

@@ -229,17 +229,19 @@ class AbstractStrategy:
         self.robot_controller.send_robot_commands()
 
     def debug_status(self) -> dict[int, list[str]]:
-        """Per-robot `["<tactic>", "committed"?]` for GUI display.
+        """Per-robot `["<tactic_id>[ (committed)]", "<tag>"]` for GUI display.
 
-        Reports which tactic slot each robot currently belongs to and whether
+        Reports which tactic slot each robot currently belongs to, whether
         that slot is `is_committed()` (the actual "why won't this reassign"
-        signal in this model) — used by `StrategyRunner._push_debug_status_to_referee`
-        for the debug GUI panel.
+        signal in this model), and the tactic's `TacticTag` value, which the
+        dashboard colours robots by — used by `StrategyRunner._push_debug_status_to_referee`
+        for the debug GUI panel. The goalkeeper is just `["goalkeeper"]`: it is
+        pinned outside the scheduler, so a scheduling role tag would say nothing.
         """
         game = self.game
         status: dict[int, list[str]] = {self._goalkeeper_id: ["goalkeeper"]}
         for tactic_id, info in self._kernel_strategy.slot_status(game).items():
             label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
             for robot_id in info["robots"]:
-                status[robot_id] = [label]
+                status[robot_id] = [label, info["tag"].value]
         return status

@@ -28,8 +28,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from utama_core.config.enums import Mode
 from utama_core.run.strategy_runner import (
+    _PLACEMENT_TELEPORT_CLEARANCE_M,
     _TELEPORT_SETTLE_MAX_EXTENSIONS,
     _TELEPORT_SETTLE_TICKS,
     StrategyRunner,
@@ -164,3 +167,41 @@ def test_tick_teleport_settle_is_noop_without_an_armed_target():
     runner = _make_bare_runner([(30.0, -5.0)] * 5)
     runner._tick_teleport_settle()
     runner.sim_controller.teleport_ball.assert_not_called()
+
+
+def _robot_at(x: float, y: float):
+    return SimpleNamespace(p=SimpleNamespace(x=x, y=y))
+
+
+@pytest.mark.parametrize(
+    "robot_distance, teleported",
+    [(_PLACEMENT_TELEPORT_CLEARANCE_M - 0.005, False), (_PLACEMENT_TELEPORT_CLEARANCE_M + 0.005, True)],
+)
+def test_placement_teleport_waits_while_a_robot_stands_on_the_target(robot_distance, teleported):
+    """tournament_20260924_082230/give_and_go_solo_vs_high_line_zone: the ball
+    was teleported 0.07m from a robot, shoved into the goal net and never
+    reached again. The teleport must hold off until the target is clear."""
+    runner = _make_bare_runner([(0.0, 0.0)])
+    runner._pending_placement_teleport = (-4.25, 1.29)
+    frame = SimpleNamespace(friendly_robots={}, enemy_robots={4: _robot_at(-4.25 + robot_distance, 1.29)})
+    runner.my = SimpleNamespace(current_game_frame=frame)
+
+    runner._tick_pending_placement_teleport()
+
+    assert runner.sim_controller.teleport_ball.called is teleported
+    assert (runner._pending_placement_teleport is None) is teleported
+
+
+def test_placement_teleport_fires_once_the_target_clears():
+    runner = _make_bare_runner([(0.0, 0.0)])
+    runner._pending_placement_teleport = (-4.25, 1.29)
+    enemy = _robot_at(-4.22, 1.35)
+    runner.my = SimpleNamespace(current_game_frame=SimpleNamespace(friendly_robots={}, enemy_robots={4: enemy}))
+
+    runner._tick_pending_placement_teleport()
+    assert not runner.sim_controller.teleport_ball.called
+
+    enemy.p.x, enemy.p.y = -3.6, 1.8
+    runner._tick_pending_placement_teleport()
+    runner._tick_pending_placement_teleport()
+    runner.sim_controller.teleport_ball.assert_called_once_with(-4.25, 1.29)

@@ -11,7 +11,7 @@ game.my_team_is_right so no construction-time team colour is needed.
 
 import math
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     BALL_PLACEMENT_DONE_DISTANCE,
@@ -22,8 +22,13 @@ from utama_core.config.referee_constants import (
     PENALTY_LINE_Y_STEP_RATIO,
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
+from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.global_utils.math_utils import (
+    detour_around_circle,
+    distance_point_to_segment,
+)
 from utama_core.shared.tolerance import Sticky
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 
@@ -100,6 +105,43 @@ def _project_outside_circle(
         return Vector2D(center.x + ux * keep_dist, center.y + uy * keep_dist)
     scale = keep_dist / dist
     return Vector2D(center.x + offset.x * scale, center.y + offset.y * scale)
+
+
+def _project_outside_segment(
+    point: Vector2D,
+    start: Vector2D,
+    end: Vector2D,
+    keep_dist: float,
+    fallback_direction: tuple[float, float],
+) -> Vector2D:
+    """Project a point out of the stadium of radius keep_dist around segment start-end.
+
+    Unlike projecting out of a circle at each end in turn, this can't push a point
+    between two overlapping circles back into the first one."""
+    seg = end - start
+    seg_len = seg.mag()
+    if seg_len == 0.0:
+        return _project_outside_circle(point, start, keep_dist, fallback_direction)
+    ux, uy = seg.x / seg_len, seg.y / seg_len
+    along = (point.x - start.x) * ux + (point.y - start.y) * uy
+    side = (point.x - start.x) * -uy + (point.y - start.y) * ux
+    if abs(side) >= keep_dist and 0.0 <= along <= seg_len:
+        return point
+    # Sideways off the segment, on the point's side (the fallback's if it is on the line).
+    sign = (
+        math.copysign(1.0, side)
+        if side != 0.0
+        else (1.0 if -uy * fallback_direction[0] + ux * fallback_direction[1] >= 0.0 else -1.0)
+    )
+    if 1e-9 < along < seg_len - 1e-9:
+        foot = Vector2D(start.x + along * ux, start.y + along * uy)
+        return Vector2D(foot.x - sign * uy * keep_dist, foot.y + sign * ux * keep_dist)
+    # Beyond an end: out of that end's circle, unless that lands back in the stadium.
+    tip = start if along <= 0.0 else end
+    projected = _project_outside_circle(point, tip, keep_dist, fallback_direction)
+    if distance_point_to_segment((projected.x, projected.y), (start.x, start.y), (end.x, end.y)) >= keep_dist - 1e-9:
+        return projected
+    return Vector2D(tip.x - sign * uy * keep_dist, tip.y + sign * ux * keep_dist)
 
 
 def _clamp_to_field(point: Vector2D, game) -> Vector2D:
@@ -184,6 +226,34 @@ def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -
     return Vector2D(safe_x, point.y)
 
 
+def _in_planner_opp_defense_margin(game, point: Vector2D) -> bool:
+    """True when the planner would push a target at `point` out of the opponent
+    defense area's margin (keep distance plus its own clearance ring)."""
+    margin = OPPONENT_DEFENSE_AREA_KEEP_DISTANCE + RefereeGeometry._PLANNER_CLEARANCE_BUFFER_M
+    opp_goal_sign = -1.0 if game.my_team_is_right else 1.0
+    inner_x = opp_goal_sign * (_field_half_length(game) - 2.0 * game.field.half_defense_area_depth)
+    return abs(point.y) < game.field.half_defense_area_width + margin and opp_goal_sign * (point.x - inner_x) > -margin
+
+
+def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float) -> Vector2D:
+    """`point` (on the circle round `center`), or the nearest point of that circle
+    the planner will drive to.
+
+    A free kick 1 m in front of the opponent box pushed a robot between the ball and
+    the box straight toward the box; the planner stopped it 0.48 m from the ball, a
+    Defender Too Close foul every free kick."""
+    if not _in_planner_opp_defense_margin(game, point):
+        return point
+    base = math.atan2(point.y - center.y, point.x - center.x)
+    for step in range(1, 37):
+        for sign in (1.0, -1.0):
+            angle = base + sign * step * math.pi / 36
+            candidate = Vector2D(center.x + radius * math.cos(angle), center.y + radius * math.sin(angle))
+            if not _in_planner_opp_defense_margin(game, candidate) and _clamp_to_field(candidate, game) == candidate:
+                return candidate
+    return point
+
+
 def _clear_to_legal_positions(
     blackboard,
     *,
@@ -230,6 +300,10 @@ def _clear_to_legal_positions(
     if designated_keep_dist is not None and ref is not None and ref.designated_position is not None:
         designated_center = Vector2D(ref.designated_position[0], ref.designated_position[1])
 
+    # The ball's path to the designated spot starts at the ball (or, with no
+    # ball seen, collapses to the spot itself).
+    placement_start = ball_center if ball_center is not None else designated_center
+
     # When a robot is exactly coincident with an obstruction center (dist == 0),
     # push it toward own half — robots should be on their side in all restart states.
     own_half_sign = 1.0 if game.my_team_is_right else -1.0
@@ -247,8 +321,13 @@ def _clear_to_legal_positions(
         # current position immediately — don't head toward a distant formation
         # target that requires traversing the exclusion zone first.
         currently_encroaching = (ball_center is not None and (ball_center - robot_pos).mag() < ball_keep_dist) or (
-            designated_center is not None and (designated_center - robot_pos).mag() < designated_keep_dist
+            designated_center is not None
+            and _project_outside_segment(
+                robot_pos, placement_start, designated_center, designated_keep_dist, (1.0, 0.0)
+            )
+            != robot_pos
         )
+        intended = intended_targets.get(robot_id) if intended_targets is not None else None
 
         if not currently_encroaching and intended_targets is not None and robot_id in intended_targets:
             target = intended_targets[robot_id]
@@ -258,11 +337,28 @@ def _clear_to_legal_positions(
         if robot_id in own_defense_evict:
             target = Vector2D(_own_defense_area_exit_x(game), robot.p.y)
         if ball_center is not None:
-            target = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
+            projected = _project_outside_circle(target, ball_center, ball_keep_dist, ball_fallback)
+            if projected != target:
+                projected = _reachable_on_circle(game, projected, ball_center, ball_keep_dist)
+            target = projected
         if designated_center is not None:
-            target = _project_outside_circle(target, designated_center, designated_keep_dist, designated_fallback)
+            # The ball travels from where it is to the designated spot, so keep clear
+            # of that whole line (the placement-interference rule's shape), not of
+            # each end separately.
+            target = _project_outside_segment(
+                target, placement_start, designated_center, designated_keep_dist, designated_fallback
+            )
         if clear_opp_defense_area:
             target = _project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+
+        if ball_center is not None and not currently_encroaching:
+            target = detour_around_circle(robot_pos, target, ball_center, ball_keep_dist)
+        elif ball_center is not None and intended is not None:
+            # Out to the edge and on round toward the formation spot in one go. Pushed out
+            # alone, a robot stops a hair inside the edge, stays "encroaching", and its target
+            # stays its own position: robots parked on the circle in the wrong half at kickoff.
+            spot = _project_outside_circle(intended, ball_center, ball_keep_dist, ball_fallback)
+            target = detour_around_circle(target, spot, ball_center, ball_keep_dist)
 
         target = _clamp_to_field(target, game)
 
@@ -472,9 +568,14 @@ class BallPlacementOursStep:
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                     )
+        # Teammates keep off the ball's path to the spot too, as the other team's do: one
+        # parked on the spot blocks the placement itself, and in the sim the teleport, which
+        # waits for the spot to be free, so it timed out after 10 s and play resumed with the
+        # ball still out (7 of 441 placements, round-robin at 5be4df48).
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            designated_keep_dist=BALL_KEEP_OUT_DISTANCE,
             exempt_robot_ids={placer_id},
         )
 
@@ -625,15 +726,33 @@ class PreparePenaltyOursStep:
 
         behind_idx = 0
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
+        intended = {}
+        # The kicker waits just behind the ball, like DirectFreeOursStep's approach:
+        # sent to the mark itself it drove onto the placed ball and shoved it off
+        # the mark before NORMAL_START, and keep-out then voided the penalty.
+        kicker_spot = Vector2D(penalty_mark.x - sign * RefereeGeometry._KICKER_APPROACH_M, 0.0)
         for robot_id in robot_ids:
             if robot_id == kicker_id:
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, penalty_mark, goal_oren)
+                kicker = game.friendly_robots[robot_id]
+                target = kicker_spot
+                if game.ball is not None:
+                    ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
+                    target = detour_around_circle(kicker.p, kicker_spot, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, goal_oren)
             else:
                 # Place behind the line, spread in y
                 offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                pos = Vector2D(behind_line_x, offset)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+                intended[robot_id] = Vector2D(behind_line_x, offset)
                 behind_idx += 1
+
+        # A teammate starting goal-side of the mark goes round the placed ball
+        # rather than knocking it off the mark on the way to its line.
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={kicker_id},
+            intended_targets=intended,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +790,7 @@ class PreparePenaltyTheirsStep:
         robot_ids = sorted(game.friendly_robots.keys())
         behind_idx = 0
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
+        intended = {}
 
         for robot_id in robot_ids:
             if robot_id == keeper_id:
@@ -681,9 +801,17 @@ class PreparePenaltyTheirsStep:
                 )
             else:
                 offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                pos = Vector2D(behind_line_x, offset)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, pos, 0.0)
+                intended[robot_id] = Vector2D(behind_line_x, offset)
                 behind_idx += 1
+
+        # The line is on the far side of the ball from our goal, so a defender
+        # starting goal-side must go round the ball, not through the keep-out circle.
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            exempt_robot_ids={keeper_id},
+            intended_targets=intended,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +828,7 @@ class DirectFreeOursStep:
     """
 
     # How close the robot center should get behind the ball before turning/kicking.
-    _APPROACH_OFFSET = ROBOT_RADIUS + 0.03
+    _APPROACH_OFFSET = RefereeGeometry._KICKER_APPROACH_M
     _APPROACH_READY_DISTANCE = 0.04
     _KICK_READY_DISTANCE = 0.16
     _FACE_READY_ANGLE = 0.18
@@ -801,7 +929,11 @@ class DirectFreeOursStep:
                 face_error = self._angle_error(robot.orientation, target_oren)
 
                 if distance_to_approach > self._APPROACH_READY_DISTANCE:
-                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
+                    # Round the ball, not through it, to an approach point on its far side:
+                    # driving through pushed free kicks placed 0.25 m inside the line back
+                    # onto it (tournament_20260927_223257).
+                    waypoint = detour_around_circle(robot.p, approach, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+                    self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, waypoint, target_oren)
                 elif abs(face_error) > self._FACE_READY_ANGLE:
                     self.blackboard.cmd_map[robot_id] = turn_on_spot(
                         game, motion_controller, robot_id, target_oren, dribbling=False

@@ -126,8 +126,10 @@ def go_to_ball(
             value="shield" if shielding else "direct",
         )
 
-    # Kicker/dribbler is on the back of the robot; approach with back facing ball.
-    target_oren = (approach_oren + math.pi) % (2 * math.pi) - math.pi
+    # The kicker and dribbler are on the front (`kick_upfield` faces where it kicks), so
+    # approach facing the ball. An old comment put them on the back, next to a "flip" by pi
+    # that was an identity; making the flip real broke capture.
+    target_oren = approach_oren
 
     # Dribbler runs the whole approach so it is already spinning at contact.
     dribbling = dribble_when_near

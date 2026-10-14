@@ -7,18 +7,17 @@ length of this projection is greater than 1.5 meters per second, the
 faster robot committed a foul. If the absolute robot speed difference is
 less than 0.3 meters per second, both conduct a foul."
 
-"Faster" here means whichever robot has the larger *closing* speed into
-the other (hit the other one harder), not absolute ground speed — worked
-examples:
-  - A stationary, B closing at 2 m/s: closing speeds (0, 2), difference
-    magnitude 2 m/s > 1.5 -> B (the closing one) fouls.
-  - A and B each closing at 1 m/s (head-on): closing speeds (1, 1),
-    difference magnitude ~0 < 0.3 -> both foul (SSL calls this out
-    explicitly — a genuine head-on collision at matched speed is nobody's
-    fault alone).
-  - A closing at 1.5 m/s, B retreating at -0.5 m/s: closing speeds
-    (1.5, -0.5), difference magnitude 2.0 -> A fouls (clearly the one
-    that closed the gap).
+A contact is a crash only when that projection exceeds 1.5 m/s; "faster"
+then compares the two robots' own speeds, and within 0.3 m/s both are at
+fault. As in TIGERs AutoReferee's `BotCollisionDetector` (the referee real
+matches use), each robot's velocity is first shortened by what it can brake in
+0.1 s (`_BRAKE_LOOKAHEAD_S` at `_BRAKE_DECELERATION`, 0.4 m/s), floored at 0.
+Worked examples:
+  - A stationary, B at 2 m/s into it: projection 1.6 > 1.5, speeds differ by
+    1.6 -> B fouls.
+  - Head-on, each at 1.2 m/s: projection 0.8 + 0.8 = 1.6 > 1.5, speeds equal
+    -> both foul. Each at 1 m/s (1.2 after braking) is no crash.
+  - Two robots resting against each other: projection ~0 -> no crash.
 `RobotPairContact.projected_velocity_difference` is exactly this
 same-line projected difference by construction; the per-side
 `closing_speed_*_into_*` properties tell us *which* robot was faster so
@@ -47,6 +46,11 @@ _ACTIVE_PLAY_COMMANDS = {
 
 _FAULT_SPEED_THRESHOLD = 1.5  # m/s — above this, the faster robot alone fouls
 _BOTH_FAULT_THRESHOLD = 0.3  # m/s — below this closing-speed difference, both foul
+# TIGERs' `botBrakeLookahead` (0.1 s) at our robots' MAX_ACCELERATION (4 m/s^2 in
+# every `RobotParams`). Without it, round-robin at 5be4df48 had 226 crashes where
+# TIGERs' rule over the same frames finds 8: mostly two robots each at about 1 m/s.
+_BRAKE_LOOKAHEAD_S = 0.1
+_BRAKE_DECELERATION = 4.0  # m/s^2
 
 # Per §8.4.2's preamble: "The same no stop foul cannot be triggered again
 # until the foul condition has stopped being violated or there has been 2
@@ -113,21 +117,21 @@ class CrashingRule(BaseRule):
                 # tick once this one's been handled.
                 pass
 
-            friendly_closing = contact.closing_speed_friendly_into_enemy
-            enemy_closing = contact.closing_speed_enemy_into_friendly
-            closing_diff = friendly_closing - enemy_closing
-            magnitude = abs(closing_diff)
-
-            if magnitude < self._both_fault_threshold:
-                fault = "both"
-            elif magnitude > self._fault_speed_threshold:
-                fault = "friendly" if closing_diff > 0 else "enemy"
-            else:
-                # Between the two thresholds: a real collision, but neither
-                # "clearly one robot's fault alone" nor "clearly matched" —
-                # the rulebook only defines the two named bands, so no
-                # foul is raised in the gap between them.
+            # A crash is > threshold along the line between the robots; only then does
+            # the 0.3 m/s band decide between the faster robot and both (TIGERs
+            # AutoReferee's BotCollisionDetector reads the rule the same way).
+            friendly_v = _braked_velocity(contact.friendly.v)
+            enemy_v = _braked_velocity(contact.enemy.v)
+            ux, uy = contact.direction_enemy_to_friendly
+            crash_speed = (enemy_v[0] - friendly_v[0]) * ux + (enemy_v[1] - friendly_v[1]) * uy
+            if abs(crash_speed) <= self._fault_speed_threshold:
                 fault = None
+            else:
+                speed_diff = math.hypot(*friendly_v) - math.hypot(*enemy_v)
+                if abs(speed_diff) < self._both_fault_threshold:
+                    fault = "both"
+                else:
+                    fault = "friendly" if speed_diff > 0 else "enemy"
 
             self._last_fired_ts[key] = now
 
@@ -142,6 +146,10 @@ class CrashingRule(BaseRule):
                     next_command=None,
                     status_message="Crashing — matched closing speed, both teams at fault",
                     offending_teams=(True, False),
+                    offending_robots=(
+                        (my_team_is_yellow, contact.friendly.id),
+                        (not my_team_is_yellow, contact.enemy.id),
+                    ),
                     is_stopping=False,
                 )
             else:
@@ -153,6 +161,9 @@ class CrashingRule(BaseRule):
                     next_command=None,
                     status_message="Crashing foul",
                     offending_teams=(faster_is_yellow,),
+                    offending_robots=(
+                        (faster_is_yellow, contact.friendly.id if faster_is_friendly else contact.enemy.id),
+                    ),
                     is_stopping=False,
                 )
 
@@ -162,3 +173,12 @@ class CrashingRule(BaseRule):
     def reset(self) -> None:
         self._prev_contact_pairs.clear()
         self._last_fired_ts.clear()
+
+
+def _braked_velocity(v) -> tuple[float, float]:
+    """`v` shortened by what the robot brakes in `_BRAKE_LOOKAHEAD_S`, never reversed."""
+    speed = math.hypot(v.x, v.y)
+    if speed == 0.0:
+        return (0.0, 0.0)
+    scale = max(speed - _BRAKE_DECELERATION * _BRAKE_LOOKAHEAD_S, 0.0) / speed
+    return (v.x * scale, v.y * scale)

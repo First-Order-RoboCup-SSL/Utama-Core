@@ -98,6 +98,7 @@ class RobotStopSpeedRule(BaseRule):
                     next_command=None,
                     status_message=f"Robot exceeded {self._max_speed:.1f} m/s during STOP",
                     offending_teams=(robot_is_yellow,),
+                    offending_robots=((robot_is_yellow, robot.id),),
                     is_stopping=False,
                 )
 

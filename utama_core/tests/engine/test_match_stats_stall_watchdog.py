@@ -442,3 +442,46 @@ def test_to_json_serializes_stall_events(tmp_path):
     assert event["kind"] == "COMMITTED_FROZEN"
     assert event["tactic_ids"] == ["give_and_go"]
     assert event["robot_ids"] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    "ball_xy, enemy_xy, expected",
+    [
+        # tournament_20260924_082230 give_and_go_solo_vs_high_line_zone: ball in the net.
+        ((-4.74, 0.07), (-4.0, 0.4), "ball in goal"),
+        ((-4.70, 1.50), (-4.0, 0.4), "ball past goal line"),
+        # tournament_20260924_092119 counter_flow_vs_zone_fluid: blue's kicker parked.
+        ((4.25, 1.52), (3.17, 0.87), "taker not closing: 1.26m -> 1.26m"),
+        ((4.25, 1.52), (4.01, 1.52), "taker at ball (0.24m)"),
+        ((4.25, 1.52), (3.99, 1.52), "taker not closing: 0.26m -> 0.26m"),
+    ],
+)
+def test_restart_stall_says_why(ball_xy, enemy_xy, expected):
+    """We are yellow, so DIRECT_FREE_BLUE's taker is the enemy robot."""
+    acc = MatchStatsAccumulator()
+    for i in range(20 * 60):
+        ts = (i + 1) * TICK_DT
+        acc.record_tick(_custom_frame(ts, RefereeCommand.DIRECT_FREE_BLUE, ball_xy=ball_xy, enemy_xy=enemy_xy))
+
+    (event,) = [e for e in acc.finalize().stall_events if e.kind == "RESTART_STALL"]
+    assert expected in event.diagnosis
+
+
+def test_committed_frozen_says_who_holds_the_ball():
+    """A COMMITTED_FROZEN stall used to carry no diagnosis, so overload_flow's 10 s freeze
+    (tournament_20261003_102921: a decoy chasing a ball the enemy held) read as just
+    "robots 3, 4 frozen"."""
+    acc = MatchStatsAccumulator()
+    for i in range(int(12 / TICK_DT)):
+        frame = _custom_frame(
+            (i + 1) * TICK_DT,
+            RefereeCommand.FORCE_START,
+            ball_xy=(1.0, 0.0),
+            friendly_xy=(1.5, 0.0),
+            enemy_xy=(1.1, 0.0),
+            enemy_has_ball=True,
+        )
+        acc.record_tick(frame, committed_tactics={"overload": (1,)})
+    (event,) = acc.finalize().stall_events
+    assert event.kind == "COMMITTED_FROZEN"
+    assert event.diagnosis == "enemy 2 holds the ball; committed 1: 0.50m"

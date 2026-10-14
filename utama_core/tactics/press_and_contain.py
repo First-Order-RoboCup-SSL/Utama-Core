@@ -33,11 +33,13 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
+    has_ball,
     own_defense_area_exit_point,
 )
 from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.kick_upfield import kick_upfield
 from utama_core.skills.src.man_mark import man_mark
 
 _PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressing to be applicable
@@ -48,8 +50,8 @@ _PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressi
 # 2026-09-01: a yellow robot already touching the ball turned toward it,
 # then away, then back, several times a second, until the unstable contact
 # knocked the ball out of bounds — mirrors the same "sticky edge" fix
-# `_friendly_closer_to_ball`-consuming pickers already needed, see
-# `kernel_strategy.py`'s `_counter_flow_picker`/`_high_line_zone_picker`).
+# `friendly_closer_to_ball`-consuming pickers already needed, see
+# `counter_flow.py`'s `_counter_flow_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
 # Require the *opposite* classification to hold for this many consecutive
 # ticks before actually switching mode.
 _LOOSE_BALL_HYSTERESIS_TICKS = 15  # 0.25s at 60Hz — enough to reject single-tick flicker, short enough to react promptly once a contest genuinely resolves
@@ -146,7 +148,17 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
         # the ball again for the remaining 500s of that match. Pick the
         # actually-closest assigned robot as presser instead.
         pressed_enemy = game.enemy_robots[pressed_enemy_id]
-        presser_id = min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(pressed_enemy.p))
+        # A robot that has already won the ball (dribbler contact) is the presser
+        # and clears it below. Without this it kept "blocking" the adjacent enemy
+        # while holding the ball — this tactic stays applicable with an enemy that
+        # close, so nothing else took over — and the enemy took it straight back
+        # (65 of 309 PressAndContain losses in the 2026-09-24 round-robin).
+        ball_winner = next((rid for rid in robot_ids if has_ball(game, rid)), None)
+        presser_id = (
+            ball_winner
+            if ball_winner is not None
+            else min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(pressed_enemy.p))
+        )
         marker_ids = tuple(rid for rid in robot_ids if rid != presser_id)
         mem.presser_id = presser_id
 
@@ -174,7 +186,9 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
                 mem.ball_is_loose = raw_ball_loose
                 mem.loose_ball_flip_ticks = 0
 
-        if ball_in_own_defense_area(game):
+        if ball_winner is not None:
+            commands[presser_id] = kick_upfield(game, ctx.motion_controller, presser_id)
+        elif ball_in_own_defense_area(game):
             # The ball is inside our own box — pressing there means an
             # outfield robot in the keeper's area (DefenseAreaRule foul).
             # Hold the edge nearest the ball, like `GiveAndGoTactic`'s

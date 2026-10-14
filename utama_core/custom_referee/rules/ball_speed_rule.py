@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
@@ -36,6 +35,8 @@ class BallSpeedRule(BaseRule):
         # True = friendly last touched, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
+        # The ball's velocity on the previous active-play frame (see `infer_last_touch_team`).
+        self._prev_ball_v: Optional[tuple[float, float]] = None
 
     def check(
         self,
@@ -46,13 +47,17 @@ class BallSpeedRule(BaseRule):
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
             self._was_over_limit = False
+            self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
             return None
 
         ball = game_frame.ball
         if ball is None:
             return None
 
-        self._last_touch_was_friendly = infer_last_touch_team(game_frame, self._last_touch_was_friendly)
+        self._last_touch_was_friendly = infer_last_touch_team(
+            game_frame, self._last_touch_was_friendly, self._prev_ball_v
+        )
+        self._prev_ball_v = (ball.v.x, ball.v.y)
 
         speed = math.hypot(ball.v.x, ball.v.y)
         is_over_limit = speed > self._max_speed
@@ -62,29 +67,18 @@ class BallSpeedRule(BaseRule):
         if not rising_edge or self._last_touch_was_friendly is None:
             return None
 
-        # Non-kicking team gets the free kick; the kicking team is charged
-        # the foul (SSL rulebook §8.4.2 "Ball Speed").
+        # SSL rulebook §8.4.2 "Ball Speed" is a non-stopping foul: the kicking
+        # team is charged and the game continues normally. This rule used to
+        # stop play with a free kick to the other team.
         my_team_is_yellow = game_frame.my_team_is_yellow
         kicking_team_is_yellow = self._last_touch_was_friendly == my_team_is_yellow
-        if kicking_team_is_yellow:
-            next_cmd = RefereeCommand.DIRECT_FREE_BLUE
-        else:
-            next_cmd = RefereeCommand.DIRECT_FREE_YELLOW
-
-        # Without an explicit designated_position, RuleViolation silently
-        # carries over whatever restart position was last recorded --
-        # possibly stale/unrelated to this kick, or illegal if it happens
-        # to sit inside a defense area (see
-        # `RefereeGeometry.legal_restart_position`'s docstring). Take the
-        # restart from the ball's own current position, projected clear.
-        placement = geometry.legal_restart_position(ball.p.x, ball.p.y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
         return RuleViolation(
             rule_name="ball_speed",
-            suggested_command=RefereeCommand.STOP,
-            next_command=next_cmd,
+            suggested_command=current_command,
+            next_command=None,
             status_message=f"Ball speed exceeded {self._max_speed:.1f} m/s",
             offending_teams=(kicking_team_is_yellow,),
-            designated_position=placement,
+            is_stopping=False,
         )
 
     def reset(self) -> None:

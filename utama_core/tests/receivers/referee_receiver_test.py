@@ -1,31 +1,52 @@
-import time
+import threading
+from collections import deque
+from unittest import mock
 
-from utama_core.data_processing.receivers.referee_receiver import RefereeMessageReceiver
+from utama_core.data_processing.receivers import referee_receiver
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
+    Referee,
+)
 
-""" TODO: Traceback (most recent call last):
-  File "/home/fredh/robocup_ssl/Robocup/src/tests/referee_receiver_test.py", line 25, in <module>
-    if receiver.check_new_message():
-  File "/home/fredh/robocup_ssl/Robocup/src/data/referee_receiver.py", line 34, in check_new_message
-    serialized_data = self._serialize_relevant_fields(data)
-  File "/home/fredh/robocup_ssl/Robocup/src/data/referee_receiver.py", line 23, in _serialize_relevant_fields
-    message_copy.ParseFromString(data)
-TypeError: a bytes-like object is required, not 'NoneType' """
 
-# Example usage:
-if __name__ == "__main__":
-    receiver = RefereeMessageReceiver()
-    try:
-        while True:
-            start_time = time.time()
-            if receiver.check_new_message():
-                command, des_pos = receiver.get_latest_command()
-                stage_time_left = receiver.get_stage_time_left()
-                message = receiver.get_latest_message()
-                time_stamp = receiver.get_packet_timestamp()
-                next_command = receiver.get_next_command()
-                # if next_command != None:
-                #     time.sleep(2)
-                # print(f"Command: {command}, Designated position: {des_pos}\n")
-            time.sleep(max(0, 0.03334 - (time.time() - start_time)))
-    except KeyboardInterrupt:
-        print("\nExiting...")
+def _packet() -> bytes:
+    pkt = Referee()
+    pkt.packet_timestamp = 1
+    pkt.stage = Referee.NORMAL_FIRST_HALF
+    pkt.command = Referee.STOP
+    pkt.command_counter = 1
+    pkt.command_timestamp = 1
+    for team in (pkt.yellow, pkt.blue):
+        team.name = "x"
+        team.score = team.red_cards = team.yellow_cards = team.timeouts = team.timeout_time = team.goalkeeper = 0
+    return pkt.SerializeToString()
+
+
+class _OnePacketNet:
+    """Delivers one packet, then blocks the way a socket with no traffic does: a loop that
+    spun on `None` instead kept a thread busy for the rest of the test session."""
+
+    def __init__(self):
+        self._packets = [_packet()]
+
+    def receive_data(self):
+        if self._packets:
+            return self._packets.pop()
+        threading.Event().wait()
+
+
+def test_receive_loop_delivers_a_packet():
+    # pull_referee_data held a non-reentrant lock while _update_data took it again, so the
+    # thread hung on the first game-controller packet and the buffer never filled.
+    with mock.patch.object(referee_receiver.network_manager, "NetworkManager", return_value=_OnePacketNet()):
+        buffer = deque(maxlen=1)
+        receiver = referee_receiver.RefereeMessageReceiver(buffer)
+
+    threading.Thread(target=receiver.pull_referee_data, daemon=True).start()
+    for _ in range(200):
+        if buffer:
+            break
+        threading.Event().wait(0.01)
+
+    assert len(buffer) == 1
+    assert buffer[0].referee_command == RefereeCommand.STOP

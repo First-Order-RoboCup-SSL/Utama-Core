@@ -1,8 +1,22 @@
 """RefereeGeometry: configurable field dimensions for the CustomReferee."""
 
+import math
 from dataclasses import dataclass
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
+from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.referee_constants import (
+    FREE_KICK_DEFENSE_AREA_DISTANCE,
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+)
+
+# §6.2.1-2 place goal and corner kicks 0.2 m from the touch line (a corner kick also
+# 0.2 m from the goal line). Ours sit 0.5 m from both: at robot-body distance from two
+# lines an ordinary drift sent the ball straight back out, restarting in the same
+# corner for most of a match (`OutOfBoundsRule._nearest_infield_point`).
+CORNER_INFIELD_OFFSET = 0.5
+# §6.2.1: a goal kick sits 1 m from the goal line.
+GOAL_KICK_DISTANCE = 1.0
 
 
 @dataclass(frozen=True)
@@ -103,6 +117,20 @@ class RefereeGeometry:
     # holds regardless of how many robots happen to be nearby when this
     # position is chosen.
     _PLANNER_CLEARANCE_BUFFER_M = 0.28
+    # The free-kick taker stands this far behind the ball (`DirectFreeOursStep.
+    # _APPROACH_OFFSET`), towards the box whenever the kick points away from it, so
+    # that spot has to clear the planner's ring too: a kick 0.54 m from the side edge
+    # held its taker 1.3 m away (tournament_20260927_230330).
+    _KICKER_APPROACH_M = ROBOT_RADIUS + 0.03
+
+    def goal_kick_position(self, goal_x_sign: float, ball_y: float) -> tuple[float, float]:
+        """SSL rulebook §6.2.1: a goal kick is placed 1 m from the goal line on the
+        `goal_x_sign` side, next to the touch line nearer `ball_y`
+        (`CORNER_INFIELD_OFFSET` from it, not the rulebook's 0.2 m). Every goal kick
+        uses this: a ball over the goal line, a disallowed goal, a penalty out of time."""
+        x = goal_x_sign * (self.half_length - GOAL_KICK_DISTANCE)
+        y = math.copysign(self.half_width - CORNER_INFIELD_OFFSET, ball_y)
+        return self.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
 
     def legal_restart_position(self, x: float, y: float, keep_dist: float) -> tuple[float, float]:
         """Project (x, y) clear of BOTH defense areas (plus `keep_dist`), for
@@ -133,12 +161,20 @@ class RefereeGeometry:
         from exactly this gap. Only x needs clamping for either defense
         area (both are full-width rectangles spanning the goal line to
         `2*half_defense_depth` in) -- y is already legal by construction
-        whenever a point clears the box on x alone.
+        whenever a point clears the box on x alone. A point just past the box's
+        side edge is within `clear_dist` of it too, so it is pushed out on x
+        like one level with the box: a free kick left at the box corner
+        (-4.25, -1.00) kept the kicker outside the planner's ring for the rest
+        of the match (tournament_20260927_223257).
         """
         left_inner_x = -self.half_length + 2.0 * self.half_defense_depth
         right_inner_x = self.half_length - 2.0 * self.half_defense_depth
-        clear_dist = keep_dist + self._PLANNER_CLEARANCE_BUFFER_M
-        if abs(y) <= self.half_defense_width:
+        # The rulebook's 1 m (§5.3.3) is wider than the planner's own margin.
+        clear_dist = max(
+            FREE_KICK_DEFENSE_AREA_DISTANCE,
+            keep_dist + self._PLANNER_CLEARANCE_BUFFER_M + self._KICKER_APPROACH_M,
+        )
+        if abs(y) <= self.half_defense_width + clear_dist:
             if x <= left_inner_x + clear_dist:
                 x = left_inner_x + clear_dist
             elif x >= right_inner_x - clear_dist:

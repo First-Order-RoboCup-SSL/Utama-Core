@@ -20,14 +20,18 @@ from utama_core.motion_planning.src.fastpathplanning.config import (
 )
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
+    _DEFENSE_AREA_CLAMP_MARGIN,
     _GOAL_POST_SAFETY_MARGIN,
     _NO_SHOT_STRAFE_STEP,
+    _PASS_ROLLING_MPS,
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ORIENTATION_TOLERANCE_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
+    ball_line_receive_point,
     clamp_outside_enemy_defense_area,
+    clamp_outside_own_defense_area,
     enemy_defense_area_hold_point,
     enemy_goal_line,
     has_ball,
@@ -278,7 +282,9 @@ def test_ball_is_loose_true_when_ball_just_outside_own_box_and_enemy_at_boundary
     assert bool(ball_is_loose(game)) is True
 
 
-def _visual_game(robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robot_id: int = 1) -> Game:
+def _visual_game(
+    robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robot_id: int = 1, my_team_is_yellow: bool = True
+) -> Game:
     """A game with a single friendly robot at `robot_xy`/`robot_orientation`
     and the ball at `ball_xy` — for exercising `has_ball(visual=True)`'s
     dribbler-relative geometry directly, independent of the enemy-box tests
@@ -286,7 +292,7 @@ def _visual_game(robot_xy: tuple, robot_orientation: float, ball_xy: tuple, robo
     zv = Vector3D(0, 0, 0)
     frame = GameFrame(
         ts=0.0,
-        my_team_is_yellow=True,
+        my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=True,
         friendly_robots={robot_id: _robot(robot_id, robot_xy[0], robot_xy[1], True, orientation=robot_orientation)},
         enemy_robots={},
@@ -449,6 +455,27 @@ def test_has_ball_visual_release_lateral_hysteresis():
     mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
     assert _visual_at(mid) is True
     assert _visual_at(_RELEASE_LATERAL_MAX + 0.01) is False
+
+
+def test_has_ball_visual_hysteresis_is_per_team():
+    """Both teams run in one process with the same robot ids: yellow robot 1 holding the ball
+    must not widen blue robot 1's box."""
+    mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, 0.0)), 1, visual=True) is True
+
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid), my_team_is_yellow=False), 1, visual=True) is False
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid)), 1, visual=True) is True
+
+
+def test_reset_possession_state_with_no_robot_forgets_every_robot():
+    """A new match starts with no robot holding (the runner calls this; a round-robin worker
+    process plays many matches)."""
+    mid = (_ACQUIRE_LATERAL_MAX + _RELEASE_LATERAL_MAX) / 2
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, 0.0)), 1, visual=True) is True
+
+    reset_possession_state()
+
+    assert has_ball(_visual_game((0.0, 0.0), 0.0, (0.10, mid)), 1, visual=True) is False
 
 
 def test_has_ball_visual_acquire_state_is_per_robot():
@@ -649,3 +676,114 @@ def test_score_pass_setup_prefers_a_longer_goal_advancing_pass_over_a_short_one(
     assert short_pass is not None
     assert long_pass is not None
     assert long_pass.score > short_pass.score
+
+
+def test_carry_origin_starts_at_pickup_and_clears_when_the_ball_is_dropped():
+    from types import SimpleNamespace
+
+    from utama_core.entities.data.vector import Vector3D
+    from utama_core.shared.pass_and_score_geometry import (
+        CARRY_LIMIT_M,
+        carry_exhausted,
+        carry_origin,
+    )
+
+    robot = SimpleNamespace(has_ball=True)
+    zero = Vector3D(0.0, 0.0, 0.0)
+    game = SimpleNamespace(friendly_robots={1: robot}, ball=SimpleNamespace(p=Vector3D(1.0, 0.0, 0.0), v=zero))
+
+    origin = carry_origin(game, 1, None)
+    assert (origin.x, origin.y) == (1.0, 0.0)
+    game.ball.p = Vector3D(1.0, CARRY_LIMIT_M - 0.01, 0.0)
+    assert carry_origin(game, 1, origin) is origin  # held: origin stays where the dribble began
+    assert not carry_exhausted(game, origin)
+    game.ball.p = Vector3D(1.0, CARRY_LIMIT_M, 0.0)
+    assert carry_exhausted(game, origin)
+
+    robot.has_ball = False
+    assert carry_origin(game, 1, origin) is None
+    assert not carry_exhausted(game, None)
+
+
+def test_carry_exhausted_counts_the_distance_needed_to_stop():
+    """At 1.6m/s the carrier needs 1.6^2 / (2*2.5) = 0.51m to stop with the ball
+    still on the dribbler, so 0.5m carried is already spent; at rest it is not.
+    Traced live: DecoyOverload's lure handed over at ~0.6m and ~1.4m/s and still
+    fouled at 1.01m while braking and turning to shoot."""
+    from types import SimpleNamespace
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.shared.pass_and_score_geometry import carry_exhausted
+
+    origin = Vector2D(0.0, 0.0)
+    moving = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(1.6, 0.0, 0.0)))
+    at_rest = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0)))
+
+    assert carry_exhausted(moving, origin, stops_after=True)
+    assert not carry_exhausted(at_rest, origin, stops_after=True)
+    # A carrier that kicks while moving (GiveAndGo) never brakes with the ball, so
+    # its carry isn't cut short by speed: counting it cost give_and_go_solo half
+    # its goals in an A/B.
+    assert not carry_exhausted(moving, origin)
+
+
+def _rolling_game(receiver_xy: tuple, ball_xy: tuple, ball_v: tuple) -> Game:
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={2: _robot(2, receiver_xy[0], receiver_xy[1], True)},
+        enemy_robots={},
+        ball=Ball(p=Vector3D(ball_xy[0], ball_xy[1], 0), v=Vector3D(ball_v[0], ball_v[1], 0), a=Vector3D(0, 0, 0)),
+    )
+    return Game(past=GameHistory(10), current=frame, field=_FIELD)
+
+
+def test_ball_line_receive_point_is_the_receiver_projected_onto_the_balls_path():
+    spot = ball_line_receive_point(_rolling_game((1.5, 0.07), (0.4, 0.0), (3.0, 0.0)), 2)
+    assert spot.x == pytest.approx(1.5)
+    assert spot.y == pytest.approx(0.0)
+
+
+def test_ball_line_receive_point_follows_a_diagonal_path():
+    spot = ball_line_receive_point(_rolling_game((1.0, 0.0), (0.0, 0.0), (1.0, 1.0)), 2)
+    assert spot.x == pytest.approx(0.5)
+    assert spot.y == pytest.approx(0.5)
+
+
+def test_ball_line_receive_point_none_just_below_rolling_speed():
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS - 0.01, 0.0)), 2) is None
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS, 0.0)), 2) is not None
+
+
+def test_ball_line_receive_point_none_once_the_ball_has_passed_the_receiver():
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (1.5, 0.1), (0.0, 3.0)), 2) is None
+    assert ball_line_receive_point(_rolling_game((1.5, 0.0), (2.0, 0.0), (3.0, 0.0)), 2) is None
+
+
+# Just outside the band either clamp keeps clear of: box half-width plus the clamp margin.
+_BESIDE_THE_BOX_Y = STANDARD_FIELD_DIMS.half_defense_area_width + _DEFENSE_AREA_CLAMP_MARGIN + 0.01
+
+
+def test_clamp_outside_enemy_defense_area_leaves_a_point_beside_the_box_alone():
+    # high_line_zone_vs_low_block (2026-09-28): a receive point at (-3.41, 2.7), 1.7 m
+    # beside the box, was pulled to x = -2.95 -- off the ball's path -- though the
+    # referee and the planner both allow it where it was.
+    point = Vector2D(_ENEMY_BOX_FRONT_X - 0.3, _BESIDE_THE_BOX_Y)
+    assert clamp_outside_enemy_defense_area(_game((0.0, 0.0)), point) == point
+
+
+def test_clamp_outside_own_defense_area_leaves_a_point_beside_the_box_alone():
+    point = Vector2D(_MY_BOX_FRONT_X + 0.3, -_BESIDE_THE_BOX_Y)
+    assert clamp_outside_own_defense_area(_game((0.0, 0.0)), point) == point
+
+
+def test_both_clamps_still_apply_just_inside_the_band():
+    inside = STANDARD_FIELD_DIMS.half_defense_area_width + _DEFENSE_AREA_CLAMP_MARGIN - 0.01
+    assert (
+        clamp_outside_enemy_defense_area(_game((0.0, 0.0)), Vector2D(_ENEMY_BOX_FRONT_X - 0.3, inside)).x
+        > _ENEMY_BOX_FRONT_X
+    )
+    assert (
+        clamp_outside_own_defense_area(_game((0.0, 0.0)), Vector2D(_MY_BOX_FRONT_X + 0.3, -inside)).x < _MY_BOX_FRONT_X
+    )

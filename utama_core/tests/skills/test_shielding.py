@@ -40,11 +40,11 @@ def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
     )
 
 
-def _game(friendly: dict, enemy: dict, ball_xy: tuple) -> Game:
+def _game(friendly: dict, enemy: dict, ball_xy: tuple, my_team_is_yellow: bool = True) -> Game:
     zv = Vector3D(0, 0, 0)
     frame = GameFrame(
         ts=0.0,
-        my_team_is_yellow=True,
+        my_team_is_yellow=my_team_is_yellow,
         my_team_is_right=True,
         friendly_robots=friendly,
         enemy_robots=enemy,
@@ -232,3 +232,33 @@ def test_shielded_approach_angle_commit_state_is_per_robot():
     assert _shielding_for(0, COMMIT_RANGE - 0.005) is False
     # Robot 1, still far away, should independently still shield.
     assert _shielding_for(1, CONTEST_RANGE - 0.01) is True
+
+
+def _shielding(dist: float, my_team_is_yellow: bool = True) -> bool:
+    """Robot 0 at `dist` from the ball, an enemy contesting it throughout."""
+    game = _game(
+        {0: _robot(0, dist, 0.0, True)},
+        {0: _robot(0, 0.3, 0.3, False)},
+        (0.0, 0.0),
+        my_team_is_yellow=my_team_is_yellow,
+    )
+    return shielded_approach_angle(game, Vector2D(dist, 0.0), Vector2D(0.0, 0.0), robot_id=0)[1]
+
+
+def test_commitment_is_per_team():
+    """Both teams run in one process with the same robot ids: yellow robot 0 committing to a
+    direct approach must not stop blue robot 0 shielding."""
+    assert _shielding(COMMIT_RANGE - 0.005) is False  # yellow commits
+
+    assert _shielding(COMMIT_RANGE + 0.01, my_team_is_yellow=False) is True
+    assert _shielding(COMMIT_RANGE + 0.01) is False
+
+
+def test_reset_shield_state_with_no_robot_forgets_every_robot():
+    """A new match starts uncommitted (the runner calls this; a round-robin worker process plays
+    many matches)."""
+    assert _shielding(COMMIT_RANGE - 0.005) is False
+
+    reset_shield_state()
+
+    assert _shielding(COMMIT_RANGE + 0.01) is True

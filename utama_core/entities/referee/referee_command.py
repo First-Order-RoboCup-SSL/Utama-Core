@@ -29,3 +29,18 @@ class RefereeCommand(Enum):
             if command.value == command_id:  # Check the enum's value (which is the command_id)
                 return command
         raise ValueError(f"Invalid referee command ID: {command_id}")
+
+
+# Commands during which the match clock runs. The rulebook pauses it "whenever no team is
+# allowed to manipulate the ball", which "includes stop, halt and the preparation states of
+# kick-off and penalty kick. Additionally, it is paused during ball placement" (Game Stages).
+CLOCK_RUNS = frozenset(
+    {
+        RefereeCommand.NORMAL_START,
+        RefereeCommand.FORCE_START,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.INDIRECT_FREE_YELLOW,
+        RefereeCommand.INDIRECT_FREE_BLUE,
+    }
+)

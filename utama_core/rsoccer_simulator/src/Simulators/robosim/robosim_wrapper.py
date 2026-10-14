@@ -1,6 +1,19 @@
+"""Parent side of the rsim subprocess protocol (`robosim_subprocess.py`).
+
+Requests: `S<uint32 rows><uint32 cols><rows*cols float64>` steps the sim; `J<json
+line>` is any other command. Replies: `<kind><uint32 length><payload>`, kind
+`B` (a float64 state vector) or `J` (a JSON object). The per-tick step used to
+be a JSON line each way; formatting and parsing ~140 floats per tick in two
+interpreters was pure overhead on top of the physics, and raw float64 carries
+exactly the same values (JSON's float repr round-trips exactly too, so the sim
+sees bit-identical inputs and the runner bit-identical states either way).
+"""
+
+import atexit
 import json
 import logging
 import os
+import struct
 import subprocess
 from pathlib import Path
 
@@ -8,9 +21,53 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Sim reuse (opt-in, `enable_sim_reuse`): a process that plays many short scenarios keeps its
+# sim subprocesses, since starting one (`pixi run`, imports, world build) costs about as much
+# CPU as a second of play. Idle sims wait here by their constructor arguments; `acquire`
+# hands one out with a new native world, so nothing of the previous play is left in it.
+_reuse_sims = False
+_idle_sims: dict[tuple, list["RSimSubprocessWrapper"]] = {}
+
+
+def enable_sim_reuse() -> None:
+    """From now on, `close()` on a sim from `acquire` parks its subprocess for the next `acquire`
+    (closed for good at interpreter exit) instead of terminating it."""
+    global _reuse_sims
+    if not _reuse_sims:
+        _reuse_sims = True
+        atexit.register(_close_idle_sims)
+
+
+def _close_idle_sims() -> None:
+    for sims in _idle_sims.values():
+        while sims:
+            sims.pop()._terminate()
+
 
 class RSimSubprocessWrapper:
+    @classmethod
+    def acquire(cls, sim_type, n_blue, n_yellow, field_type, time_step_ms) -> "RSimSubprocessWrapper":
+        """A sim in the state a new one would be in: a parked subprocess given a new native world
+        when reuse is on and one fits, else a new subprocess."""
+        key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        idle = _idle_sims.get(key)
+        while idle:
+            sim = idle.pop()
+            try:
+                acked = sim._request({"new_world": True}).get("ack")
+            except Exception:  # a dead or desynchronised subprocess is not worth debugging: start afresh
+                acked = False
+            if not acked:
+                sim._terminate()
+                continue
+            sim._released = False
+            return sim
+        return cls(*key)
+
     def __init__(self, sim_type, n_blue, n_yellow, field_type, time_step_ms):
+        self._key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        self._released = False
+        self._broken = False  # a request failed part-way: the pipe may be out of step, so never reuse it
         script_path = (Path(__file__).parent / "robosim_subprocess.py").resolve()
         env = os.environ.copy()
         cmake_policy_flag = "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
@@ -47,61 +104,61 @@ class RSimSubprocessWrapper:
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            text=True,
-            bufsize=1,
             env=env,
             cwd=project_root,
         )
 
-    _MAX_NON_JSON_LINES = 10  # generous vs. one stray diagnostic; see docstring below
+    def _read_exact(self, n: int) -> bytes:
+        data = self.proc.stdout.read(n)
+        if len(data) != n:
+            code = self.proc.poll()
+            raise RuntimeError(
+                f"robosim subprocess closed its stdout while awaiting a response (exit code {code}, "
+                f"got {len(data)} of {n} bytes)"
+            )
+        return data
 
-    def _read_json_line(self) -> dict:
-        # rc-robosim's native layer occasionally writes plain-text diagnostics
-        # (e.g. "turnover 0.862573 robot x: ... ball y: ...") straight to its
-        # own stdout, which shares this pipe with our JSON RPC protocol --
-        # confirmed live, 2026-09-01: a `full_match_tournament.py` match
-        # deterministically hit this at the exact same tick every run, and
-        # the subprocess was still alive (`proc.poll() is None`) when it
-        # happened, so this was never a subprocess crash despite raising
-        # JSONDecodeError one line up the stack. Skip any line that isn't
-        # valid JSON instead of letting it blow up the caller.
-        #
-        # IMPORTANT: an unbounded skip loop is not safe here. Verified live
-        # that at least one "turnover" diagnostic came out *instead of* that
-        # tick's JSON state reply, not merely ahead of it: after discarding
-        # it, `readline()` blocked forever waiting on a reply that was never
-        # coming, while the subprocess sat idle (`S` state, 0 bytes buffered
-        # on the pipe) waiting for its *next* command -- a silent, one-sided
-        # deadlock, strictly worse than the JSONDecodeError this replaced
-        # (that at least surfaced loudly). Cap the number of stray lines
-        # tolerated per call and fail loudly past that instead of hanging.
-        for _ in range(self._MAX_NON_JSON_LINES):
-            if self.proc.poll() is not None:
-                raise RuntimeError(f"robosim subprocess exited (code {self.proc.returncode}) while awaiting a response")
-            line = self.proc.stdout.readline()
-            if line == "":
-                raise RuntimeError("robosim subprocess closed its stdout while awaiting a response")
-            try:
-                return json.loads(line)
-            except json.JSONDecodeError:
-                logger.warning("Discarding non-JSON line from robosim subprocess stdout: %r", line)
-        raise RuntimeError(
-            f"robosim subprocess sent {self._MAX_NON_JSON_LINES} consecutive non-JSON lines "
-            "without a valid reply -- treating this as a missing response, not more diagnostics to skip"
-        )
+    def _read_reply(self):
+        """One reply frame: a float64 array for `B`, the decoded dict for `J`.
 
-    def step(self, commands: np.ndarray):
-        # Serialize commands as JSON and send to subprocess
-        data = json.dumps({"commands": commands.tolist()})
-        self.proc.stdin.write(data + "\n")
-        self.proc.stdin.flush()
+        No tolerance for stray output is needed here (the JSON-line reader it
+        replaced skipped up to 10 non-JSON lines): `robosim_subprocess.py`
+        points fd 1 at devnull before importing `robosim`, so rc-robosim's
+        native "turnover ..." diagnostics never reach this pipe. An unexpected
+        kind byte means the framing itself is broken, so fail loudly.
+        """
+        header = self._read_exact(5)
+        kind = header[:1]
+        (length,) = struct.unpack("<I", header[1:])
+        body = self._read_exact(length)
+        if kind == b"B":
+            return np.frombuffer(body, dtype="<f8").astype(np.float64)
+        if kind == b"J":
+            resp = json.loads(body)
+            if "error" in resp:
+                raise RuntimeError(f"robosim subprocess error: {resp['error']}")
+            return resp
+        raise RuntimeError(f"robosim subprocess sent an unknown reply frame kind {kind!r}")
 
-        # Read simulator state back
-        state = self._read_json_line()["state"]
-        return np.array(state)
+    def _exchange(self, request: bytes):
+        try:
+            self.proc.stdin.write(request)
+            self.proc.stdin.flush()
+            return self._read_reply()
+        except BaseException:
+            self._broken = True
+            raise
+
+    def _request(self, payload: dict) -> dict:
+        return self._exchange(b"J" + json.dumps(payload).encode() + b"\n")
+
+    def step(self, commands: np.ndarray) -> np.ndarray:
+        commands = np.ascontiguousarray(commands, dtype="<f8")
+        rows, cols = commands.shape
+        return self._exchange(b"S" + struct.pack("<II", rows, cols) + commands.tobytes())
 
     def reset(self, ball_pos, blue_robots_pos, yellow_robots_pos):
-        data = json.dumps(
+        self._request(
             {
                 "reset": {
                     "ball_pos": ball_pos.tolist(),
@@ -110,26 +167,24 @@ class RSimSubprocessWrapper:
                 }
             }
         )
-        self.proc.stdin.write(data + "\n")
-        self.proc.stdin.flush()
-        # Optionally read acknowledgement
-        self._read_json_line()
 
     def get_field_params(self):
-        data = json.dumps({"get_field_params": True})
-        self.proc.stdin.write(data + "\n")
-        self.proc.stdin.flush()
-        resp = self._read_json_line()
-        return resp["field_params"]
+        return self._request({"get_field_params": True})["field_params"]
 
     def get_state(self):
-        data = json.dumps({"get_state": True})
-        self.proc.stdin.write(data + "\n")
-        self.proc.stdin.flush()
-        resp = self._read_json_line()
-        return resp["state"]
+        return self._request({"get_state": True})["state"]
 
     def close(self):
+        """Done with this sim: parked for the next `acquire` when reuse is on, else terminated."""
+        if self._released:
+            return
+        if _reuse_sims and not self._broken and self.proc.poll() is None:
+            self._released = True
+            _idle_sims.setdefault(self._key, []).append(self)
+            return
+        self._terminate()
+
+    def _terminate(self):
         try:
             if self.proc and self.proc.poll() is None:
                 self.proc.terminate()

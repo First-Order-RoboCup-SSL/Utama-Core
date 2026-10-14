@@ -23,17 +23,17 @@ function, for callers with only one tactic kind active at a time who would
 otherwise have to write a trivial one-group `Partitioner` themselves.
 
 Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
-before any tactic ticks at all, not by a tactic: `kernel.referee_override`
-reuses the BT path's existing `actions.py` Step classes (keep-out-distance
+before any tactic ticks at all, not by a tactic: `engine.referee_override`
+reuses the `custom_referee/actions.py` Step classes (keep-out-distance
 geometry, formation positions) to take over every outfield robot's command
-for the duration of the restart, the same way `build_referee_override_tree`
-does for the BT path. See `_OVERRIDE_COMMANDS` there and `referee_reset.py`
-for how this fits with the barrier-reset/pause tiers.
+for the duration of the restart. See `_OVERRIDE_COMMANDS` there and
+`referee_reset.py` for how this fits with the barrier-reset/pause tiers.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -64,6 +64,19 @@ logger = logging.getLogger(__name__)
 # for any one of them.
 DEFAULT_COMMITMENT_DEADLINE_S = 15.0
 
+# Rulebook 5.4: a kick-off, free kick or penalty is in play once its ball has moved this far.
+_BALL_IN_PLAY_M = 0.05
+_TWO_STAGE_RESTARTS = frozenset(
+    {
+        RefereeCommand.PREPARE_KICKOFF_YELLOW,
+        RefereeCommand.PREPARE_KICKOFF_BLUE,
+        RefereeCommand.PREPARE_PENALTY_YELLOW,
+        RefereeCommand.PREPARE_PENALTY_BLUE,
+        RefereeCommand.DIRECT_FREE_YELLOW,
+        RefereeCommand.DIRECT_FREE_BLUE,
+    }
+)
+
 # A commitment is only treated as "stalled" (eligible for deadline release)
 # if the ball has moved less than this since the commitment began. A
 # commitment making real progress -- passing, dribbling toward goal -- keeps
@@ -76,13 +89,15 @@ _STALL_BALL_MOVEMENT_M = 0.05
 # pinned by a committed tactic slot — see `Strategy._choose_partition`) into
 # named tactic slots every tick, given the game state, the free robot pool,
 # the previous full partition (None on the first tick or right after a
-# barrier reset), and the set of tactic ids currently applicable() (design
-# doc §15) — a tactic id absent from this set must not be given any robots
-# this tick, whether because it isn't registered or because its applicable()
-# just returned False. Every free robot must end up in at most one slot (no
-# robot given to two slots at once — `Strategy._validate_partition` raises if
-# so) and no slot may be given a robot outside `free_robot_ids` or a
-# non-empty slot for a tactic id outside `applicable_tactic_ids`. A free
+# barrier reset), and `available_tactic_ids`: the registered tactic ids that
+# are not pinned by a commitment and whose applicable() is True (design doc
+# §15). A tactic id absent from this set must not be given any robots this
+# tick — and a Partitioner never needs to work out *why* one is absent
+# (pinned elsewhere vs. inapplicable) to stay legal; `Strategy` has already
+# folded both into this one set. Every free robot must end up in at most one
+# slot (no robot given to two slots at once — `Strategy._validate_partition`
+# raises if so) and no slot may be given a robot outside `free_robot_ids` or a
+# non-empty slot for a tactic id outside `available_tactic_ids`. A free
 # robot need NOT appear in the returned partition at all — a Partitioner has
 # no obligation to invent an applicable tactic for a robot nothing currently
 # wants; an uncovered robot simply isn't ticked by any tactic that tick (see
@@ -155,6 +170,8 @@ class Strategy:
         self._slots: dict[TacticId, _TacticSlot] = {}
         self._prev_partition: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._prev_referee_command = None
+        # Their two-stage restart and where its ball stood at NORMAL_START (see `_held_restart`).
+        self._their_restart: Optional[tuple[RefereeCommand, float, float]] = None
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
 
@@ -245,10 +262,10 @@ class Strategy:
         original `Strategy`, which never consulted the picker while the
         active tactic was committed).
 
-        Does not filter by `applicable_tactic_ids` itself — it can't
+        Does not filter by `available_tactic_ids` itself — it can't
         distinguish "the wrapped picker named an unregistered tactic" (a
         bug, must raise `KeyError` same as ever) from "it named a
-        registered but currently inapplicable one" (`applicable_tactic_ids`
+        registered but currently inapplicable one" (`available_tactic_ids`
         alone can't tell those apart, since it's already a subset of
         registered ids by construction). `Strategy._choose_partition`'s own
         validation already raises the right error for both cases, so this
@@ -259,7 +276,7 @@ class Strategy:
             game: Game,
             free_robots: frozenset[RobotId],
             prev_partition: Optional[dict[TacticId, frozenset[RobotId]]],
-            applicable_tactic_ids: frozenset[TacticId],
+            available_tactic_ids: frozenset[TacticId],
         ) -> dict[TacticId, frozenset[RobotId]]:
             if not free_robots:
                 return {}
@@ -274,14 +291,18 @@ class Strategy:
         return {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
 
     def slot_status(self, game: Game) -> dict[TacticId, dict]:
-        """Per-active-slot debug info: robots held and whether it's currently committed.
+        """Per-active-slot debug info: robots held, whether it's currently committed, and its tactic's tag.
 
         Read-only reporting, not used by `tick()` itself — for callers that
         want to display "what is this robot's tactic doing right now"
         without reaching into `_slots` directly (e.g. a GUI debug panel).
         """
         return {
-            tid: {"robots": slot.assigned_robots, "committed": slot.tactic.is_committed(game, slot.mem)}
+            tid: {
+                "robots": slot.assigned_robots,
+                "committed": slot.tactic.is_committed(game, slot.mem),
+                "tag": slot.tactic.tag,
+            }
             for tid, slot in self._slots.items()
             if slot.assigned_robots
         }
@@ -301,6 +322,26 @@ class Strategy:
                 return tid
         return None
 
+    def _held_restart(self, game: Game, command: RefereeCommand) -> Optional[RefereeCommand]:
+        """The opponent's kick-off/free kick/penalty whose positioning still applies at
+        NORMAL_START: the rulebook (5.4) only puts the ball in play once it has moved
+        `_BALL_IN_PLAY_M`, and until then the defending team stays where the restart put it.
+        Found in decoy_and_overload_vs_tiki_taka (2026-09-28): treated as live play, a
+        defender walked onto the unkicked free-kick ball and wedged the kicker for 10 s."""
+        ball = getattr(game, "ball", None)
+        if command in _TWO_STAGE_RESTARTS:
+            theirs = command.name.endswith("_YELLOW") != game.my_team_is_yellow
+            self._their_restart = (command, ball.p.x, ball.p.y) if theirs and ball is not None else None
+            return None
+        if command is not RefereeCommand.NORMAL_START or self._their_restart is None:
+            self._their_restart = None
+            return None
+        restart, x0, y0 = self._their_restart
+        if ball is None or math.hypot(ball.p.x - x0, ball.p.y - y0) >= _BALL_IN_PLAY_M:
+            self._their_restart = None
+            return None
+        return restart
+
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
         referee = getattr(game, "referee", None)
@@ -310,20 +351,22 @@ class Strategy:
             tier = classify_transition(self._prev_referee_command, current_command)
             if tier is ResetTier.BARRIER:
                 self._barrier_reset(game)
+            held_restart = self._held_restart(game, current_command)
             self._prev_referee_command = current_command
 
-            if is_override_command(current_command):
+            if held_restart is not None or is_override_command(current_command):
                 # Restart in progress (kickoff/placement/free-kick/penalty),
                 # or STOP/TIMEOUT_* (see `referee_override.py`'s module
                 # docstring for why both are in this set too, ahead of the
                 # `is_paused` check below rather than behind it): legal
-                # positioning takes over every outfield robot for this tick,
-                # same as the BT path's RefereeOverride Selector. Slots
+                # positioning takes over every outfield robot for this tick. Slots
                 # already had their mem/commitments cleared by the barrier
                 # reset on the transition in; tactics simply don't tick while
                 # this is active, so there is nothing further to reconcile
                 # once the restart ends and normal picking resumes.
-                override_commands = self._referee_override.tick(game, self._ctx.motion_controller, current_command)
+                override_commands = self._referee_override.tick(
+                    game, self._ctx.motion_controller, held_restart or current_command
+                )
                 # Most override Steps still compute a command for every
                 # friendly robot including the goalkeeper (e.g. `StopStep`
                 # drives the keeper off the ball if it's inside the keep-out
@@ -377,7 +420,15 @@ class Strategy:
             slot = self._slot_for(tactic_id)
 
             if slot.assigned_robots != robot_ids:
-                slot.mem = slot.tactic.initial_mem() if robot_ids else None
+                # Kept only while the slot still has robots: a slot given none (an empty set
+                # in the partition, or left out of it) is released and starts afresh.
+                keep_mem = (
+                    bool(robot_ids)
+                    and slot.mem is not None
+                    and getattr(slot.tactic, "keeps_mem_on_robot_change", False)
+                )
+                if not keep_mem:
+                    slot.mem = slot.tactic.initial_mem() if robot_ids else None
                 slot.assigned_robots = robot_ids
                 slot.committed_ticks = 0
                 slot.commit_started_ts = None
@@ -474,8 +525,9 @@ class Strategy:
         out of the picker's candidate set entirely when `applicable(game)`
         is False (design doc §15) — a precondition on being assigned at all,
         checked only for non-committed tactics, never overriding a
-        commitment. `applicable_tactic_ids` is passed to the picker so it
-        can respect this itself; `Strategy` also validates the picker's
+        commitment. `available_tactic_ids` (applicable, and not pinned by a
+        commitment) is passed to the picker so it can respect both itself
+        without re-deriving pinning from `prev_partition`; `Strategy` also validates the picker's
         return value against it afterward, since a `Partitioner` is a plain
         function and nothing stops one from ignoring its own inputs.
 
@@ -542,13 +594,13 @@ class Strategy:
                 value=sorted(pinned_robots),
             )
 
-        applicable_tactic_ids = {
+        available_tactic_ids = {
             tactic_id
             for tactic_id, tactic in self._tactics.items()
             if tactic_id not in pinned and tactic.applicable(game)
         }
 
-        free_partition = self._partitioner(game, free_robots, self._prev_partition, frozenset(applicable_tactic_ids))
+        free_partition = self._partitioner(game, free_robots, self._prev_partition, frozenset(available_tactic_ids))
 
         result = dict(pinned)
         for tactic_id, robots in free_partition.items():
@@ -557,7 +609,7 @@ class Strategy:
                     f"picker assigned robots to tactic {tactic_id!r}, which is currently committed "
                     "and must not be reassigned"
                 )
-            if robots and tactic_id in self._tactics and tactic_id not in applicable_tactic_ids:
+            if robots and tactic_id in self._tactics and tactic_id not in available_tactic_ids:
                 raise ValueError(
                     f"picker assigned robots to tactic {tactic_id!r}, which is not currently "
                     "applicable() — a Partitioner must not propose robots for an inapplicable tactic"

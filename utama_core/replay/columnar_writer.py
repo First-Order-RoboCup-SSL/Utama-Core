@@ -8,8 +8,7 @@ frame. Loading the pickle format means reconstructing ~36,000 `GameFrame`s
 (each nesting ~12 `Robot` + a `Ball` + a `RefereeData`) just to immediately
 throw the objects away and pull out a handful of floats. Profiling a real
 600s replay showed this reconstruction cost dominates load time (84% of it
-in `pickle.load` alone) — see `docs/testing_gaps.md`'s replay-loading
-entries. Storing the same data as flat numpy arrays from the start removes
+in `pickle.load` alone). Storing the same data as flat numpy arrays from the start removes
 that reconstruction cost entirely for bulk/vectorized consumers.
 
 Design:
@@ -26,12 +25,15 @@ Design:
   robot that only appears later. A tick where a given id is absent gets
   NaN position/velocity/acceleration and `has_ball=False` for that id's
   column once everything is assembled.
+- Robot, ball and designated-position floats are stored as float32: under a
+  micrometre on a 12 m field, far below vision noise, and half the bytes
+  (they barely compress). Timestamps stay float64. The reader widens them
+  back to float64.
 - Flushing periodically (every `checkpoint_every_s` seconds of match time)
   means a mid-match crash still leaves a valid, loadable (if truncated)
   replay — mirroring the durability the old pickle-per-frame format got
-  for free from flushing every dump, which mattered for this session's
-  own robosim-crash debugging (`docs/testing_gaps.md`'s "Referee
-  FORCE_START Thrash" entry). Each flush rebuilds arrays from every tick
+  for free from flushing every dump, which matters when debugging a
+  robosim crash. Each flush rebuilds arrays from every tick
   buffered so far (not just the newest ones) — this is the one op that's
   O(n_ticks) instead of O(1) per tick, deliberately paid only a few times
   per match rather than continuously.
@@ -49,14 +51,20 @@ Design:
   column trivially (small int enums; two floats with NaN for "absent").
   `game_events`/`status_message`/`source_identifier`/`next_command`/team
   info don't fit a column at all without truncation (variable-length
-  lists, strings, nested objects) *and* have zero real read sites — those
-  go to a small sparse sidecar list, one pickled entry per tick where any
-  of them is actually set, not per tick overall.
+  lists, strings, nested objects) — those go to a small sparse sidecar
+  list: the full `RefereeData` at each tick where it differs from the last
+  stored one other than by its clocks running on (`columnar_reader.
+  advance_clocks`), which the reader carries forward. A live referee sets
+  `source_identifier` and team info on every message, so "any rare field
+  set" meant every tick: 230 MB per round-robin of identical messages.
 """
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import logging
+import math
 import pickle
 from dataclasses import dataclass, field
 from itertools import count
@@ -66,7 +74,9 @@ from typing import Optional
 import numpy as np
 
 from utama_core.config.settings import REPLAY_BASE_PATH
+from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game import GameFrame
+from utama_core.replay.columnar_reader import advance_clocks
 from utama_core.replay.entities import ReplayMetadata
 
 _NAN = float("nan")
@@ -94,6 +104,7 @@ class _TickRecord:
     referee_command: int
     stage: int
     designated_position: tuple
+    my_team_is_right: bool = True
 
 
 class ColumnarReplayWriter:
@@ -124,7 +135,8 @@ class ColumnarReplayWriter:
 
         self._my_team_is_right: Optional[bool] = None
         self._ticks: list[_TickRecord] = []
-        self._sparse_referee: list[tuple[int, object]] = []
+        self._sparse_referee: list[tuple[int, RefereeData]] = []
+        self._last_stored_ts = 0.0
         self._last_checkpoint_ts: Optional[float] = None
 
     def _resolve_path(self, replay_configs: ColumnarReplayWriterConfig) -> Path:
@@ -166,8 +178,10 @@ class ColumnarReplayWriter:
             designated_position = (
                 referee.designated_position if referee.designated_position is not None else (_NAN, _NAN)
             )
-            if _has_rare_fields(referee):
-                self._sparse_referee.append((tick_index, referee))
+            if self._changed(referee, frame.ts):
+                # a copy: a referee may update its team info in place
+                self._sparse_referee.append((tick_index, copy.deepcopy(referee)))
+                self._last_stored_ts = frame.ts
         else:
             has_referee = False
             referee_command = -1
@@ -186,6 +200,7 @@ class ColumnarReplayWriter:
                 referee_command=referee_command,
                 stage=stage,
                 designated_position=designated_position,
+                my_team_is_right=frame.my_team_is_right,
             )
         )
 
@@ -195,6 +210,13 @@ class ColumnarReplayWriter:
             elif frame.ts - self._last_checkpoint_ts >= self.replay_configs.checkpoint_every_s:
                 self._flush()
                 self._last_checkpoint_ts = frame.ts
+
+    def _changed(self, referee: RefereeData, ts: float) -> bool:
+        """Whether `referee` differs from the last stored message carried forward to `ts`."""
+        if not self._sparse_referee:
+            return True
+        expected = advance_clocks(self._sparse_referee[-1][1], ts - self._last_stored_ts)
+        return not _same_referee(referee, expected)
 
     def _build_arrays(self) -> dict:
         n = len(self._ticks)
@@ -249,29 +271,32 @@ class ColumnarReplayWriter:
             stage[tick_i] = t.stage
             designated_position[tick_i] = t.designated_position
 
+        f32 = np.float32  # see _FLOAT32_KEYS
         return {
             "my_team_is_yellow": np.array(self.metadata.my_team_is_yellow),
+            # the side at the first tick; `side_is_right` has every tick's (teams change ends at half-time)
             "my_team_is_right": np.array(bool(self._my_team_is_right)),
+            "side_is_right": np.array([t.my_team_is_right for t in self._ticks], dtype=bool),
             "friendly_ids": np.array(friendly_ids, dtype=np.int32),
             "enemy_ids": np.array(enemy_ids, dtype=np.int32),
             "ts": ts,
-            "friendly_p": friendly_p,
-            "friendly_v": friendly_v,
-            "friendly_a": friendly_a,
-            "friendly_orientation": friendly_orientation,
+            "friendly_p": friendly_p.astype(f32),
+            "friendly_v": friendly_v.astype(f32),
+            "friendly_a": friendly_a.astype(f32),
+            "friendly_orientation": friendly_orientation.astype(f32),
             "friendly_has_ball": friendly_has_ball,
-            "enemy_p": enemy_p,
-            "enemy_v": enemy_v,
-            "enemy_a": enemy_a,
-            "enemy_orientation": enemy_orientation,
+            "enemy_p": enemy_p.astype(f32),
+            "enemy_v": enemy_v.astype(f32),
+            "enemy_a": enemy_a.astype(f32),
+            "enemy_orientation": enemy_orientation.astype(f32),
             "enemy_has_ball": enemy_has_ball,
-            "ball_p": ball_p,
-            "ball_v": ball_v,
-            "ball_a": ball_a,
+            "ball_p": ball_p.astype(f32),
+            "ball_v": ball_v.astype(f32),
+            "ball_a": ball_a.astype(f32),
             "has_referee": has_referee,
             "referee_command": referee_command,
             "stage": stage,
-            "designated_position": designated_position,
+            "designated_position": designated_position.astype(f32),
         }
 
     def _flush(self) -> None:
@@ -294,11 +319,25 @@ class ColumnarReplayWriter:
         self._flush()
 
 
-def _has_rare_fields(referee) -> bool:
-    return bool(
-        referee.game_events
-        or referee.status_message is not None
-        or referee.source_identifier is not None
-        or referee.next_command is not None
-        or referee.current_action_time_remaining is not None
-    )
+_CLOCK_TOLERANCE_S = 1e-6
+
+
+def _team_fields(team) -> Optional[dict]:
+    return None if team is None else vars(team)
+
+
+def _same_referee(a: RefereeData, b: RefereeData) -> bool:
+    """Every field equal, clocks to within `_CLOCK_TOLERANCE_S`."""
+    for f in dataclasses.fields(RefereeData):
+        x, y = getattr(a, f.name), getattr(b, f.name)
+        if f.name in ("blue_team", "yellow_team"):
+            x, y = _team_fields(x), _team_fields(y)
+        if f.name in ("time_sent", "time_received", "stage_time_left"):
+            if not math.isclose(x, y, abs_tol=_CLOCK_TOLERANCE_S):
+                return False
+        elif f.name == "current_action_time_remaining" and x is not None and y is not None:
+            if abs(x - y) > 1:  # microseconds
+                return False
+        elif x != y:
+            return False
+    return True

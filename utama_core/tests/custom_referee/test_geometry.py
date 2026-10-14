@@ -234,3 +234,53 @@ class TestOutOfBoundsCornerPlacementRealTraces:
         ), f"{source}: exit=({x},{y}) -> placement=({px},{py}) only {dist_sideline:.3f}m from sideline"
         assert GEO.is_in_field(px, py)
         assert not _in_either_defense_area(px, py)
+
+
+@pytest.mark.parametrize("x,y", [(-4.25, -1.004), (-4.25, 1.02), (4.25, -1.1), (3.9, 1.2)])
+def test_a_restart_beside_the_box_side_edge_clears_the_planner_margin(x: float, y: float) -> None:
+    """A restart level with the box only needed pushing out if it was inside the box's
+    width, so one just past the side edge stayed where it was: a free kick at
+    (-4.25, -1.00), the box corner, left the kicker parked outside the planner's
+    keep-out ring 0.49 m away for the rest of the match (three matches,
+    tournament_20260927_223257). The keep distance applies at the side edge too."""
+    px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+    inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+    beyond_front = inner_x - abs(px)
+    beyond_side = abs(py) - GEO.half_defense_width
+    clearance = max(beyond_front, beyond_side)
+    assert (
+        clearance
+        >= OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+        + TestLegalRestartPositionClearsPlannerObstacle._PLANNER_FULL_CLEARANCE_M
+        - 1e-9
+    )
+
+
+@pytest.mark.parametrize("x,y", [(-4.25, -1.54), (4.25, 1.6), (-3.1, 1.2)])
+def test_a_restart_near_the_box_leaves_room_for_the_kickers_approach(x: float, y: float) -> None:
+    """The kicker stands `DirectFreeOursStep._APPROACH_OFFSET` behind the ball, which is
+    towards the box whenever the kick points away from it; that spot has to clear the
+    planner's ring too. A free kick at (-4.25, -1.54), 0.54 m from the side edge, held
+    its kicker 1.3 m away for 20 s (tournament_20260927_230330)."""
+    from utama_core.custom_referee.actions import DirectFreeOursStep
+
+    px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+    inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+    clearance = max(inner_x - abs(px), abs(py) - GEO.half_defense_width)
+    need = (
+        OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+        + TestLegalRestartPositionClearsPlannerObstacle._PLANNER_FULL_CLEARANCE_M
+        + DirectFreeOursStep._APPROACH_OFFSET
+    )
+    assert clearance >= need - 1e-9
+
+
+@pytest.mark.parametrize("x,y", [(3.0, 0.0), (-2.9, 0.4), (4.0, 1.8), (-4.25, -1.54)])
+def test_a_free_kick_is_placed_a_metre_clear_of_the_defense_area(x: float, y: float) -> None:
+    """SSL rulebook §5.3.3: a free-kick position is valid only with "1 meter distance
+    to either defense area". The planner-driven 0.65 m left (3.0, 0.0) at 2.85, 0.65 m
+    from the box."""
+    px, py = GEO.legal_restart_position(x, y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+    inner_x = GEO.half_length - 2.0 * GEO.half_defense_depth
+    clearance = max(inner_x - abs(px), abs(py) - GEO.half_defense_width)
+    assert clearance >= 1.0 - 1e-9

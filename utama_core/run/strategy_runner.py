@@ -1,4 +1,5 @@
 import cProfile
+import dataclasses
 import logging
 import math
 import signal
@@ -15,7 +16,12 @@ from rich.text import Text
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
+from utama_core.config.physical_constants import (
+    BALL_RADIUS,
+    MAX_ROBOT_ID,
+    MAX_ROBOTS,
+    ROBOT_RADIUS,
+)
 from utama_core.config.settings import (
     FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
@@ -36,7 +42,8 @@ from utama_core.engine.match_log import MatchLog
 from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
-from utama_core.entities.game import Game, GameFrame, GameHistory
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game, GameFrame, GameHistory, Robot
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
@@ -57,6 +64,8 @@ from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNo
 from utama_core.run import GameGater
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
+from utama_core.shared.pass_and_score_geometry import reset_possession_state
+from utama_core.skills.src.shielding import reset_shield_state
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
     GRSimController,
@@ -133,6 +142,17 @@ _TELEPORT_SETTLE_SPEED_MPS = 0.05
 # spike, so a genuinely fast in-flight ball at the moment of a teleport
 # (rather than the reset artifact) can't stall the re-pin loop indefinitely.
 _TELEPORT_SETTLE_MAX_EXTENSIONS = 10
+# sim-only: a BALL_PLACEMENT_* teleport is held back while any robot stands
+# within this distance of the placement target. Teleporting the ball into a
+# robot's body gets it shoved out by contact resolution faster than the
+# settle re-pin can hold it: traced in
+# tournament_20260924_082230/give_and_go_solo_vs_high_line_zone (t=37.1),
+# where the ball landed 0.07m from a blue robot, was pushed off at ~1.5m/s
+# and rolled into the goal net behind the line -- unreachable without
+# entering the defense area, so DIRECT_FREE_YELLOW stalled for the rest of
+# the match. The non-placing team clears the placement area during
+# BALL_PLACEMENT_*, so the teleport fires as soon as the spot is free.
+_PLACEMENT_TELEPORT_CLEARANCE_M = ROBOT_RADIUS + BALL_RADIUS + 0.02
 
 # sim-only: recovery for a rare native-engine hang, distinct from the
 # post-teleport velocity spike above. Traced live (tournament_20260905_083358,
@@ -240,6 +260,37 @@ def _build_robot_feedback_snapshot(
     return snapshot
 
 
+def _turned(robot: Robot, bounds: FieldBounds) -> Robot:
+    """`robot` half a turn about the centre spot, at rest: where it stands after changing ends.
+    Kept within `bounds`: a robot in the run-off past a line comes back onto it, since the sim
+    refuses to teleport a robot outside the field (a match crashed at half-time that way)."""
+    (left, top), (right, bottom) = bounds.top_left, bounds.bottom_right
+    return dataclasses.replace(
+        robot,
+        p=Vector2D(min(max(-robot.p.x, left), right), min(max(-robot.p.y, bottom), top)),
+        v=Vector2D(0.0, 0.0),
+        a=Vector2D(0.0, 0.0),
+        orientation=math.remainder(robot.orientation + math.pi, 2 * math.pi),
+    )
+
+
+def _mirrored(frame: GameFrame) -> GameFrame:
+    """`frame` as the other team sees it: the same absolute coordinates, friendly and enemy swapped."""
+
+    def flip(robots: dict[int, Robot]) -> dict[int, Robot]:
+        return {i: Robot(r.id, not r.is_friendly, r.has_ball, r.p, r.v, r.a, r.orientation) for i, r in robots.items()}
+
+    return GameFrame(
+        frame.ts,
+        not frame.my_team_is_yellow,
+        not frame.my_team_is_right,
+        flip(frame.enemy_robots),
+        flip(frame.friendly_robots),
+        frame.ball,
+        frame.referee,
+    )
+
+
 @dataclass(slots=True)
 class SideRuntime:
     """Encapsulates all per-side (my team / opponent) runtime state.
@@ -297,7 +348,7 @@ class StrategyRunner:
         match_log_path (Optional[str], optional): If set, writes a structured JSONL trace of
             `my`'s kernel-tactic assignment decisions (see `utama_core.engine.match_log.MatchLog`)
             to this path on `close()`. Only applies when `strategy` is a kernel-tactic
-            `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored for BT-path strategies.
+            `AbstractStrategy` (i.e. exposes `_kernel_strategy`); ignored otherwise (e.g. test doubles).
             Defaults to None, which disables the trace.
         stats_path (Optional[str], optional): If set, writes a single JSON summary of `my`'s
             match (rule-event counts, possession %, per-robot zone-time %; see
@@ -375,6 +426,8 @@ class StrategyRunner:
         self._teleport_settle_target: Optional[Tuple[float, float]] = None
         self._teleport_settle_ticks_left: int = 0
         self._teleport_settle_extensions_left: int = 0
+        # See `_PLACEMENT_TELEPORT_CLEARANCE_M`'s docstring at module scope.
+        self._pending_placement_teleport: Optional[Tuple[float, float]] = None
         # See `_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS`'s module docstring.
         self._frozen_field_since: Optional[float] = None
         self._last_referee_data: Optional["RefereeData"] = None
@@ -475,6 +528,9 @@ class StrategyRunner:
             self.referee.attach_match_log(self.match_log)
         self.stats_path = stats_path
         self.match_stats = MatchStatsAccumulator() if stats_path else None
+        # a worker process plays many matches: no robot starts one holding or committed
+        reset_possession_state()
+        reset_shield_state()
         self.referee_initial_command = referee_initial_command
 
         self._load_robot_controllers()
@@ -529,6 +585,14 @@ class StrategyRunner:
             self.replay_writer = ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
         else:
             self.replay_writer = None
+
+        # Acceleration is read only by the replay (no strategy, tactic or planner reads
+        # `.a`), so the side the replay doesn't record skips it: about 7% of the runner's CPU.
+        # In sim PVP our refiners make both sides' frames (`_run_step`), so ours always keep it.
+        if self.opp is not None:
+            recorded_is_my = self.replay_writer is None or self.replay_writer.replay_configs.is_my_perspective
+            skips = self.opp if recorded_is_my or self.mode != Mode.REAL else self.my
+            skips.velocity_refiner.compute_acceleration = False
 
         # Live terminal status panel
         self.num_frames_elapsed = 0
@@ -858,6 +922,19 @@ class StrategyRunner:
         self._teleport_settle_target = (x, y)
         self._teleport_settle_ticks_left = _TELEPORT_SETTLE_TICKS
         self._teleport_settle_extensions_left = _TELEPORT_SETTLE_MAX_EXTENSIONS
+
+    def _tick_pending_placement_teleport(self) -> None:
+        """Fire the pending BALL_PLACEMENT_* teleport once no robot is within
+        `_PLACEMENT_TELEPORT_CLEARANCE_M` of the target (see its docstring)."""
+        if self._pending_placement_teleport is None:
+            return
+        x, y = self._pending_placement_teleport
+        frame = self.my.current_game_frame
+        robots = (*frame.friendly_robots.values(), *frame.enemy_robots.values())
+        if any(math.hypot(r.p.x - x, r.p.y - y) < _PLACEMENT_TELEPORT_CLEARANCE_M for r in robots):
+            return
+        self._pending_placement_teleport = None
+        self._teleport_ball_and_settle(x, y)
 
     def _tick_teleport_settle(self) -> None:
         """One tick of the re-pin window `_teleport_ball_and_settle` arms.
@@ -1220,8 +1297,8 @@ class StrategyRunner:
             # threading `match_log` through every `build_*_kernel_strategy`
             # factory's signature — those only accept `motion_controller`
             # today, and none of them need to know this trace exists. A
-            # BT-path `AbstractStrategy` simply has no `_kernel_strategy`
-            # attribute, so this is a no-op for it.
+            # strategy without `_kernel_strategy` (e.g. a test double) makes
+            # this a no-op.
             kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
@@ -1318,6 +1395,56 @@ class StrategyRunner:
         if self.opp:
             self.opp.strategy.load_game(self.opp.game)
 
+    def _follow_referee_sides(self, referee_data: Optional["RefereeData"]) -> None:
+        """Change ends when the referee says the teams have.
+
+        The referee says which team defends the +x goal (`blue_team_on_positive_half`): the game
+        controller in a real match, `CustomReferee` in the sim, which swaps it at half-time. When
+        that disagrees with the side we play on, both teams change ends: their frames, `Field`s
+        and history start again on the new side. Tactic memory is cleared by the stoppage the
+        change happens in (`Strategy._barrier_reset`). A referee that doesn't say (None) changes
+        nothing.
+
+        In the sim every robot is also carried to the other end, as people do in the half-time
+        break: turned half a turn about the centre spot, so it stands where it stood, in its new
+        half. Driving there instead takes every robot the length of the pitch through both
+        defense areas: the fouls escalated to a HALT, whose sim resume dropped the second
+        half's kick-off.
+        """
+        if referee_data is None or referee_data.blue_team_on_positive_half is None:
+            return
+        on_positive = referee_data.blue_team_on_positive_half != self.my_team_is_yellow
+        if on_positive == self.my_team_is_right:
+            return
+        self.logger.info("Teams change ends: my team now defends the %s goal", "right" if on_positive else "left")
+        self.my_team_is_right = on_positive
+        carry = self.sim_controller is not None
+        if carry:
+            frame = self.my.current_game_frame
+            for robots, is_yellow in (
+                (frame.friendly_robots, self.my_team_is_yellow),
+                (frame.enemy_robots, not self.my_team_is_yellow),
+            ):
+                for r in robots.values():
+                    turned = _turned(r, self.field_bounds)
+                    self.sim_controller.teleport_robot(is_yellow, r.id, turned.p.x, turned.p.y, turned.orientation)
+        for side, is_right in ((self.my, on_positive), (self.opp, not on_positive)):
+            if side is None or side.game is None:
+                continue
+            frame = dataclasses.replace(side.current_game_frame, my_team_is_right=is_right)
+            if carry:
+                frame = dataclasses.replace(
+                    frame,
+                    friendly_robots={i: _turned(r, self.field_bounds) for i, r in frame.friendly_robots.items()},
+                    enemy_robots={i: _turned(r, self.field_bounds) for i, r in frame.enemy_robots.items()},
+                )
+                side.position_refiner.reset()  # its filters would track the robots across the pitch
+                side.position_refiner.start_filtering()
+            side.current_game_frame = frame
+            side.game_history = GameHistory(MAX_GAME_HISTORY)
+            side.game = Game(side.game_history, frame, field=Field(is_right, self.full_field_dims, self.field_bounds))
+            side.strategy.load_game(side.game)
+
     # Reset the game state and robot info in buffer
     def _reset_game(self):
         """Reload game state by waiting for valid frames and reinitializing Game objects.
@@ -1392,7 +1519,9 @@ class StrategyRunner:
         """Run a test with the given test manager and episode timeout.
         Args:
             test_manager (AbstractTestManager): The test manager to run the test.
-            episode_timeout (float): The timeout for each episode in seconds.
+            episode_timeout (float): The timeout for each episode in seconds: game time in
+                rsim, which isn't throttled to real time, so a test gets the same simulated
+                time however loaded the machine is; wall-clock time otherwise.
             rsim_headless (bool): Whether to run RSim in headless mode. Defaults to False.
         """
         signal.signal(signal.SIGINT, self._handle_sigint)
@@ -1416,14 +1545,14 @@ class StrategyRunner:
                     time.sleep(0.1)
 
                 self._reset_game()
-                episode_start_time = time.time()
+                episode_start_time = self._episode_clock()
 
                 if self.profiler:
                     self.profiler.enable()
 
                 while not self._stop_event.is_set():
 
-                    if (time.time() - episode_start_time) > episode_timeout:
+                    if (self._episode_clock() - episode_start_time) > episode_timeout:
                         passed = False
                         self.logger.warning(
                             "Episode %d timed out after %f secs",
@@ -1461,6 +1590,12 @@ class StrategyRunner:
 
         finally:
             self.close()
+
+    def _episode_clock(self) -> float:
+        """`run_test`'s timeout clock: the game's timestamp in rsim, wall time otherwise."""
+        if self.mode == Mode.RSIM:
+            return self.my.current_game_frame.ts
+        return time.time()
 
     def run(self):
         """Run the main loop, stepping the game until interrupted.
@@ -1542,7 +1677,13 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             if self.match_stats is not None:
-                self.match_stats.record_rule_violation(self.referee.last_violation)
+                violation = self.referee.last_violation
+                self.match_stats.record_rule_violation(
+                    violation,
+                    self.my.current_game_frame.my_team_is_yellow,
+                    game_frame=self.my.current_game_frame if violation is not None else None,
+                    robot_tactics=self._robot_tactics() if violation is not None else None,
+                )
             self.ref_buffer.append(ref_data)
             _BALL_PLACEMENT_COMMANDS = (
                 RefereeCommand.BALL_PLACEMENT_YELLOW,
@@ -1554,6 +1695,9 @@ class StrategyRunner:
                     and self._prev_custom_ref_command != RefereeCommand.STOP
                     and ref_data.next_command not in _BALL_PLACEMENT_COMMANDS
                     and self._halt_resume_stop_entered_at is None
+                    # A STOP out of a HALT resumes the restart the HALT interrupted
+                    # (`resume_from_halt`); forcing FORCE_START here would drop it.
+                    and self._prev_custom_ref_command != RefereeCommand.HALT
                 ):
                     # On transition into STOP with a designated position, teleport
                     # the ball immediately and skip straight to FORCE_START so
@@ -1571,7 +1715,7 @@ class StrategyRunner:
                     # BALL_PLACEMENT_*. That made BallPlacementInterferenceRule
                     # structurally unreachable in every rsim/grsim run, which is
                     # why it had never fired in any tournament (see
-                    # docs/testing_gaps.md gap #6/#9). This branch must only
+                    # docs/testing_gaps.md gap #9). This branch must only
                     # fire for STOP-preceded restarts that do NOT go through
                     # ball placement.
                     #
@@ -1591,7 +1735,13 @@ class StrategyRunner:
                     # (added alongside this fix), 2026-09-04.
                     x, y = ref_data.designated_position
                     self._teleport_ball_and_settle(x, y)
-                    self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+                    # A queued FORCE_START (no_progress, a no-fault push) restarts the ball
+                    # where it is, so StopStep has to separate the robots first; the state
+                    # machine advances once all are 0.5 m clear. Forced on the same tick, two
+                    # robots locked on the ball never let go: no_progress fired every 10 s for
+                    # 230 s of tiki_taka_plus_vs_zone_fluid (tournament_20261005_115048).
+                    if ref_data.next_command != RefereeCommand.FORCE_START:
+                        self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
                 elif (
                     ref_data.referee_command in _BALL_PLACEMENT_COMMANDS
                     and self._prev_custom_ref_command not in _BALL_PLACEMENT_COMMANDS
@@ -1599,9 +1749,12 @@ class StrategyRunner:
                     # On transition into BALL_PLACEMENT, teleport the ball to the
                     # designated position and let the state machine auto-advance.
                     # Robots cannot physically retrieve an out-of-bounds ball in
-                    # simulation, so we simulate placement instantly.
-                    x, y = ref_data.designated_position
-                    self._teleport_ball_and_settle(x, y)
+                    # simulation, so we simulate placement instantly -- as soon
+                    # as no robot stands on the target (`_tick_pending_placement_teleport`).
+                    self._pending_placement_teleport = ref_data.designated_position
+            if ref_data.referee_command not in _BALL_PLACEMENT_COMMANDS:
+                self._pending_placement_teleport = None
+            self._tick_pending_placement_teleport()
             if self.sim_controller is not None:
                 # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
                 # no auto-advance in GameStateMachine by design — on a real
@@ -1650,8 +1803,15 @@ class StrategyRunner:
                         # a second short sim-only grace window, tracked the
                         # same way, giving StopStep a chance to clear illegal
                         # positions before NORMAL_START is force-issued.
-                        self.referee.force_command(RefereeCommand.STOP, self.my.current_game_frame.ts)
-                        self._halt_resume_stop_entered_at = self.my.current_game_frame.ts
+                        #
+                        # A restart queued when the HALT came (a kick-off after
+                        # half-time or a goal, a free kick, a penalty) resumes
+                        # through STOP into that restart: STOP's own auto-advance
+                        # waits for robots to clear. Forcing STOP used to clear the
+                        # queue, so play resumed as FORCE_START and the kick-off
+                        # was lost (test_change_of_ends on CI, 2026-10-06).
+                        if not self.referee.resume_from_halt(self.my.current_game_frame.ts):
+                            self._halt_resume_stop_entered_at = self.my.current_game_frame.ts
                 elif ref_data.referee_command == RefereeCommand.STOP and self._halt_resume_stop_entered_at is not None:
                     if (
                         self.my.current_game_frame.ts - self._halt_resume_stop_entered_at
@@ -1686,6 +1846,8 @@ class StrategyRunner:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
 
+        self._follow_referee_sides(referee_data)
+
         friendly_res, opp_res = None, None
         if self.mode == Mode.REAL:
             responses = raw_robot_responses
@@ -1709,6 +1871,13 @@ class StrategyRunner:
         # alternate between opp and friendly playing
         real = self.mode == Mode.REAL
         sim_opp_pairs = (sim_response_pairs[1], sim_response_pairs[0]) if sim_response_pairs is not None else None
+        # Sim PVP: both teams see the same vision, so it is refined once, for our side, and
+        # the opponent gets that frame mirrored (the two refinements were identical; see
+        # test_frame_once.py). About 10% of a match's time.
+        my_kinematics = opp_kinematics = None
+        if sim_response_pairs is not None:
+            my_kinematics = self._refine_kinematics(self.my, vision_frames)
+            opp_kinematics = _mirrored(my_kinematics)
         if self.toggle_opp_first:
             if self.opp:
                 self._step_game(
@@ -1717,6 +1886,7 @@ class StrategyRunner:
                     True,
                     real_responses=opp_res if real else None,
                     sim_response_pairs=sim_opp_pairs,
+                    kinematics=opp_kinematics,
                 )
             self._step_game(
                 vision_frames,
@@ -1724,6 +1894,7 @@ class StrategyRunner:
                 False,
                 real_responses=friendly_res if real else None,
                 sim_response_pairs=sim_response_pairs,
+                kinematics=my_kinematics,
             )
         else:
             self._step_game(
@@ -1732,6 +1903,7 @@ class StrategyRunner:
                 False,
                 real_responses=friendly_res if real else None,
                 sim_response_pairs=sim_response_pairs,
+                kinematics=my_kinematics,
             )
             if self.opp:
                 self._step_game(
@@ -1740,6 +1912,7 @@ class StrategyRunner:
                     True,
                     real_responses=opp_res if real else None,
                     sim_response_pairs=sim_opp_pairs,
+                    kinematics=opp_kinematics,
                 )
         self.toggle_opp_first = not self.toggle_opp_first
         self._publish_vision_stream_frame()
@@ -1994,6 +2167,35 @@ class StrategyRunner:
             return
         self.referee.set_debug_status(self.my.strategy.debug_status())
 
+    def _robot_tactics(self) -> dict[str, dict[int, str]]:
+        """`{"friendly"|"enemy": {robot_id: tactic}}` for `MatchStats`' foul log: the
+        tactic class of the slot holding each robot in live play, "goalkeeper" for the pinned keeper, and
+        "restart override" for outfield robots while `RefereeOverride` drives them.
+        Reads the command from before this tick's referee step (when the foul happened).
+        A side without a kernel strategy is omitted."""
+        live = self._prev_custom_ref_command in (RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START)
+        frame = self.my.current_game_frame
+        out: dict[str, dict[int, str]] = {}
+        for side_name, side, robots in (
+            ("friendly", self.my, frame.friendly_robots),
+            ("enemy", self.opp, frame.enemy_robots),
+        ):
+            kernel_strategy = getattr(getattr(side, "strategy", None), "_kernel_strategy", None)
+            if kernel_strategy is None:
+                continue
+            tactics = {rid: "restart override" for rid in robots}
+            if live:
+                tactics = {}
+                for tactic_id, robot_ids in kernel_strategy.active_partition.items():
+                    name = type(kernel_strategy._tactics[tactic_id]).__name__
+                    for rid in robot_ids:
+                        tactics[rid] = name
+            keeper_id = getattr(kernel_strategy, "_pinned_robot_id", None)
+            if keeper_id is not None:
+                tactics[keeper_id] = "goalkeeper"
+            out[side_name] = tactics
+        return out
+
     def _committed_tactics(self) -> Optional[dict]:
         """Currently-committed tactic slots as `{tactic_id: (robot_id, ...)}`,
         for `MatchStats`'s COMMITTED_FROZEN stall watchdog (see
@@ -2003,7 +2205,7 @@ class StrategyRunner:
         the same way `_push_debug_status_to_referee` reaches `_kernel_strategy`
         post-construction — rather than adding a new plumbing path. Returns
         `None` (watchdog falls back to "ball frozen during live play") for a
-        BT-path strategy, which has no `_kernel_strategy`.
+        strategy without `_kernel_strategy`.
         """
         kernel_strategy = getattr(self.my.strategy, "_kernel_strategy", None)
         if kernel_strategy is None:
@@ -2087,6 +2289,12 @@ class StrategyRunner:
         ]
         self.rsim_env.draw_polygon(bounds_polygon, color="PINK", width=2)
 
+    @staticmethod
+    def _refine_kinematics(side: SideRuntime, vision_frames: List[RawVisionData]) -> GameFrame:
+        """`side`'s next frame from this tick's vision: positions, then velocities."""
+        frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
+        return side.velocity_refiner.refine(side.game_history, frame)
+
     def _step_game(
         self,
         vision_frames: List[RawVisionData],
@@ -2094,6 +2302,7 @@ class StrategyRunner:
         running_opp: bool,
         real_responses: Optional[List[RobotResponse]] = None,
         sim_response_pairs: Optional[Tuple[List[RobotResponse], List[RobotResponse]]] = None,
+        kinematics: Optional[GameFrame] = None,
     ):
         """Step the game for the robot controller and strategy.
 
@@ -2110,6 +2319,9 @@ class StrategyRunner:
                                                          DoubleTouchRule needs the opponent's
                                                          touches). `None` keeps the old per-side
                                                          controller pull (single-team sim).
+            kinematics (Optional[GameFrame]): This side's frame already through the position and
+                                              velocity refiners (sim PVP, see `_run_step`); `None`
+                                              refines `vision_frames` here.
         """
         side = self.opp if running_opp else self.my
 
@@ -2124,8 +2336,7 @@ class StrategyRunner:
             enemy_responses = None
 
         # Update game frame with refined information
-        new_game_frame = side.position_refiner.refine(side.current_game_frame, vision_frames)
-        new_game_frame = side.velocity_refiner.refine(side.game_history, new_game_frame)  # , robot_frame.imu_data)
+        new_game_frame = kinematics if kinematics is not None else self._refine_kinematics(side, vision_frames)
         new_game_frame = side.robot_info_refiner.refine(new_game_frame, responses, enemy_responses)
         new_game_frame = self.referee_refiner.refine(new_game_frame, referee_data)
 

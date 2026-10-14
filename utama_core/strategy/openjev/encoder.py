@@ -21,7 +21,7 @@ from typing import Any, Optional
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
-from utama_core.strategy.kernel_strategy import _CLOSER_TO_BALL_MARGIN
+from utama_core.strategy.pickers import CLOSER_TO_BALL_MARGIN
 from utama_core.strategy.openjev.splits import TACTIC_GLOSSARY, split_glossary
 from utama_core.tactics.clear_ball import in_danger
 
@@ -74,9 +74,9 @@ def possession(game: Game) -> tuple[str, Optional[float], Optional[float]]:
     _, theirs = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     if ours is None or theirs is None:
         return "contested", ours, theirs
-    if ours < theirs - _CLOSER_TO_BALL_MARGIN:
+    if ours < theirs - CLOSER_TO_BALL_MARGIN:
         return "us", float(ours), float(theirs)
-    if theirs < ours - _CLOSER_TO_BALL_MARGIN:
+    if theirs < ours - CLOSER_TO_BALL_MARGIN:
         return "them", float(ours), float(theirs)
     return "contested", float(ours), float(theirs)
 

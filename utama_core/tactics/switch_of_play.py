@@ -66,6 +66,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     at_target,
+    ball_line_receive_point,
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
@@ -489,21 +490,23 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # never be entered — every use of runner_id past "assess" assumes
             # it is set (that's what two_robot_mode's "collapse pivot into
             # runner" is for), and with a single robot there is no pivot to
-            # collapse. The carrier just chases and holds the ball; nothing to
-            # time out, since "assess" never advances past itself here.
+            # collapse. The carrier plays the ball itself: shoot when a lane is
+            # open, otherwise carry it toward one (`_score_goal`), so "assess"
+            # never advancing past itself is fine. It used to hold the ball
+            # where it stood, which held it forever: at its own corner free
+            # kicks overload_press's lone switch robot stopped 0.13 m from the
+            # ball (inside the visual has_ball box, short of contact) for 10 s
+            # until no_progress, with the overload slot committed and waiting
+            # (tournament_20261005_170958: vs split_shape t=479, vs three_slot
+            # t=149). Fetch the ball first: with no lane, `_score_goal` moves to a
+            # better shooting spot before it checks possession.
             if not has_ball(game, carrier_id, visual=True):
                 commands[carrier_id] = go_to_ball(
                     game=game, motion_controller=ctx.motion_controller, robot_id=carrier_id, ctx=ctx
                 )
             else:
-                carrier_pos = game.friendly_robots[carrier_id].p
-                commands[carrier_id] = move(
-                    game=game,
-                    motion_controller=ctx.motion_controller,
-                    robot_id=carrier_id,
-                    target_coords=carrier_pos,
-                    target_oren=carrier_pos.angle_to(game.ball.p.to_2d()),
-                    dribbling=True,
+                commands[carrier_id], _shot, mem.prev_best_shot_y = _score_goal(
+                    game, ctx, carrier_id, mem.prev_best_shot_y
                 )
             return commands, mem
 
@@ -624,7 +627,11 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # the intercept point (and required facing angle) drift right
             # along with it and never settle.
             runner_target = _runner_target(game, mem.weak_side if mem.weak_side is not None else 1)
-            runner_ready = _debounced_settled(game, runner_id, runner_target, mem)
+            # A pass already rolling at the runner is met on its path (see `_pass_exec`),
+            # which moves the runner off its spot; don't send it back there mid-pass.
+            runner_ready = ball_line_receive_point(game, runner_id) is not None or _debounced_settled(
+                game, runner_id, runner_target, mem
+            )
             if ctx.match_log is not None:
                 ctx.match_log.trace(
                     tick=0,

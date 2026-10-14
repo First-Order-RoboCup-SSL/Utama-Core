@@ -200,3 +200,45 @@ def test_assert_valid_bounding_box_invalid(top_left, bottom_right):
     bb = FieldBounds(top_left, bottom_right)
     with pytest.raises(ValueError):
         assert_valid_bounding_box(bb, 4.5, 3.0)
+
+
+def _find_intersection_numpy(line1, line2):
+    """`find_intersection` as it was before its plain-float rewrite."""
+    A, B = np.asarray(line1[0]), np.asarray(line1[1])
+    C, D = np.asarray(line2[0]), np.asarray(line2[1])
+    denom = (B[0] - A[0]) * (D[1] - C[1]) - (B[1] - A[1]) * (D[0] - C[0])
+    if abs(denom) < 1e-9:
+        return None
+    t = ((C[0] - A[0]) * (D[1] - C[1]) - (C[1] - A[1]) * (D[0] - C[0])) / denom
+    u = ((C[0] - A[0]) * (B[1] - A[1]) - (C[1] - A[1]) * (B[0] - A[0])) / denom
+    if -1e-9 <= t <= 1 + 1e-9 and -1e-9 <= u <= 1 + 1e-9:
+        return A + t * (B - A)
+    return None
+
+
+def test_find_intersection_matches_numpy_version_bit_for_bit():
+    """Random crossing, missing, parallel, degenerate and endpoint-touching
+    segments, as float64 arrays, int arrays and tuples: same None-ness and
+    exactly the same point as the numpy implementation."""
+    from utama_core.global_utils.math_utils import find_intersection
+
+    rng = np.random.default_rng(3)
+    for _ in range(20000):
+        pts = rng.uniform(-3.0, 3.0, (4, 2))
+        kind = rng.integers(5)
+        if kind == 1:  # parallel
+            pts[3] = pts[2] + (pts[1] - pts[0]) * rng.uniform(-2, 2)
+        elif kind == 2:  # shared endpoint
+            pts[2] = pts[1]
+        elif kind == 3:  # zero-length segment
+            pts[3] = pts[2]
+        elif kind == 4:  # small integer grid
+            pts = rng.integers(-3, 4, (4, 2))
+        as_tuple = rng.random() < 0.3
+        l1 = (tuple(pts[0]), tuple(pts[1])) if as_tuple else (pts[0], pts[1])
+        l2 = (pts[2], pts[3])
+        got, want = find_intersection(l1, l2), _find_intersection_numpy(l1, l2)
+        if want is None:
+            assert got is None
+        else:
+            assert got.dtype == np.float64 and np.array_equal(got, want, equal_nan=True)

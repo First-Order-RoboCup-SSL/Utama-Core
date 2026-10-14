@@ -25,7 +25,7 @@ the ball moving just enough to dodge the 0.05m stillness tolerance every
 time, so the ball genuinely never "freezes" even though nothing useful is
 happening — see `_maybe_record_no_progress_possession`'s docstring for the
 live match this was found in). All three are pure observations recorded
-for post-match reporting (see `tournament.py`'s "STALLS" section) —
+for post-match reporting (see `round_robin.py`'s "STALLS" section) —
 nothing here reads back into or alters gameplay.
 
 `turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
@@ -130,6 +130,108 @@ class StallEvent:
     duration_s: float
     tactic_ids: tuple = ()
     robot_ids: tuple = ()
+    # Why it stalled, from the onset frame. RESTART_STALL: why the restart can't be taken
+    # (`_diagnose_restart`), e.g. "ball in goal". COMMITTED_FROZEN: who holds the ball and how
+    # far each committed robot is from it (`_diagnose_frozen`).
+    diagnosis: str = ""
+
+
+# Taker within this of the ball counts as "at the ball" for `_diagnose_restart`.
+_TAKER_AT_BALL_M = 0.25
+
+
+def _restart_taker_distance(game_frame: GameFrame, command: RefereeCommand) -> Optional[float]:
+    """Distance from the ball to the nearest robot of the team taking `command`
+    (DIRECT_FREE_BLUE -> blue, ...), or None for a command with no taker (STOP, HALT)."""
+    ball = game_frame.ball
+    name = command.name
+    if ball is None or not (name.endswith("_YELLOW") or name.endswith("_BLUE")):
+        return None
+    taker_is_friendly = name.endswith("_YELLOW") == game_frame.my_team_is_yellow
+    robots = game_frame.friendly_robots if taker_is_friendly else game_frame.enemy_robots
+    if not robots:
+        return None
+    return min(math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y) for r in robots.values())
+
+
+def _diagnose_restart(game_frame: GameFrame, command: RefereeCommand, taker_start_m: Optional[float]) -> str:
+    """One line on why a restart is stuck, for the tournament STALLS section."""
+    ball = game_frame.ball
+    if ball is None:
+        return "no ball"
+    dims = STANDARD_FIELD_DIMS
+    if abs(ball.p.x) > dims.full_field_half_length:
+        where = "in goal" if abs(ball.p.y) < dims.half_goal_width else "past goal line"
+        return f"ball {where} at ({ball.p.x:.2f}, {ball.p.y:.2f}), unreachable"
+    if abs(ball.p.y) > dims.full_field_half_width:
+        return f"ball past touchline at ({ball.p.x:.2f}, {ball.p.y:.2f})"
+    now_m = _restart_taker_distance(game_frame, command)
+    if now_m is None:
+        return f"no taker for {command.name}"
+    if now_m <= _TAKER_AT_BALL_M:
+        return f"taker at ball ({now_m:.2f}m) but restart not taken"
+    start = f"{taker_start_m:.2f}m -> " if taker_start_m is not None else ""
+    return f"taker not closing: {start}{now_m:.2f}m from ball at ({ball.p.x:.2f}, {ball.p.y:.2f})"
+
+
+def _diagnose_frozen(game_frame: GameFrame, robot_ids: tuple) -> str:
+    """One line on a COMMITTED_FROZEN stall: who holds the ball, and each committed
+    robot's distance from it, e.g. "enemy 4 holds the ball; committed 3: 0.31m, 4: 2.10m"."""
+    ball = game_frame.ball
+    holders = [f"friendly {r.id}" for r in game_frame.friendly_robots.values() if r.has_ball]
+    holders += [f"enemy {r.id}" for r in game_frame.enemy_robots.values() if r.has_ball]
+    held = f"{' and '.join(holders)} holds the ball" if holders else "nobody holds the ball"
+    distances = [
+        f"{rid}: {math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y):.2f}m"
+        for rid in robot_ids
+        if (r := game_frame.friendly_robots.get(rid)) is not None
+    ]
+    return f"{held}; committed {', '.join(distances)}" if distances else held
+
+
+@dataclass
+class FoulEvent:
+    """One foul, for post-match attribution (which robot, which tactic, where).
+
+    `robot_id` is the robot the rule itself named (`RuleViolation.offending_robots`) or,
+    when the rule only knows a team (`inferred=True`), that side's robot nearest the
+    ball. `tactic` is the slot holding the robot at that moment ("goalkeeper", "restart
+    override" outside live play), or None when the caller can't see that side's strategy.
+    """
+
+    rule: str
+    sim_time: float
+    side: str  # "friendly" | "enemy"
+    robot_id: Optional[int]
+    tactic: Optional[str]
+    inferred: bool
+    ball_xy: Optional[tuple[float, float]]
+
+    def to_dict(self) -> dict:
+        return {
+            "rule": self.rule,
+            "sim_time": round(self.sim_time, 3),
+            "side": self.side,
+            "robot_id": self.robot_id,
+            "tactic": self.tactic,
+            "inferred": self.inferred,
+            "ball_xy": [round(v, 3) for v in self.ball_xy] if self.ball_xy is not None else None,
+        }
+
+
+def _offending_sides(violation: RuleViolation, my_team_is_yellow: bool) -> tuple[str, ...]:
+    """ "friendly"/"enemy" for each team that committed `violation`. Uses `offending_teams`
+    where the rule sets it; several rules (out of bounds, double touch, defense area, keep-out)
+    don't, so otherwise the side awarded the restart (`next_command`'s colour) is the
+    non-offender. A goal is nobody's foul."""
+    teams = violation.offending_teams
+    if not teams and violation.rule_name != "goal" and violation.next_command is not None:
+        name = violation.next_command.name
+        if name.endswith("_YELLOW"):
+            teams = (False,)
+        elif name.endswith("_BLUE"):
+            teams = (True,)
+    return tuple("friendly" if is_yellow == my_team_is_yellow else "enemy" for is_yellow in teams)
 
 
 @dataclass
@@ -197,7 +299,7 @@ class MatchStats:
     # the GiveAndGoTactic bug would have shown up as here.
     #
     # Kept as plain per-pass lists, not pre-aggregated into a mean/median --
-    # post-match tooling (`tournament.py`, `tools/metric_correlation.py`,
+    # post-match tooling (`round_robin.py`, `tools/metric_correlation.py`,
     # dashboards) can compute whatever summary statistic it wants from the
     # raw distribution; deciding that here would throw away information
     # (e.g. a bimodal distribution -- mostly fine passes plus a handful of
@@ -223,6 +325,9 @@ class MatchStats:
     )
     n_restarts: int = 0
     n_restarts_with_entry: int = 0
+    # `rule_event_counts` split by the side that committed it; see `_offending_sides`.
+    fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
+    fouls: List[FoulEvent] = field(default_factory=list)
 
     def to_json(self, path: Union[str, Path]) -> None:
         with open(path, "w") as f:
@@ -248,6 +353,8 @@ class MatchStats:
                     "restart_to_first_entry_s": self.restart_to_first_entry_s,
                     "n_restarts": self.n_restarts,
                     "n_restarts_with_entry": self.n_restarts_with_entry,
+                    "fouls_by_side": self.fouls_by_side,
+                    "fouls": [e.to_dict() for e in self.fouls],
                     "stall_events": [
                         {
                             "kind": e.kind,
@@ -257,6 +364,7 @@ class MatchStats:
                             "duration_s": e.duration_s,
                             "tactic_ids": list(e.tactic_ids),
                             "robot_ids": list(e.robot_ids),
+                            "diagnosis": e.diagnosis,
                         }
                         for e in self.stall_events
                     ],
@@ -316,6 +424,8 @@ class MatchStatsAccumulator:
     """Accumulates per-tick possession/zone data and rule-violation counts; call `finalize()` once."""
 
     _rule_event_counts: Dict[str, int] = field(default_factory=dict)
+    _fouls_by_side: Dict[str, Dict[str, int]] = field(default_factory=lambda: {"friendly": {}, "enemy": {}})
+    _fouls: List[FoulEvent] = field(default_factory=list)
     _possession_ticks: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     _zone_ticks: Dict[int, Dict[str, int]] = field(default_factory=dict)
     _ticks_recorded: int = 0
@@ -398,6 +508,7 @@ class MatchStatsAccumulator:
     # command that is -- reset on every command change.
     _restart_command: Optional[RefereeCommand] = None
     _restart_started_at: Optional[float] = None
+    _restart_taker_start_m: Optional[float] = None
     # Set once a RESTART_STALL has already been logged for the *current*
     # restart, so a 65s stuck restart produces one event, not one per tick
     # past the threshold.
@@ -423,10 +534,54 @@ class MatchStatsAccumulator:
     _no_progress_logged: bool = False
     _no_progress_event_idx: Optional[int] = None
 
-    def record_rule_violation(self, violation: Optional[RuleViolation]) -> None:
+    def record_rule_violation(
+        self,
+        violation: Optional[RuleViolation],
+        my_team_is_yellow: Optional[bool] = None,
+        game_frame: Optional[GameFrame] = None,
+        robot_tactics: Optional[Dict[str, Dict[int, str]]] = None,
+    ) -> None:
+        """`game_frame`/`robot_tactics` (`{"friendly"|"enemy": {robot_id: tactic}}`) are
+        optional; with them each foul is also logged as a `FoulEvent`."""
         if violation is None:
             return
         self._rule_event_counts[violation.rule_name] = self._rule_event_counts.get(violation.rule_name, 0) + 1
+        if my_team_is_yellow is None:
+            return
+        for side in _offending_sides(violation, my_team_is_yellow):
+            counts = self._fouls_by_side[side]
+            counts[violation.rule_name] = counts.get(violation.rule_name, 0) + 1
+            if game_frame is not None:
+                self._log_foul(violation, side, my_team_is_yellow, game_frame, robot_tactics or {})
+
+    def _log_foul(
+        self,
+        violation: RuleViolation,
+        side: str,
+        my_team_is_yellow: bool,
+        game_frame: GameFrame,
+        robot_tactics: Dict[str, Dict[int, str]],
+    ) -> None:
+        side_is_yellow = (side == "friendly") == my_team_is_yellow
+        robot_ids = [rid for is_yellow, rid in violation.offending_robots if is_yellow == side_is_yellow]
+        ball = game_frame.ball
+        inferred = not robot_ids
+        if inferred:
+            robots = game_frame.friendly_robots if side == "friendly" else game_frame.enemy_robots
+            if ball is not None and robots:
+                robot_ids = [min(robots.values(), key=lambda r: math.hypot(r.p.x - ball.p.x, r.p.y - ball.p.y)).id]
+        for rid in robot_ids or [None]:
+            self._fouls.append(
+                FoulEvent(
+                    rule=violation.rule_name,
+                    sim_time=game_frame.ts,
+                    side=side,
+                    robot_id=rid,
+                    tactic=robot_tactics.get(side, {}).get(rid) if rid is not None else None,
+                    inferred=inferred,
+                    ball_xy=(ball.p.x, ball.p.y) if ball is not None else None,
+                )
+            )
 
     def record_tick(
         self,
@@ -441,7 +596,7 @@ class MatchStatsAccumulator:
         computed every tick for the referee debug GUI panel; see
         `StrategyRunner._push_debug_status_to_referee`), so this accumulator
         doesn't need to reach into kernel internals itself. When omitted
-        (`None`, the default -- e.g. a BT-path strategy, or a caller that
+        (`None`, the default -- e.g. a strategy without `_kernel_strategy`, or a caller that
         doesn't have it handy), `COMMITTED_FROZEN` falls back to "ball frozen
         during live play", without requiring a committed slot; the resulting
         `StallEvent.tactic_ids`/`robot_ids` are then simply empty.
@@ -789,6 +944,9 @@ class MatchStatsAccumulator:
         if current_command != self._restart_command:
             self._restart_command = current_command
             self._restart_started_at = sim_time
+            self._restart_taker_start_m = (
+                _restart_taker_distance(game_frame, current_command) if current_command is not None else None
+            )
             self._restart_stall_logged = False
             self._restart_stall_event_idx = None
 
@@ -805,6 +963,7 @@ class MatchStatsAccumulator:
                             tick=tick,
                             referee_command=current_command.name,
                             duration_s=elapsed,
+                            diagnosis=_diagnose_restart(game_frame, current_command, self._restart_taker_start_m),
                         )
                     )
                 elif self._restart_stall_event_idx is not None:
@@ -862,6 +1021,7 @@ class MatchStatsAccumulator:
                     duration_s=frozen_for,
                     tactic_ids=committed_tactic_ids,
                     robot_ids=committed_robot_ids,
+                    diagnosis=_diagnose_frozen(game_frame, committed_robot_ids),
                 )
             )
         elif self._committed_frozen_event_idx is not None:
@@ -967,4 +1127,6 @@ class MatchStatsAccumulator:
             restart_to_first_entry_s=restart_to_first_entry_s,
             n_restarts=self._n_restarts,
             n_restarts_with_entry=self._n_restarts_with_entry,
+            fouls_by_side={side: dict(c) for side, c in self._fouls_by_side.items()},
+            fouls=list(self._fouls),
         )

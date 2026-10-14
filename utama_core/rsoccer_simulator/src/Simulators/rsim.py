@@ -138,7 +138,7 @@ class RSimVSS(RSim):
         n_robots_yellow,
         time_step_ms,
     ) -> RSimSubprocessWrapper:
-        return RSimSubprocessWrapper(
+        return RSimSubprocessWrapper.acquire(
             sim_type="VSS",
             n_blue=n_robots_blue,
             n_yellow=n_robots_yellow,
@@ -197,7 +197,7 @@ class RSimSSL(RSim):
         n_robots_yellow,
         time_step_ms,
     ) -> RSimSubprocessWrapper:
-        return RSimSubprocessWrapper(
+        return RSimSubprocessWrapper.acquire(
             sim_type="SSL",
             n_blue=n_robots_blue,
             n_yellow=n_robots_yellow,

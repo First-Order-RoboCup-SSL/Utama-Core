@@ -223,10 +223,28 @@ def test_pause_command_freezes_without_resetting_mem():
     assert commands == {}  # no commands issued while paused
     assert tactic.mem_creations == 1  # mem NOT reset by a plain pause
 
-    # Resume with FORCE_START coming from HALT (not from a barrier command):
-    # should NOT be treated as a barrier reset.
-    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    # Resuming with NORMAL_START keeps the pre-pause state...
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic.mem_creations == 1
+
+
+def test_force_start_after_a_pause_clears_mem_and_commitment():
+    """FORCE_START out of a pause is a barrier: the ball may have been moved (rsim teleports
+    it on STOP -> FORCE_START), so a committed tactic must not resume its old action."""
+    tactic = RecordingTactic(committed=True)
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
+    strategy.tick(_FakeGame(RefereeCommand.HALT))
+    assert tactic.mem_creations == 1  # the pause itself still preserves mem
+
+    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    assert tactic.mem_creations == 2
 
 
 def test_unregistered_picker_choice_raises():
@@ -254,7 +272,7 @@ def test_requires_at_least_one_tactic():
 # --- genuine concurrent multi-tactic partition shape (raw Partitioner) ---
 
 
-def _even_split_picker(game, free_robots, prev_partition, applicable_tactic_ids):
+def _even_split_picker(game, free_robots, prev_partition, available_tactic_ids):
     """Splits the free pool in half between 'a' and 'b', by sorted id."""
     ordered = sorted(free_robots)
     half = len(ordered) // 2
@@ -277,7 +295,7 @@ def test_two_tactics_run_concurrently_each_tick():
 def test_mem_resets_only_for_the_tactic_whose_robots_changed():
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": frozenset({1, 2}), "b": frozenset({3})}
 
     strategy = Strategy(
@@ -295,13 +313,56 @@ def test_mem_resets_only_for_the_tactic_whose_robots_changed():
     assert tactic_b.mem_creations == 1
 
 
+@pytest.mark.parametrize("keeps_mem", [False, True])
+def test_keeps_mem_on_robot_change_survives_a_robot_leaving_but_not_a_release(keeps_mem):
+    tactic = RecordingTactic()
+    tactic.keeps_mem_on_robot_change = keeps_mem
+    partitions = iter([{"a": frozenset({1, 2, 3})}, {"a": frozenset({1, 2})}, {}, {"a": frozenset({1, 2})}])
+
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=lambda game, free_robots, prev, available_tactic_ids: next(partitions),
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    strategy.tick(_FakeGame())
+    strategy.tick(_FakeGame())  # robot 3 leaves the slot
+    assert tactic.mem_creations == (1 if keeps_mem else 2)
+    assert strategy._slots["a"].mem.tick_count == (2 if keeps_mem else 1)
+
+    strategy.tick(_FakeGame())  # slot released
+    strategy.tick(_FakeGame())  # and given robots again: always a fresh mem
+    assert tactic.mem_creations == (2 if keeps_mem else 3)
+    assert strategy._slots["a"].mem.tick_count == 1
+
+
+def test_keeps_mem_on_robot_change_starts_afresh_after_an_explicitly_empty_slot():
+    """Copilot on #141: a partition may give a slot an empty robot set, which releases it
+    like leaving it out; the kept memory survived that and was reused on reassignment."""
+    tactic = RecordingTactic()
+    tactic.keeps_mem_on_robot_change = True
+    partitions = iter([{"a": frozenset({1, 2})}, {"a": frozenset()}, {"a": frozenset({1, 2})}])
+
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=lambda game, free_robots, prev, available_tactic_ids: next(partitions),
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    for _ in range(3):
+        strategy.tick(_FakeGame())
+
+    assert tactic.mem_creations == 2
+    assert strategy._slots["a"].mem.tick_count == 1
+
+
 def test_committed_group_keeps_its_robots_while_other_group_still_reassigns():
     committed_tactic = RecordingTactic(committed=True)
     other_tactic = RecordingTactic(committed=False)
 
     calls = []
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         calls.append(free_robots)
         return {"b": free_robots}
 
@@ -334,7 +395,7 @@ def test_picker_assigning_to_a_committed_tactic_raises():
     committed_tactic = RecordingTactic(committed=True)
     other_tactic = RecordingTactic(committed=False)
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}  # illegal: "a" is committed and pinned
 
     strategy = Strategy(
@@ -358,7 +419,7 @@ def test_partition_may_leave_a_free_robot_unassigned():
     `Strategy._validate_partition`'s docstring."""
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def missing_robot_picker(game, free_robots, prev, applicable_tactic_ids):
+    def missing_robot_picker(game, free_robots, prev, available_tactic_ids):
         ordered = sorted(free_robots)
         return {"a": frozenset(ordered[:-1]), "b": frozenset()}  # drops the last robot
 
@@ -376,7 +437,7 @@ def test_partition_may_leave_a_free_robot_unassigned():
 def test_partition_rejects_a_robot_outside_the_outfield_pool():
     tactic_a = RecordingTactic()
 
-    def rogue_robot_picker(game, free_robots, prev, applicable_tactic_ids):
+    def rogue_robot_picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots | {99}}  # invents a robot id outside the pool
 
     strategy = Strategy(
@@ -392,7 +453,7 @@ def test_partition_rejects_a_robot_outside_the_outfield_pool():
 def test_overlapping_partition_raises():
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
 
-    def overlapping_picker(game, free_robots, prev, applicable_tactic_ids):
+    def overlapping_picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots, "b": free_robots}  # same robots in both tactics
 
     strategy = Strategy(
@@ -411,7 +472,7 @@ def test_barrier_reset_clears_all_tactics_and_unpins_commitments():
 
     calls = []
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         calls.append(free_robots)
         return {"b": free_robots}
 
@@ -447,7 +508,7 @@ def test_inapplicable_tactic_is_never_proposed_robots():
     tactic_a = RecordingTactic(applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}
 
     strategy = Strategy(
@@ -468,7 +529,7 @@ def test_inapplicable_tactic_with_no_robots_proposed_does_not_raise():
     tactic_a = RecordingTactic(applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}  # never names "a"
 
     strategy = Strategy(
@@ -490,7 +551,7 @@ def test_committed_tactic_is_never_asked_applicable():
     committed_tactic = RecordingTactic(committed=True, applicable=False)
     other_tactic = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}
 
     strategy = Strategy(
@@ -508,6 +569,37 @@ def test_committed_tactic_is_never_asked_applicable():
     assert strategy.active_partition.get("a") == frozenset({1, 2})
 
 
+def test_committed_tactic_id_is_withheld_from_partitioner_until_released():
+    """The contract every `Partitioner` relies on instead of re-deriving it from
+    `prev_partition`: a committed slot's tactic id is absent from
+    `available_tactic_ids` (so "not available" already covers "pinned"), and
+    reappears the tick its commitment ends.
+    """
+    tactic_a = RecordingTactic(committed=True)
+    tactic_b = RecordingTactic()
+    seen: list[frozenset[str]] = []
+
+    def picker(game, free_robots, prev, available_tactic_ids):
+        seen.append(available_tactic_ids)
+        return {"b": free_robots}
+
+    strategy = Strategy(
+        tactics={"a": tactic_a, "b": tactic_b},
+        partitioner=picker,
+        outfield_robot_ids=(1, 2, 3),
+        ctx=_ctx(),
+    )
+    strategy._slot_for("a").assigned_robots = frozenset({1})
+    strategy._slot_for("a").mem = tactic_a.initial_mem()
+
+    strategy.tick(_FakeGame())
+    assert seen[-1] == frozenset({"b"})
+
+    tactic_a._committed = False
+    strategy.tick(_FakeGame())
+    assert seen[-1] == frozenset({"a", "b"})
+
+
 def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allow():
     """Once a commitment ends, applicable() is asked for the first time and
     the tactic is evicted immediately if it says False — no special-casing
@@ -516,7 +608,7 @@ def test_tactic_becomes_reassignable_once_commitment_and_applicability_both_allo
     tactic_a = RecordingTactic(committed=True, applicable=False)
     tactic_b = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"b": free_robots}
 
     strategy = Strategy(
@@ -545,7 +637,7 @@ def test_pause_freezes_without_resetting_any_tactic():
     docstring for why."""
     tactic_a = RecordingTactic()
 
-    def picker(game, free_robots, prev, applicable_tactic_ids):
+    def picker(game, free_robots, prev, available_tactic_ids):
         return {"a": free_robots}
 
     strategy = Strategy(
@@ -561,7 +653,7 @@ def test_pause_freezes_without_resetting_any_tactic():
     assert commands == {}
     assert tactic_a.mem_creations == 1
 
-    strategy.tick(_FakeGame(RefereeCommand.FORCE_START))
+    strategy.tick(_FakeGame(RefereeCommand.NORMAL_START))
     assert tactic_a.mem_creations == 1
 
 
@@ -741,3 +833,57 @@ def test_match_log_skips_barrier_reset_event_when_nothing_was_assigned():
 
     tactic_ids = [e.tactic_id for e in strategy.match_log.events() if isinstance(e, IntentionEvent)]
     assert "referee reset" not in tactic_ids
+
+
+# --- their two-stage restart after NORMAL_START ---
+
+
+class _RestartGame:
+    """A referee command, our colour, and a ball position — all the restart hold reads."""
+
+    def __init__(self, command: RefereeCommand, ball_x: float = 0.0):
+        from types import SimpleNamespace
+
+        self.referee = _FakeReferee(command)
+        self.my_team_is_yellow = True
+        self.ball = SimpleNamespace(p=SimpleNamespace(x=ball_x, y=0.0))
+
+
+def _held_restart_strategy():
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+        referee_overrides={
+            RefereeCommand.DIRECT_FREE_BLUE: lambda game, mc: {1: "keep-out", 2: "keep-out"},
+            RefereeCommand.PREPARE_KICKOFF_BLUE: lambda game, mc: {1: "own-half", 2: "own-half"},
+            RefereeCommand.DIRECT_FREE_YELLOW: lambda game, mc: {1: "kicker", 2: "wait"},
+        },
+    )
+    return strategy, tactic
+
+
+@pytest.mark.parametrize(
+    "restart, held", [(RefereeCommand.DIRECT_FREE_BLUE, "keep-out"), (RefereeCommand.PREPARE_KICKOFF_BLUE, "own-half")]
+)
+def test_their_restart_positioning_holds_after_normal_start_until_the_ball_is_in_play(restart, held):
+    # decoy_and_overload_vs_tiki_taka / _vs_give_and_go_solo (2026-09-28): the
+    # defending team treated NORMAL_START as live play, walked onto the unkicked
+    # ball and wedged the kicker for the full 10 s restart timeout.
+    strategy, tactic = _held_restart_strategy()
+    strategy.tick(_RestartGame(restart))
+
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.0)) == {1: held, 2: held}
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.04)) == {1: held, 2: held}
+    assert tactic.mem_creations == 0
+
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.06)) == {1: "cmd-1", 2: "cmd-2"}
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START, ball_x=0.0)) == {1: "cmd-1", 2: "cmd-2"}
+
+
+def test_our_own_restart_hands_over_at_normal_start():
+    strategy, _ = _held_restart_strategy()
+    strategy.tick(_RestartGame(RefereeCommand.DIRECT_FREE_YELLOW))
+    assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START)) == {1: "cmd-1", 2: "cmd-2"}

@@ -1,43 +1,48 @@
-## Pipeline Method Explanation
+# Pipeline method
 
-
-### Problem: 
-- When ingesting new data, we may want to combine this new data with our previous knowledge eg, Kalman filter. Currently this requires writing many new functions in the GameFrame object making it bloated.
-- Interface for accessing past, current and future (predictions) is not uniform
-- Uncertainty on strategies which we originally aimed to address with a Behaviour Tree;
-  the strategy layer has since been rewritten kernel-native and no longer uses one
-  (see `docs/STRATEGY_DEVELOPMENT.md`)
-  
-### System diagram
 ![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
-### Solution
-Solve this by maintaining the idea that the game represents everything we have about the "true current state" of the game but allow it to be passed through a pipeline in which it is repeatedly augmented by new data. 
 
-The pipeline is composed of Refiner operators which take the current game state and a new datapoint, and return an updated game state.
+How vision, robot and referee data become one `Game` state, and how one tick turns that
+state into robot commands. Everything below runs inside `StrategyRunner`
+(`utama_core/run/strategy_runner.py`).
 
-Later pipeline stages use the game from earlier pipeline stages, so it sees earlier updates in the game. For example the has_ball refiner uses the IR data for our own robots and the positions in game for the enemy robots (and so the position refiner happens first in the pipeline). This illustrates the idea that we try to make everything as equal as possible for enemy and friendly robots (both have has_ball for example) but generate estimates using different data sources.  
+## Data in
 
-We think this method resolves all of the concerns: 
- - How and where to combine multiple cameras? We have a camera combiner inside the position refiner which does this.
+The referee is one of three sources (`run/referee_source.py`): none, the official
+GameController over the network, or `CustomReferee`, which runs in the same process and is what
+rsim matches and tournaments use (`docs/custom_referee.md`).
 
- - What if we get behind and need to drop frames? We've replaced the queues with 1 place buffers and we run the main loop at a fixed frame rate, taking the latest data available from every camera, the robot and the referee once per frame.
- -  Frame Limiting - Done through the concept of buffers
-Estop - Done by a field in game
-Current Vel cacls - Done by a field in game 
-Prediction - handled by predictors
-GameFrame gating - See diagram
-Concurrency - deque is thread safe
+**Problem.** Combining new data with prior knowledge (e.g. a Kalman filter) kept bloating
+`GameFrame` with new functions, and access to past and current state wasn't uniform.
 
-### Key system points
-- Main loop is now a fixed frequency
-- GameFrame is immutable
-- Separation of receivers (network) and refiners allow easier testing 
-- Formalisation of Past, Present, Future games
-- `GameHistory` (`utama_core/entities/game/game_history.py`) stores historical records
+**Solution.** `Game` holds our best estimate of the true current state and is updated by a
+chain of **refiners**: each takes the current game frame and one kind of new data and returns
+an updated frame. Later refiners see earlier updates: `RobotInfoRefiner` takes has-ball from our
+robots' IR, or infers it from the refined positions for a robot whose IR isn't trusted, and
+takes the enemy's from their responses when the sim provides them (both teams in rsim).
+Friendly and enemy robots expose the same fields, estimated from different sources.
 
-> The `GameTimeline` / `Predictions` interface described in earlier drafts of this
-> design (uniform past/present/future access with pluggable per-property predictors)
-> was never built. `GameHistory` and the `Refiner` pipeline above shipped; predictions
-> are currently handled ad hoc per call site, not through a shared predictor interface.
+- **Multiple cameras** are combined inside `PositionRefiner`.
+- **Falling behind:** receivers fill one-slot buffers (`deque(maxlen=1)`), and the main loop
+  runs at a fixed rate and takes only the latest vision and referee data each tick.
+- `GameFrame` is immutable; receivers (network) are separate from refiners, which makes
+  testing easier.
+- `GameHistory` (`utama_core/entities/game/game_history.py`) stores past frames.
+- Before the first tick, `GameGater` waits until the frames hold the expected robots and ball.
 
+The uniform `GameTimeline`/`Predictions` interface (pluggable per-property predictors) from
+earlier drafts was never built; predictions are ad hoc per call site.
 
+## One tick
+
+`CustomReferee` steps first (when in-process), then each side refines its frame, the replay
+writer and `MatchStats` record it, and `AbstractStrategy.step` runs the strategy layer:
+`Strategy.tick` (referee overrides, tactic slots), tactics, skills, then the `MotionController`
+(fpp, dwa or trajsample) turns targets into one `RobotCommand` per robot for rsim, grSim or the
+real robots.
+
+In rsim both teams run in one `StrategyRunner`: each side has its own refiners, strategy and
+motion controller and steps in turn, alternating which goes first. `MatchStats` and the replay
+writer follow one side's frames. The dashboard's vision stream renders the same frames.
+`docs/STRATEGY_DEVELOPMENT.md` covers the strategy layer; `docs/motion_planning_comparison.md`
+the motion controllers.

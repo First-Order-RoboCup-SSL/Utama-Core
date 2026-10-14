@@ -108,7 +108,10 @@ def turn_on_spot(
         )
         local_left_vel = -held_turn.angular_vel * PIVOT_RADIUS
         pivot_push_global = rotate_vector(0.0, local_left_vel, -robot.orientation)
-        for enemy in game.enemy_robots.values():
+        # A teammate's body blocks the sweep exactly as an enemy's does (two tactics'
+        # carriers on one ball: high_line_zone_vs_low_block, 2026-09-28).
+        blockers = [r for rid, r in game.friendly_robots.items() if rid != robot_id] + list(game.enemy_robots.values())
+        for enemy in blockers:
             if enemy is None:
                 continue
             to_enemy = enemy.p - robot.p

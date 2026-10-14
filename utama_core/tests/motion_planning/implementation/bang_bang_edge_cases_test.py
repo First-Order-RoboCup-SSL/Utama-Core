@@ -218,8 +218,25 @@ _KNOWN_DEFECT = (
 )
 
 
-@pytest.mark.xfail(strict=False, reason=_KNOWN_DEFECT)
-@pytest.mark.parametrize("seed", range(_N_SEEDS))
+def _seeds_with_known_defect(n_seeds: int, defect_seeds: frozenset) -> list:
+    """Seeds for a random sweep where only `defect_seeds` hit the defect. Those are
+    strict xfails and every other seed must pass, so a regression in a seed outside
+    the defect region fails instead of hiding as an xfail, and a fix shows as XPASS."""
+    xfail = pytest.mark.xfail(strict=True, reason=_KNOWN_DEFECT)
+    return [pytest.param(seed, marks=xfail) if seed in defect_seeds else seed for seed in range(n_seeds)]
+
+
+_ACCELERATION_BOUND_DEFECT_SEEDS = frozenset(
+    {0, 3, 11, 14, 18, 31, 33, 37, 40, 43, 46, 48, 50, 53, 60, 63, 66, 68, 71, 73, 83, 84, 85, 86}
+    | {92, 94, 98, 100, 101, 106, 108, 114, 121, 122, 125, 127, 133, 141, 148, 149, 151, 155}
+    | {156, 161, 162, 168, 174, 196}
+)
+_P0_EQUALS_P1_DEFECT_SEEDS = frozenset(
+    {0, 1, 3, 6, 7, 11, 12, 13, 15, 16, 17, 20, 21, 22, 30, 33, 34, 37, 38, 39, 40, 41, 42, 43} | {44, 45, 46, 47, 48}
+)
+
+
+@pytest.mark.parametrize("seed", _seeds_with_known_defect(_N_SEEDS, _ACCELERATION_BOUND_DEFECT_SEEDS))
 def test_bang_bang_1d_random_acceleration_bound(seed):
     """Covers every region, including same-direction and opposing-direction
     overspeed (both fixed -- see module docstring)."""
@@ -251,8 +268,7 @@ def test_bang_bang_1d_v0_opposes_direction_to_target(seed):
     _assert_acceleration_bound(trajectory, a_max)
 
 
-@pytest.mark.xfail(strict=False, reason=_KNOWN_DEFECT)
-@pytest.mark.parametrize("seed", range(50))
+@pytest.mark.parametrize("seed", _seeds_with_known_defect(50, _P0_EQUALS_P1_DEFECT_SEEDS))
 def test_bang_bang_1d_p0_equals_p1_with_nonzero_v0(seed):
     """Already at the target but still moving -- must brake to a stop at
     that exact point, not overshoot or undershoot."""
@@ -270,7 +286,6 @@ def test_bang_bang_1d_p0_equals_p1_with_nonzero_v0(seed):
     _assert_acceleration_bound(trajectory, a_max)
 
 
-@pytest.mark.xfail(strict=False, reason=_KNOWN_DEFECT)
 @pytest.mark.parametrize("seed", range(50))
 def test_bang_bang_1d_tiny_distance(seed):
     """1e-6-scale distances -- must not blow up numerically or fail to
@@ -403,7 +418,6 @@ def test_trajectory_2d_p0_equals_p1_with_nonzero_v0(seed):
     assert math.hypot(*end_vel) <= _END_TOL + 1e-9
 
 
-@pytest.mark.xfail(strict=False, reason=_KNOWN_DEFECT)
 @pytest.mark.parametrize("seed", range(50))
 def test_trajectory_2d_tiny_distance(seed):
     rng = random.Random(seed + 10000)

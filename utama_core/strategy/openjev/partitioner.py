@@ -26,7 +26,7 @@ from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.kernel_strategy import _tiki_taka_picker
+from utama_core.strategy.tiki_taka import _tiki_taka_picker
 from utama_core.strategy.openjev import encoder
 from utama_core.strategy.openjev.client import OpenJevClient
 from utama_core.strategy.openjev.splits import SPLIT_KEYS, allocate, make_tactics

@@ -93,15 +93,15 @@ _RELEASE_RANGE = 0.35
 
 # Per-robot "have we committed to a direct approach and not yet released"
 # state — see `COMMIT_RANGE`'s docstring for why this module needs it now.
-# Keyed by `robot_id` only (not team), matching every other caller in this
-# module/its call sites (`go_to_ball`, tactics) which only ever pass
-# friendly robots through here. Never grows unboundedly: at most one entry
-# per robot ID actually in play.
-_COMMITTED_ROBOTS: dict[int, bool] = {}
+# Keyed by (team, robot_id): both teams' strategies run in one process with
+# the same robot ids. A new match clears it (`StrategyRunner` calls
+# `reset_shield_state()`), since a round-robin worker plays many matches.
+_COMMITTED_ROBOTS: dict[tuple[bool, int], bool] = {}
 
 
-def reset_shield_state(robot_id: int) -> None:
-    """Forget any committed-direct-approach state for `robot_id`.
+def reset_shield_state(robot_id: Optional[int] = None) -> None:
+    """Forget any committed-direct-approach state for `robot_id` (either team's), or for
+    every robot when None.
 
     Call this wherever a robot's ball-approach is being restarted from
     scratch for an unrelated reason (new possession, role reassignment) so a
@@ -111,7 +111,10 @@ def reset_shield_state(robot_id: int) -> None:
     approach with the enemy now far away simply won't re-trigger the
     `CONTEST_RANGE` check in the first place.
     """
-    _COMMITTED_ROBOTS.pop(robot_id, None)
+    if robot_id is None:
+        _COMMITTED_ROBOTS.clear()
+    for team_is_yellow in (True, False):
+        _COMMITTED_ROBOTS.pop((team_is_yellow, robot_id), None)
 
 
 def nearest_contesting_enemy(game: Game, ball: Vector2D) -> Optional[Vector2D]:
@@ -164,7 +167,7 @@ def shielded_approach_angle(game: Game, robot: Vector2D, ball: Vector2D, robot_i
         # shielding on a later, unrelated one once this robot is done with
         # the current ball entirely.
         if dist > _RELEASE_RANGE:
-            _COMMITTED_ROBOTS.pop(robot_id, None)
+            _COMMITTED_ROBOTS.pop((game.my_team_is_yellow, robot_id), None)
         return robot.angle_to(ball), False
 
     # Hysteresis: once committed to a direct approach, stay committed until
@@ -174,12 +177,13 @@ def shielded_approach_angle(game: Game, robot: Vector2D, ball: Vector2D, robot_i
     # this replaces (bare-threshold chatter repeatedly re-triggering large
     # `target_oren` jumps faster than the orientation PID could recover from
     # the previous one).
-    already_committed = _COMMITTED_ROBOTS.get(robot_id, False)
+    key = (game.my_team_is_yellow, robot_id)
+    already_committed = _COMMITTED_ROBOTS.get(key, False)
     if already_committed:
         shielding = dist > _RELEASE_RANGE
     else:
         shielding = dist > COMMIT_RANGE
-    _COMMITTED_ROBOTS[robot_id] = not shielding
+    _COMMITTED_ROBOTS[key] = not shielding
 
     if shielding:
         # Approach from the far side of the ball relative to the contesting

@@ -200,11 +200,12 @@ cython_debug/
 
 AutoReferee/
 ssl-game-controller/
-replays/
+# No trailing slash: also ignores the symlink a worktree points at the main checkout's replays.
+replays
 renders/
 scratch/
 scenario_bench_results/
-utama_core/replay/banks/
+benchmark_results/
 
 # local agent-tool config dirs
 .codex/
@@ -214,9 +215,8 @@ utama_core/replay/banks/
 .vscode
 
 .ruff_cache/
-# pixi environments
-.pixi/*
-!.pixi/config.toml
+# pixi environments (no trailing slash: also ignores a worktree's .pixi symlink)
+.pixi
 
 # RL training artifacts
 outputs/

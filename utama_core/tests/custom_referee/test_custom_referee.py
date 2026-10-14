@@ -19,53 +19,18 @@ from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.custom_referee.state_machine import GameStateMachine
 from utama_core.entities.data.referee import RefereeData
-from utama_core.entities.data.vector import Vector2D, Vector3D
-from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
-from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.tests.custom_referee.helpers import ball as _ball
+from utama_core.tests.custom_referee.helpers import frame as _frame
+from utama_core.tests.custom_referee.helpers import robot as _robot
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
-
-
-def _ball(x: float, y: float, z: float = 0.0, vx: float = 0.0, vy: float = 0.0, vz: float = 0.0) -> Ball:
-    return Ball(p=Vector3D(x, y, z), v=Vector3D(vx, vy, vz), a=Vector3D(0, 0, 0))
-
-
-def _robot(robot_id: int, x: float, y: float, is_friendly: bool, has_ball: bool = False) -> Robot:
-    return Robot(
-        id=robot_id,
-        is_friendly=is_friendly,
-        has_ball=has_ball,
-        p=Vector2D(x, y),
-        v=Vector2D(0, 0),
-        a=Vector2D(0, 0),
-        orientation=0.0,
-    )
-
-
-def _frame(
-    ball: Ball,
-    friendly_robots: dict | None = None,
-    enemy_robots: dict | None = None,
-    my_team_is_yellow: bool = True,
-    my_team_is_right: bool = False,
-    ts: float = 10.0,
-) -> GameFrame:
-    return GameFrame(
-        ts=ts,
-        my_team_is_yellow=my_team_is_yellow,
-        my_team_is_right=my_team_is_right,
-        friendly_robots=friendly_robots or {},
-        enemy_robots=enemy_robots or {},
-        ball=ball,
-        referee=None,
-    )
 
 
 def _state_machine() -> GameStateMachine:
@@ -239,6 +204,21 @@ class TestOutOfBoundsRule:
         assert violation is not None
         assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE  # non-kicking team
 
+    def test_every_goal_kick_is_placed_at_the_same_spot(self):
+        """A ball over the goal line and a disallowed goal (and a penalty out of
+        time) are all goal kicks, so they share one spot: 0.5 m from the touch
+        line. The out-of-bounds goal kick sat 0.5 m from it, the others 0.2 m."""
+        rule = OutOfBoundsRule()
+        # Blue (enemy, on the right) kicks it over yellow's goal line on the left: a goal kick.
+        kicker = {0: _robot(0, -3.0, -2.0, is_friendly=False, has_ball=True)}
+        rule.check(_frame(ball=_ball(-3.0, -2.0), enemy_robots=kicker, ts=9.9), GEO, RefereeCommand.NORMAL_START)
+        violation = rule.check(_frame(ball=_ball(-4.55, -2.9), ts=10.0), GEO, RefereeCommand.NORMAL_START)
+        assert violation is not None
+        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
+        spot = (-(GEO.half_length - 1.0), -(GEO.half_width - 0.5))
+        assert violation.designated_position == pytest.approx(spot)
+        assert GEO.goal_kick_position(-1.0, -2.9) == pytest.approx(spot)
+
     def test_unknown_last_touch_has_no_colour_bias(self):
         """No robots in the frame → no restart can be attributed; the rule
         must not default to a hardcoded colour."""
@@ -295,14 +275,17 @@ class TestBallSpeedRule:
         assert rule.check(slow, GEO, RefereeCommand.NORMAL_START) is None
         assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
 
-    def test_free_kick_assigned_to_non_kicking_team(self):
-        """Friendly (yellow) kicked → enemy (blue) gets the free kick."""
+    def test_non_stopping_foul_charged_to_the_kicking_team(self):
+        """SSL rulebook §8.4.2 lists Ball Speed as a non-stopping foul: friendly
+        (yellow) kicked too fast -> yellow is charged, play continues. Ours used
+        to stop play with a free kick to the other team."""
         rule = BallSpeedRule(max_speed_mps=6.5)
         friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert violation.is_stopping is False
+        assert violation.offending_teams == (True,)
 
     def test_inactive_outside_active_play(self):
         rule = BallSpeedRule(max_speed_mps=6.5)
@@ -317,32 +300,13 @@ class TestBallSpeedRule:
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
 
     def test_enemy_kick_attributed_symmetrically(self):
-        """Enemy (blue) kicked too fast → friendly (yellow) gets the free kick."""
+        """Enemy (blue) kicked too fast → blue is charged."""
         rule = BallSpeedRule(max_speed_mps=6.5)
         enemy = {0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), enemy_robots=enemy, my_team_is_yellow=True)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW
-
-    def test_designated_position_is_projected_clear_of_the_defense_area(self):
-        """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
-        ExcessiveDribblingRule/PushingRule (roadmap item 15/16): a fast kick
-        struck from right at a defense-area edge (e.g. a keeper's clearance)
-        must not hand back a `designated_position` inside that box."""
-        rule = BallSpeedRule(max_speed_mps=6.5)
-        friendly = {0: _robot(0, -3.6, 0.0, is_friendly=True, has_ball=True)}
-        frame = _frame(
-            ball=_ball(-3.6, 0.0, vx=7.0, vy=0.0),
-            friendly_robots=friendly,
-            my_team_is_yellow=True,
-            my_team_is_right=False,  # friendly (yellow) defends the left area
-        )
-        violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert violation is not None
-        assert violation.designated_position is not None
-        assert not GEO.is_in_left_defense_area(*violation.designated_position)
-        assert not GEO.is_in_right_defense_area(*violation.designated_position)
+        assert violation.offending_teams == (False,)
 
     def test_scrum_kick_tie_broken_by_distance_not_colour(self):
         """Both teams in contact at the kick: the closer robot's team is the
@@ -353,7 +317,7 @@ class TestBallSpeedRule:
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, enemy_robots=enemy)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
-        assert violation.next_command == RefereeCommand.DIRECT_FREE_YELLOW  # enemy kicked, friendly gets FK
+        assert violation.offending_teams == (False,)  # enemy (blue) kicked
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +446,51 @@ class TestDoubleTouchRule:
         )
         assert violation2 is None
 
+    @pytest.mark.parametrize(("enemy_distance", "expect_foul"), [(0.12, False), (0.13, True)])
+    def test_contact_without_has_ball_closes_the_window(self, enemy_distance, expect_foul):
+        """A deflection or a receive that never engages the dribbler is still a
+        touch: another robot within robot + ball radius + 1cm (0.1215m) of the
+        ball closes the window, so the kicker's next touch is legal. 63 of 68
+        friendly double-touch fouls in the 2026-09-23 round-robin were this.
+        Farther away (0.13m) is not contact, and the re-touch still fouls."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
+
+        def step(kicker_has_ball: bool, ball_x: float, enemy_x: float):
+            return rule.check(
+                _frame(
+                    ball=_ball(ball_x, 0.0),
+                    friendly_robots={0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=kicker_has_ball)},
+                    enemy_robots={5: _robot(5, enemy_x, 0.0, is_friendly=False, has_ball=False)},
+                    my_team_is_yellow=True,
+                ),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+
+        assert step(True, 0.08, 3.0) is None  # kick
+        assert step(False, 2.0, 2.0 + enemy_distance) is None  # ball brushes past an enemy
+        violation = step(True, 0.08, 3.0)  # kicker touches it again
+        assert (violation is not None) is expect_foul
+
+    def test_defending_team_touching_first_leaves_no_kicker(self):
+        """Blue's free kick taken without blue's dribbler registering it: our
+        robot's first touch must not make it "the kicker" of blue's restart."""
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_BLUE)
+
+        for has_ball in (True, False, True):
+            violation = rule.check(
+                _frame(
+                    ball=_ball(0.08, 0.0),
+                    friendly_robots={0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=has_ball)},
+                    my_team_is_yellow=True,
+                ),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+            assert violation is None
+
     def test_ordinary_open_play_without_a_preceding_restart_is_never_armed(self):
         """NORMAL_START reached other than via a restart command (e.g. after a
         kickoff timeout auto-advances straight through, or mid-match with no
@@ -538,13 +547,47 @@ class TestDoubleTouchRule:
 
 class TestDefenseAreaRule:
     def _frame_with_attacker_in_defense(self, my_team_is_right: bool = False) -> GameFrame:
-        # Enemy robot inside my (left) defense area.
-        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False)}
+        # Enemy robot inside my (left) defense area, touching the ball.
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False, has_ball=True)}
         return _frame(
-            ball=_ball(0, 0),
+            ball=_ball(-4.2, 0.5),
             enemy_robots=enemy,
             my_team_is_right=my_team_is_right,
         )
+
+    def test_attacker_touching_the_ball_in_the_box_is_a_non_stopping_foul(self):
+        # SSL rulebook §8.4.2 "Attacker Touched Ball In Opponent Defense Area" is
+        # non-stopping; ours stopped play and awarded a free kick.
+        v = DefenseAreaRule().check(self._frame_with_attacker_in_defense(), GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.is_stopping is False
+        assert v.offending_teams == (False,)  # enemy is blue here
+
+    def test_attacker_in_the_box_without_touching_the_ball_is_no_foul(self):
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False)}
+        frame = _frame(ball=_ball(0, 0), enemy_robots=enemy, my_team_is_right=False)
+        assert DefenseAreaRule().check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_attacker_partially_inside_touching_the_ball_is_a_foul(self):
+        # "partially or fully inside": centre just outside the box edge (x = -3.5),
+        # body over it.
+        enemy = {0: _robot(0, -3.45, 0.5, is_friendly=False, has_ball=True)}
+        frame = _frame(ball=_ball(-3.35, 0.5), enemy_robots=enemy, my_team_is_right=False)
+        assert DefenseAreaRule().check(frame, GEO, RefereeCommand.NORMAL_START) is not None
+
+    def test_attacker_foul_not_raised_again_within_two_seconds(self):
+        # §8.4.2: "cannot be triggered again until the foul condition has stopped
+        # being violated or there has been 2 seconds since the foul was first triggered".
+        rule = DefenseAreaRule()
+        enemy = {0: _robot(0, -4.3, 0.5, is_friendly=False, has_ball=True)}
+
+        def check(ts):
+            frame = _frame(ball=_ball(-4.2, 0.5), enemy_robots=enemy, my_team_is_right=False, ts=ts)
+            return rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+
+        assert check(10.0) is not None
+        assert check(11.9) is None
+        assert check(12.0) is not None
 
     def test_fires_during_normal_start(self):
         rule = DefenseAreaRule()
@@ -589,6 +632,35 @@ class TestDefenseAreaRule:
         assert v is not None
         assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
         assert v.counts_toward_foul_counter is False
+
+    @pytest.mark.parametrize("we_defend_right", [False, True])
+    def test_penalty_places_the_ball_on_the_mark_in_front_of_the_fouling_goal(self, we_defend_right):
+        # clear_press_plus_vs_high_line_zone (2026-09-28): the penalty carried no
+        # designated_position, so the ball stayed where the foul happened, a blue
+        # robot touched it during PREPARE_PENALTY, and the keep-out free kick that
+        # followed was taken on a ball rolling into the net -- stalled 42 s.
+        rule = DefenseAreaRule(max_defenders=1)
+        own_goal_x = GEO.half_length if we_defend_right else -GEO.half_length
+        friendly = {
+            0: _robot(0, own_goal_x * 0.95, 0.0, is_friendly=True),
+            1: _robot(1, own_goal_x * 0.95, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(ball=_ball(own_goal_x * 0.95, 0.5), friendly_robots=friendly, my_team_is_right=we_defend_right)
+        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
+        assert v.designated_position == pytest.approx((own_goal_x * 0.5, 0.0))
+
+    def test_penalty_restart_goes_through_ball_placement(self):
+        sm = _state_machine()
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True),
+            1: _robot(1, -4.3, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(ball=_ball(-4.3, 0.5), friendly_robots=friendly)
+        v = DefenseAreaRule(max_defenders=1).check(frame, GEO, RefereeCommand.NORMAL_START)
+        data = sm.step(current_time=1.0, violation=v, game_frame=frame)
+        assert data.next_command == RefereeCommand.BALL_PLACEMENT_BLUE
+        assert data.designated_position == pytest.approx((-GEO.half_length * 0.5, 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +714,41 @@ class TestKeepOutRule:
         friendly = {0: _robot(0, 0.1, 0.0, is_friendly=True)}
         frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly)
         assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_defender_too_close_is_a_non_stopping_foul_on_the_defending_team(self):
+        # SSL rulebook §8.4.3 "Defender Too Close To Ball": a foul that resets the
+        # kicking team's timer, not a stop. Ours stopped play and re-awarded the
+        # free kick, and the sim shortcut turned that into a FORCE_START scramble.
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}  # we are yellow
+        v = rule.check(_frame(ball=_ball(0.0, 0.0), friendly_robots=friendly), GEO, RefereeCommand.DIRECT_FREE_BLUE)
+        assert v is not None
+        assert v.is_stopping is False
+        assert v.offending_teams == (True,)
+        assert v.counts_toward_foul_counter is True
+
+    def test_not_raised_again_within_two_seconds(self):
+        # §8.4.3: "Each foul has a grace period of 2 seconds per team until it is raised again."
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}
+
+        def check(ts):
+            frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly, ts=ts)
+            return rule.check(frame, GEO, RefereeCommand.DIRECT_FREE_BLUE)
+
+        assert check(10.0) is not None
+        assert check(11.99) is None
+        assert check(12.0) is not None
+
+    @pytest.mark.parametrize("command", [RefereeCommand.PREPARE_PENALTY_BLUE, RefereeCommand.STOP])
+    def test_no_automatic_sanction_during_a_penalty_or_stop(self, command):
+        # §8.4.3 names only the opponent's kick-off or free kick. During STOP there
+        # is "no automatic sanction"; penalty positioning is §8.3.4 "Disrespect
+        # Procedures", a human referee's call (and the defending keeper is exempt).
+        rule = KeepOutRule(radius_meters=0.5, violation_persistence_frames=1)
+        friendly = {0: _robot(0, 0.2, 0.0, is_friendly=True)}
+        frame = _frame(ball=_ball(0.0, 0.0), friendly_robots=friendly)
+        assert rule.check(frame, GEO, command) is None
 
 
 # ---------------------------------------------------------------------------

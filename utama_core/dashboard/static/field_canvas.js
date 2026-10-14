@@ -5,7 +5,8 @@
 //
 // Usage:
 //   const view = new FieldCanvas(canvasEl, geometry, { myTeamIsRight, myTeamIsYellow });
-//   view.draw({ robots: {friendly:[...], enemy:[...]}, ball: {...}, designated: [x,y], tactics: {robotId: "label"} });
+//   view.draw({ robots: {friendly:[...], enemy:[...]}, ball: {...}, designated: [x,y], tactics: {robotId: "label"},
+//               tactic_tags: {robotId: "attack" | "defense" | "mixed"} });
 
 const FIELD_COLORS = {
   pitch: "#242832",
@@ -17,6 +18,16 @@ const FIELD_COLORS = {
   laneOpen: "#5fb87a",
   laneBlocked: "#c0524a",
   committed: "#e0a14a",
+};
+
+// Ring colour per `TacticTag` value (utama_core/engine/tactic.py) around a
+// friendly robot, so the team's attack/defense split reads at a glance while
+// the body keeps its jersey colour. Purely a display of the tag the robot's
+// current tactic declares; nothing in the scheduler reads it.
+const TACTIC_TAG_COLORS = {
+  attack: "#d9694f",
+  defense: "#4fb3a9",
+  mixed: "#a68fd6",
 };
 
 // Robot body radius, world meters -> px is ROBOT_RADIUS * scale so the drawn
@@ -179,6 +190,7 @@ class FieldCanvas {
 
     const robots = state.robots;
     const tactics = state.tactics || {};
+    const tacticTags = state.tactic_tags || {};
     if (robots) {
       const r = Math.max(2, ROBOT_RADIUS_M * scale);
       const friendlyFill = this.myTeamIsYellow ? FIELD_COLORS.yellow : FIELD_COLORS.blue;
@@ -190,6 +202,14 @@ class FieldCanvas {
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, 2 * Math.PI);
           ctx.fill();
+          const tagColor = label ? TACTIC_TAG_COLORS[tacticTags[String(bot.id)]] : undefined;
+          if (tagColor) {
+            ctx.strokeStyle = tagColor;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + 2, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
           // Heading dash extends past the body edge so it reads as a
           // direction pointer rather than disappearing into the fill.
           ctx.strokeStyle = FIELD_COLORS.pitch;
@@ -212,6 +232,7 @@ class FieldCanvas {
       };
       drawTeam(robots.enemy, enemyFill, false);
       drawTeam(robots.friendly, friendlyFill, true);
+      this._drawTagLegend(ctx, tacticTags);
     }
 
     if (state.ball) {
@@ -223,6 +244,27 @@ class FieldCanvas {
     }
 
     this._drawOverlays(ctx, state, robots, toX, toY);
+  }
+
+  // Small key for the tactic-tag rings, only when some robot has a tag.
+  _drawTagLegend(ctx, tacticTags) {
+    const present = new Set(Object.values(tacticTags));
+    const entries = Object.keys(TACTIC_TAG_COLORS).filter((tag) => present.has(tag));
+    if (!entries.length) return;
+    ctx.font = "7px ui-monospace, monospace";
+    ctx.textAlign = "left";
+    let x = 8;
+    const y = 10;
+    for (const tag of entries) {
+      ctx.strokeStyle = TACTIC_TAG_COLORS[tag];
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x + 3, y - 2, 3, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.fillStyle = FIELD_COLORS.marker;
+      ctx.fillText(tag, x + 9, y);
+      x += 9 + ctx.measureText(tag).width + 10;
+    }
   }
 
   // Tactic-specific geometric intentions (which enemy a marker covers, a

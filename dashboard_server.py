@@ -9,7 +9,7 @@ already wires up Replay and Tournament unconditionally (both are stateless
 readers of `replays/*/summary.json` and `*.pkl` files on disk), so this
 script's only job is to start the HTTP server and keep the process alive.
 Live/Referee views need a running match to attach to and so are still
-opt-in — see `demo_referee_gui_rsim.py` for a script that starts one.
+opt-in — see `examples/demo_referee_gui_rsim.py` for a script that starts one.
 
 Use this when you just want to browse recorded replays or tournament
 standings without also starting a live rsim match.

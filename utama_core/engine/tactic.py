@@ -47,8 +47,17 @@ class Tactic(Protocol[MemT]):
     tag: TacticTag
     """Which of the closed set of roles this tactic plays — see `TacticTag`."""
 
+    keeps_mem_on_robot_change: bool
+    """True if `mem` survives robots joining or leaving this tactic's slot.
+
+    Off by default (`BaseTactic`): most `mem` names robots by role, so the kernel
+    wipes it whenever the robot set changes. A tactic sets this only if its `tick`
+    already copes with a role holder leaving. It still gets a fresh `mem` after a
+    slot is released, a barrier reset, or a deadline release."""
+
     def initial_mem(self) -> MemT:
-        """Fresh state for this tactic. Called whenever its robot assignment changes."""
+        """Fresh state for this tactic. Called whenever its robot assignment changes,
+        unless `keeps_mem_on_robot_change`."""
         ...
 
     def tick(
@@ -131,6 +140,8 @@ class BaseTactic(Generic[MemT]):
     `applicable`/`is_committed`/`suggest_next` boilerplate when the defaults
     are fine. Does NOT default `tag` — every tactic must declare its own.
     """
+
+    keeps_mem_on_robot_change = False
 
     def applicable(self, game: Game) -> bool:
         return True

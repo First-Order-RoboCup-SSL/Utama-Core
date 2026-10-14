@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.excessive_dribbling_rule import (
@@ -15,6 +17,7 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.tests.custom_referee.helpers import frame as _frame
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 
@@ -34,25 +37,6 @@ def _robot(
         v=Vector2D(vx, vy),
         a=Vector2D(0, 0),
         orientation=0.0,
-    )
-
-
-def _frame(
-    ball: Ball,
-    friendly_robots: dict | None = None,
-    enemy_robots: dict | None = None,
-    my_team_is_yellow: bool = True,
-    my_team_is_right: bool = False,
-    ts: float = 10.0,
-) -> GameFrame:
-    return GameFrame(
-        ts=ts,
-        my_team_is_yellow=my_team_is_yellow,
-        my_team_is_right=my_team_is_right,
-        friendly_robots=friendly_robots or {},
-        enemy_robots=enemy_robots or {},
-        ball=ball,
-        referee=None,
     )
 
 
@@ -145,6 +129,20 @@ class TestExcessiveDribblingRule:
         assert v.rule_name == "excessive_dribbling"
         assert v.next_command == RefereeCommand.DIRECT_FREE_BLUE
         assert v.offending_teams == (True,)
+
+    @pytest.mark.parametrize("we_are_yellow", [True, False])
+    def test_violation_names_the_dribbling_robot_by_colour(self, we_are_yellow):
+        """`offending_robots` feeds the MatchStats foul log: (is_yellow, id), not (is_friendly, id)."""
+        rule = ExcessiveDribblingRule(max_dribble_meters=1.0)
+        v = None
+        for x in [0.0, 0.5, 1.2]:
+            robot = _robot(3, x, 0.0, is_friendly=True, has_ball=True)
+            v = rule.check(
+                _frame(ball=_ball(x, 0.0), friendly_robots={3: robot}, my_team_is_yellow=we_are_yellow),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+        assert v.offending_robots == ((we_are_yellow, 3),)
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as KeeperHeldBallRule above: a

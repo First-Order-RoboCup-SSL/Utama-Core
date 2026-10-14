@@ -26,6 +26,8 @@ class GoalDetectionConfig:
 class OutOfBoundsConfig:
     enabled: bool = True
     free_kick_assigner: str = "last_touch"
+    # §6.2.3 (Division B only): an aimless kick restarts from where it was kicked.
+    aimless_kick: bool = True
 
 
 @dataclass
@@ -116,6 +118,22 @@ class BallPlacementInterferenceConfig:
 
 
 @dataclass
+class NoProgressConfig:
+    """SSL rulebook §8.1 "No Progress In Game": 10 s in Division B."""
+
+    enabled: bool = True
+    max_seconds: float = 10.0
+
+
+@dataclass
+class PenaltyTimeLimitConfig:
+    """SSL rulebook §5.3.5: a penalty still in play after 10 s is stopped."""
+
+    enabled: bool = True
+    max_seconds: float = 10.0
+
+
+@dataclass
 class RulesConfig:
     goal_detection: GoalDetectionConfig = field(default_factory=GoalDetectionConfig)
     out_of_bounds: OutOfBoundsConfig = field(default_factory=OutOfBoundsConfig)
@@ -132,6 +150,8 @@ class RulesConfig:
     ball_placement_interference: BallPlacementInterferenceConfig = field(
         default_factory=BallPlacementInterferenceConfig
     )
+    no_progress: NoProgressConfig = field(default_factory=NoProgressConfig)
+    penalty_time_limit: PenaltyTimeLimitConfig = field(default_factory=PenaltyTimeLimitConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +183,9 @@ class AutoAdvanceConfig:
     # NORMAL_START → FORCE_START after kickoff_timeout_seconds if ball hasn't
     # moved (catches a stuck kickoff).
     normal_start_to_force: bool = True
+    # A half's playing time run out → the second half (kicked off by the other team) or,
+    # after it, POST_GAME.
+    end_of_half: bool = True
 
 
 @dataclass
@@ -247,6 +270,8 @@ _ALL_RULE_NAMES = frozenset(
         "crashing",
         "defense_area_stoppage",
         "ball_placement_interference",
+        "no_progress",
+        "penalty_time_limit",
     }
 )
 
@@ -274,6 +299,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
     oob_cfg = OutOfBoundsConfig(
         enabled=ob.get("enabled", True),
         free_kick_assigner=ob.get("free_kick_assigner", "last_touch"),
+        aimless_kick=ob.get("aimless_kick", True),
     )
 
     da = rules_d.get("defense_area", {})
@@ -350,6 +376,18 @@ def _parse_profile(data: dict) -> RefereeProfile:
         grace_seconds=bpi.get("grace_seconds", 2.0),
     )
 
+    np_d = rules_d.get("no_progress", {})
+    np_cfg = NoProgressConfig(
+        enabled=np_d.get("enabled", True),
+        max_seconds=np_d.get("max_seconds", 10.0),
+    )
+
+    ptl = rules_d.get("penalty_time_limit", {})
+    ptl_cfg = PenaltyTimeLimitConfig(
+        enabled=ptl.get("enabled", True),
+        max_seconds=ptl.get("max_seconds", 10.0),
+    )
+
     rules = RulesConfig(
         goal_detection=goal_cfg,
         out_of_bounds=oob_cfg,
@@ -364,6 +402,8 @@ def _parse_profile(data: dict) -> RefereeProfile:
         crashing=cr_cfg,
         defense_area_stoppage=das_cfg,
         ball_placement_interference=bpi_cfg,
+        no_progress=np_cfg,
+        penalty_time_limit=ptl_cfg,
     )
 
     game_d = data.get("game", {})
@@ -376,6 +416,7 @@ def _parse_profile(data: dict) -> RefereeProfile:
         direct_free_to_normal=aa.get("direct_free_to_normal", True),
         ball_placement_to_next=aa.get("ball_placement_to_next", True),
         normal_start_to_force=aa.get("normal_start_to_force", True),
+        end_of_half=aa.get("end_of_half", True),
     )
     game = GameConfig(
         half_duration_seconds=game_d.get("half_duration_seconds", 300.0),

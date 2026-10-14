@@ -432,6 +432,59 @@ def test_out_of_bounds_restart_spot_is_capturable_by_go_to_ball(headless):
     assert passed
 
 
+class _NoProgressClearsManager(AbstractTestManager):
+    """A robot holds the ball still until no_progress fires. The FORCE_START that
+    follows must find it the state machine's 0.5 m clear, not still on the ball."""
+
+    n_episodes = 1
+
+    def __init__(self, referee: CustomReferee):
+        super().__init__()
+        self._referee = referee
+        self.stop_seen = False
+        self.distance_at_restart: Optional[float] = None
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        sim_controller.teleport_robot(game.my_team_is_yellow, 0, -1.3, 0.0, 0.0)
+        sim_controller.teleport_ball(-1.0, 0.0)
+        self._referee.force_command(RefereeCommand.FORCE_START, game.ts)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+        if ref.referee_command == RefereeCommand.STOP:
+            self.stop_seen = True
+        elif ref.referee_command == RefereeCommand.FORCE_START and self.stop_seen:
+            self.distance_at_restart = min(r.p.distance_to(game.ball.p.to_2d()) for r in game.friendly_robots.values())
+            return TestingStatus.SUCCESS if self.distance_at_restart >= 0.5 - 0.02 else TestingStatus.FAILURE
+        return TestingStatus.IN_PROGRESS
+
+
+def test_no_progress_restart_separates_robots_before_force_start(headless):
+    """The runner's sim shortcut forced FORCE_START on the STOP's first tick, with the
+    ball teleported to where it already lay. Two robots locked on the ball never
+    separated, so no_progress fired every 10 s for 230 s of tiki_taka_plus_vs_zone_fluid
+    (tournament_20261005_115048). A queued FORCE_START waits for StopStep's clearing."""
+    referee = CustomReferee.from_profile_name("simulation")
+    runner = StrategyRunner(
+        strategy=_go_to_ball_strategy(robot_id=0),
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        mode="rsim",
+        exp_friendly=1,
+        exp_enemy=0,
+        exp_ball=True,
+        referee=referee,
+    )
+    tm = _NoProgressClearsManager(referee)
+
+    passed = runner.run_test(tm, episode_timeout=25.0, rsim_headless=headless)
+
+    assert tm.stop_seen, "no_progress never stopped play"
+    assert passed, f"robot only {tm.distance_at_restart} m from the ball at FORCE_START"
+
+
 # ---------------------------------------------------------------------------
 # Scenario 5: HALT auto-resumes in simulation (no human GC to un-halt)
 # ---------------------------------------------------------------------------
@@ -486,6 +539,69 @@ def test_halt_auto_resumes_to_normal_start_in_sim(headless):
     assert passed
 
 
+class _HaltDuringQueuedKickoffManager(AbstractTestManager):
+    """A HALT arrives while a kick-off is queued behind a STOP (as at half-time: STOP, then
+    ball placement, then the kick-off). The sim's auto-resume must go on to that kick-off.
+    It used to `force_command(STOP)`, clearing the queue, then NORMAL_START: the kick-off was
+    lost and play restarted wherever the ball lay (test_change_of_ends on CI, 2026-10-06)."""
+
+    n_episodes = 1
+
+    def __init__(self, referee: CustomReferee):
+        super().__init__()
+        self._referee = referee
+        self.halt_seen: bool = False
+        self.after_halt: list[RefereeCommand] = []
+
+    def reset_field(self, sim_controller: AbstractSimController, game: Game):
+        from utama_core.custom_referee.rules.base_rule import RuleViolation
+
+        sim_controller.teleport_ball(0.5, 0.5)
+        self._referee.set_command(
+            RefereeCommand.STOP,
+            game.ts,
+            designated_position=(0.0, 0.0),
+            next_command=RefereeCommand.BALL_PLACEMENT_BLUE,
+        )
+        self._referee._state._post_ball_placement_command = RefereeCommand.PREPARE_KICKOFF_BLUE
+        halt = RuleViolation(
+            rule_name="defense_area_stoppage",
+            suggested_command=RefereeCommand.HALT,
+            next_command=None,
+            status_message="2nd foul — HALT",
+            offending_teams=(True,),
+        )
+        self._referee._state._apply_violation(halt, game.ts)
+
+    def eval_status(self, game: Game) -> TestingStatus:
+        ref = game.referee
+        if ref is None:
+            return TestingStatus.IN_PROGRESS
+        if ref.referee_command == RefereeCommand.HALT:
+            self.halt_seen = True
+        elif self.halt_seen and (not self.after_halt or self.after_halt[-1] != ref.referee_command):
+            self.after_halt.append(ref.referee_command)
+        if ref.referee_command in (
+            RefereeCommand.PREPARE_KICKOFF_BLUE,
+            RefereeCommand.NORMAL_START,
+            RefereeCommand.FORCE_START,
+        ):
+            return TestingStatus.SUCCESS
+        return TestingStatus.IN_PROGRESS
+
+
+def test_halt_resume_goes_on_to_the_queued_kickoff(headless):
+    referee = CustomReferee.from_profile_name("simulation")
+    runner = _make_runner(referee)
+    tm = _HaltDuringQueuedKickoffManager(referee)
+
+    runner.run_test(tm, episode_timeout=30.0, rsim_headless=headless)
+
+    assert tm.halt_seen, "CustomReferee never entered HALT"
+    assert tm.after_halt[-1:] == [RefereeCommand.PREPARE_KICKOFF_BLUE], tm.after_halt
+    assert RefereeCommand.BALL_PLACEMENT_BLUE in tm.after_halt, tm.after_halt
+
+
 class _HaltResumeClearsDefenseAreaManager(AbstractTestManager):
     """A robot frozen inside the OPPONENT defense area when HALT is forced
     must be clear of it (by OPPONENT_DEFENSE_AREA_KEEP_DISTANCE) by the time
@@ -526,6 +642,13 @@ class _HaltResumeClearsDefenseAreaManager(AbstractTestManager):
     def eval_status(self, game: Game) -> TestingStatus:
         ref = game.referee
         if ref is None:
+            return TestingStatus.IN_PROGRESS
+
+        if not self.halt_seen and ref.referee_command != RefereeCommand.HALT:
+            # Forced directly: a robot merely standing in the opponent's box is no
+            # longer a stopping foul (rulebook §8.4.2 needs a ball touch), so the
+            # old STOP -> second-foul -> HALT escalation no longer gets here.
+            self._referee.force_command(RefereeCommand.HALT, game.ts)
             return TestingStatus.IN_PROGRESS
 
         if ref.referee_command == RefereeCommand.HALT:
@@ -575,7 +698,7 @@ def test_halt_resume_clears_robot_from_opponent_defense_area(headless):
 # since STOP is observed strictly before BALL_PLACEMENT_* is. That made
 # BallPlacementInterferenceRule structurally unreachable in every rsim/grsim
 # run, which is exactly why it had never fired in any tournament (see
-# docs/testing_gaps.md gap #6/#9) — not under-sampling, a real bug. Every
+# docs/testing_gaps.md gap #9) — not under-sampling, a real bug. Every
 # test in test_ball_placement_rsim.py already worked around this by injecting
 # BALL_PLACEMENT_YELLOW directly via force_command() instead of going through
 # set_command()/a real restart (see those tests' own comments).

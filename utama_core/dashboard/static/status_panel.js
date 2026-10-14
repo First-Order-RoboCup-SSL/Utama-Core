@@ -51,6 +51,19 @@ function renderRefereeHeaderInto(ids, state) {
   }
 }
 
+// `tacticStatus` rows are `[label, tag?]` (see `AbstractStrategy.debug_status`):
+// label is the tactic id, suffixed " (committed)" while its slot is committed;
+// tag is its `TacticTag` value. Returns {robotId: tag} for FieldCanvas's
+// `tactic_tags`.
+function tacticTagsFromStatus(tacticStatus) {
+  const tags = {};
+  for (const robotId in tacticStatus || {}) {
+    const tag = tacticStatus[robotId][1];
+    if (tag) tags[robotId] = tag;
+  }
+  return tags;
+}
+
 function renderTacticStatusInto(containerId, tacticStatus, options) {
   const c = document.getElementById(containerId);
   if (!c) return;
@@ -65,15 +78,17 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
 
   let html = "";
   for (const robotId of robotIds) {
-    const labels = status[robotId] || [];
-    const committed = labels.some((l) => l.includes("committed"));
+    const [label = "", tag] = status[robotId] || [];
+    const committed = label.includes("committed");
+    const tagColor = TACTIC_TAG_COLORS[tag];
     html +=
       '<div class="ref-row"><span class="' +
       (committed ? "accent" : "") +
       '">' +
       robotId +
       "</span><span>" +
-      labels.map((l) => l.replace(/\s*\(committed\)/, "")).join(", ") +
+      label.replace(/\s*\(committed\)/, "") +
+      (tagColor ? ' <span style="color:' + tagColor + '; font-size:.65rem;">' + tag + "</span>" : "") +
       "</span>" +
       (committed ? '<span class="muted" style="font-size:.65rem;">committed</span>' : "") +
       "</div>";

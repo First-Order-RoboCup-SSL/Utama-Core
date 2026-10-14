@@ -3,6 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
+from utama_core.config.settings import EXACT_MATH
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import Field, FieldBounds
 
@@ -75,9 +76,19 @@ def rad_to_deg(radians: float):
     return degrees % 360
 
 
-def distance(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+def _distance_numpy(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
     """Calculate the Euclidean distance between two points in 2D space using the Pythagorean theorem."""
     return np.hypot(point2[0] - point1[0], point2[1] - point1[1])
+
+
+def _distance_fast(point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+    """`_distance_numpy` with `math.hypot` on plain floats: a Python float, and
+    last-bit different from `np.hypot` in well under 1% of cases."""
+    return math.hypot(float(point2[0]) - float(point1[0]), float(point2[1]) - float(point1[1]))
+
+
+# See `EXACT_MATH` in settings.py.
+distance = _distance_numpy if EXACT_MATH else _distance_fast
 
 
 def angle_between_points(main_point: Vector2D, point1: Vector2D, point2: Vector2D):
@@ -246,7 +257,7 @@ def distance_point_to_segment(point, seg_start, seg_end) -> float:
     return math.hypot(px - closest_x, py - closest_y)
 
 
-def closest_point_on_segment(point, seg_start, seg_end):
+def _closest_point_on_segment_numpy(point, seg_start, seg_end):
     """Calculate the point on a segment closest to another point.
 
     Args:
@@ -276,6 +287,31 @@ def closest_point_on_segment(point, seg_start, seg_end):
         return seg_end
     else:
         return seg_start + t * seg_vec
+
+
+def _closest_point_on_segment_fast(point, seg_start, seg_end):
+    """`_closest_point_on_segment_numpy` on plain floats. Returns the same
+    objects in the same cases (`seg_start`/`seg_end` themselves at the ends);
+    the dot products are plain multiply-adds rather than `np.dot`, which can
+    round differently in the last bit."""
+    seg_start = np.asarray(seg_start)
+    seg_end = np.asarray(seg_end)
+    sx, sy = float(seg_start[0]), float(seg_start[1])
+    seg_dx = float(seg_end[0]) - sx
+    seg_dy = float(seg_end[1]) - sy
+    seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+    if seg_len_sq < EPS:
+        return seg_start
+    t = ((float(point[0]) - sx) * seg_dx + (float(point[1]) - sy) * seg_dy) / seg_len_sq
+    if t < 0:
+        return seg_start
+    elif t > 1:
+        return seg_end
+    return np.array([sx + t * seg_dx, sy + t * seg_dy])
+
+
+# See `EXACT_MATH` in settings.py.
+closest_point_on_segment = _closest_point_on_segment_numpy if EXACT_MATH else _closest_point_on_segment_fast
 
 
 def segments_intersect(
@@ -366,18 +402,58 @@ def find_intersection(line1, line2):
     Returns:
         np.array of intersection point (x, y), or None if no intersection.
     """
-    A, B = np.asarray(line1[0]), np.asarray(line1[1])
-    C, D = np.asarray(line2[0]), np.asarray(line2[1])
+    # Plain floats rather than numpy scalars/arrays (the planner calls this
+    # ~140k times a match): the same IEEE double operations in the same
+    # order, so the same result, including `A + t * (B - A)` done per axis.
+    ax, ay = float(line1[0][0]), float(line1[0][1])
+    bx, by = float(line1[1][0]), float(line1[1][1])
+    cx, cy = float(line2[0][0]), float(line2[0][1])
+    dx, dy = float(line2[1][0]), float(line2[1][1])
 
-    denom = (B[0] - A[0]) * (D[1] - C[1]) - (B[1] - A[1]) * (D[0] - C[0])
+    denom = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx)
 
     if abs(denom) < EPS:
         return None
 
-    t = ((C[0] - A[0]) * (D[1] - C[1]) - (C[1] - A[1]) * (D[0] - C[0])) / denom
-    u = ((C[0] - A[0]) * (B[1] - A[1]) - (C[1] - A[1]) * (B[0] - A[0])) / denom
+    t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / denom
+    u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / denom
 
     if -EPS <= t <= 1 + EPS and -EPS <= u <= 1 + EPS:
-        return A + t * (B - A)
+        return np.array([ax + t * (bx - ax), ay + t * (by - ay)])
 
     return None
+
+
+# A detour waypoint sits on a circle this much wider than the keep-out one, at least
+# `_DETOUR_MIN_TURN_RAD` further round from the robot. The straight leg to it from a robot
+# on the keep-out edge stays outside while 1.1 * cos(turn) >= 1, i.e. turn <= 24.6deg.
+_DETOUR_RADIUS_FACTOR = 1.1
+_DETOUR_MIN_TURN_RAD = math.radians(20.0)
+
+
+def detour_around_circle(start: Vector2D, target: Vector2D, center: Vector2D, radius: float) -> Vector2D:
+    """`target`, or a waypoint round the circle if the straight line from `start` to
+    `target` passes through it: the tangent point (or `_DETOUR_MIN_TURN_RAD` further
+    round, once the robot is on the circle), on the side the target lies. Called every
+    tick, so the robot heads for the real target as soon as that line is clear.
+
+    Found on tournament_20260924_124033: after a goal the conceding team is still in
+    the scorer's half (STOP only clears robots near the ball). At PREPARE_KICKOFF its
+    robots drove straight at their own-half spots through the centre circle, and
+    `keep_out` voided 47 of 54 kickoffs after goals into a FORCE_START scramble."""
+    seg = target - start
+    length_sq = seg.dot(seg)
+    if length_sq == 0.0:
+        return target
+    t = min(1.0, max(0.0, (center - start).dot(seg) / length_sq))
+    if (start + seg * t - center).mag() >= radius:
+        return target
+    rel_start, rel_target = start - center, target - center
+    dist = rel_start.mag()
+    if dist == 0.0:
+        return target  # on the centre itself: the caller's push-out handles it
+    wide = radius * _DETOUR_RADIUS_FACTOR
+    turn = max(math.acos(min(1.0, wide / dist)), _DETOUR_MIN_TURN_RAD)
+    cross = rel_start.x * rel_target.y - rel_start.y * rel_target.x
+    angle = math.atan2(rel_start.y, rel_start.x) + (turn if cross >= 0.0 else -turn)
+    return Vector2D(center.x + wide * math.cos(angle), center.y + wide * math.sin(angle))

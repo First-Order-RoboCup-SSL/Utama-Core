@@ -66,6 +66,7 @@
     </div>
     <div class="stack" style="padding:6px 10px 10px; gap:4px;">
       <input type="range" id="replay-slider" min="0" max="0" value="0" style="width:100%;">
+      <div id="replay-markers" class="marker-strip" title="goals, fouls, stalls, ball losses: click one, or [ and ] to step"></div>
       <div class="row" style="align-items:center; justify-content:space-between;">
         <div class="row" style="align-items:center;">
           <button id="replay-step-back" title="Previous frame (←)">⏮</button>
@@ -94,6 +95,8 @@
     <div class="ref-section-title">Tactics</div>
     <div id="replay-tactic-entries" style="font-size:.75rem;"></div>
     <div id="replay-status-entries" style="font-size:.75rem;"></div>
+    <div class="ref-section-title">Events <span class="muted" style="font-size:.65rem;">[ and ] step through them</span></div>
+    <div id="replay-marker-list" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
     <div class="ref-section-title">Intention log</div>
     <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
   </div>

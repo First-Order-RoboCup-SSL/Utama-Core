@@ -7,13 +7,11 @@ do* during a restart, so left alone, a Tactic's normal logic keeps running
 during e.g. an opponent's ball placement — driving straight at the ball,
 which is an SSL rule violation, not just a scheduling wrinkle.
 
-The old BT path (`actions.py`, plus a `tree.py` that no longer exists — see
-`docs/referee_integration.md`, now stale) already solved this: a priority
-Selector matches the current `RefereeCommand` and, when matched, takes over
-every friendly robot's command for that tick, bypassing the strategy tree
-entirely. This module reuses that same logic (the `*Step` classes in
-`utama_core/custom_referee/actions.py`, now plain classes with no py_trees
-dependency) rather than reimplementing keep-out-distance geometry — those
+This module matches the current `RefereeCommand` and, when it is a restart,
+takes over every friendly robot's command for that tick, bypassing tactics
+entirely. It reuses the `*Step` classes in
+`utama_core/custom_referee/actions.py` rather than reimplementing
+keep-out-distance geometry — those
 classes only ever touch `blackboard.game`, `blackboard.motion_controller`,
 and `blackboard.cmd_map` (verified: no other blackboard key is read), so a
 tiny duck-typed shim exposing just those three attributes is enough to drive
@@ -43,12 +41,10 @@ together under "just freeze", which was wrong for the other two:
   (despite several comments elsewhere in this codebase claiming `is_paused`
   covered it — it didn't; `RefereeCommand.TIMEOUT_YELLOW` was never actually
   in `_PAUSE_COMMANDS`), so tactics kept ticking and issuing ordinary motion
-  commands straight through a timeout. The old BT path's own tree dispatched
-  `TIMEOUT_YELLOW | TIMEOUT_BLUE` to `StopStep` directly
-  (`docs/referee_integration.md`'s tree diagram) — the same "push any
+  commands straight through a timeout. A timeout needs STOP's "push any
   encroaching robot outside the ball keep-out radius, freeze everyone else"
-  behaviour as STOP, not a passive freeze — so it belongs in this module
-  alongside STOP, not in `referee_reset.py`'s `_PAUSE_COMMANDS`.
+  `StopStep`, not a passive freeze, so it belongs in this module alongside
+  STOP, not in `referee_reset.py`'s `_PAUSE_COMMANDS`.
 
 Both fixes reuse `StopStep`/`_clear_to_legal_positions` (already fully
 implemented in `actions.py`, just never wired into the kernel path).
@@ -76,11 +72,10 @@ from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
-# Commands the BT path treats as restarts requiring legal-position override
-# (i.e. everything in `_REFEREE_STOPPAGE_COMMANDS` except HALT, which
-# `Strategy.tick()`'s `is_paused` check already handles by issuing no commands
-# at all — see module docstring for why STOP and TIMEOUT_* are included here
-# despite STOP also being one of `is_paused`'s commands).
+# Commands requiring a legal-position override: every stoppage/restart except
+# HALT, which `Strategy.tick()`'s `is_paused` check already handles by issuing
+# no commands at all — see module docstring for why STOP and TIMEOUT_* are
+# included here despite STOP also being one of `is_paused`'s commands.
 _OVERRIDE_COMMANDS = frozenset(
     {
         RefereeCommand.STOP,
@@ -125,12 +120,11 @@ class _BlackboardShim:
 
 
 class RefereeOverride:
-    """Stateful dispatcher mirroring `build_referee_override_tree`'s command→Step mapping.
+    """Stateful dispatcher from referee command to the `*Step` that positions robots for it.
 
     Kept as long-lived instances (one `RefereeOverride` per `Strategy`, not
     reconstructed per tick) because `BallPlacementOursStep` carries its own
-    cross-tick state (`_release_started_at`/`_placer_id`) exactly like it does
-    on the BT path — a fresh instance every tick would lose that state and
+    cross-tick state (`_release_started_at`/`_placer_id`) — a fresh instance every tick would lose that state and
     re-trigger the release-delay logic every tick.
 
     `overrides`: an optional per-`RefereeCommand` map of strategy-supplied

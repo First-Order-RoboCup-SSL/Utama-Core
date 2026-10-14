@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
-from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.referee_constants import PENALTY_MARK_HALF_FIELD_RATIO
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
@@ -24,6 +26,9 @@ def _defenders_touching_ball(robots: list[Robot]) -> bool:
     return any(r.has_ball for r in robots)
 
 
+# Rulebook §8.4.2: a non-stopping foul is not raised again within 2 s.
+_NON_STOPPING_REGRACE_SECONDS = 2.0
+
 _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
     RefereeCommand.FORCE_START,
@@ -38,6 +43,12 @@ def _split_by_color(game_frame: GameFrame):
         return game_frame.enemy_robots.values(), game_frame.friendly_robots.values()
 
 
+def _penalty_mark(geometry: RefereeGeometry, goal_is_right: bool) -> tuple[float, float]:
+    """The mark in front of the goal on that side, where the penalty's ball goes."""
+    goal_x = geometry.half_length if goal_is_right else -geometry.half_length
+    return (goal_x * PENALTY_MARK_HALF_FIELD_RATIO, 0.0)
+
+
 class DefenseAreaRule(BaseRule):
     """Detects attacker encroachment or too many defenders in either defense area.
 
@@ -49,6 +60,11 @@ class DefenseAreaRule(BaseRule):
     def __init__(self, max_defenders: int = 1, attacker_infringement: bool = True) -> None:
         self._max_defenders = max_defenders
         self._attacker_infringement = attacker_infringement
+        # Last attacker foul per team, keyed by is_yellow (rulebook §8.4.2 re-raise grace).
+        self._attacker_foul_at: dict[bool, float] = {True: -math.inf, False: -math.inf}
+
+    def reset_for_new_episode(self) -> None:
+        self._attacker_foul_at = {True: -math.inf, False: -math.inf}
 
     def check(
         self,
@@ -90,25 +106,9 @@ class DefenseAreaRule(BaseRule):
                 suggested_command=RefereeCommand.STOP,
                 next_command=RefereeCommand.PREPARE_PENALTY_BLUE,
                 status_message="Extra yellow defender touched ball inside own defense area",
+                designated_position=_penalty_mark(geometry, goal_is_right=yellow_is_right),
                 counts_toward_foul_counter=False,
             )
-
-        if self._attacker_infringement:
-            for r in blue_robots:
-                if in_yellow_defense(r.p.x, r.p.y):
-                    ball = game_frame.ball
-                    placement = (
-                        geometry.legal_restart_position(ball.p.x, ball.p.y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
-                        if ball is not None
-                        else None
-                    )
-                    return RuleViolation(
-                        rule_name="defense_area",
-                        suggested_command=RefereeCommand.STOP,
-                        next_command=RefereeCommand.DIRECT_FREE_YELLOW,
-                        status_message="Blue attacker in yellow defense area",
-                        designated_position=placement,
-                    )
 
         # --- Blue defense area --- (mirror of the yellow branch above; see
         # its comment for the ball-touch/occupancy-proxy reasoning.)
@@ -119,24 +119,40 @@ class DefenseAreaRule(BaseRule):
                 suggested_command=RefereeCommand.STOP,
                 next_command=RefereeCommand.PREPARE_PENALTY_YELLOW,
                 status_message="Extra blue defender touched ball inside own defense area",
+                designated_position=_penalty_mark(geometry, goal_is_right=not yellow_is_right),
                 counts_toward_foul_counter=False,
             )
 
+        # "Attacker Touched Ball In Opponent Defense Area" (rulebook §8.4.2): the
+        # ball touched by a robot partially or fully inside the opponent's box.
+        # Non-stopping -- the game continues normally -- and not raised again for
+        # the same team within 2 s. Checked after both Multiple Defenders
+        # branches so a non-stopping result never hides a stopping one.
         if self._attacker_infringement:
-            for r in yellow_robots:
-                if in_blue_defense(r.p.x, r.p.y):
-                    ball = game_frame.ball
-                    placement = (
-                        geometry.legal_restart_position(ball.p.x, ball.p.y, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
-                        if ball is not None
-                        else None
-                    )
-                    return RuleViolation(
-                        rule_name="defense_area",
-                        suggested_command=RefereeCommand.STOP,
-                        next_command=RefereeCommand.DIRECT_FREE_BLUE,
-                        status_message="Yellow attacker in blue defense area",
-                        designated_position=placement,
-                    )
+            dist_to_yellow_area = (
+                geometry.distance_to_right_defense_area if yellow_is_right else geometry.distance_to_left_defense_area
+            )
+            dist_to_blue_area = (
+                geometry.distance_to_left_defense_area if yellow_is_right else geometry.distance_to_right_defense_area
+            )
+            for attackers_are_yellow, attackers, dist_to_area in (
+                (False, blue_robots, dist_to_yellow_area),
+                (True, yellow_robots, dist_to_blue_area),
+            ):
+                if game_frame.ts - self._attacker_foul_at[attackers_are_yellow] < _NON_STOPPING_REGRACE_SECONDS:
+                    continue
+                for r in attackers:
+                    if r.has_ball and dist_to_area(r.p.x, r.p.y) < ROBOT_RADIUS:
+                        self._attacker_foul_at[attackers_are_yellow] = game_frame.ts
+                        colour = "Yellow" if attackers_are_yellow else "Blue"
+                        return RuleViolation(
+                            rule_name="defense_area",
+                            suggested_command=current_command,
+                            next_command=None,
+                            status_message=f"{colour} attacker touched ball in opponent defense area",
+                            offending_teams=(attackers_are_yellow,),
+                            offending_robots=((attackers_are_yellow, r.id),),
+                            is_stopping=False,
+                        )
 
         return None

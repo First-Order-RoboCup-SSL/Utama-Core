@@ -307,3 +307,37 @@ def test_our_kickoff_with_only_keeper_present_does_not_raise(nonzero_keeper_runn
 
     assert result is None
     assert step.blackboard.cmd_map == {}
+
+
+def test_their_kickoff_from_the_wrong_half_goes_round_the_centre_circle(split_shape_runner):
+    """After a goal the conceding team is still in the scorer's half (STOP only clears
+    robots near the ball). At PREPARE_KICKOFF they drove straight at their own-half
+    spots through the centre circle and lingered inside the keep-out radius, so
+    `keep_out` voided 47 of 54 kickoffs after goals (tournament_20260924_124033). They
+    must go round: the real `KeepOutRule` never fires on the way home, and nobody parks
+    on the circle in the wrong half (the old push-out left a robot a hair inside the edge,
+    "encroaching", its target its own position)."""
+    from utama_core.config.field_params import STANDARD_FIELD_DIMS
+    from utama_core.custom_referee.geometry import RefereeGeometry
+    from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
+
+    runner = split_shape_runner
+    game = runner.my.game
+    runner.step_once()
+    # my_team_is_right=True: our half is +x. Line the outfield robots up in the
+    # opponent's half, just across the halfway line, either side of the centre spot.
+    for rid, y in zip((1, 2, 3, 4, 5), (-0.6, -0.3, 0.05, 0.3, 0.6)):
+        runner.sim_controller.teleport_robot(True, rid, -0.9, y, 0.0)
+    runner.sim_controller.teleport_ball(0.0, 0.0)
+    for _ in range(10):  # let the teleport reach the vision frames
+        runner.step_once()
+
+    _set_referee_command(runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
+    rule, geometry = KeepOutRule(), RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+    for tick in range(420):
+        runner.step_once()
+        violation = rule.check(runner.my.current_game_frame, geometry, RefereeCommand.PREPARE_KICKOFF_BLUE)
+        assert violation is None, f"keep_out fired {tick / 60:.2f}s into their kickoff"
+
+    for rid in (1, 2, 3, 4, 5):
+        assert game.friendly_robots[rid].p.x > 0, f"robot {rid} did not get back to its own half"

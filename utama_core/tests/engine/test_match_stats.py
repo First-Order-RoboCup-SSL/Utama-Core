@@ -690,3 +690,70 @@ def test_restart_with_no_entry_excluded_from_mean():
     assert stats.n_restarts_with_entry == 0
     assert stats.restart_to_first_entry_s["friendly"] is None
     assert "enemy_5" not in stats.robot_motion_pct  # no velocity readings (v=None) -> excluded
+
+
+def test_fouls_by_side_uses_offending_teams_or_the_restart_colour():
+    """We are yellow. `offending_teams` wins where a rule sets it; rules that
+    don't (out of bounds, double touch, ...) are charged to the side that did
+    *not* get the restart; a goal is nobody's foul."""
+    acc = MatchStatsAccumulator()
+
+    def v(rule, next_command=None, offending_teams=()):
+        return RuleViolation(
+            rule_name=rule,
+            suggested_command=RefereeCommand.STOP,
+            next_command=next_command,
+            status_message="",
+            offending_teams=offending_teams,
+        )
+
+    acc.record_rule_violation(v("excessive_dribbling", RefereeCommand.DIRECT_FREE_BLUE, (True,)), True)
+    acc.record_rule_violation(v("double_touch", RefereeCommand.DIRECT_FREE_BLUE), True)  # blue's restart -> ours
+    acc.record_rule_violation(v("out_of_bounds", RefereeCommand.BALL_PLACEMENT_YELLOW), True)  # theirs
+    acc.record_rule_violation(v("crashing", RefereeCommand.FORCE_START, (True, False)), True)  # both
+    acc.record_rule_violation(v("goal", RefereeCommand.PREPARE_KICKOFF_BLUE), True)  # nobody's
+    acc.record_rule_violation(v("double_touch", RefereeCommand.DIRECT_FREE_BLUE))  # side unknown: tally only
+
+    stats = acc.finalize()
+    assert stats.fouls_by_side == {
+        "friendly": {"excessive_dribbling": 1, "double_touch": 1, "crashing": 1},
+        "enemy": {"out_of_bounds": 1, "crashing": 1},
+    }
+    assert stats.rule_event_counts["double_touch"] == 2
+
+
+def test_foul_log_names_the_robot_and_its_tactic():
+    """We are yellow. A rule that names its robot is logged as-is; one that only knows
+    a team (keeper held ball) falls back to that side's robot nearest the ball."""
+    acc = MatchStatsAccumulator()
+    frame = _frame(
+        {0: _robot(0, 4.0, 0.0, True), 3: _robot(3, 1.0, 0.5, True)},
+        {2: _robot(2, 1.2, 0.5, False), 4: _robot(4, -2.0, 0.0, False)},
+        ball_xy=(1.1, 0.5),
+    )
+    tactics = {"friendly": {0: "goalkeeper", 3: "press"}, "enemy": {2: "attack", 4: "defend"}}
+    dribble = RuleViolation(
+        rule_name="excessive_dribbling",
+        suggested_command=RefereeCommand.STOP,
+        next_command=RefereeCommand.DIRECT_FREE_YELLOW,
+        status_message="",
+        offending_teams=(False,),
+        offending_robots=((False, 2),),
+    )
+    held = RuleViolation(
+        rule_name="keeper_held_ball",
+        suggested_command=RefereeCommand.STOP,
+        next_command=RefereeCommand.DIRECT_FREE_BLUE,
+        status_message="",
+        offending_teams=(True,),
+    )
+
+    acc.record_rule_violation(dribble, True, game_frame=frame, robot_tactics=tactics)
+    acc.record_rule_violation(held, True, game_frame=frame, robot_tactics=tactics)
+    acc.record_rule_violation(held, True)  # no frame: counted, not logged
+
+    fouls = [(f.rule, f.side, f.robot_id, f.tactic, f.inferred) for f in acc.finalize().fouls]
+    assert fouls == [
+        ("excessive_dribbling", "enemy", 2, "attack", False),
+        ("keeper_held_ball", "friendly", 3, "press", True),
+    ]
