@@ -147,6 +147,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools.replay_trace import trace
 from utama_core.analysis.goal_ledger import TYPES, WINDOW_S, per_match
 from utama_core.config.settings import REPLAY_BASE_PATH
+from utama_core.global_utils.git_utils import git_revision
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, bench_key
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
@@ -178,16 +179,6 @@ BANKS = REPO_ROOT / "utama_core" / "scenario_bench" / "banks"
 DEFAULT_WEIGHTS = BANKS / "situation_rates_real.json"
 
 
-def _git_revision() -> str | None:
-    import subprocess
-
-    try:
-        result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], check=True, capture_output=True, text=True)
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip() or None
-
-
 def _parallel_map(fn: Callable, items: Iterable, workers: int) -> Iterator:
     """`map`, over `workers` processes when more than one (results stay in order)."""
     if workers <= 1:
@@ -212,7 +203,7 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
     elif args.harvest_from is not None:
         scenarios, harvest_report = harvest_run_dir(
             args.harvest_from,
-            evaluator_version=_git_revision() or "unknown",
+            evaluator_version=git_revision() or "unknown",
             per_situation=args.per_situation,
             workers=args.workers,
         )
@@ -1126,7 +1117,7 @@ def main() -> int:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": generated_at.isoformat(),
-        "git_revision": _git_revision(),
+        "git_revision": git_revision(),
         "candidate": args.candidate,
         "baseline": args.baseline,
         "against": against_source,
