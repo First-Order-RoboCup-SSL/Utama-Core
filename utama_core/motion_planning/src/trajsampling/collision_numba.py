@@ -307,7 +307,7 @@ def _enemy_distance_at(row: np.ndarray, t: float, px: float, py: float) -> float
 
 
 @njit(cache=True, fastmath=True)
-def first_collision_numba(
+def first_collision_with_kind_numba(
     leg1: np.ndarray,
     ux1: float,
     uy1: float,
@@ -332,12 +332,10 @@ def first_collision_numba(
     traj_obs: np.ndarray,  # shape (n_traj, TRAJ_ROW_LEN)
     cv_obs: np.ndarray,  # shape (n_cv, CV_ROW_LEN)
     enemy_obs: np.ndarray,  # shape (n_enemy, ENEMY_ROW_LEN)
-) -> float:
+) -> Tuple[float, int]:
     """Native port of `TrajectorySamplingPlanner._first_collision`'s scan
-    loop -- see that method's docstring for the exact semantics being
-    preserved (margin formula, own-radius subtraction, adaptive stepping,
-    `MAX_LOOKAHEAD_TIME` clamp). Returns the absolute collision time, or
-    -1.0 if clear (Python wrapper converts to `Optional[float]`).
+    loop, returning (collision_time, obstacle_kind):
+      kind: 0 = static, 1 = traj, 2 = cv, 3 = enemy, -1 = no collision.
     """
     t = start_t
     duration = min(query_duration, max_lookahead_time)
@@ -346,24 +344,6 @@ def first_collision_numba(
     n_cv = cv_obs.shape[0]
     n_enemy = enemy_obs.shape[0]
 
-    # A robot can start a plan already inside another (moving) obstacle's
-    # clearance envelope -- e.g. GiveAndGoTactic's abandoned-receiver robot,
-    # left standing right where it was waiting to catch a pass, replanning a
-    # fresh route the instant the ball becomes a real obstacle again. Without
-    # this, `d < margin` at the very first sample (t == start_t) fires for
-    # EVERY candidate direction regardless of where it's headed -- the
-    # robot's own starting position is the collision, not anything about the
-    # trajectory -- so the planner can never find an escape and the robot
-    # stays pinned near-zero velocity indefinitely (found live, 2026-09-03:
-    # a robot 0.088m from the ball, inside the 0.09+0.0215=0.1115m combined
-    # radius, reporting collision_time~=0 against every sampled direction).
-    # Fixed by giving each obstacle a one-time "still escaping" grace at the
-    # start of the scan: an obstacle already violating clearance at t ==
-    # start_t doesn't veto the trajectory outright until the robot has first
-    # cleared it (`d >= margin`) at some later sample -- from that point on
-    # it's checked normally, including re-triggering if the trajectory turns
-    # back into it. An obstacle that ISN'T penetrated at start_t is never
-    # granted this grace, so a normal approaching trajectory is unaffected.
     static_escaping = np.ones(n_static, dtype=np.bool_)
     traj_escaping = np.ones(n_traj, dtype=np.bool_)
     cv_escaping = np.ones(n_cv, dtype=np.bool_)
@@ -377,6 +357,7 @@ def first_collision_numba(
 
         closest = math.inf
         collided = False
+        collided_kind = -1
 
         for i in range(n_static):
             d = _static_distance_at(static_obs[i], px, py) - robot_radius
@@ -387,6 +368,7 @@ def first_collision_numba(
                 static_escaping[i] = still_penetrating
             if still_penetrating and not static_escaping[i]:
                 collided = True
+                collided_kind = 0
                 break
             if d < closest:
                 closest = d
@@ -400,6 +382,7 @@ def first_collision_numba(
                     traj_escaping[i] = still_penetrating
                 if still_penetrating and not traj_escaping[i]:
                     collided = True
+                    collided_kind = 1
                     break
                 if d < closest:
                     closest = d
@@ -413,6 +396,7 @@ def first_collision_numba(
                     cv_escaping[i] = still_penetrating
                 if still_penetrating and not cv_escaping[i]:
                     collided = True
+                    collided_kind = 2
                     break
                 if d < closest:
                     closest = d
@@ -426,6 +410,7 @@ def first_collision_numba(
                     enemy_escaping[i] = still_penetrating
                 if still_penetrating and not enemy_escaping[i]:
                     collided = True
+                    collided_kind = 3
                     break
                 if d < closest:
                     closest = d
@@ -433,7 +418,7 @@ def first_collision_numba(
         first_sample = False
 
         if collided:
-            return t
+            return t, collided_kind
 
         if closest == math.inf:
             step = max_time_step
@@ -448,7 +433,64 @@ def first_collision_numba(
             break
         t = min(t + step, duration)
 
-    return -1.0
+    return -1.0, -1
+
+
+@njit(fastmath=True)
+def first_collision_numba(
+    leg1: np.ndarray,
+    ux1: float,
+    uy1: float,
+    p0x1: float,
+    p0y1: float,
+    switch_t: float,
+    leg2: np.ndarray,
+    ux2: float,
+    uy2: float,
+    p0x2: float,
+    p0y2: float,
+    query_duration: float,
+    start_t: float,
+    max_lookahead_time: float,
+    robot_radius: float,
+    margin_v_max: float,
+    margin_base: float,
+    max_time_step: float,
+    min_time_step: float,
+    step_distance_ratio: float,
+    static_obs: np.ndarray,
+    traj_obs: np.ndarray,
+    cv_obs: np.ndarray,
+    enemy_obs: np.ndarray,
+) -> float:
+    """Wrapper around `first_collision_with_kind_numba` returning only the collision time."""
+    t_col, _ = first_collision_with_kind_numba(
+        leg1,
+        ux1,
+        uy1,
+        p0x1,
+        p0y1,
+        switch_t,
+        leg2,
+        ux2,
+        uy2,
+        p0x2,
+        p0y2,
+        query_duration,
+        start_t,
+        max_lookahead_time,
+        robot_radius,
+        margin_v_max,
+        margin_base,
+        max_time_step,
+        min_time_step,
+        step_distance_ratio,
+        static_obs,
+        traj_obs,
+        cv_obs,
+        enemy_obs,
+    )
+    return t_col
 
 
 def empty_row_array(row_len: int) -> np.ndarray:

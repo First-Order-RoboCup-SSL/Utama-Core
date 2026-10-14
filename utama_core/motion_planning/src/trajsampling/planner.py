@@ -41,7 +41,7 @@ import math
 import random
 from dataclasses import dataclass
 from dataclasses import replace as dataclasses_replace
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -65,7 +65,7 @@ from utama_core.motion_planning.src.trajsampling.obstacles import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PlanResult:
     trajectory: Trajectory2D
     has_collision: bool
@@ -628,7 +628,7 @@ class TrajectorySamplingPlanner:
             return self._with_current_clearance(reused, p0, obstacles)
 
         direct = Trajectory2D.compute(p0, v0, target_pos, self.v_max, self.a_max)
-        collision_time = self._first_collision(direct, obstacle_arrays)
+        collision_time, direct_kind = self._check_collision(direct, obstacle_arrays)
         if collision_time is None:
             self._commit(robot_id, game.ts, direct, target_pos)
             result = PlanResult(trajectory=direct, has_collision=False, collision_time=None)
@@ -668,8 +668,8 @@ class TrajectorySamplingPlanner:
         # ranked down by raw survival time exactly like a genuine head-on
         # collision, with the planner never actually being allowed to
         # complete a totally normal, low-speed arrival next to another robot.
-        def fallback_rank(trajectory, t_col: float, blocked: bool) -> float:
-            return self._fallback_rank(trajectory, t_col, blocked, obstacle_arrays, target_pos)
+        def fallback_rank(trajectory, t_col: float, blocked: bool, obs_kind: int = -1) -> float:
+            return self._fallback_rank(trajectory, t_col, blocked, obstacle_arrays, target_pos, obs_kind=obs_kind)
 
         direct_blocked = self._blocked_by_priority_obstacle(
             robot_id, direct, obstacles, collision_time, priority_enabled, game=game
@@ -681,7 +681,7 @@ class TrajectorySamplingPlanner:
             result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
             return self._with_current_clearance(result, p0, obstacles)
         best_fallback = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
-        best_rank = fallback_rank(direct, collision_time, direct_blocked)
+        best_rank = fallback_rank(direct, collision_time, direct_blocked, obs_kind=direct_kind)
 
         cand_targets = self._intermediate_targets(robot_id, p0, target_pos)
 
@@ -701,7 +701,7 @@ class TrajectorySamplingPlanner:
                         is_last = True
 
             for candidate in self._two_segment_candidates(p0, v0, candidate_target, target_pos):
-                t_col = self._first_collision(candidate, obstacle_arrays)
+                t_col, cand_kind = self._check_collision(candidate, obstacle_arrays)
                 if t_col is None:
                     eff_dur = candidate.duration - (0.15 if is_last else 0.0)
                     if eff_dur < best_accepted_duration:
@@ -719,7 +719,7 @@ class TrajectorySamplingPlanner:
                         best_accepted = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
                         best_accepted_target = candidate_target
                     continue
-                rank = fallback_rank(candidate, t_col, blocked)
+                rank = fallback_rank(candidate, t_col, blocked, obs_kind=cand_kind)
                 if rank > best_rank:
                     best_fallback = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
                     best_rank = rank
@@ -779,11 +779,25 @@ class TrajectorySamplingPlanner:
         _, (evx, evy) = result.trajectory.state_at(result.elapsed)
         speed = math.hypot(evx, evy)
         margin = (min(speed, config.MARGIN_V_MAX) / config.MARGIN_V_MAX) ** 2 * config.MARGIN_BASE
-        clear_obstacles = [o for o in obstacles if o.distance_at(result.elapsed, p0) - config.ROBOT_RADIUS >= margin]
-        candidates = clear_obstacles or obstacles
 
-        nearest_obstacle = min(candidates, key=lambda o: o.distance_at(result.elapsed, p0))
-        nearest = nearest_obstacle.distance_at(result.elapsed, p0) - config.ROBOT_RADIUS
+        best_cand_d = math.inf
+        best_cand_obs = None
+        best_all_d = math.inf
+        best_all_obs = None
+
+        for o in obstacles:
+            d = o.distance_at(result.elapsed, p0)
+            if d < best_all_d:
+                best_all_d = d
+                best_all_obs = o
+            if d - config.ROBOT_RADIUS >= margin:
+                if d < best_cand_d:
+                    best_cand_d = d
+                    best_cand_obs = o
+
+        nearest_obstacle = best_cand_obs if best_cand_obs is not None else best_all_obs
+        nearest_d = best_cand_d if best_cand_obs is not None else best_all_d
+        nearest = nearest_d - config.ROBOT_RADIUS
 
         # Closing speed: finite-difference the gap to THIS SAME obstacle a
         # short step further along the robot's own committed trajectory,
@@ -885,6 +899,7 @@ class TrajectorySamplingPlanner:
         blocked: bool,
         obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         target_pos: Tuple[float, float],
+        obs_kind: int = -1,
     ) -> float:
         """How good a colliding candidate is as `plan()`'s fallback: higher is better.
 
@@ -900,7 +915,9 @@ class TrajectorySamplingPlanner:
         """
         if blocked:
             return -math.inf
-        if self._first_collision(trajectory, (obstacle_arrays[0],) + _NO_MOVING_OBSTACLES) == t_col:
+        if obs_kind == 0 or (
+            obs_kind == -1 and self._first_collision(trajectory, (obstacle_arrays[0],) + _NO_MOVING_OBSTACLES) == t_col
+        ):
             return _STATIC_COLLISION_RANK
         (cx, cy), _ = trajectory.state_at(t_col)
         return -((cx - target_pos[0]) ** 2 + (cy - target_pos[1]) ** 2)
@@ -1106,15 +1123,34 @@ class TrajectorySamplingPlanner:
         fresh.sort(key=angular_distance)
         return ([last] if last is not None else []) + near_last + fresh
 
+    def _check_collision(
+        self,
+        trajectory,
+        obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        start_t: float = 0.0,
+    ) -> Tuple[Optional[float], int]:
+        """Wrapper around `_first_collision` that supports mocks/subclasses returning either
+        `(t_col, kind)` or just `t_col`."""
+        try:
+            res = self._first_collision(trajectory, obstacle_arrays, start_t=start_t, return_kind=True)
+            if isinstance(res, tuple):
+                return res
+            return res, -1
+        except TypeError:
+            return self._first_collision(trajectory, obstacle_arrays, start_t=start_t), -1
+
     def _first_collision(
         self,
         trajectory,
         obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         start_t: float = 0.0,
-    ) -> Optional[float]:
+        return_kind: bool = False,
+    ) -> Union[Optional[float], Tuple[Optional[float], int]]:
         """Returns the absolute trajectory time of the first collision at or
         after `start_t` (not a time-since-`start_t` offset), or None if
         clear through `min(trajectory.duration, MAX_LOOKAHEAD_TIME)`.
+        If `return_kind` is True, returns `(collision_time, obstacle_kind)`
+        where obstacle_kind is 0=static, 1=traj, 2=cv, 3=enemy, -1=none.
         `start_t` lets `_try_reuse` revalidate only the remaining portion of
         an already-committed trajectory instead of re-checking time this
         robot has already safely passed through.
@@ -1125,7 +1161,7 @@ class TrajectorySamplingPlanner:
         `_flatten_obstacles` per candidate.
 
         Delegates the actual timestep x obstacle scan to
-        `collision_numba.first_collision_numba`, a native port of what used
+        `collision_numba.first_collision_with_kind_numba`, a native port of what used
         to be this method's own loop. Profiling (see `planner.py`'s module
         docstring) found this loop -- ~18 adaptive timesteps x ~20
         obstacles per call, tens of thousands of calls per match -- was the
@@ -1152,7 +1188,7 @@ class TrajectorySamplingPlanner:
         """
         leg1_args, switch_t, leg2_args, duration = _flatten_query_trajectory(trajectory)
         static_arr, traj_arr, cv_arr, enemy_arr = obstacle_arrays
-        t_col = _cn.first_collision_numba(
+        t_col, obs_kind = _cn.first_collision_with_kind_numba(
             leg1_args[0],
             leg1_args[1],
             leg1_args[2],
@@ -1178,7 +1214,10 @@ class TrajectorySamplingPlanner:
             cv_arr,
             enemy_arr,
         )
-        return None if t_col < 0.0 else t_col
+        res_t = None if t_col < 0.0 else t_col
+        if return_kind:
+            return res_t, obs_kind
+        return res_t
 
     def _collision_leniency_accepts(
         self,
@@ -1416,7 +1455,7 @@ class _CommittedTrajectoryObstacle:
         return math.hypot(point[0] - ox, point[1] - oy) - self.radius
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TwoSegmentTrajectory:
     """A trajectory to an intermediate target, switched at `switch_t` for a
     fresh trajectory toward the real final target -- paper section 2.2.

@@ -31,6 +31,9 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
+from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+    enable_sim_reuse,
+)
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -168,6 +171,8 @@ def run_match(
     `CustomReferee`, so this match's referee injects extra seeded-random
     legal restarts during live play.
     """
+    enable_sim_reuse()
+
     build_a = getattr(kernel_strategy, config_a_name)
     build_b = getattr(kernel_strategy, config_b_name)
 

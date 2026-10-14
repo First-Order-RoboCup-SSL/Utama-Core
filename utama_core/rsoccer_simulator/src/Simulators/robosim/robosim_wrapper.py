@@ -180,20 +180,25 @@ class RSimSubprocessWrapper:
         env["SKBUILD_CMAKE_ARGS"] = f"{env.get('SKBUILD_CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
         project_root = Path(__file__).resolve().parents[5]
         robosim_env = project_root / ".pixi" / "envs" / "robosim"
+        robosim_python = robosim_env / "bin" / "python"
         include_dir = robosim_env / "include"
         lib_dir = robosim_env / "lib"
         prefix = str(robosim_env)
         env["CMAKE_PREFIX_PATH"] = f"{prefix}:{env.get('CMAKE_PREFIX_PATH', '')}".strip(":")
         env["CMAKE_LIBRARY_PATH"] = f"{lib_dir}:{env.get('CMAKE_LIBRARY_PATH', '')}".strip(":")
         env["CMAKE_INCLUDE_PATH"] = f"{include_dir}:{env.get('CMAKE_INCLUDE_PATH', '')}".strip(":")
+        env["CONDA_PREFIX"] = prefix
+        env["PATH"] = f"{robosim_env}/bin:{env.get('PATH', '')}"
+        env["LD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('LD_LIBRARY_PATH', '')}"
+
+        if robosim_python.exists():
+            cmd = [str(robosim_python)]
+        else:
+            cmd = ["pixi", "run", "--environment", "robosim", "--", "python"]
+
         self.proc = subprocess.Popen(
-            [
-                "pixi",
-                "run",
-                "--environment",
-                "robosim",
-                "--",
-                "python",
+            cmd
+            + [
                 str(script_path),
                 "--sim_type",
                 sim_type,

@@ -683,10 +683,10 @@ def test_plan_exempts_ball_as_obstacle_when_targeting_it():
     first_call_cv_row_count = []
     original_first_collision = planner._first_collision
 
-    def _traced_first_collision(trajectory, obstacle_arrays, start_t=0.0):
+    def _traced_first_collision(trajectory, obstacle_arrays, *args, **kwargs):
         if not first_call_cv_row_count:
             first_call_cv_row_count.append(obstacle_arrays[2].shape[0])
-        return original_first_collision(trajectory, obstacle_arrays, start_t)
+        return original_first_collision(trajectory, obstacle_arrays, *args, **kwargs)
 
     planner._first_collision = _traced_first_collision
 

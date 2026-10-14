@@ -627,6 +627,7 @@ def main() -> None:
     _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
     _print_foul_table(summary["fouls"])
+    _print_motion_planning_table(summary["strategies"])
     if run_dir is not None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
@@ -777,6 +778,10 @@ def strategy_table(
                     "matches_as_a": 0,
                     "real_losses_as_a": 0,
                     "real_loss_kinds_as_a": {},
+                    "robot_overlap_ticks": 0,
+                    "teammate_overlap_ticks": 0,
+                    "near_miss_ticks": 0,
+                    "worst_clearance_m": None,
                 },
             )
             prefix = "" if is_a else "enemy_"
@@ -790,6 +795,13 @@ def strategy_table(
             row["attacking_third_entries"] += stats.get(f"{prefix}attacking_third_entries", 0)
             row["fouls"] += sum((fouls.get(own) or {}).values())
             row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
+            row["robot_overlap_ticks"] += stats.get("robot_overlap_ticks", 0)
+            row["teammate_overlap_ticks"] += (stats.get("teammate_overlap_ticks") or {}).get(own, 0)
+            row["near_miss_ticks"] += stats.get("near_miss_ticks", 0)
+            wc = stats.get("worst_clearance_m")
+            if wc is not None:
+                if row["worst_clearance_m"] is None or wc < row["worst_clearance_m"]:
+                    row["worst_clearance_m"] = round(wc, 3)
             progress.setdefault(name, []).extend(stats.get(f"{prefix}pass_progress_m") or [])
             if chances_by_match and tag in chances_by_match:
                 chances.add(chance_totals.setdefault(name, {}), chances.side_totals(chances_by_match[tag], own))
@@ -941,6 +953,29 @@ def _print_chances(table: dict[str, dict]) -> None:
             f"{pct(c['faced_open_goal']):>7} {pct(c['regain_to_shot']):>11} {num(c['regain_to_shot_s']):>5} "
             f"{num(c['danger_s_per_match']):>6} {pct(c['free_kick_to_shot']):>7} "
             f"{num(t['pass_progress_m']):>8} {pct(t['forward_pass_share']):>4}"
+        )
+
+
+def _print_motion_planning_table(table: dict[str, dict]) -> None:
+    has_motion = any(
+        t.get("worst_clearance_m") is not None or t.get("robot_overlap_ticks", 0) > 0 for t in table.values()
+    )
+    if not has_motion:
+        return
+    print(
+        "\nMOTION PLANNING (per match averages; tm_coll = teammate overlap s, "
+        "total_coll = all overlap s, near_miss = near miss s <5cm, min_clr = worst clearance):"
+    )
+    print(f"  {'strategy':<32} {'tm_coll':>9} {'total_coll':>12} {'near_miss':>11} {'min_clr':>10}")
+    for name, t in sorted(table.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
+        n = max(1, t["matches"])
+        tm_coll_s = (t.get("teammate_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        total_coll_s = (t.get("robot_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        near_miss_s = (t.get("near_miss_ticks", 0) / n) / TICKS_PER_SECOND
+        wc = t.get("worst_clearance_m")
+        min_clr_str = f"{wc * 100:.1f} cm" if wc is not None else "-"
+        print(
+            f"  {_short_name(name):<32} {tm_coll_s:>8.2f}s {total_coll_s:>11.2f}s {near_miss_s:>10.2f}s {min_clr_str:>10}"
         )
 
 
