@@ -212,7 +212,7 @@ def enrich_tournament_directory(tournament_dir: Union[str, Path]) -> None:
                     st["worst_clearance_m"] = m["worst_clearance_m"]
 
             # Rebuild strategy_table if possible
-            from tools.evaluation.round_robin import strategy_table
+            from utama_core.analysis.strategy_table import strategy_table
 
             summary["strategies"] = strategy_table(summary["results"])
             with open(summary_path, "w") as f:
