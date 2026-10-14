@@ -34,11 +34,6 @@ class ObstacleRegion:
         return cls(polygon=polygon, rect=AxisAlignedRectangle(min_x, max_x, min_y, max_y))
 
 
-def to_polygons(obstacles: Iterable[ObstacleRegion]) -> List[np.ndarray]:
-    """Return the list of polygon arrays for the given obstacles."""
-    return [obs.polygon for obs in obstacles]
-
-
 def to_rectangles(obstacles: Iterable[ObstacleRegion]) -> List[AxisAlignedRectangle]:
     """Return the list of bounding rectangles for the given obstacles."""
     return [obs.rect for obs in obstacles]

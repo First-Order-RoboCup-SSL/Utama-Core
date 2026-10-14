@@ -2,7 +2,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from utama_core.rsoccer_simulator.src.Entities import Field, Frame, FrameSSL, FrameVSS
+from utama_core.rsoccer_simulator.src.Entities import Field, Frame, FrameSSL
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     RSimSubprocessWrapper,
     acquire_simulator,
@@ -103,49 +103,6 @@ class RSim:
         time_step_ms,
     ) -> RSimSubprocessWrapper:
         raise NotImplementedError
-
-
-class RSimVSS(RSim):
-    def send_commands(self, commands):
-        sim_commands = np.zeros((self.n_robots_blue + self.n_robots_yellow, 2), dtype=np.float64)
-
-        for cmd in commands:
-            if cmd.yellow:
-                rbt_id = self.n_robots_blue + cmd.id
-            else:
-                rbt_id = cmd.id
-            sim_commands[rbt_id][0] = cmd.v_wheel0
-            sim_commands[rbt_id][1] = cmd.v_wheel1
-        self._last_state = self.simulator.step(sim_commands)
-
-    def get_frame(self) -> FrameVSS:
-        # Reuse the state `step()` already returned this tick instead of a
-        # second, separate `get_state()` round-trip — see the `_last_state`
-        # comment in `RSim.__init__`/`reset()` for why this is also a
-        # correctness fix, not just avoiding redundant I/O. Fall back to a
-        # real fetch when there's no cached step yet (first call after
-        # construction, or right after a `reset()`).
-        state = self._last_state if self._last_state is not None else self.simulator.get_state()
-        # Update frame with new state
-        frame = FrameVSS()
-        frame.parse(state, self.n_robots_blue, self.n_robots_yellow)
-
-        return frame
-
-    def _init_simulator(
-        self,
-        field_type,
-        n_robots_blue,
-        n_robots_yellow,
-        time_step_ms,
-    ) -> RSimSubprocessWrapper:
-        return acquire_simulator(
-            sim_type="VSS",
-            n_blue=n_robots_blue,
-            n_yellow=n_robots_yellow,
-            field_type=field_type,
-            time_step_ms=time_step_ms,
-        )
 
 
 class RSimSSL(RSim):
