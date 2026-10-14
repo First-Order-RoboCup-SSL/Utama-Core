@@ -130,21 +130,23 @@ class EnemyRobotObstacle:
         object.__setattr__(self, "_f_minus", BangBang1D.compute(0.0, self.speed, -far, self.v_max, self.a_max))
 
     def distance_at(self, t: float, point: Tuple[float, float]) -> float:
+        if self.speed < 1e-6:
+            return math.hypot(point[0] - self.p0[0], point[1] - self.p0[1]) - self.radius
         tc = max(0.0, min(t, self.t_max))
         f_plus, _ = self._f_plus.state_at(tc)
         f_minus, _ = self._f_minus.state_at(tc)
-        r_dyn = abs(f_plus - f_minus) / 2.0
-        # Stationary opponent: direction is undefined and r_dyn's f+/f-
-        # split is meaningless as a directional offset -- just grow a plain
-        # circle from p0, matching the paper's explicit tweak ("for
-        # non-moving robots, the dynamic radius is set to zero, effectively
-        # reducing the obstacle to a small circle").
-        if self.speed < 1e-6:
-            center = self.p0
-        else:
-            offset = f_minus + r_dyn
-            center = (self.p0[0] + self.direction[0] * offset, self.p0[1] + self.direction[1] * offset)
-        return math.hypot(point[0] - center[0], point[1] - center[1]) - (self.radius + r_dyn)
+        length = f_plus - f_minus
+        if length < 1e-9:
+            return math.hypot(point[0] - self.p0[0], point[1] - self.p0[1]) - self.radius
+        # Tube (capsule) from f_minus to f_plus along direction unit vector
+        ax = self.p0[0] + self.direction[0] * f_minus
+        ay = self.p0[1] + self.direction[1] * f_minus
+        px, py = point
+        s = (px - ax) * self.direction[0] + (py - ay) * self.direction[1]
+        s = max(0.0, min(length, s))
+        cx = ax + self.direction[0] * s
+        cy = ay + self.direction[1] * s
+        return math.hypot(px - cx, py - cy) - self.radius
 
 
 def enemy_obstacle_from_robot(

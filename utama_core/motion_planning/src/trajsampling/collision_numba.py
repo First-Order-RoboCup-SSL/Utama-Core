@@ -282,17 +282,28 @@ def _enemy_distance_at(row: np.ndarray, t: float, px: float, py: float) -> float
         tc = 0.0
     elif tc > t_max:
         tc = t_max
-    fp, _ = _bangbang_state_at(f_plus, tc)
-    fm, _ = _bangbang_state_at(f_minus, tc)
-    r_dyn = abs(fp - fm) / 2.0
 
     if speed < 1e-6:
-        cx, cy = p0x, p0y
-    else:
-        offset = fm + r_dyn
-        cx = p0x + dirx * offset
-        cy = p0y + diry * offset
-    return math.hypot(px - cx, py - cy) - (radius + r_dyn)
+        return math.hypot(px - p0x, py - p0y) - radius
+
+    fp, _ = _bangbang_state_at(f_plus, tc)
+    fm, _ = _bangbang_state_at(f_minus, tc)
+    length = fp - fm
+    if length < 1e-9:
+        return math.hypot(px - p0x, py - p0y) - radius
+
+    # Tube (capsule) from fm to fp along direction unit vector:
+    # ax, ay is the rear reachability bound, bx, by is the forward bound
+    ax = p0x + dirx * fm
+    ay = p0y + diry * fm
+    s = (px - ax) * dirx + (py - ay) * diry
+    if s < 0.0:
+        s = 0.0
+    elif s > length:
+        s = length
+    cx = ax + dirx * s
+    cy = ay + diry * s
+    return math.hypot(px - cx, py - cy) - radius
 
 
 @njit(cache=True, fastmath=True)

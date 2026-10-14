@@ -72,10 +72,17 @@ doubles match count.
 
 from __future__ import annotations
 
+import os
+
+# Prevent multi-process thread oversubscription across OpenBLAS, MKL, OpenMP, NumExpr
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import dataclasses
 import itertools
 import json
-import os
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -137,8 +144,9 @@ def run_match(
     control_scheme: str = "fpp",
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
+    max_match_seconds: float = MAX_MATCH_SECONDS,
 ) -> MatchResult:
-    """Play one full match (capped at this module's `MAX_MATCH_SECONDS`), config_a
+    """Play one full match (capped at `max_match_seconds`), config_a
     fixed to the right side and kickoff (this module's historical, un-swept
     convention — `ladder.py` sweeps side and kickoff). Thin wrapper over `match.run_match`; see its
     docstring for what each parameter does.
@@ -146,7 +154,7 @@ def run_match(
     return _lib_run_match(
         config_a_name,
         config_b_name,
-        duration_seconds=MAX_MATCH_SECONDS,
+        duration_seconds=max_match_seconds,
         run_dir=run_dir,
         control_scheme=control_scheme,
         fuzz_seed=fuzz_seed,
@@ -297,6 +305,12 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
+    match_seconds = MAX_MATCH_SECONDS
+    if "--match-seconds" in args:
+        idx = args.index("--match-seconds")
+        match_seconds = float(args[idx + 1])
+        args = args[:idx] + args[idx + 2 :]
+
     # `--pair A B` plays exactly one fixture, A as config_a (yellow, right side
     # and kickoff in the first half) -- e.g. to rerun one stalled match from a round-robin, which
     # reproduces exactly since rsim is deterministic.
@@ -373,7 +387,7 @@ def main() -> None:
     else:
         print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
     if not sequential:
-        default_workers = max(1, (os.cpu_count() or 1) - 1)
+        default_workers = min(12, max(1, (os.cpu_count() or 1) - 1))
         n_workers = max(1, min(len(pairs), max_workers_override or default_workers))
         print(f"Running {n_workers} matches concurrently (--sequential to disable)\n")
     else:
@@ -441,13 +455,18 @@ def main() -> None:
 
     if sequential:
         for config_a_name, config_b_name in pairs:
+            match_kwargs = {
+                "run_dir": run_dir,
+                "control_scheme": control_scheme,
+                "fuzz_seed": fuzz_seed,
+                "fuzz_interval_s": fuzz_interval_s,
+            }
+            if match_seconds != MAX_MATCH_SECONDS:
+                match_kwargs["max_match_seconds"] = match_seconds
             result = run_match(
                 config_a_name,
                 config_b_name,
-                run_dir=run_dir,
-                control_scheme=control_scheme,
-                fuzz_seed=fuzz_seed,
-                fuzz_interval_s=fuzz_interval_s,
+                **match_kwargs,
             )
             _record(result)
             _analyse(result)
@@ -463,7 +482,8 @@ def main() -> None:
         # only user-visible reordering is the interleaved progress log.
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
             futures = [
-                pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s) for a, b in pairs
+                pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s, match_seconds)
+                for a, b in pairs
             ]
             for future in as_completed(futures):
                 result = future.result()

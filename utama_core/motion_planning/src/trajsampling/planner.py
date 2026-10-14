@@ -265,16 +265,24 @@ def _flatten_obstacles(
     return _stack_rows(_flatten_obstacle_rows(obstacles))
 
 
-def _has_priority(robot_id: int, other_id: int) -> bool:
+def _has_priority(robot_id: int, other_id: int, game: Optional[Game] = None) -> bool:
     """True if `robot_id` outranks `other_id` and so may plan through its
-    path -- `other_id` must yield instead. Mirrors TIGERs'
-    `PathFinderPrioMap.mapByBotId`'s default ("higher botIds are
-    preferred"): a plain, fixed ordering by ID, not dynamically computed
-    from role or task. Good enough to break the symmetry that let two
-    equally-"locally correct" robots both plan through each other; a
-    role-aware ordering (e.g. attacker outranks support) is a refinement
-    for later, not needed to fix the observed collision.
+    path -- `other_id` must yield instead.
+
+    Role-aware priority:
+    If `game` is provided and exactly one of the two teammates possesses the
+    ball (`has_ball == True`), the ball carrier takes absolute priority over
+    off-ball runners. Otherwise breaks symmetry by fixed robot ID
+    (`robot_id > other_id`), matching TIGERs' `PathFinderPrioMap.mapByBotId`.
     """
+    if game is not None:
+        r_this = game.friendly_robots.get(robot_id)
+        r_other = game.friendly_robots.get(other_id)
+        if r_this is not None and r_other is not None:
+            if r_this.has_ball and not r_other.has_ball:
+                return True
+            if r_other.has_ball and not r_this.has_ball:
+                return False
     return robot_id > other_id
 
 
@@ -414,6 +422,19 @@ _N_NEAR_LAST_JITTER = 3
 # `last`'s own direction, comfortably inside `_STALE_INTERMEDIATE_TARGET_ANGLE_RAD`
 # so a jittered variant is never itself stale merely for being tried.
 _NEAR_LAST_JITTER_STEP_RAD = math.radians(11)
+
+# The moving-obstacle arrays left empty, to check a candidate against static
+# obstacles alone (`_fallback_rank`).
+_NO_MOVING_OBSTACLES = (
+    _cn.empty_row_array(_cn.TRAJ_ROW_LEN),
+    _cn.empty_row_array(_cn.CV_ROW_LEN),
+    _cn.empty_row_array(_cn.ENEMY_ROW_LEN),
+)
+
+# Fallback rank of a candidate whose first collision is static: below every
+# moving collision (ranked by minus squared distance to the target, at most
+# tens of m^2), above a priority-blocked one (-inf).
+_STATIC_COLLISION_RANK = -1e18
 
 
 class TrajectorySamplingPlanner:
@@ -600,7 +621,9 @@ class TrajectorySamplingPlanner:
         # See `_first_collision`'s docstring for why this matters.
         obstacle_arrays = _stack_rows(combined_rows)
 
-        reused = self._try_reuse(robot_id, game.ts, p0, target_pos, obstacles, obstacle_arrays, priority_enabled)
+        reused = self._try_reuse(
+            robot_id, game.ts, p0, target_pos, obstacles, obstacle_arrays, priority_enabled, game=game
+        )
         if reused is not None:
             return self._with_current_clearance(reused, p0, obstacles)
 
@@ -645,11 +668,11 @@ class TrajectorySamplingPlanner:
         # ranked down by raw survival time exactly like a genuine head-on
         # collision, with the planner never actually being allowed to
         # complete a totally normal, low-speed arrival next to another robot.
-        def fallback_rank(t_col: float, blocked: bool) -> float:
-            return -math.inf if blocked else t_col
+        def fallback_rank(trajectory, t_col: float, blocked: bool) -> float:
+            return self._fallback_rank(trajectory, t_col, blocked, obstacle_arrays, target_pos)
 
         direct_blocked = self._blocked_by_priority_obstacle(
-            robot_id, direct, obstacles, collision_time, priority_enabled
+            robot_id, direct, obstacles, collision_time, priority_enabled, game=game
         )
         if not direct_blocked and self._collision_leniency_accepts(
             direct, collision_time, v0, target_pos, priority_enabled
@@ -658,44 +681,53 @@ class TrajectorySamplingPlanner:
             result = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
             return self._with_current_clearance(result, p0, obstacles)
         best_fallback = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
-        best_rank = fallback_rank(collision_time, direct_blocked)
+        best_rank = fallback_rank(direct, collision_time, direct_blocked)
 
-        for candidate_target in self._intermediate_targets(robot_id, p0, target_pos):
-            # Try every switch-time variant for this direction before moving
-            # on to the next sampled direction -- see
-            # `_two_segment_candidates`'s docstring for why a single fixed
-            # switch time isn't enough.
-            #
-            # Tried splitting this into a once-per-direction shared-prefix
-            # check plus a per-variant tail check, to avoid re-scanning each
-            # variant's common `first_leg` prefix from t=0. Measured: no
-            # speedup (107.9s vs 106.5s self-time on the same real-match
-            # profile, i.e. a wash within noise) and `_first_collision`'s own
-            # call count went UP (115k vs 77k), because most sampled
-            # directions' first leg doesn't collide at all, so the
-            # early-abandon path rarely fires -- the split then just adds a
-            # second Python-level call per candidate without saving any
-            # scanning. Reverted; see `profile_real_match_opt.log`. The real
-            # fix for the per-timestep obstacle loop's cost turned out to be
-            # `_first_collision`'s own numba rewrite (see its docstring),
-            # not reducing candidate/call count.
+        cand_targets = self._intermediate_targets(robot_id, p0, target_pos)
+
+        best_accepted: Optional[PlanResult] = None
+        best_accepted_target: Optional[Tuple[float, float]] = None
+        best_accepted_duration: float = math.inf
+
+        last_dir = self._last_intermediate_direction.get(robot_id)
+
+        for candidate_target in cand_targets:
+            is_last = False
+            if last_dir is not None:
+                cdx, cdy = candidate_target[0] - p0[0], candidate_target[1] - p0[1]
+                cdist = math.hypot(cdx, cdy)
+                if cdist > 1e-6:
+                    if abs(cdx / cdist - last_dir[0]) < 1e-4 and abs(cdy / cdist - last_dir[1]) < 1e-4:
+                        is_last = True
+
             for candidate in self._two_segment_candidates(p0, v0, candidate_target, target_pos):
                 t_col = self._first_collision(candidate, obstacle_arrays)
                 if t_col is None:
-                    self._commit(robot_id, game.ts, candidate, target_pos)
-                    self._last_intermediate_direction[robot_id] = _unit_direction(p0, candidate_target)
-                    result = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
-                    return self._with_current_clearance(result, p0, obstacles)
-                blocked = self._blocked_by_priority_obstacle(robot_id, candidate, obstacles, t_col, priority_enabled)
+                    eff_dur = candidate.duration - (0.15 if is_last else 0.0)
+                    if eff_dur < best_accepted_duration:
+                        best_accepted_duration = eff_dur
+                        best_accepted = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
+                        best_accepted_target = candidate_target
+                    continue
+                blocked = self._blocked_by_priority_obstacle(
+                    robot_id, candidate, obstacles, t_col, priority_enabled, game=game
+                )
                 if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos, priority_enabled):
-                    self._commit(robot_id, game.ts, candidate, target_pos)
-                    self._last_intermediate_direction[robot_id] = _unit_direction(p0, candidate_target)
-                    result = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
-                    return self._with_current_clearance(result, p0, obstacles)
-                rank = fallback_rank(t_col, blocked)
+                    eff_dur = candidate.duration - (0.15 if is_last else 0.0) + 0.05
+                    if eff_dur < best_accepted_duration:
+                        best_accepted_duration = eff_dur
+                        best_accepted = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
+                        best_accepted_target = candidate_target
+                    continue
+                rank = fallback_rank(candidate, t_col, blocked)
                 if rank > best_rank:
                     best_fallback = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
                     best_rank = rank
+
+        if best_accepted is not None and best_accepted_target is not None:
+            self._commit(robot_id, game.ts, best_accepted.trajectory, target_pos)
+            self._last_intermediate_direction[robot_id] = _unit_direction(p0, best_accepted_target)
+            return self._with_current_clearance(best_accepted, p0, obstacles)
 
         # Nothing collision-free was found within the sample budget: return
         # whichever candidate survives longest before its first collision
@@ -779,6 +811,7 @@ class TrajectorySamplingPlanner:
         obstacles: List[TimedObstacle],
         obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         priority_enabled: bool = True,
+        game: Optional[Game] = None,
     ) -> Optional[PlanResult]:
         """Keep executing the already-committed trajectory, evaluated at its
         real elapsed time, instead of silently restarting it from t=0 every
@@ -837,13 +870,40 @@ class TrajectorySamplingPlanner:
         recheck_end = min(elapsed + _PRIORITY_RECHECK_LOOKAHEAD_TIME, trajectory.duration)
         t = elapsed
         while True:
-            if self._blocked_by_priority_obstacle(robot_id, trajectory, obstacles, t, priority_enabled):
+            if self._blocked_by_priority_obstacle(robot_id, trajectory, obstacles, t, priority_enabled, game=game):
                 return None
             if t >= recheck_end:
                 break
             t = min(t + config.MIN_TIME_STEP, recheck_end)
 
         return PlanResult(trajectory=trajectory, has_collision=False, collision_time=None, elapsed=elapsed)
+
+    def _fallback_rank(
+        self,
+        trajectory,
+        t_col: float,
+        blocked: bool,
+        obstacle_arrays: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        target_pos: Tuple[float, float],
+    ) -> float:
+        """How good a colliding candidate is as `plan()`'s fallback: higher is better.
+
+        A candidate blocked by a higher-priority teammate is never eligible (see
+        `plan()`). Among the rest, the best is the one whose first collision is
+        closest to the target (TIGERs' `getBestRejectedResult`): it makes the
+        most progress before it has to deal with the obstacle. Ranking by
+        survival time instead preferred a candidate that wanders off and
+        collides late, far from the target, over one that gets nearly there. A
+        candidate whose first collision is with a static obstacle (field
+        boundary, defence area) won't clear by waiting, so it ranks below every
+        moving collision, as in Sumatra.
+        """
+        if blocked:
+            return -math.inf
+        if self._first_collision(trajectory, (obstacle_arrays[0],) + _NO_MOVING_OBSTACLES) == t_col:
+            return _STATIC_COLLISION_RANK
+        (cx, cy), _ = trajectory.state_at(t_col)
+        return -((cx - target_pos[0]) ** 2 + (cy - target_pos[1]) ** 2)
 
     def _two_segment_candidates(
         self,
@@ -1020,9 +1080,24 @@ class TrajectorySamplingPlanner:
             return angular_distance_of_angle(cand_angle)
 
         fresh: List[Tuple[float, float]] = []
-        for _ in range(config.N_INTERMEDIATE_TARGETS):
-            angle = self._rng.uniform(0, 2 * math.pi)
-            fresh.append((p0[0] + r * math.cos(angle), p0[1] + r * math.sin(angle)))
+        n = config.N_INTERMEDIATE_TARGETS
+        # Generate n candidate directions symmetrically fanning out from final_angle.
+        # Tight angles use compact radius for efficient obstacle hugs; wider angles
+        # expand to the full configured radius for large obstacle clusters.
+        step = math.radians(15)
+        for i in range(1, (n // 2) + 1):
+            offset = step * i
+            # Compact radius (0.6m) for tight angles <= 30 deg, scaling to full radius (1.0m) at >= 60 deg
+            rad_scale = min(1.0, 0.6 + 0.13 * (i - 1))
+            cand_r = r * rad_scale
+            fresh.append(
+                (p0[0] + cand_r * math.cos(final_angle + offset), p0[1] + cand_r * math.sin(final_angle + offset))
+            )
+            fresh.append(
+                (p0[0] + cand_r * math.cos(final_angle - offset), p0[1] + cand_r * math.sin(final_angle - offset))
+            )
+        if len(fresh) < n:
+            fresh.append((p0[0] + r * math.cos(final_angle + math.pi), p0[1] + r * math.sin(final_angle + math.pi)))
 
         # Sort by angle between (p0 -> final_target) and (p0 -> candidate),
         # smallest first -- paper section 2.2: "This favors paths pointing
@@ -1192,6 +1267,7 @@ class TrajectorySamplingPlanner:
         obstacles: List[TimedObstacle],
         collision_time: float,
         priority_enabled: bool = True,
+        game: Optional[Game] = None,
     ) -> bool:
         """True if, at `collision_time`, this trajectory collides with a
         teammate that outranks `robot_id` (see `_has_priority`). Ported from
@@ -1214,7 +1290,7 @@ class TrajectorySamplingPlanner:
         point, _ = trajectory.state_at(collision_time)
         for obstacle in obstacles:
             owner_id = getattr(obstacle, "owner_id", None)
-            if owner_id is None or not _has_priority(owner_id, robot_id):
+            if owner_id is None or not _has_priority(owner_id, robot_id, game=game):
                 continue
             d = obstacle.distance_at(collision_time, point) - config.ROBOT_RADIUS
             if d < config.MARGIN_BASE:
