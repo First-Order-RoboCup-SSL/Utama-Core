@@ -19,6 +19,7 @@ side/kickoff as independent axes.
 from __future__ import annotations
 
 import dataclasses
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -30,6 +31,9 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
+from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+    enable_sim_reuse,
+)
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -167,6 +171,8 @@ def run_match(
     `CustomReferee`, so this match's referee injects extra seeded-random
     legal restarts during live play.
     """
+    enable_sim_reuse()
+
     build_a = getattr(kernel_strategy, config_a_name)
     build_b = getattr(kernel_strategy, config_b_name)
 
@@ -214,6 +220,8 @@ def run_match(
             replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
         )
 
+    resolved_scheme = None if control_scheme in (None, "auto") else control_scheme
+
     runner = StrategyRunner(
         strategy=strategy_a,
         opp_strategy=strategy_b,
@@ -226,7 +234,7 @@ def run_match(
         referee=referee,
         enable_vision_stream=False,
         referee_initial_command=initial_command,
-        control_scheme=control_scheme,
+        control_scheme=resolved_scheme,
         **extra_kwargs,
     )
 

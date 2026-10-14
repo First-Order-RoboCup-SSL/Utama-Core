@@ -683,10 +683,10 @@ def test_plan_exempts_ball_as_obstacle_when_targeting_it():
     first_call_cv_row_count = []
     original_first_collision = planner._first_collision
 
-    def _traced_first_collision(trajectory, obstacle_arrays, start_t=0.0):
+    def _traced_first_collision(trajectory, obstacle_arrays, *args, **kwargs):
         if not first_call_cv_row_count:
             first_call_cv_row_count.append(obstacle_arrays[2].shape[0])
-        return original_first_collision(trajectory, obstacle_arrays, start_t)
+        return original_first_collision(trajectory, obstacle_arrays, *args, **kwargs)
 
     planner._first_collision = _traced_first_collision
 
@@ -1084,3 +1084,97 @@ def test_with_current_clearance_still_reports_a_genuinely_approaching_obstacle()
 
     expected = approaching.distance_at(0.0, p0) - config.ROBOT_RADIUS
     assert updated.nearest_obstacle_distance == pytest.approx(expected)
+
+
+def _rank_scene():
+    # Robot at the origin, target 1 m ahead. A parked robot 0.6 m ahead stops the
+    # direct line near the target; another 1.5 m behind stops a retreat later.
+    obstacles = [
+        ConstantVelocityObstacle(p0=(0.6, 0.0), v=(0.0, 0.0), radius=0.09),
+        ConstantVelocityObstacle(p0=(-1.5, 0.0), v=(0.0, 0.0), radius=0.09),
+        StaticSegmentObstacle(a=(0.0, 0.5), b=(0.0, 3.0)),
+    ]
+    return TrajectorySamplingPlanner(v_max=2.0, a_max=2.0), _flatten_obstacles(obstacles), (1.0, 0.0)
+
+
+def test_fallback_prefers_the_candidate_that_collides_nearest_the_target():
+    """When every candidate collides, the fallback is the one that gets closest
+    to the target before its first collision (TIGERs' `getBestRejectedResult`),
+    not the one that survives longest: that preferred a retreat colliding late,
+    far from the target, over a direct run stopped just short of it."""
+    planner, arrays, target = _rank_scene()
+    direct = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), target, 2.0, 2.0)
+    retreat = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), (-3.0, 0.0), 2.0, 2.0)
+    t_direct, t_retreat = planner._first_collision(direct, arrays), planner._first_collision(retreat, arrays)
+    assert t_direct is not None and t_retreat is not None and t_retreat > t_direct  # survival time favours the retreat
+    assert planner._fallback_rank(direct, t_direct, False, arrays, target) > planner._fallback_rank(
+        retreat, t_retreat, False, arrays, target
+    )
+
+
+def test_fallback_ranks_a_static_collision_below_any_moving_one():
+    """A candidate whose first collision is a static obstacle (a field line, a
+    defence area) won't clear by waiting, so it ranks below every moving
+    collision even when it collides nearer the target -- and above a candidate
+    blocked by a higher-priority teammate."""
+    planner, arrays, target = _rank_scene()
+    into_wall = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), (0.0, 2.0), 2.0, 2.0)
+    retreat = Trajectory2D.compute((0.0, 0.0), (0.0, 0.0), (-3.0, 0.0), 2.0, 2.0)
+    t_wall, t_retreat = planner._first_collision(into_wall, arrays), planner._first_collision(retreat, arrays)
+    wall_rank = planner._fallback_rank(into_wall, t_wall, False, arrays, target)
+    assert wall_rank < planner._fallback_rank(retreat, t_retreat, False, arrays, target)
+    assert wall_rank > planner._fallback_rank(retreat, t_retreat, True, arrays, target)
+
+
+def test_enemy_obstacle_lateral_clearance_is_tube_not_inflated_sphere():
+    """An opponent moving along +x has reachable forward acceleration and braking
+    bounds along x, but its body width orthogonal to travel (in y) is strictly its
+    robot radius, not an inflated circle of radius (radius + r_dyn). A query point
+    located laterally at y=0.35m from an opponent traveling along y=0 must have
+    clearance equal to 0.35 - radius, without being encroached upon by r_dyn."""
+    from utama_core.motion_planning.src.trajsampling.obstacles import EnemyRobotObstacle
+
+    obs = EnemyRobotObstacle(
+        p0=(0.0, 0.0),
+        speed=1.5,
+        direction=(1.0, 0.0),
+        v_max=3.0,
+        a_max=3.0,
+        radius=0.09,
+        t_max=0.5,
+    )
+    # At t=0.3s, opponent has moved forward to x in [0.315, 0.585].
+    # At x=0.4, y=0.35 (directly beside the tube):
+    # Under tube model: distance to the segment along y=0 is exactly 0.35 - 0.09 = 0.26m.
+    # Under the old spherical model, r_dyn (~0.135m) was added to radius, reducing clearance to ~0.125m.
+    d = obs.distance_at(0.3, (0.4, 0.35))
+    assert math.isclose(d, 0.35 - 0.09, abs_tol=1e-6)
+
+
+def test_has_priority_role_aware_ball_carrier_and_fallback():
+    """Ball carrier must take priority over off-ball teammates regardless of robot ID.
+    When neither has the ball, or game is None, falls back to ID-based tie breaking."""
+    from dataclasses import replace
+
+    from utama_core.motion_planning.src.trajsampling.planner import _has_priority
+
+    # Standalone (no game): higher ID wins
+    assert _has_priority(2, 1, game=None) is True
+    assert _has_priority(1, 2, game=None) is False
+
+    # With game: robot 1 has ball, robot 5 does not
+    game, _ = _game((0.0, 0.0), (0.0, 0.0))
+    r1 = replace(_robot(1, 0.0, 0.0, True), has_ball=True)
+    r5 = replace(_robot(5, 1.0, 0.0, True), has_ball=False)
+    game.friendly_robots[1] = r1
+    game.friendly_robots[5] = r5
+
+    # Robot 1 has lower ID than 5, but HAS BALL -> outranks robot 5!
+    assert _has_priority(1, 5, game=game) is True
+    assert _has_priority(5, 1, game=game) is False
+
+    # Neither has ball -> falls back to higher ID (5 outranks 1)
+    r1_noball = replace(r1, has_ball=False)
+    game.friendly_robots[1] = r1_noball
+    assert _has_priority(1, 5, game=game) is False
+    assert _has_priority(5, 1, game=game) is True

@@ -61,8 +61,11 @@ class FrameSSL(Frame):
         rbt_obs = 11
 
         for i in range(n_blues):
-            robot = Robot()
-            robot.id = i
+            robot = self.robots_blue.get(i)
+            if robot is None:
+                robot = Robot()
+                robot.id = i
+                self.robots_blue[i] = robot
             robot.x = state[5 + (rbt_obs * i) + 0]
             robot.y = state[5 + (rbt_obs * i) + 1]
             robot.theta = state[5 + (rbt_obs * i) + 2]
@@ -74,20 +77,22 @@ class FrameSSL(Frame):
             robot.v_wheel1 = state[5 + (rbt_obs * i) + 8]
             robot.v_wheel2 = state[5 + (rbt_obs * i) + 9]
             robot.v_wheel3 = state[5 + (rbt_obs * i) + 10]
-            self.robots_blue[robot.id] = robot
 
+        offset_yellow = 5 + n_blues * rbt_obs
         for i in range(n_yellows):
-            robot = Robot()
-            robot.id = i
-            robot.x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 0]
-            robot.y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 1]
-            robot.theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 2]
-            robot.v_x = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 3]
-            robot.v_y = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 4]
-            robot.v_theta = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 5]
-            robot.infrared = bool(state[5 + n_blues * rbt_obs + (rbt_obs * i) + 6])
-            robot.v_wheel0 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 7]
-            robot.v_wheel1 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 8]
-            robot.v_wheel2 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 9]
-            robot.v_wheel3 = state[5 + n_blues * rbt_obs + (rbt_obs * i) + 10]
-            self.robots_yellow[robot.id] = robot
+            robot = self.robots_yellow.get(i)
+            if robot is None:
+                robot = Robot()
+                robot.id = i
+                self.robots_yellow[i] = robot
+            robot.x = state[offset_yellow + (rbt_obs * i) + 0]
+            robot.y = state[offset_yellow + (rbt_obs * i) + 1]
+            robot.theta = state[offset_yellow + (rbt_obs * i) + 2]
+            robot.v_x = state[offset_yellow + (rbt_obs * i) + 3]
+            robot.v_y = state[offset_yellow + (rbt_obs * i) + 4]
+            robot.v_theta = state[offset_yellow + (rbt_obs * i) + 5]
+            robot.infrared = bool(state[offset_yellow + (rbt_obs * i) + 6])
+            robot.v_wheel0 = state[offset_yellow + (rbt_obs * i) + 7]
+            robot.v_wheel1 = state[offset_yellow + (rbt_obs * i) + 8]
+            robot.v_wheel2 = state[offset_yellow + (rbt_obs * i) + 9]
+            robot.v_wheel3 = state[offset_yellow + (rbt_obs * i) + 10]

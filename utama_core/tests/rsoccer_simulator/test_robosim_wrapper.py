@@ -68,18 +68,30 @@ def test_subprocess_error_is_raised_not_swallowed():
 
 
 def _descendant_running(pid: int, name: str) -> int:
-    """`proc.pid` is the `pixi run` launcher, whose own argv names the script too:
-    the script is the deepest process under it with `name` in its argv."""
+    """Finds the process executing `name`. When launched via `pixi run`, `proc.pid`
+    is the launcher process, and the script is the deepest descendant running `name`.
+    When launched directly via the environment's python binary, `proc.pid` itself
+    is the script process."""
+    with open(f"/proc/{pid}/cmdline", "rb") as f:
+        root_cmd = f.read()
+
     found, pending = None, [pid]
     while pending:
         p = pending.pop(0)
         with open(f"/proc/{p}/cmdline", "rb") as f:
             if name.encode() in f.read():
                 found = p
-        for task in os.listdir(f"/proc/{p}/task"):
-            with open(f"/proc/{p}/task/{task}/children") as f:
-                pending += [int(c) for c in f.read().split()]
-    assert found not in (None, pid), f"no process under {pid} runs {name}"
+        task_dir = f"/proc/{p}/task"
+        if os.path.isdir(task_dir):
+            for task in os.listdir(task_dir):
+                children_file = f"/proc/{p}/task/{task}/children"
+                if os.path.exists(children_file):
+                    with open(children_file) as f:
+                        pending += [int(c) for c in f.read().split()]
+    assert found is not None, f"no process under {pid} runs {name}"
+    if found == pid:
+        parts = root_cmd.split(b"\x00")
+        assert b"python" in parts[0], f"{pid} is launcher, not script: {parts[0]}"
     return found
 
 

@@ -362,7 +362,9 @@ def _clear_to_legal_positions(
 
         target = _clamp_to_field(target, game)
 
-        if target == Vector2D(robot.p.x, robot.p.y):
+        dx = target.x - robot.p.x
+        dy = target.y - robot.p.y
+        if dx * dx + dy * dy < 1e-4:
             blackboard.cmd_map[robot_id] = empty_command(False)
             continue
 

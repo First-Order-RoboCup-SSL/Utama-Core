@@ -757,3 +757,45 @@ def test_foul_log_names_the_robot_and_its_tactic():
         ("excessive_dribbling", "enemy", 2, "attack", False),
         ("keeper_held_ball", "friendly", 3, "press", True),
     ]
+
+
+def test_motion_planning_collision_and_clearance_tracking(tmp_path):
+    acc = MatchStatsAccumulator()
+    # Frame 1: friendly robots overlap (centers at (0, 0) and (0.10, 0) -> dist=0.10, clearance=0.10 - 0.18 = -0.08m)
+    f1 = {1: _robot(1, 0.0, 0.0, True), 2: _robot(2, 0.10, 0.0, True)}
+    e1 = {3: _robot(3, 2.0, 0.0, False)}
+    acc.record_tick(_frame(f1, e1, ball_xy=(0.5, 0.0)))
+
+    # Frame 2: near miss between friendly and enemy (centers at (0, 0) and (0.20, 0) -> clearance=0.02m)
+    f2 = {1: _robot(1, 0.0, 0.0, True), 2: _robot(2, 1.0, 1.0, True)}
+    e2 = {3: _robot(3, 0.20, 0.0, False)}
+    acc.record_tick(_frame(f2, e2, ball_xy=(0.5, 0.0)))
+
+    # Frame 3: safe separation (all robots >= 0.5m apart)
+    f3 = {1: _robot(1, 0.0, 0.0, True), 2: _robot(2, 1.0, 1.0, True)}
+    e3 = {3: _robot(3, 2.0, 2.0, False)}
+    acc.record_tick(_frame(f3, e3, ball_xy=(0.5, 0.0)))
+
+    stats = acc.finalize()
+    assert stats.robot_overlap_ticks == 1
+    assert stats.robot_overlap_incidents == 1
+    assert stats.near_miss_ticks == 1
+    assert stats.teammate_overlap_ticks == {"friendly": 1, "enemy": 0}
+    assert stats.teammate_overlap_incidents == {"friendly": 1, "enemy": 0}
+    assert stats.opponent_overlap_ticks == 0
+    assert stats.opponent_overlap_incidents == 0
+    assert stats.worst_clearance_m == pytest.approx(-0.08, abs=1e-3)
+
+    # Test serialization to json
+    json_path = tmp_path / "stats.json"
+    stats.to_json(json_path)
+    with open(json_path) as f:
+        data = json.load(f)
+    assert data["robot_overlap_ticks"] == 1
+    assert data["robot_overlap_incidents"] == 1
+    assert data["near_miss_ticks"] == 1
+    assert data["teammate_overlap_ticks"] == {"friendly": 1, "enemy": 0}
+    assert data["teammate_overlap_incidents"] == {"friendly": 1, "enemy": 0}
+    assert data["opponent_overlap_ticks"] == 0
+    assert data["opponent_overlap_incidents"] == 0
+    assert data["worst_clearance_m"] == pytest.approx(-0.08, abs=1e-3)

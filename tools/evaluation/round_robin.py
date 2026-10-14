@@ -72,10 +72,17 @@ doubles match count.
 
 from __future__ import annotations
 
+import os
+
+# Prevent multi-process thread oversubscription across OpenBLAS, MKL, OpenMP, NumExpr
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import dataclasses
 import itertools
 import json
-import os
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -137,8 +144,9 @@ def run_match(
     control_scheme: str = "fpp",
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
+    max_match_seconds: float = MAX_MATCH_SECONDS,
 ) -> MatchResult:
-    """Play one full match (capped at this module's `MAX_MATCH_SECONDS`), config_a
+    """Play one full match (capped at `max_match_seconds`), config_a
     fixed to the right side and kickoff (this module's historical, un-swept
     convention — `ladder.py` sweeps side and kickoff). Thin wrapper over `match.run_match`; see its
     docstring for what each parameter does.
@@ -146,7 +154,7 @@ def run_match(
     return _lib_run_match(
         config_a_name,
         config_b_name,
-        duration_seconds=MAX_MATCH_SECONDS,
+        duration_seconds=max_match_seconds,
         run_dir=run_dir,
         control_scheme=control_scheme,
         fuzz_seed=fuzz_seed,
@@ -297,6 +305,12 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
+    match_seconds = MAX_MATCH_SECONDS
+    if "--match-seconds" in args:
+        idx = args.index("--match-seconds")
+        match_seconds = float(args[idx + 1])
+        args = args[:idx] + args[idx + 2 :]
+
     # `--pair A B` plays exactly one fixture, A as config_a (yellow, right side
     # and kickoff in the first half) -- e.g. to rerun one stalled match from a round-robin, which
     # reproduces exactly since rsim is deterministic.
@@ -373,7 +387,7 @@ def main() -> None:
     else:
         print(f"Recording to replays/{run_id}/ (per-match replay, intention log, stats)")
     if not sequential:
-        default_workers = max(1, (os.cpu_count() or 1) - 1)
+        default_workers = min(12, max(1, (os.cpu_count() or 1) - 1))
         n_workers = max(1, min(len(pairs), max_workers_override or default_workers))
         print(f"Running {n_workers} matches concurrently (--sequential to disable)\n")
     else:
@@ -441,13 +455,18 @@ def main() -> None:
 
     if sequential:
         for config_a_name, config_b_name in pairs:
+            match_kwargs = {
+                "run_dir": run_dir,
+                "control_scheme": control_scheme,
+                "fuzz_seed": fuzz_seed,
+                "fuzz_interval_s": fuzz_interval_s,
+            }
+            if match_seconds != MAX_MATCH_SECONDS:
+                match_kwargs["max_match_seconds"] = match_seconds
             result = run_match(
                 config_a_name,
                 config_b_name,
-                run_dir=run_dir,
-                control_scheme=control_scheme,
-                fuzz_seed=fuzz_seed,
-                fuzz_interval_s=fuzz_interval_s,
+                **match_kwargs,
             )
             _record(result)
             _analyse(result)
@@ -463,7 +482,8 @@ def main() -> None:
         # only user-visible reordering is the interleaved progress log.
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
             futures = [
-                pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s) for a, b in pairs
+                pool.submit(run_match, a, b, run_dir, control_scheme, fuzz_seed, fuzz_interval_s, match_seconds)
+                for a, b in pairs
             ]
             for future in as_completed(futures):
                 result = future.result()
@@ -607,6 +627,7 @@ def main() -> None:
     _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
     _print_foul_table(summary["fouls"])
+    _print_motion_planning_table(summary["strategies"])
     if run_dir is not None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
@@ -757,6 +778,12 @@ def strategy_table(
                     "matches_as_a": 0,
                     "real_losses_as_a": 0,
                     "real_loss_kinds_as_a": {},
+                    "robot_overlap_ticks": 0,
+                    "robot_overlap_incidents": 0,
+                    "teammate_overlap_ticks": 0,
+                    "teammate_overlap_incidents": 0,
+                    "near_miss_ticks": 0,
+                    "worst_clearance_m": None,
                 },
             )
             prefix = "" if is_a else "enemy_"
@@ -770,6 +797,15 @@ def strategy_table(
             row["attacking_third_entries"] += stats.get(f"{prefix}attacking_third_entries", 0)
             row["fouls"] += sum((fouls.get(own) or {}).values())
             row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
+            row["robot_overlap_ticks"] += stats.get("robot_overlap_ticks", 0)
+            row["robot_overlap_incidents"] += stats.get("robot_overlap_incidents", 0)
+            row["teammate_overlap_ticks"] += (stats.get("teammate_overlap_ticks") or {}).get(own, 0)
+            row["teammate_overlap_incidents"] += (stats.get("teammate_overlap_incidents") or {}).get(own, 0)
+            row["near_miss_ticks"] += stats.get("near_miss_ticks", 0)
+            wc = stats.get("worst_clearance_m")
+            if wc is not None:
+                if row["worst_clearance_m"] is None or wc < row["worst_clearance_m"]:
+                    row["worst_clearance_m"] = round(wc, 3)
             progress.setdefault(name, []).extend(stats.get(f"{prefix}pass_progress_m") or [])
             if chances_by_match and tag in chances_by_match:
                 chances.add(chance_totals.setdefault(name, {}), chances.side_totals(chances_by_match[tag], own))
@@ -922,6 +958,31 @@ def _print_chances(table: dict[str, dict]) -> None:
             f"{num(c['danger_s_per_match']):>6} {pct(c['free_kick_to_shot']):>7} "
             f"{num(t['pass_progress_m']):>8} {pct(t['forward_pass_share']):>4}"
         )
+
+
+def _print_motion_planning_table(table: dict[str, dict]) -> None:
+    has_motion = any(
+        t.get("worst_clearance_m") is not None or t.get("robot_overlap_ticks", 0) > 0 for t in table.values()
+    )
+    if not has_motion:
+        return
+    print(
+        "\nMOTION PLANNING (per match averages; tm_coll = teammate overlap s (incidents), "
+        "total_coll = all overlap s (incidents), near_miss = near miss s <5cm, min_clr = worst clearance):"
+    )
+    print(f"  {'strategy':<32} {'tm_coll':>18} {'total_coll':>20} {'near_miss':>11} {'min_clr':>10}")
+    for name, t in sorted(table.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
+        n = max(1, t["matches"])
+        tm_coll_s = (t.get("teammate_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        tm_inc = t.get("teammate_overlap_incidents", 0) / n
+        total_coll_s = (t.get("robot_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        tot_inc = t.get("robot_overlap_incidents", 0) / n
+        near_miss_s = (t.get("near_miss_ticks", 0) / n) / TICKS_PER_SECOND
+        wc = t.get("worst_clearance_m")
+        min_clr_str = f"{wc * 100:.1f} cm" if wc is not None else "-"
+        tm_str = f"{tm_coll_s:.2f}s ({tm_inc:.1f})"
+        tot_str = f"{total_coll_s:.2f}s ({tot_inc:.1f})"
+        print(f"  {_short_name(name):<32} {tm_str:>18} {tot_str:>20} {near_miss_s:>10.2f}s {min_clr_str:>10}")
 
 
 def _print_ball_losses(b: dict, run_id: str) -> None:
