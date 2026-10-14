@@ -15,6 +15,16 @@ import numpy as np
 from utama_core.config.physical_constants import ROBOT_RADIUS
 
 
+def _count_incidents(d_pairs: np.ndarray) -> int:
+    """Count discrete collision incidents across pairs via rising-edge transitions (d < 0.0)."""
+    if d_pairs.size == 0 or d_pairs.shape[0] == 0:
+        return 0
+    in_contact = d_pairs < 0.0
+    starts = in_contact[0:1, :]
+    trans = in_contact[1:, :] & ~in_contact[:-1, :]
+    return int(np.sum(starts) + np.sum(trans))
+
+
 def compute_motion_metrics_from_arrays(
     friendly_p: np.ndarray,
     enemy_p: np.ndarray,
@@ -32,9 +42,12 @@ def compute_motion_metrics_from_arrays(
     -------
     dict with:
         robot_overlap_ticks : int
+        robot_overlap_incidents : int
         near_miss_ticks : int
         teammate_overlap_ticks : dict[str, int]
+        teammate_overlap_incidents : dict[str, int]
         opponent_overlap_ticks : int
+        opponent_overlap_incidents : int
         worst_clearance_m : float or None
         total_ticks : int
     """
@@ -42,9 +55,12 @@ def compute_motion_metrics_from_arrays(
     if t_steps == 0 or (friendly_p.shape[1] + enemy_p.shape[1]) < 2:
         return {
             "robot_overlap_ticks": 0,
+            "robot_overlap_incidents": 0,
             "near_miss_ticks": 0,
             "teammate_overlap_ticks": {"friendly": 0, "enemy": 0},
+            "teammate_overlap_incidents": {"friendly": 0, "enemy": 0},
             "opponent_overlap_ticks": 0,
+            "opponent_overlap_incidents": 0,
             "worst_clearance_m": None,
             "total_ticks": t_steps,
         }
@@ -62,9 +78,11 @@ def compute_motion_metrics_from_arrays(
         d_ff = np.linalg.norm(diff_ff, axis=-1)[:, idx_f[0], idx_f[1]] - two_r
         clearances.append(d_ff)
         ff_overlap = int(np.sum(np.any(d_ff < 0.0, axis=1)))
+        ff_incidents = _count_incidents(d_ff)
     else:
         d_ff = np.empty((t_steps, 0), dtype=np.float32)
         ff_overlap = 0
+        ff_incidents = 0
 
     # Enemy teammate clearances
     if n_e >= 2:
@@ -73,9 +91,11 @@ def compute_motion_metrics_from_arrays(
         d_ee = np.linalg.norm(diff_ee, axis=-1)[:, idx_e[0], idx_e[1]] - two_r
         clearances.append(d_ee)
         ee_overlap = int(np.sum(np.any(d_ee < 0.0, axis=1)))
+        ee_incidents = _count_incidents(d_ee)
     else:
         d_ee = np.empty((t_steps, 0), dtype=np.float32)
         ee_overlap = 0
+        ee_incidents = 0
 
     # Cross (friendly vs enemy) clearances
     if n_f >= 1 and n_e >= 1:
@@ -83,16 +103,21 @@ def compute_motion_metrics_from_arrays(
         d_fe = (np.linalg.norm(diff_fe, axis=-1) - two_r).reshape(t_steps, -1)
         clearances.append(d_fe)
         fe_overlap = int(np.sum(np.any(d_fe < 0.0, axis=1)))
+        fe_incidents = _count_incidents(d_fe)
     else:
         d_fe = np.empty((t_steps, 0), dtype=np.float32)
         fe_overlap = 0
+        fe_incidents = 0
 
     if not clearances:
         return {
             "robot_overlap_ticks": 0,
+            "robot_overlap_incidents": 0,
             "near_miss_ticks": 0,
             "teammate_overlap_ticks": {"friendly": 0, "enemy": 0},
+            "teammate_overlap_incidents": {"friendly": 0, "enemy": 0},
             "opponent_overlap_ticks": 0,
+            "opponent_overlap_incidents": 0,
             "worst_clearance_m": None,
             "total_ticks": t_steps,
         }
@@ -101,12 +126,16 @@ def compute_motion_metrics_from_arrays(
     overlap_ticks = int(np.sum(np.any(all_clear < 0.0, axis=1)))
     near_miss_ticks = int(np.sum(np.any((all_clear >= 0.0) & (all_clear < 0.05), axis=1)))
     worst_clearance_m = round(float(np.min(all_clear)), 3)
+    total_overlap_incidents = ff_incidents + ee_incidents + fe_incidents
 
     return {
         "robot_overlap_ticks": overlap_ticks,
+        "robot_overlap_incidents": total_overlap_incidents,
         "near_miss_ticks": near_miss_ticks,
         "teammate_overlap_ticks": {"friendly": ff_overlap, "enemy": ee_overlap},
+        "teammate_overlap_incidents": {"friendly": ff_incidents, "enemy": ee_incidents},
         "opponent_overlap_ticks": fe_overlap,
+        "opponent_overlap_incidents": fe_incidents,
         "worst_clearance_m": worst_clearance_m,
         "total_ticks": t_steps,
     }
@@ -145,9 +174,12 @@ def enrich_tournament_directory(tournament_dir: Union[str, Path]) -> None:
                 s_data.update(
                     {
                         "robot_overlap_ticks": metrics["robot_overlap_ticks"],
+                        "robot_overlap_incidents": metrics["robot_overlap_incidents"],
                         "near_miss_ticks": metrics["near_miss_ticks"],
                         "teammate_overlap_ticks": metrics["teammate_overlap_ticks"],
+                        "teammate_overlap_incidents": metrics["teammate_overlap_incidents"],
                         "opponent_overlap_ticks": metrics["opponent_overlap_ticks"],
+                        "opponent_overlap_incidents": metrics["opponent_overlap_incidents"],
                         "worst_clearance_m": metrics["worst_clearance_m"],
                     }
                 )
@@ -171,9 +203,12 @@ def enrich_tournament_directory(tournament_dir: Union[str, Path]) -> None:
                     m = stats_updates[tag]
                     st = result.setdefault("stats", {})
                     st["robot_overlap_ticks"] = m["robot_overlap_ticks"]
+                    st["robot_overlap_incidents"] = m["robot_overlap_incidents"]
                     st["near_miss_ticks"] = m["near_miss_ticks"]
                     st["teammate_overlap_ticks"] = m["teammate_overlap_ticks"]
+                    st["teammate_overlap_incidents"] = m["teammate_overlap_incidents"]
                     st["opponent_overlap_ticks"] = m["opponent_overlap_ticks"]
+                    st["opponent_overlap_incidents"] = m["opponent_overlap_incidents"]
                     st["worst_clearance_m"] = m["worst_clearance_m"]
 
             # Rebuild strategy_table if possible

@@ -37,9 +37,12 @@ def test_compute_motion_metrics_from_arrays():
 
     res = compute_motion_metrics_from_arrays(fp, ep)
     assert res["robot_overlap_ticks"] == 1
+    assert res["robot_overlap_incidents"] == 1
     assert res["near_miss_ticks"] == 1
     assert res["teammate_overlap_ticks"] == {"friendly": 1, "enemy": 0}
+    assert res["teammate_overlap_incidents"] == {"friendly": 1, "enemy": 0}
     assert res["opponent_overlap_ticks"] == 0
+    assert res["opponent_overlap_incidents"] == 0
     assert res["worst_clearance_m"] == pytest.approx(-0.08, abs=1e-3)
     assert res["total_ticks"] == 3
 
@@ -66,4 +69,6 @@ def test_enrich_tournament_directory(tmp_path: Path):
     with open(stats_path) as f:
         data = json.load(f)
     assert data["robot_overlap_ticks"] == 1
+    assert data["robot_overlap_incidents"] == 1
+    assert data["teammate_overlap_incidents"] == {"friendly": 1, "enemy": 0}
     assert data["worst_clearance_m"] == pytest.approx(-0.08, abs=1e-3)

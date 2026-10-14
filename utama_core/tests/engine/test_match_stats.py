@@ -778,9 +778,12 @@ def test_motion_planning_collision_and_clearance_tracking(tmp_path):
 
     stats = acc.finalize()
     assert stats.robot_overlap_ticks == 1
+    assert stats.robot_overlap_incidents == 1
     assert stats.near_miss_ticks == 1
     assert stats.teammate_overlap_ticks == {"friendly": 1, "enemy": 0}
+    assert stats.teammate_overlap_incidents == {"friendly": 1, "enemy": 0}
     assert stats.opponent_overlap_ticks == 0
+    assert stats.opponent_overlap_incidents == 0
     assert stats.worst_clearance_m == pytest.approx(-0.08, abs=1e-3)
 
     # Test serialization to json
@@ -789,7 +792,10 @@ def test_motion_planning_collision_and_clearance_tracking(tmp_path):
     with open(json_path) as f:
         data = json.load(f)
     assert data["robot_overlap_ticks"] == 1
+    assert data["robot_overlap_incidents"] == 1
     assert data["near_miss_ticks"] == 1
     assert data["teammate_overlap_ticks"] == {"friendly": 1, "enemy": 0}
+    assert data["teammate_overlap_incidents"] == {"friendly": 1, "enemy": 0}
     assert data["opponent_overlap_ticks"] == 0
+    assert data["opponent_overlap_incidents"] == 0
     assert data["worst_clearance_m"] == pytest.approx(-0.08, abs=1e-3)

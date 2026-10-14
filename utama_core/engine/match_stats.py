@@ -335,9 +335,12 @@ class MatchStats:
     # opponent_overlap_ticks: ticks with overlaps between friendly and enemy robots.
     # worst_clearance_m: minimum edge-to-edge separation observed over the match (None if <2 robots).
     robot_overlap_ticks: int = 0
+    robot_overlap_incidents: int = 0
     near_miss_ticks: int = 0
     teammate_overlap_ticks: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
+    teammate_overlap_incidents: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     opponent_overlap_ticks: int = 0
+    opponent_overlap_incidents: int = 0
     worst_clearance_m: Optional[float] = None
 
     def to_json(self, path: Union[str, Path]) -> None:
@@ -367,9 +370,12 @@ class MatchStats:
                     "fouls_by_side": self.fouls_by_side,
                     "fouls": [e.to_dict() for e in self.fouls],
                     "robot_overlap_ticks": self.robot_overlap_ticks,
+                    "robot_overlap_incidents": self.robot_overlap_incidents,
                     "near_miss_ticks": self.near_miss_ticks,
                     "teammate_overlap_ticks": self.teammate_overlap_ticks,
+                    "teammate_overlap_incidents": self.teammate_overlap_incidents,
                     "opponent_overlap_ticks": self.opponent_overlap_ticks,
+                    "opponent_overlap_incidents": self.opponent_overlap_incidents,
                     "worst_clearance_m": self.worst_clearance_m,
                     "stall_events": [
                         {
@@ -552,9 +558,13 @@ class MatchStatsAccumulator:
 
     # --- Motion planning collision / clearance tracking ---
     _robot_overlap_ticks: int = 0
+    _robot_overlap_incidents: int = 0
     _near_miss_ticks: int = 0
     _teammate_overlap_ticks: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
+    _teammate_overlap_incidents: Dict[str, int] = field(default_factory=lambda: {"friendly": 0, "enemy": 0})
     _opponent_overlap_ticks: int = 0
+    _opponent_overlap_incidents: int = 0
+    _active_overlap_pairs: set = field(default_factory=set)
     _worst_clearance_m: float = math.inf
 
     def record_rule_violation(
@@ -655,6 +665,7 @@ class MatchStatsAccumulator:
             enemy_teammate = False
             opp_overlap = False
             min_c = math.inf
+            current_overlap_pairs = set()
 
             n_rob = len(all_robots)
             for i in range(n_rob):
@@ -668,6 +679,7 @@ class MatchStatsAccumulator:
                         min_c = clearance
                     if clearance < 0.0:
                         has_overlap = True
+                        current_overlap_pairs.add(((side1, r1.id), (side2, r2.id)))
                         if side1 == side2:
                             if side1 == "friendly":
                                 friendly_teammate = True
@@ -677,6 +689,16 @@ class MatchStatsAccumulator:
                             opp_overlap = True
                     elif clearance < 0.05:
                         has_near_miss = True
+
+            new_overlaps = current_overlap_pairs - self._active_overlap_pairs
+            if new_overlaps:
+                for (s1, _), (s2, _) in new_overlaps:
+                    self._robot_overlap_incidents += 1
+                    if s1 == s2:
+                        self._teammate_overlap_incidents[s1] += 1
+                    else:
+                        self._opponent_overlap_incidents += 1
+            self._active_overlap_pairs = current_overlap_pairs
 
             if min_c < self._worst_clearance_m:
                 self._worst_clearance_m = min_c
@@ -1198,8 +1220,11 @@ class MatchStatsAccumulator:
             fouls_by_side={side: dict(c) for side, c in self._fouls_by_side.items()},
             fouls=list(self._fouls),
             robot_overlap_ticks=self._robot_overlap_ticks,
+            robot_overlap_incidents=self._robot_overlap_incidents,
             near_miss_ticks=self._near_miss_ticks,
             teammate_overlap_ticks=dict(self._teammate_overlap_ticks),
+            teammate_overlap_incidents=dict(self._teammate_overlap_incidents),
             opponent_overlap_ticks=self._opponent_overlap_ticks,
+            opponent_overlap_incidents=self._opponent_overlap_incidents,
             worst_clearance_m=round(self._worst_clearance_m, 3) if self._worst_clearance_m != math.inf else None,
         )

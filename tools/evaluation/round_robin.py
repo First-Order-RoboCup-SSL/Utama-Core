@@ -779,7 +779,9 @@ def strategy_table(
                     "real_losses_as_a": 0,
                     "real_loss_kinds_as_a": {},
                     "robot_overlap_ticks": 0,
+                    "robot_overlap_incidents": 0,
                     "teammate_overlap_ticks": 0,
+                    "teammate_overlap_incidents": 0,
                     "near_miss_ticks": 0,
                     "worst_clearance_m": None,
                 },
@@ -796,7 +798,9 @@ def strategy_table(
             row["fouls"] += sum((fouls.get(own) or {}).values())
             row["stalled"] += bool(stats.get("stall_events") or r.get("possession_backstop"))
             row["robot_overlap_ticks"] += stats.get("robot_overlap_ticks", 0)
+            row["robot_overlap_incidents"] += stats.get("robot_overlap_incidents", 0)
             row["teammate_overlap_ticks"] += (stats.get("teammate_overlap_ticks") or {}).get(own, 0)
+            row["teammate_overlap_incidents"] += (stats.get("teammate_overlap_incidents") or {}).get(own, 0)
             row["near_miss_ticks"] += stats.get("near_miss_ticks", 0)
             wc = stats.get("worst_clearance_m")
             if wc is not None:
@@ -963,20 +967,22 @@ def _print_motion_planning_table(table: dict[str, dict]) -> None:
     if not has_motion:
         return
     print(
-        "\nMOTION PLANNING (per match averages; tm_coll = teammate overlap s, "
-        "total_coll = all overlap s, near_miss = near miss s <5cm, min_clr = worst clearance):"
+        "\nMOTION PLANNING (per match averages; tm_coll = teammate overlap s (incidents), "
+        "total_coll = all overlap s (incidents), near_miss = near miss s <5cm, min_clr = worst clearance):"
     )
-    print(f"  {'strategy':<32} {'tm_coll':>9} {'total_coll':>12} {'near_miss':>11} {'min_clr':>10}")
+    print(f"  {'strategy':<32} {'tm_coll':>18} {'total_coll':>20} {'near_miss':>11} {'min_clr':>10}")
     for name, t in sorted(table.items(), key=lambda kv: (-kv[1]["wins"], -kv[1]["draws"])):
         n = max(1, t["matches"])
         tm_coll_s = (t.get("teammate_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        tm_inc = t.get("teammate_overlap_incidents", 0) / n
         total_coll_s = (t.get("robot_overlap_ticks", 0) / n) / TICKS_PER_SECOND
+        tot_inc = t.get("robot_overlap_incidents", 0) / n
         near_miss_s = (t.get("near_miss_ticks", 0) / n) / TICKS_PER_SECOND
         wc = t.get("worst_clearance_m")
         min_clr_str = f"{wc * 100:.1f} cm" if wc is not None else "-"
-        print(
-            f"  {_short_name(name):<32} {tm_coll_s:>8.2f}s {total_coll_s:>11.2f}s {near_miss_s:>10.2f}s {min_clr_str:>10}"
-        )
+        tm_str = f"{tm_coll_s:.2f}s ({tm_inc:.1f})"
+        tot_str = f"{total_coll_s:.2f}s ({tot_inc:.1f})"
+        print(f"  {_short_name(name):<32} {tm_str:>18} {tot_str:>20} {near_miss_s:>10.2f}s {min_clr_str:>10}")
 
 
 def _print_ball_losses(b: dict, run_id: str) -> None:
