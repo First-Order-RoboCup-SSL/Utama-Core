@@ -379,3 +379,59 @@ def test_clamp_to_obstacle_clearance_matches_reference(seed):
         a = new._clamp_to_obstacle_clearance(*args, clearance=clearance)
         b = ref._clamp_to_obstacle_clearance(*args, clearance=clearance)
         assert a == b and type(a) is type(b)
+
+
+def test_obstacle_cache_and_array_prebuild():
+    """Static obstacles are cached across ticks and _get_obstacles seeds _obstacle_arrays_cache."""
+    from utama_core.entities.data.vector import Vector2D
+    from utama_core.entities.game import Game
+    from utama_core.entities.game.field import FieldBounds
+
+    planner = FastPathPlanner(env=None)
+    bounds = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
+
+    class DummyRobot:
+        def __init__(self, rid, x, y, vx, vy):
+            self.id = rid
+            self.p = Vector2D(x, y)
+            self.v = Vector2D(vx, vy)
+
+    class DummyField:
+        enemy_defense_area = np.array([[3.5, 1.0], [4.5, 1.0], [4.5, -1.0], [3.5, -1.0]])
+        my_team_is_right = False
+
+    class DummyGame:
+        ts = 1.0
+        field = DummyField()
+        friendly_robots = {0: DummyRobot(0, 0.0, 0.0, 0.5, 0.0), 1: DummyRobot(1, 1.0, 1.0, 0.0, 0.0)}
+        enemy_robots = {0: DummyRobot(0, 2.0, 2.0, -0.5, 0.0)}
+
+    game = DummyGame()
+
+    # First call: builds static obstacles
+    planner._refresh_obstacle_cache(game, bounds)
+    static_1 = planner._obstacle_cache_static
+    static_arrays_1 = planner._obstacle_cache_static_arrays
+    assert len(static_1) == 8
+    assert static_arrays_1 is not None
+
+    # Second call with same bounds and field: reuses exact same static objects
+    game.ts = 1.1
+    planner._refresh_obstacle_cache(game, bounds)
+    assert planner._obstacle_cache_static is static_1
+    assert planner._obstacle_cache_static_arrays is static_arrays_1
+
+    # _get_obstacles seeds _obstacle_arrays_cache with matching arrays
+    planner._obstacle_arrays_cache.clear()
+    our_pos = np.array([0.0, 0.0])
+    obstacles, clearance, subgoal_dist = planner._get_obstacles(game, 0, our_pos, bounds)
+    assert len(planner._obstacle_arrays_cache) == 1
+    cached_obs, cached_arrs = planner._obstacle_arrays_cache[0]
+    assert cached_obs is obstacles
+    from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+        flatten_obstacles,
+    )
+
+    expected_arrs = flatten_obstacles(obstacles)
+    for arr, exp in zip(cached_arrs, expected_arrs):
+        assert np.array_equal(arr, exp)

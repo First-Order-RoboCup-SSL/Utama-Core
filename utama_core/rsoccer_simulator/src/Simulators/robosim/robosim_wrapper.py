@@ -21,16 +21,24 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+try:
+    import robosim
+
+    _HAS_NATIVE_ROBOSIM = True
+except ImportError:
+    _HAS_NATIVE_ROBOSIM = False
+
 # Sim reuse (opt-in, `enable_sim_reuse`): a process that plays many short scenarios keeps its
 # sim subprocesses, since starting one (`pixi run`, imports, world build) costs about as much
 # CPU as a second of play. Idle sims wait here by their constructor arguments; `acquire`
 # hands one out with a new native world, so nothing of the previous play is left in it.
 _reuse_sims = False
 _idle_sims: dict[tuple, list["RSimSubprocessWrapper"]] = {}
+_idle_native_sims: dict[tuple, list["RSimNativeWrapper"]] = {}
 
 
 def enable_sim_reuse() -> None:
-    """From now on, `close()` on a sim from `acquire` parks its subprocess for the next `acquire`
+    """From now on, `close()` on a sim from `acquire` parks its simulator for the next `acquire`
     (closed for good at interpreter exit) instead of terminating it."""
     global _reuse_sims
     if not _reuse_sims:
@@ -42,6 +50,102 @@ def _close_idle_sims() -> None:
     for sims in _idle_sims.values():
         while sims:
             sims.pop()._terminate()
+    for nsims in _idle_native_sims.values():
+        while nsims:
+            nsims.pop().close()
+
+
+class RSimNativeWrapper:
+    """In-process native C++ wrapper around `robosim` for zero-IPC simulation."""
+
+    @classmethod
+    def acquire(cls, sim_type, n_blue, n_yellow, field_type, time_step_ms) -> "RSimNativeWrapper":
+        key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        idle = _idle_native_sims.get(key)
+        while idle:
+            sim = idle.pop()
+            sim.new_world()
+            sim._released = False
+            return sim
+        return cls(*key)
+
+    def __init__(self, sim_type, n_blue, n_yellow, field_type, time_step_ms):
+        self._key = (sim_type, n_blue, n_yellow, field_type, time_step_ms)
+        self._released = False
+        self.sim_type = sim_type
+        self.n_blue = n_blue
+        self.n_yellow = n_yellow
+        self.field_type = field_type
+        self.time_step_ms = time_step_ms
+        self.new_world()
+
+    def new_world(self):
+        blue_robots_pos = [[-0.2 * i, 0, 0] for i in range(1, self.n_blue + 1)]
+        yellow_robots_pos = [[0.2 * i, 0, 0] for i in range(1, self.n_yellow + 1)]
+        if self.sim_type == "VSS":
+            self.sim = robosim.VSS(
+                self.field_type,
+                self.n_blue,
+                self.n_yellow,
+                self.time_step_ms,
+                [0, 0, 0, 0],
+                blue_robots_pos,
+                yellow_robots_pos,
+            )
+        else:
+            self.sim = robosim.SSL(
+                self.field_type,
+                self.n_blue,
+                self.n_yellow,
+                self.time_step_ms,
+                [0, 0, 0, 0],
+                blue_robots_pos,
+                yellow_robots_pos,
+            )
+
+    def step(self, commands: np.ndarray) -> np.ndarray:
+        if hasattr(self.sim, "step_fast"):
+            self.sim.step_fast(commands)
+            return self.sim.get_state_array()
+        self.sim.step(commands)
+        return np.array(self.sim.get_state(), dtype=np.float64)
+
+    def reset(self, ball_pos, blue_robots_pos, yellow_robots_pos):
+        self.sim.reset(
+            np.array(ball_pos),
+            np.array(blue_robots_pos),
+            np.array(yellow_robots_pos),
+        )
+
+    def get_field_params(self):
+        return self.sim.get_field_params()
+
+    def get_state(self):
+        if hasattr(self.sim, "get_state_array"):
+            return self.sim.get_state_array()
+        return np.array(self.sim.get_state(), dtype=np.float64)
+
+    def close(self):
+        if self._released:
+            return
+        if _reuse_sims:
+            self._released = True
+            _idle_native_sims.setdefault(self._key, []).append(self)
+            return
+        self.sim = None
+
+
+def acquire_simulator(sim_type, n_blue, n_yellow, field_type, time_step_ms):
+    """Acquire a simulator.
+
+    Subprocess mode is preferred by default: running ODE physics in a dedicated
+    subprocess pipelines physics computation on a separate CPU core from Python's
+    strategy/tactics loop, giving significantly higher end-to-end throughput.
+    In-process native robosim can be explicitly selected via UTAMA_USE_NATIVE_RSIM=1.
+    """
+    if os.environ.get("UTAMA_USE_NATIVE_RSIM") and _HAS_NATIVE_ROBOSIM:
+        return RSimNativeWrapper.acquire(sim_type, n_blue, n_yellow, field_type, time_step_ms)
+    return RSimSubprocessWrapper.acquire(sim_type, n_blue, n_yellow, field_type, time_step_ms)
 
 
 class RSimSubprocessWrapper:

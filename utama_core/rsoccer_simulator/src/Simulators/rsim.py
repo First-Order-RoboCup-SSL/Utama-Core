@@ -5,6 +5,7 @@ import numpy as np
 from utama_core.rsoccer_simulator.src.Entities import Field, Frame, FrameSSL, FrameVSS
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     RSimSubprocessWrapper,
+    acquire_simulator,
 )
 
 
@@ -138,7 +139,7 @@ class RSimVSS(RSim):
         n_robots_yellow,
         time_step_ms,
     ) -> RSimSubprocessWrapper:
-        return RSimSubprocessWrapper.acquire(
+        return acquire_simulator(
             sim_type="VSS",
             n_blue=n_robots_blue,
             n_yellow=n_robots_yellow,
@@ -148,8 +149,13 @@ class RSimVSS(RSim):
 
 
 class RSimSSL(RSim):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sim_cmds = np.zeros((self.n_robots_blue + self.n_robots_yellow, 8), dtype=np.float64)
+
     def send_commands(self, commands):
-        sim_cmds = np.zeros((self.n_robots_blue + self.n_robots_yellow, 8), dtype=np.float64)
+        sim_cmds = self._sim_cmds
+        sim_cmds.fill(0.0)
 
         for cmd in commands:
             if cmd.yellow:
@@ -197,7 +203,7 @@ class RSimSSL(RSim):
         n_robots_yellow,
         time_step_ms,
     ) -> RSimSubprocessWrapper:
-        return RSimSubprocessWrapper.acquire(
+        return acquire_simulator(
             sim_type="SSL",
             n_blue=n_robots_blue,
             n_yellow=n_robots_yellow,

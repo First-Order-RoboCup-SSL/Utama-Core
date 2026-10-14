@@ -3,17 +3,28 @@ cmake_minimum_required(VERSION 3.14)
 project(robosim)
 set(CMAKE_CXX_STANDARD 11)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
+
 # Define CMAKE_INSTALL_xxx: LIBDIR, INCLUDEDIR
 include(GNUInstallDirs)
 include(FindPackageHandleStandardArgs)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+
+if(DEFINED PYTHON_EXECUTABLE)
+  set(PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "Path to Python executable" FORCE)
+endif()
+find_package(PythonInterp REQUIRED)
+find_package(PythonLibs REQUIRED)
+
 # Fetch pybind11
 include(FetchContent)
 
 FetchContent_Declare(
   pybind11
-  URL https://github.com/pybind/pybind11/archive/refs/tags/v2.6.2.tar.gz
-  URL_HASH SHA256=8ff2fff22df038f5cd02cea8af56622bc67f5b64534f1b83b9f133b8366acff2
+  URL https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.tar.gz
 )
 FetchContent_MakeAvailable(pybind11)
 

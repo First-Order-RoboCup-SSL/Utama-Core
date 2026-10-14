@@ -49,6 +49,7 @@ numpy = "<=2.0.2"
 [tasks]
 lint = "pre-commit run --all-files"
 test = "pytest utama_core/tests/"
+build-planner = "cmake -B build/fpp utama_core/motion_planning/src/fastpathplanning/cpp && cmake --build build/fpp -j"
 main = "python -m main"
 replay = "python -m utama_core.replay.replay_player"
 runs = "python -m utama_core.analysis.list_runs"

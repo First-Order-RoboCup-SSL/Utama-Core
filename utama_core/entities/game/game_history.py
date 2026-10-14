@@ -102,7 +102,12 @@ class GameHistory:
         if not history_deque:  # Handles both key not found or empty deque
             return []
         n = len(history_deque)
-        return list(islice(history_deque, max(0, n - num_points), n))
+        if num_points == 1:
+            return [history_deque[-1]]
+        if num_points >= n:
+            return list(history_deque)
+        # Direct list slicing on recent elements
+        return [history_deque[i] for i in range(n - num_points, n)]
 
     def get_historical_attribute_series(
         self,
