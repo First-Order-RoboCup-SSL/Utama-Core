@@ -13,6 +13,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `lint` | the whole pre-commit stack (black, ruff, isort) on every file |
 | `precommit-install` / `precommit-uninstall` | install or remove the pre-commit hook |
 | `main` | `main.py`: watch one match between two strategies in rsim (below) |
+| `build-planner` | build the C++ fast-path planner (`utama_core/motion_planning/src/fastpathplanning/cpp`) into `build/fpp` with cmake |
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio |

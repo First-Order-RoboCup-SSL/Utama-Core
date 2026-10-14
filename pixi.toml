@@ -59,6 +59,3 @@ precommit-uninstall = "pre-commit uninstall"
 
 [environments]
 robosim = { features = ["robosim"], no-default-feature = true }
-
-[target.linux-64.tasks]
-main = "python -m main"
