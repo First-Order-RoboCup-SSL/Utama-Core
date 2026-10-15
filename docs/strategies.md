@@ -53,6 +53,47 @@ against the round-robin's top.
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
 
+## Strategy search, 2026-10-11
+
+Six `split_shape` variants, each one idea, in an 18-config round-robin with the 12 above
+(`replays/tournament_20261012_095359/summary.json`, 153 matches of 600 s, after the
+`LeadAndSupportTactic` shot-target, `turn_on_spot` blocked-pivot, `DecoyOverloadTactic`
+finish-release and `split_wall` keep-out fixes). rsim is deterministic, so this is one match per
+pairing: the order among the six variants changed with every fix to shared code and is not
+evidence on its own. Every variant finished above `split_shape`, which beat none of them.
+
+| Strategy | Idea | W-D-L | GF-GA | Points per match | vs `split_shape` |
+|---|---|---|---|---|---|
+| `split_sticky` | Possession hysteresis on the attack/defense split | 15-0-2 | 136-83 | 2.65 | 8-7 |
+| `split_block` | `BlockShapeTactic` defense | 14-1-2 | 144-82 | 2.53 | 8-8 |
+| `split_wall` | Two-robot wall at the opponent's direct free kicks (`referee_overrides`) | 14-1-2 | 119-75 | 2.53 | 7-6 |
+| `split_outlet` | One robot held high on the weak side while defending (`OutletTactic`) | 14-0-3 | 127-85 | 2.47 | 8-7 |
+| `split_outlet_wall` | `split_outlet` plus `split_wall`'s free-kick wall | 13-1-3 | 127-74 | 2.35 | 7-2 |
+| `split_press` | Without the ball, a 2-robot `PressAndContainTactic` instead of a lone chaser | 12-2-3 | 138-73 | 2.24 | 8-8 |
+| `split_shape` | (reference) | 10-3-4 | 113-76 | 1.94 | |
+
+**Head to head, 2026-10-12.** Each pairing played its 8 deterministic side/kickoff settings and
+20 seeded noisy matches (side fixed, kickoff alternating; vision noise 3 mm and 1° per detection,
+2% of detections dropped per frame; a seed replays bit for bit). Goal difference per match for
+the first-named strategy, ± one standard error:
+
+| Pairing | 8 settings, no noise | 20 noisy seeds |
+|---|---|---|
+| `split_block` vs `split_shape` | 6-2-0, +2.4 ± 0.9 | 11-1-8, +0.5 ± 0.6 |
+| `split_outlet` vs `split_shape` | 4-0-4, −1.3 ± 1.3 | 8-4-8, −0.6 ± 0.8 |
+| `split_sticky` vs `split_block` | 3-1-4, +0.0 ± 1.4 | 8-4-8, −0.3 ± 0.5 |
+| `split_shape` vs `counter_flow` | 7-1-0, +4.0 ± 0.7 | 17-1-2, +3.1 ± 0.5 |
+
+No variant is shown better than `split_shape`: `split_block`'s edge in the 8 deterministic
+settings, the setting it was picked on, did not hold over 20 noisy matches. The variants are
+within about half a goal per match of each other. Noise keeps a real gap (`counter_flow`) and
+gives each match about the same spread as the deterministic settings (2-4 goals), so it adds
+matches without adding noise to each one. `split_shape` stays the champion.
+
+6 of the round-robin's 153 matches stalled (COMMITTED_FROZEN): two carriers pinning the ball
+between them until the referee's no-progress stop; the cause of the stuck turn is not yet found.
+None of the 80 noisy matches stalled (about 3 expected at the round-robin's rate).
+
 ## Latest results
 
 **Round-robin** (2026-10-10, strategy-guard at a17e2791, the 12 strategies above, 66 matches,

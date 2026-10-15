@@ -97,6 +97,7 @@ def turn_on_spot(
     # blocked branch below for why holding position doesn't actually yield a
     # working turn.
     move_target = robot.p
+    blocked = False
     if in_contact:
         held_turn = move(
             game=game,
@@ -141,6 +142,7 @@ def turn_on_spot(
             away_dist = away.mag()
             if away_dist > 1e-6:
                 move_target = robot.p + away * (_PIVOT_CLEARANCE_M / away_dist)
+            blocked = True
             break
 
     turn = move(
@@ -152,7 +154,9 @@ def turn_on_spot(
         dribbling=dribbling,
     )
 
-    if in_contact:
+    # When blocked, keep move()'s lateral command: it drives toward the escape
+    # target, and overriding it with the pivot term would push back into the blocker.
+    if in_contact and not blocked:
         local_left_vel = -turn.angular_vel * PIVOT_RADIUS
         turn = turn._replace(local_left_vel=local_left_vel)
 

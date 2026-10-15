@@ -54,7 +54,15 @@ from utama_core.strategy.score_aware_zone_flow import (
     build_score_aware_zone_flow_kernel_strategy,
 )
 from utama_core.strategy.shadow_switch import build_shadow_switch_kernel_strategy
+from utama_core.strategy.split_block import build_split_block_kernel_strategy
+from utama_core.strategy.split_outlet import build_split_outlet_kernel_strategy
+from utama_core.strategy.split_outlet_wall import (
+    build_split_outlet_wall_kernel_strategy,
+)
+from utama_core.strategy.split_press import build_split_press_kernel_strategy
 from utama_core.strategy.split_shape import build_split_shape_kernel_strategy
+from utama_core.strategy.split_sticky import build_split_sticky_kernel_strategy
+from utama_core.strategy.split_wall import build_split_wall_kernel_strategy
 from utama_core.strategy.switch_of_play import build_switch_of_play_kernel_strategy
 from utama_core.strategy.three_slot import (
     _three_way_picker,
