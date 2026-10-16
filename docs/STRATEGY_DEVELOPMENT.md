@@ -292,6 +292,14 @@ What a converted match holds, and where it differs from a sim replay (the detail
   `NORMAL_START` and keeps `DIRECT_FREE_*` until the next stoppage. The converter switches it
   to `NORMAL_START` once the ball has moved 0.05 m, as our referee does.
 - `<stem>.source.json` holds the teams, the final score, the tracker used and the field size.
+- Sidecars for measuring physics and vision (sim realism, [sim_realism.md](sim_realism.md)),
+  not read by any replay tool: `<stem>.kicks.json`, every kick the tracker reported (start,
+  kicker, start position, velocity estimates, stop); `<stem>.tracker.zip`, per-tick ball and
+  robot visibility and robot angular velocity; with `--raw-vision`, `<stem>.vision.zip`, every
+  raw camera detection (about another 35 MB a match). Kicks and visibility come from whichever
+  autoref's tracker sends them (in 2026 TIGERs did, ER-Force not). For a match converted
+  before these existed, `--backfill-extras` downloads the log again and adds them without
+  rewriting the replay.
 - Logs before 2020 have no tracker: the converter merges raw camera detections without
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
