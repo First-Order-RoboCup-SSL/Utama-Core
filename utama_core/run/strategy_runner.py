@@ -1,5 +1,6 @@
 import cProfile
 import dataclasses
+import json
 import logging
 import signal
 import threading
@@ -51,6 +52,7 @@ from utama_core.replay.columnar_writer import (
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
@@ -219,6 +221,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
+        sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick speed noise and vision noise
+            (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
+            Recorded in a columnar replay. Defaults to None (off).
         filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.
         referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``
             instance to use the in-process referee, ``OfficialReferee()`` to consume
@@ -266,6 +271,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         stats_path: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
+        sim_noise: Optional[SimNoise] = None,
         filtering: bool = True,
         referee: RefereeSource = None,
         referee_initial_command: Optional[RefereeCommand] = None,
@@ -379,7 +385,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
         ### functions below rely on self.my and self.opp ###
 
-        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing, sim_noise)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
 
         # Set before `_load_robot_controllers()`, which wires `self.match_log`
@@ -443,6 +449,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # module docstring for why the columnar format exists).
         if isinstance(replay_writer_config, ColumnarReplayWriterConfig):
             self.replay_writer = ColumnarReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if sim_noise is not None and self.rsim_env is not None:
+                self.replay_writer.sim_noise_json = json.dumps(
+                    {"settings": sim_noise.to_dict(), "draw": self.rsim_env.sim_draw.to_dict()}, sort_keys=True
+                )
         elif replay_writer_config:
             self.replay_writer = ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
         else:
@@ -774,6 +784,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self,
         rsim_noise: RsimGaussianNoise,
         rsim_vanishing: float,
+        sim_noise: Optional[SimNoise] = None,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
@@ -819,6 +830,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 ball_starting_position=self.field_bounds.center,
                 gaussian_noise=rsim_noise,
                 vanishing=rsim_vanishing,
+                sim_noise=sim_noise,
             )
 
             if self.opp:

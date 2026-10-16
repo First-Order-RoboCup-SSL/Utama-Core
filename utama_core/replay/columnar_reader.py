@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import bisect
 import dataclasses
+import json
 import pickle
 from dataclasses import dataclass
 from functools import cached_property
@@ -178,6 +179,12 @@ def _robots_at(ids, is_friendly, p_row, v_row, a_row, orientation_row, has_ball_
             orientation=float(orientation_row[i]),
         )
     return robots
+
+
+def load_sim_noise(path: Union[str, Path]) -> Optional[dict]:
+    """The `SimNoise` settings and per-robot draw a replay was played with, or None if it had none."""
+    with np.load(path, allow_pickle=False) as data:
+        return json.loads(str(data["sim_noise"])) if "sim_noise" in data.files else None
 
 
 def load_columnar_replay(path: Union[str, Path]) -> ColumnarReplay:

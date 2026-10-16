@@ -194,7 +194,7 @@ whoever runs it.
 - **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
 >>>>>>> repo-cleanup
   `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
-  `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
+  `--sim-noise JSON`, `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
   round-robin; see the determinism caveat below).
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
   writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
@@ -208,6 +208,13 @@ whoever runs it.
 - **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
   seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
   schedule. Details: `docs/custom_referee.md`.
+- **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
+  command latency per robot, kick speed noise (a per-robot offset plus kick-to-kick spread),
+  and vision noise and dropped detections, all off by default. Draws depend on the seed, team
+  colour and robot id only, so every pairing in a run gets the same physics and A/B comparisons
+  stay paired; the same seed replays a match exactly. Settings and draws go into each replay
+  (`columnar_reader.load_sim_noise`) and `summary.json`, and into the match key only when set.
+  Ranges come from `docs/sim_realism.md` Phase 1; until then the knobs have no calibrated values.
 - **`tools/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
   why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
 - **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless

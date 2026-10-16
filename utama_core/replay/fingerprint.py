@@ -490,9 +490,12 @@ def match_key(
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     recorded: bool = True,
+    sim_noise: Optional[dict] = None,
 ) -> str:
     """Key of one `match.run_match` call: same key, same result. `recorded` is
-    whether it ran with a `run_dir` (the match log and stats recorder are then live)."""
+    whether it ran with a `run_dir` (the match log and stats recorder are then live).
+    `sim_noise` (`SimNoise.to_dict()`) enters the key only when set, so matches without it
+    keep their keys."""
     settings = {
         "duration_seconds": duration_seconds,
         "a_is_right": a_is_right,
@@ -502,6 +505,8 @@ def match_key(
         "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
         "recorded": recorded,
     }
+    if sim_noise is not None:
+        settings["sim_noise"] = sim_noise
     return _digest(
         [
             "round-robin match",
