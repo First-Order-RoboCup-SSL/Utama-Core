@@ -226,19 +226,3 @@ class Vector3D(VectorBase):
 
     def __repr__(self):
         return f"Vector3D(x={self.x}, y={self.y}, z={self.z})"
-
-
-if __name__ == "__main__":
-    import numpy as np
-
-    v2d = Vector2D(3, 4)
-    v2d2 = Vector2D(1, 2)
-    print(np.dot(v2d, v2d2))  # Should print 11.0
-    print(v2d.dot(v2d2))  # Should print 11.0
-
-    print(v2d.angle_to(v2d2))  # Should print -2.356194490192345
-    print(np.arctan2(v2d2.y - v2d.y, v2d2.x - v2d.x))  # Should print -2.356194490192345
-
-    d = v2d2 - v2d
-    print(np.linalg.norm(d))  # Should print 2.8284271247461903
-    print(v2d.distance_to(v2d2))  # Should print 2.8284271247461903

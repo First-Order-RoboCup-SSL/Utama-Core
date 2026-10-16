@@ -1,29 +1,22 @@
 import cProfile
 import dataclasses
+import json
 import logging
-import math
 import signal
 import threading
 import time
 import warnings
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
 
 from rich.live import Live
-from rich.text import Text
 
 from utama_core.config.enums import Mode, mode_str_to_enum
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.formations import FormationType, get_formations
-from utama_core.config.physical_constants import (
-    BALL_RADIUS,
-    MAX_ROBOT_ID,
-    MAX_ROBOTS,
-    ROBOT_RADIUS,
-)
+from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
 from utama_core.config.settings import (
-    FPS_PRINT_INTERVAL,
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
     ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
@@ -42,8 +35,7 @@ from utama_core.engine.match_log import MatchLog
 from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
-from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.game import Game, GameFrame, GameHistory, Robot
+from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.mapping_utils import (
@@ -53,7 +45,6 @@ from utama_core.global_utils.mapping_utils import (
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
-from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
@@ -61,9 +52,20 @@ from utama_core.replay.columnar_writer import (
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
+from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
+from utama_core.run.side_runtime import SideRuntime, _mirrored, _turned
+from utama_core.run.sim_recovery import _PLACEMENT_TELEPORT_CLEARANCE_M  # noqa: F401
+from utama_core.run.sim_recovery import _TELEPORT_SETTLE_MAX_EXTENSIONS  # noqa: F401
+from utama_core.run.sim_recovery import _TELEPORT_SETTLE_TICKS  # noqa: F401
+from utama_core.run.sim_recovery import (  # noqa: F401; noqa: F401 (re-exported for tests)
+    _SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS,
+    SimRecoveryMixin,
+)
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
+from utama_core.run.vision_stream_status import VisionStreamStatusMixin
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
 from utama_core.skills.src.shielding import reset_shield_state
 from utama_core.team_controller.src.controllers import (
@@ -84,7 +86,6 @@ if TYPE_CHECKING:
     from utama_core.entities.data.referee import RefereeData
 
 _GEOMETRY_MATCH_TOLERANCE_M = 0.001  # mm-precision integers from vision → 1 mm tolerance
-_VS_KICK_THRESHOLD = 0.5  # m/s — ball speed above this triggers kick commentary
 _SIM_HALT_AUTO_RESUME_SECONDS = 5.0  # sim-only: no human GC to resume a HALT, see below
 # sim-only: a second grace window after a HALT auto-resumes into STOP,
 # before forcing NORMAL_START — gives StopStep a few ticks to actively clear
@@ -98,93 +99,6 @@ _SIM_HALT_AUTO_RESUME_SECONDS = 5.0  # sim-only: no human GC to resume a HALT, s
 # window closed), so this carries real margin rather than the bare minimum.
 _SIM_HALT_RESUME_CLEAR_SECONDS = 4.0
 
-# sim-only: `sim_controller.teleport_ball()` (used to instantly simulate a
-# ball placement/free-kick reposition, since robots cannot physically
-# retrieve an out-of-bounds ball in simulation) is meant to place the ball at
-# rest at the designated position. Traced live in a tournament run
-# (replays/tournament_20260905_002133/counter_flow_vs_zone_fluid_LK, 2026-09-05):
-# the underlying native reset (`SSLWorld::replace()`) does correctly zero the
-# ball's ODE body velocity at the instant of reset, but the very next physics
-# step afterward produces a large spurious velocity (tens of m/s observed) —
-# a contact-resolution artifact, not something teleport_ball's caller
-# controls. That single spike is enough to send the ball rolling metres away
-# from the placement target before it settles, so
-# `GameStateMachine._ball_placement_done()` (gated purely on ball-to-target
-# distance) never sees the ball close enough to auto-advance the restart —
-# the match then sits in BALL_PLACEMENT_*/DIRECT_FREE_* for the rest of the
-# match (RESTART_STALL in MatchStats.stall_events). Re-pinning the ball to
-# the same target for a few ticks after every teleport absorbs that one-tick
-# transient before it can accumulate into real displacement, without needing
-# a fix in the vendored native engine.
-_TELEPORT_SETTLE_TICKS = 3
-# Ball speed (m/s) below which the settle window is allowed to close --
-# i.e. the ball is considered genuinely at rest, not merely past the initial
-# reset-artifact transient. The native engine's post-teleport spike (tens of
-# m/s, see `_TELEPORT_SETTLE_TICKS`'s docstring) decays *through* a range of
-# still-real, few-m/s speeds on its way to zero, and releasing the re-pin as
-# soon as it first dips low is still enough for the ball to coast meters away
-# over the following seconds before `_ball_placement_done()`'s distance gate
-# can catch it -- a rolling SSL ball loses speed very slowly. Confirmed live,
-# 2026-09-12: a teleport spike of ~13 m/s decayed to 0.83 m/s two ticks
-# later (an earlier version of this constant released the window at any
-# speed under 3.0 m/s, right where this case landed), and the ball then
-# drifted, still slowing but never stopping, for the next ~14 seconds and
-# ~2.5m before wedging against the field boundary in a corner -- the actual
-# mechanism behind every "double-axis corner overshoot" RESTART_STALL traced
-# this session (e.g. overload_flow_vs_tiki_taka's BALL_PLACEMENT_BLUE at
-# t=24.2s), not a genuinely unreachable placement target. 0.05 m/s is
-# comfortably above rsim's steady-state numerical noise floor (~1e-3 m/s
-# once actually at rest, per _SIM_FROZEN_FIELD_VELOCITY_TOL_MPS's docstring)
-# while still well below any speed that could carry the ball a visible
-# distance before the next tick's re-pin.
-_TELEPORT_SETTLE_SPEED_MPS = 0.05
-# Cap on how many times the settle window can be extended by a detected
-# spike, so a genuinely fast in-flight ball at the moment of a teleport
-# (rather than the reset artifact) can't stall the re-pin loop indefinitely.
-_TELEPORT_SETTLE_MAX_EXTENSIONS = 10
-# sim-only: a BALL_PLACEMENT_* teleport is held back while any robot stands
-# within this distance of the placement target. Teleporting the ball into a
-# robot's body gets it shoved out by contact resolution faster than the
-# settle re-pin can hold it: traced in
-# tournament_20260924_082230/give_and_go_solo_vs_high_line_zone (t=37.1),
-# where the ball landed 0.07m from a blue robot, was pushed off at ~1.5m/s
-# and rolled into the goal net behind the line -- unreachable without
-# entering the defense area, so DIRECT_FREE_YELLOW stalled for the rest of
-# the match. The non-placing team clears the placement area during
-# BALL_PLACEMENT_*, so the teleport fires as soon as the spot is free.
-_PLACEMENT_TELEPORT_CLEARANCE_M = ROBOT_RADIUS + BALL_RADIUS + 0.02
-
-# sim-only: recovery for a rare native-engine hang, distinct from the
-# post-teleport velocity spike above. Traced live (tournament_20260905_083358,
-# tiki_taka_vs_zone_fluid_Lk, 189s RESTART_STALL during DIRECT_FREE_BLUE):
-# immediately after a mid-match `teleport_ball`-triggered `RSim.reset()`
-# (from a BALL_PLACEMENT_BLUE placement), every robot AND the ball froze
-# bit-for-bit (position std ~1e-13m, velocity exactly 0.0) for the rest of
-# the match — the vendored native `robosim` subprocess kept returning valid
-# JSON state each `step()` (no exception, no protocol desync), but the
-# physics itself silently stopped advancing. Application-level command
-# computation was verified correct and unrelated: the kicker's tactic, PID,
-# and rotation math all produced real, correctly-directed, nonzero commands
-# every tick throughout the stall — the freeze is entirely on the native
-# engine's side, downstream of everything this codebase controls. Not
-# reproducible live from any cold-teleported starting point (tried both
-# mid-stall and pre-foul), so it can't be root-caused or fixed at the
-# source — only detected and recovered from, the same trade-off already
-# made for `_SIM_HALT_AUTO_RESUME_SECONDS` (no human GC in a sim tournament
-# to intervene). If literally every robot and the ball report zero velocity
-# for this long during live play (`current_command` neither paused nor mid-
-# restart — those already legitimately hold everything still), force a
-# fresh `teleport_ball` to the ball's own current position: `teleport_ball`
-# always resets the *entire* frame (see `SSLBaseEnv.teleport_ball`'s
-# docstring), not just the ball, so this is the cheapest way to re-issue a
-# full-frame `RSim.reset()` and give the native engine another chance to
-# resume advancing, without changing anyone's actual position.
-_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS = 8.0
-# Exactly 0.0, not a small tolerance: ordinary rsim noise/refiner jitter
-# never lands two consecutive ticks at bit-identical velocity, so this can
-# only fire on the genuine native-engine freeze this exists to catch, never
-# on a robot/ball that is merely moving slowly.
-_SIM_FROZEN_FIELD_VELOCITY_TOL_MPS = 0.0
 
 logging.basicConfig(
     filename="Utama.log",
@@ -260,62 +174,7 @@ def _build_robot_feedback_snapshot(
     return snapshot
 
 
-def _turned(robot: Robot, bounds: FieldBounds) -> Robot:
-    """`robot` half a turn about the centre spot, at rest: where it stands after changing ends.
-    Kept within `bounds`: a robot in the run-off past a line comes back onto it, since the sim
-    refuses to teleport a robot outside the field (a match crashed at half-time that way)."""
-    (left, top), (right, bottom) = bounds.top_left, bounds.bottom_right
-    return dataclasses.replace(
-        robot,
-        p=Vector2D(min(max(-robot.p.x, left), right), min(max(-robot.p.y, bottom), top)),
-        v=Vector2D(0.0, 0.0),
-        a=Vector2D(0.0, 0.0),
-        orientation=math.remainder(robot.orientation + math.pi, 2 * math.pi),
-    )
-
-
-def _mirrored(frame: GameFrame) -> GameFrame:
-    """`frame` as the other team sees it: the same absolute coordinates, friendly and enemy swapped."""
-
-    def flip(robots: dict[int, Robot]) -> dict[int, Robot]:
-        return {i: Robot(r.id, not r.is_friendly, r.has_ball, r.p, r.v, r.a, r.orientation) for i, r in robots.items()}
-
-    return GameFrame(
-        frame.ts,
-        not frame.my_team_is_yellow,
-        not frame.my_team_is_right,
-        flip(frame.enemy_robots),
-        flip(frame.friendly_robots),
-        frame.ball,
-        frame.referee,
-    )
-
-
-@dataclass(slots=True)
-class SideRuntime:
-    """Encapsulates all per-side (my team / opponent) runtime state.
-
-    Args:
-        strategy (AbstractStrategy): The strategy for this side.
-        position_refiner (PositionRefiner): Position refiner for this side.
-        velocity_refiner (VelocityRefiner): Velocity refiner for this side.
-        robot_info_refiner (RobotInfoRefiner): Robot info refiner for this side.
-        motion_controller (type[MotionController]): Motion controller factory for this side.
-    """
-
-    strategy: AbstractStrategy
-    position_refiner: PositionRefiner
-    velocity_refiner: VelocityRefiner
-    robot_info_refiner: RobotInfoRefiner
-    motion_controller: type[MotionController]
-    control_scheme: str = "fpp"
-
-    game: Optional[Game] = field(init=False, default=None)
-    game_history: Optional[GameHistory] = field(init=False, default=None)
-    current_game_frame: Optional[GameFrame] = field(init=False, default=None)
-
-
-class StrategyRunner:
+class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin):
     """Main class to run the robot controller and strategy.
 
     Args:
@@ -362,6 +221,9 @@ class StrategyRunner:
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
+        sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick speed noise and vision noise
+            (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
+            Recorded in a columnar replay. Defaults to None (off).
         filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.
         referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``
             instance to use the in-process referee, ``OfficialReferee()`` to consume
@@ -409,6 +271,7 @@ class StrategyRunner:
         stats_path: Optional[str] = None,
         rsim_noise: RsimGaussianNoise = RsimGaussianNoise(),
         rsim_vanishing: float = 0,
+        sim_noise: Optional[SimNoise] = None,
         filtering: bool = True,
         referee: RefereeSource = None,
         referee_initial_command: Optional[RefereeCommand] = None,
@@ -522,7 +385,7 @@ class StrategyRunner:
 
         ### functions below rely on self.my and self.opp ###
 
-        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing)
+        self.rsim_env, self.sim_controller = self._load_sim(rsim_noise, rsim_vanishing, sim_noise)
         self._assert_exp_robots_and_ball(exp_friendly, exp_enemy, exp_ball)
 
         # Set before `_load_robot_controllers()`, which wires `self.match_log`
@@ -586,6 +449,10 @@ class StrategyRunner:
         # module docstring for why the columnar format exists).
         if isinstance(replay_writer_config, ColumnarReplayWriterConfig):
             self.replay_writer = ColumnarReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
+            if sim_noise is not None and self.rsim_env is not None:
+                self.replay_writer.sim_noise_json = json.dumps(
+                    {"settings": sim_noise.to_dict(), "draw": self.rsim_env.sim_draw.to_dict()}, sort_keys=True
+                )
         elif replay_writer_config:
             self.replay_writer = ReplayWriter(replay_writer_config, my_team_is_yellow, exp_friendly, exp_enemy)
         else:
@@ -613,22 +480,6 @@ class StrategyRunner:
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
-
-    def _start_vision_stream(self, http_port: int) -> None:
-        """Start the browser stream that mirrors refined game frames."""
-        try:
-            self._vision_stream_renderer = GameFrameRenderer(self.full_field_dims, scale=300.0)
-            self.vision_stream = RSimVisionStreamServer(
-                http_port=http_port,
-            )
-            self.vision_stream.start()
-            self._publish_vision_stream_frame()
-            self.logger.info("Vision stream available at %s", self.vision_stream.url)
-            print(f"Vision stream available at {self.vision_stream.url}")
-        except Exception:
-            self.vision_stream = None
-            self._vision_stream_renderer = None
-            self.logger.warning("Vision stream could not be started; continuing without browser video.", exc_info=True)
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
@@ -721,11 +572,6 @@ class StrategyRunner:
         self._stop_event.set()
         self._stop_fps_live()
         print("\nStopping gracefully. Press Ctrl+C again to force quit.", flush=True)
-
-    def _stop_fps_live(self):
-        if self._fps_live:
-            self._fps_live.stop()
-            self._fps_live = None
 
     def _load_mode(self, mode_str: str) -> Mode:
         """Convert a mode string to a Mode enum value.
@@ -929,118 +775,6 @@ class StrategyRunner:
         if isinstance(self.referee, CustomReferee):
             self.referee.set_robot_feedback_data(self._robot_feedback_snapshot)
 
-    def _teleport_ball_and_settle(self, x: float, y: float) -> None:
-        """`sim_controller.teleport_ball(x, y)`, plus arming the re-pin window
-        `_run_step` uses to counter the native engine's post-reset velocity
-        spike (see `_TELEPORT_SETTLE_TICKS`'s module docstring).
-        """
-        self.sim_controller.teleport_ball(x, y)
-        self._teleport_settle_target = (x, y)
-        self._teleport_settle_ticks_left = _TELEPORT_SETTLE_TICKS
-        self._teleport_settle_extensions_left = _TELEPORT_SETTLE_MAX_EXTENSIONS
-
-    def _tick_pending_placement_teleport(self) -> None:
-        """Fire the pending BALL_PLACEMENT_* teleport once no robot is within
-        `_PLACEMENT_TELEPORT_CLEARANCE_M` of the target (see its docstring)."""
-        if self._pending_placement_teleport is None:
-            return
-        x, y = self._pending_placement_teleport
-        frame = self.my.current_game_frame
-        robots = (*frame.friendly_robots.values(), *frame.enemy_robots.values())
-        if any(math.hypot(r.p.x - x, r.p.y - y) < _PLACEMENT_TELEPORT_CLEARANCE_M for r in robots):
-            return
-        self._pending_placement_teleport = None
-        self._teleport_ball_and_settle(x, y)
-
-    def _tick_teleport_settle(self) -> None:
-        """One tick of the re-pin window `_teleport_ball_and_settle` arms.
-
-        Traced live in a tournament run (see `_TELEPORT_SETTLE_TICKS`'s
-        docstring): the native rsim engine's post-teleport velocity spike
-        doesn't decay with repeated resets — it simply waits for the first
-        real physics step *without* a reset immediately before it, however
-        many resets preceded it. So this doesn't just re-pin for a fixed
-        number of ticks: it keeps extending the window (bounded by
-        `_TELEPORT_SETTLE_MAX_EXTENSIONS`) for as long as the ball's most
-        recent velocity still reads as unsettled, and only stops once a tick
-        is observed with the window closed AND the ball has actually settled
-        (`_TELEPORT_SETTLE_SPEED_MPS`'s docstring has the full rationale for
-        why this needs to be a strict "at rest" check, not just "no longer
-        looks like the initial reset spike").
-
-        Reads the ball's velocity via `self.rsim_env.frame.ball` (the raw sim
-        state, refreshed every physics `step()`), not `current_game_frame` —
-        the latter is the *refined* frame `_step_game` builds once per tick,
-        so at the point this runs (after the referee block, before
-        `_step_game`) it is always one tick stale and would see last tick's
-        already-corrected velocity instead of this tick's live spike.
-        """
-        if self.sim_controller is None or self._teleport_settle_target is None:
-            return
-        raw_ball = self.rsim_env.frame.ball if self.mode == Mode.RSIM and self.rsim_env is not None else None
-        ball_speed = math.hypot(raw_ball.v_x, raw_ball.v_y) if raw_ball is not None else 0.0
-        settled = ball_speed <= _TELEPORT_SETTLE_SPEED_MPS
-        # The tick whose re-pin drove `_teleport_settle_ticks_left` to 0
-        # still needs one more check here — its own `step()` (this tick,
-        # further down in `_run_step`) is what actually produces or clears
-        # the spike, and that only becomes observable next tick. So don't
-        # drop `_teleport_settle_target` (and stop checking) until a tick is
-        # seen with the window closed AND (settled OR out of extensions —
-        # a ball that never actually settles must still terminate the loop
-        # eventually rather than re-pin forever).
-        if self._teleport_settle_ticks_left <= 0 and (settled or self._teleport_settle_extensions_left <= 0):
-            self._teleport_settle_target = None
-            return
-        if not settled and self._teleport_settle_extensions_left > 0:
-            self._teleport_settle_ticks_left += 1
-            self._teleport_settle_extensions_left -= 1
-        x, y = self._teleport_settle_target
-        self.sim_controller.teleport_ball(x, y)
-        self._teleport_settle_ticks_left = max(0, self._teleport_settle_ticks_left - 1)
-
-    def _tick_frozen_field_watchdog(self) -> None:
-        """Recover from the rare native-engine hang described in
-        `_SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS`'s module docstring.
-
-        Runs once per tick, after `_step_game` has refreshed
-        `self.my.current_game_frame` for this tick. Only meaningful in sim
-        (`Mode.HALT` has its own dedicated auto-resume timer above, and a
-        real match has no `sim_controller` to recover through — `HALT` is
-        additionally excluded on purpose, since it's the one live-play state
-        where every robot legitimately holds zero velocity by design).
-        """
-        if self.sim_controller is None or self.mode != Mode.RSIM:
-            return
-        frame = self.my.current_game_frame
-        if frame is None or frame.ball is None:
-            self._frozen_field_since = None
-            return
-        referee = getattr(frame, "referee", None)
-        current_command = getattr(referee, "referee_command", None) if referee is not None else None
-        if current_command == RefereeCommand.HALT:
-            self._frozen_field_since = None
-            return
-
-        tol = _SIM_FROZEN_FIELD_VELOCITY_TOL_MPS
-        all_still = frame.ball.v.mag() <= tol and all(
-            robot.v.mag() <= tol for robot in (*frame.friendly_robots.values(), *frame.enemy_robots.values())
-        )
-        if not all_still:
-            self._frozen_field_since = None
-            return
-
-        if self._frozen_field_since is None:
-            self._frozen_field_since = frame.ts
-        elif frame.ts - self._frozen_field_since >= _SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS:
-            self.logger.warning(
-                "Frozen-field watchdog: every robot and the ball reported exactly zero "
-                "velocity for %.1fs (native-engine hang, see _SIM_FROZEN_FIELD_AUTO_RECOVER_SECONDS) "
-                "— forcing a full-frame reset via teleport_ball to recover.",
-                frame.ts - self._frozen_field_since,
-            )
-            self.sim_controller.teleport_ball(frame.ball.p.x, frame.ball.p.y)
-            self._frozen_field_since = None
-
     def _remove_rsim_ball(self):
         """Removes the ball from the RSim environment by teleporting it off-field."""
         self.sim_controller.remove_ball()
@@ -1050,6 +784,7 @@ class StrategyRunner:
         self,
         rsim_noise: RsimGaussianNoise,
         rsim_vanishing: float,
+        sim_noise: Optional[SimNoise] = None,
     ) -> Tuple[Optional[SSLStandardEnv], Optional[AbstractSimController]]:
         """Mode RSIM: Loads the RSim environment with the expected number of robots and corresponding sim controller.
         Mode GRSIM: Loads corresponding sim controller and teleports robots in GRSim to ensure the expected number of
@@ -1095,6 +830,7 @@ class StrategyRunner:
                 ball_starting_position=self.field_bounds.center,
                 gaussian_noise=rsim_noise,
                 vanishing=rsim_vanishing,
+                sim_noise=sim_noise,
             )
 
             if self.opp:
@@ -1943,234 +1679,7 @@ class StrategyRunner:
 
         # --- end of frame ---
         if self.show_live_status:
-            frame_end = time.perf_counter()
-            frame_dt = frame_end - frame_start
-
-            self.elapsed_time += frame_dt
-            self.num_frames_elapsed += 1
-
-            if self.elapsed_time >= FPS_PRINT_INTERVAL:
-                fps = self.num_frames_elapsed / self.elapsed_time
-
-                ref = self.referee_refiner
-                stage_secs = ref.stage_time_left
-                stage_min = int(stage_secs // 60)
-                stage_sec = int(stage_secs % 60)
-                display = Text()
-                display.append(f"FPS: {fps:.1f}", style="bold cyan")
-                display.append("  |  ")
-                display.append(ref.last_command.name, style="bold yellow")
-                if ref.last_next_command:
-                    display.append("  ->  ")
-                    display.append(ref.last_next_command.name, style="yellow")
-                display.append("  |  ")
-                display.append(ref.stage.name.replace("_", " ").title())
-                display.append("  |  Blue ")
-                display.append(str(ref.blue_team.score), style="bold blue")
-                display.append(" - ")
-                display.append(str(ref.yellow_team.score), style="bold yellow")
-                display.append(" Yellow")
-                display.append(f"  |  {stage_min}:{stage_sec:02d} left")
-                display.append("  |  Ref: ")
-                if isinstance(self.referee, CustomReferee):
-                    display.append("custom", style="bold magenta")
-                    display.append(" (")
-                    display.append(self.referee.profile_name, style="magenta")
-                    display.append(")")
-                elif isinstance(self.referee, OfficialReferee):
-                    display.append("official", style="bold magenta")
-                else:
-                    display.append("none", style="bold magenta")
-
-                if ref.last_status_message:
-                    display.append(f"  |  {ref.last_status_message}", style="dim")
-
-                self._fps_live.update(display)
-                self._fps_live.refresh()
-
-                self.elapsed_time = 0.0
-                self.num_frames_elapsed = 0
-
-    def _publish_vision_stream_frame(self) -> None:
-        """Publish the latest refined game frame to the browser stream."""
-        if self.vision_stream is None or self._vision_stream_renderer is None or self.my.current_game_frame is None:
-            return
-        if not self.vision_stream.is_due():
-            return
-        self.vision_stream.publish_status(self._vision_stream_status())
-        frame = self._vision_stream_renderer.render(self.my.current_game_frame)
-        self.vision_stream.publish_rgb_frame(frame)
-
-    _VS_TEAM_NAMES = [
-        "FC Recursion",
-        "Real Segfault",
-        "Borussia Debugmund",
-        "Manchester Bytecode",
-        "Inter Malloc",
-        "Atletico del Stack",
-        "Null Pointer United",
-        "Schalke 0x04",
-        "Deportivo Kernel",
-        "Racing Club de Runtime",
-        "Galactic Overhead",
-        "Ajax Exception",
-        "Off-by-One City",
-        "SV Deadlock",
-        "Infinite Loop FC",
-    ]
-
-    _VS_IDLE_LINES = [
-        "The robots are thinking...",
-        "Calculating optimal trajectory",
-        "Both sides plotting their next move",
-        "The crowd holds its breath",
-        "Pure silicon determination out there",
-        "No human reflexes required",
-        "Running at full clock speed",
-        "Algorithms at war",
-        "404: defence not found",
-        "This is peak robot football",
-    ]
-
-    _VS_KICK_LINES = [
-        "What a strike!",
-        "They've let it fly!",
-        "Big boot from the robot!",
-        "The ball is moving!",
-        "Powerful kick!",
-        "Sending it downfield!",
-    ]
-
-    _VS_GOAL_LINES_YELLOW = [
-        "GOAL! Yellow draws blood!",
-        "Yellow scores! Unbelievable!",
-        "The yellow machine delivers!",
-        "Yellow puts it in the net!",
-    ]
-
-    _VS_GOAL_LINES_BLUE = [
-        "GOAL! Blue strikes back!",
-        "Blue finds the net!",
-        "Brilliant from the blue side!",
-        "Blue pulls one back!",
-    ]
-
-    _VS_FOOTBALLER_NAMES = [
-        "Martin",
-        "Fred",
-        "Joel",
-        "Louis",
-    ]
-
-    @staticmethod
-    def _assign_team_names() -> tuple[str, str]:
-        import random
-
-        pool = list(StrategyRunner._VS_TEAM_NAMES)
-        random.shuffle(pool)
-        return pool[0], pool[1]
-
-    def _update_vs_commentary(self, ball_speed: float | None, score_blue: int, score_yellow: int) -> None:
-        import random
-
-        now = time.monotonic()
-        score = (score_blue, score_yellow)
-
-        # Goal scored — highest priority
-        if score != self._vs_prev_score:
-            if score[1] > self._vs_prev_score[1]:
-                line = random.choice(self._VS_GOAL_LINES_YELLOW)
-            else:
-                line = random.choice(self._VS_GOAL_LINES_BLUE)
-            self._vs_commentary = line
-            self._vs_commentary_until = now + 5.0
-            self._vs_prev_score = score
-            self._vs_prev_ball_speed = ball_speed or 0.0
-            return
-
-        self._vs_prev_score = score
-
-        # Kick detected
-        prev_spd = self._vs_prev_ball_speed
-        cur_spd = ball_speed or 0.0
-        self._vs_prev_ball_speed = cur_spd
-        if cur_spd > _VS_KICK_THRESHOLD and prev_spd <= _VS_KICK_THRESHOLD:
-            if now >= self._vs_commentary_until:
-                self._vs_commentary = random.choice(self._VS_KICK_LINES)
-                self._vs_commentary_until = now + 2.5
-
-        # Idle rotation
-        if now >= self._vs_idle_next:
-            if now >= self._vs_commentary_until:
-                self._vs_commentary = self._VS_IDLE_LINES[self._vs_idle_index % len(self._VS_IDLE_LINES)]
-                self._vs_idle_index += 1
-            self._vs_idle_next = now + 6.0
-
-    def _vision_stream_status(self) -> dict[str, object]:
-        """Build status metadata shown above the browser stream."""
-        stage_secs = max(0.0, self.referee_refiner.stage_time_left)
-        stage_min = int(stage_secs // 60)
-        stage_sec = int(stage_secs % 60)
-
-        blue = self.referee_refiner.blue_team
-        yellow = self.referee_refiner.yellow_team
-
-        ball = self.my.current_game_frame.ball if self.my.current_game_frame else None
-        ball_speed = (ball.v.x**2 + ball.v.y**2) ** 0.5 if ball is not None else None
-
-        name_yellow, name_blue = (
-            self._vs_team_names if self.my_team_is_yellow else (self._vs_team_names[1], self._vs_team_names[0])
-        )
-        self._update_vs_commentary(ball_speed, blue.score, yellow.score)
-
-        return {
-            "time_left": f"{stage_min}:{stage_sec:02d}",
-            "score_blue": blue.score,
-            "score_yellow": yellow.score,
-            "yellow_cards_blue": blue.yellow_cards,
-            "yellow_cards_yellow": yellow.yellow_cards,
-            "red_cards_blue": blue.red_cards,
-            "red_cards_yellow": yellow.red_cards,
-            "team_blue": name_blue,
-            "team_yellow": name_yellow,
-            "mode": self.mode.value,
-            "ball_speed": round(ball_speed, 2) if ball_speed is not None else None,
-            "commentary": self._vs_commentary,
-            "annotations": self._vision_stream_annotations(),
-            "roster": self._vision_stream_roster(),
-        }
-
-    def _get_robot_name(self, is_friendly: bool, robot_id: int) -> str:
-        key = (is_friendly, robot_id)
-        if key not in self._vs_robot_names:
-            used = set(self._vs_robot_names.values())
-            pool = [n for n in self._VS_FOOTBALLER_NAMES if n not in used]
-            if not pool:
-                pool = self._VS_FOOTBALLER_NAMES
-            import random
-
-            self._vs_robot_names[key] = random.choice(pool)
-        return self._vs_robot_names[key]
-
-    def _vision_stream_annotations(self) -> list[dict]:
-        """Build per-robot label annotations (footballer name) for the overlay canvas."""
-        renderer = self._vision_stream_renderer
-        game_frame = self.my.current_game_frame
-        if renderer is None or game_frame is None:
-            return []
-
-        annotations = []
-        for robot in game_frame.friendly_robots.values():
-            name = self._get_robot_name(True, robot.id)
-            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
-            annotations.append({"id": robot.id, "team": "friendly", "px": px, "py": py, "label": name})
-
-        for robot in game_frame.enemy_robots.values():
-            name = self._get_robot_name(False, robot.id)
-            px, py = renderer._pos_transform(robot.p.x, -robot.p.y)
-            annotations.append({"id": robot.id, "team": "enemy", "px": px, "py": py, "label": name})
-
-        return annotations
+            self._update_live_status(frame_start)
 
     def _push_debug_status_to_referee(self) -> None:
         """Push per-robot debug status to CustomReferee for GUI display.
@@ -2234,56 +1743,6 @@ class StrategyRunner:
             for tactic_id, info in kernel_strategy.slot_status(game).items()
             if info["committed"] and info["robots"]
         }
-
-    def _vision_stream_roster(self) -> list[dict]:
-        """Build the player roster list shown below the scoreboard."""
-        game_frame = self.my.current_game_frame
-        if game_frame is None:
-            return []
-
-        _ROLE_LABELS = {
-            "GOALKEEPER": "Goalkeeper",
-            "DEFENDER": "Defender",
-            "STRIKER": "Striker",
-            "MIDFIELDER": "Midfielder",
-            "UNASSIGNED": "On field",
-        }
-
-        role_map: dict = {}
-        passer_id: int | None = None
-        receiver_id: int | None = None
-        try:
-            bb = self.my.strategy.blackboard
-            if bb is not None:
-                role_map = bb.role_map or {}
-                passer_id = bb.get("passer_id")
-                receiver_id = bb.get("receiver_id")
-        except Exception:
-            pass
-
-        roster = []
-        for robot in game_frame.friendly_robots.values():
-            name = self._get_robot_name(True, robot.id)
-            if robot.id == passer_id:
-                status = "Passing"
-            elif robot.id == receiver_id:
-                status = "Receiving"
-            else:
-                role = role_map.get(robot.id)
-                status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
-            roster.append(
-                {"name": name, "team": "yellow" if game_frame.my_team_is_yellow else "blue", "status": status}
-            )
-
-        for robot in game_frame.enemy_robots.values():
-            name = self._get_robot_name(False, robot.id)
-            role = role_map.get(robot.id)
-            status = _ROLE_LABELS.get(role.name, "On field") if role else "On field"
-            roster.append(
-                {"name": name, "team": "blue" if game_frame.my_team_is_yellow else "yellow", "status": status}
-            )
-
-        return roster
 
     def _draw_rsim_field_bounds_overlay(self) -> None:
         """Draw active field bounds overlay in RSIM human render mode."""

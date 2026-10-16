@@ -280,11 +280,15 @@ def test_match_key_covers_every_setting(repo):
         match_key(g, a, b, duration_seconds=65.0, control_scheme="dwa"),
         match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1),
         match_key(g, a, b, duration_seconds=65.0, recorded=False),
+        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 1}),
+        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 2}),
     ]
     assert len({ref, *variants}) == 1 + len(variants)
     # the fuzz interval only matters when fuzzing is on
     assert match_key(g, a, b, duration_seconds=65.0, fuzz_interval_s=(1.0, 2.0)) == ref
     assert match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
+    # matches without sim noise keep the keys they had before the setting existed
+    assert match_key(g, a, b, duration_seconds=65.0, sim_noise=None) == ref
 
 
 def test_numerics_env_vars_change_the_base(repo, monkeypatch):

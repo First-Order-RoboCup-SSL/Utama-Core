@@ -34,6 +34,7 @@ from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     enable_sim_reuse,
 )
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -130,6 +131,7 @@ def run_match(
     control_scheme: str = "fpp",
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
+    sim_noise: Optional[SimNoise] = None,
 ) -> MatchResult:
     """Play one match between two kernel-strategy factories, until the referee calls full
     time (two halves of the profile's `half_duration_seconds` of playing time, the clock
@@ -170,6 +172,11 @@ def run_match(
     `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
     `CustomReferee`, so this match's referee injects extra seeded-random
     legal restarts during live play.
+
+    `sim_noise`, if set, plays the match with seeded latency, kick speed noise and vision noise
+    (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`, `docs/sim_realism.md`). The draws
+    depend on the seed, team colour and robot id only, so the same `sim_noise` gives every
+    pairing the same physics.
     """
     enable_sim_reuse()
 
@@ -235,6 +242,7 @@ def run_match(
         enable_vision_stream=False,
         referee_initial_command=initial_command,
         control_scheme=resolved_scheme,
+        sim_noise=sim_noise,
         **extra_kwargs,
     )
 

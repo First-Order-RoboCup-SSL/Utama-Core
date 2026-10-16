@@ -24,7 +24,6 @@ from utama_core.config.referee_constants import (
 )
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     detour_around_circle,
     distance_point_to_segment,
@@ -961,13 +960,3 @@ class DirectFreeTheirsStep:
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
         )
-
-
-# ---------------------------------------------------------------------------
-# Helper: resolve bilateral commands
-# ---------------------------------------------------------------------------
-
-
-def is_our_command(command: RefereeCommand, our_command: RefereeCommand, their_command: RefereeCommand) -> bool:
-    """Not used directly — bilateral resolution is done in tree.py via command sets."""
-    return command == our_command

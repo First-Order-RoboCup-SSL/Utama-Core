@@ -19,7 +19,6 @@ import json
 import math
 import random
 import statistics
-import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
@@ -45,6 +44,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.global_utils.git_utils import git_revision
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.run import StrategyRunner
 from utama_core.skills.src.utils.move_utils import move
@@ -971,19 +971,6 @@ def _percentile(values: list[float], fraction: float) -> float | None:
     return ordered[math.ceil(fraction * len(ordered)) - 1]
 
 
-def _git_revision() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip() or None
-
-
 def run_case(scheme: str, scenario: Scenario, repeat: int, timing_warmup_calls: int) -> dict:
     manager = BenchmarkManager(scenario)
     my_strategy = _go_to_targets_strategy(scenario.friendly_targets, scenario.friendly_target_trajectories)
@@ -1226,7 +1213,7 @@ def main() -> int:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": generated_at.isoformat(),
-        "git_revision": _git_revision(),
+        "git_revision": git_revision(),
         "mode": "rsim",
         "headless": True,
         "schemes": list(args.schemes),

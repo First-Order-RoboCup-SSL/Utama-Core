@@ -150,3 +150,33 @@ def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_s
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save", "a", "c"])
     tournament.main()
     assert calls == [("build_a_kernel_strategy", "build_c_kernel_strategy")]
+
+
+def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypatch):
+    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+
+    calls = []
+
+    def _fake_run_match(config_a_name, config_b_name, **kwargs):
+        calls.append(kwargs.get("sim_noise"))
+        return _stub_result(config_a_name, config_b_name)
+
+    monkeypatch.setattr(tournament, "run_match", _fake_run_match)
+    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "tournament.py",
+            "--sequential",
+            "--sim-noise",
+            '{"seed": 3, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.2}',
+            "build_low_block_kernel_strategy",
+            "build_tiki_taka_kernel_strategy",
+        ],
+    )
+
+    tournament.main()
+
+    assert calls == [SimNoise(seed=3, latency_s=(0.05, 0.1), kick_speed_sd=0.2)]
+    (summary_path,) = tmp_path.glob("tournament_*/summary.json")
+    assert json.loads(summary_path.read_text())["sim_noise"]["seed"] == 3
