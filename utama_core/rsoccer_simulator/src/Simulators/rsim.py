@@ -67,6 +67,15 @@ class RSim:
     def get_field_params(self):
         return Field(**self.simulator.get_field_params())
 
+    def set_physics_params(self, substeps: int, ball_slide_decel: float, ball_roll_decel: float, ball_slide_fraction: float):
+        """The fork's tunable physics (`SSLWorld::setPhysicsParams`); kept across `reset()`."""
+        self.simulator.set_physics_params(
+            substeps=substeps,
+            ball_slide_decel=ball_slide_decel,
+            ball_roll_decel=ball_roll_decel,
+            ball_slide_fraction=ball_slide_fraction,
+        )
+
     def _placement_dict_from_frame(self, frame: Frame):
         replacement_pos: Dict[str, np.ndarray] = {}
 
@@ -109,9 +118,13 @@ class RSimSSL(RSim):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._sim_cmds = np.zeros((self.n_robots_blue + self.n_robots_yellow, 8), dtype=np.float64)
+        # With a 9th column (a kick's direction error) only on ticks where some kick has one, so
+        # every other tick sends rsim exactly what it got before the field existed.
+        self._sim_cmds_angled = np.zeros((self.n_robots_blue + self.n_robots_yellow, 9), dtype=np.float64)
 
     def send_commands(self, commands):
-        sim_cmds = self._sim_cmds
+        angled = any(cmd.kick_angle for cmd in commands)
+        sim_cmds = self._sim_cmds_angled if angled else self._sim_cmds
         sim_cmds.fill(0.0)
 
         for cmd in commands:
@@ -136,6 +149,8 @@ class RSimSSL(RSim):
                 sim_cmds[rbt_id][5] = cmd.kick_v_x
                 sim_cmds[rbt_id][6] = cmd.kick_v_z
                 sim_cmds[rbt_id][7] = cmd.dribbler
+            if angled:
+                sim_cmds[rbt_id][8] = cmd.kick_angle
 
         self._last_state = self.simulator.step(sim_cmds)
 

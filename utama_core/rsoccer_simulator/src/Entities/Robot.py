@@ -14,6 +14,7 @@ class Robot:
     v_theta: float = 0
     kick_v_x: float = 0
     kick_v_z: float = 0
+    kick_angle: float = 0  # radians off the facing direction (`SimNoise` kick direction)
     dribbler: bool = False
     infrared: bool = False
     wheel_speed: bool = False

@@ -209,8 +209,12 @@ whoever runs it.
   seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
   schedule. Details: `docs/custom_referee.md`.
 - **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
-  command latency per robot, kick speed noise (a per-robot offset plus kick-to-kick spread),
-  and vision noise and dropped detections, all off by default. Draws depend on the seed, team
+  command latency per robot, kick speed and direction noise (a per-robot offset plus
+  kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot
+  speed, acceleration and braking limits applied to the commands the sim acts on (hardware caps,
+  below any planner), the physics substep count, and vision noise and dropped detections, all
+  off by default. Ball friction, kick direction and substeps need a robosim binary built from
+  `vendor/rSim` (`vendor/rSim/FORK_NOTES.md`); with the stock binary they raise. Draws depend on the seed, team
   colour and robot id only, so every pairing in a run gets the same physics and A/B comparisons
   stay paired; the same seed replays a match exactly. Settings and draws go into each replay
   (`columnar_reader.load_sim_noise`) and `summary.json`, and into the match key only when set.

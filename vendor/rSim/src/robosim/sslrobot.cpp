@@ -232,13 +232,19 @@ void SSLRobot::Kicker::toggleDribbler()
     this->dribblerOn != this->dribblerOn;
 }
 
-void SSLRobot::Kicker::kick(dReal kickSpeedX, dReal kickSpeedZ)
+bool SSLRobot::Kicker::kick(dReal kickSpeedX, dReal kickSpeedZ, dReal angle)
 {    
     dReal dx,dy,dz;
     dReal vx,vy,vz;
 
     this->rob->chassis->getBodyDirection(dx,dy,dz);
     dz = 0;
+    if (angle != 0) {
+        const dReal c = cos(angle), s = sin(angle);
+        const dReal rx = dx * c - dy * s;
+        dy = dx * s + dy * c;
+        dx = rx;
+    }
 
     unholdBall();
 
@@ -275,7 +281,9 @@ void SSLRobot::Kicker::kick(dReal kickSpeedX, dReal kickSpeedZ)
             this->kickerState = FLAT_KICK;
 
         this->kickerCounter = 10;
+        return true;
     }
+    return false;
 }
 
 void SSLRobot::Kicker::holdBall(){
