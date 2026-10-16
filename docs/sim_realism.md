@@ -314,6 +314,13 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
   pass line offset 0.11 vs 0.26 m; keeper depth 0.09 vs 0.21 m (strategy). With 8 strategies
   instead of 4, attempt volume matches; the 4-strategy samples' excess was those strategies.
   The knobs cost about 1% of match time (120 s match: 28.0 s off, 28.3 s on).
+- **New baseline, 2026-10-16** (`replays/tournament_20261016_201213`, all 12 strategies, 66
+  matches, v3 noise, 8 workers, ~70 min): 3.6 goals per match (old deterministic baseline
+  `tournament_20261014_144456`: 6.7). split_shape still first (26 points, GD +18; was +58).
+  Below it the order barely survives: rank correlation with the old baseline 0.17
+  (clear_danger 10th → 2nd, decoy_and_overload 12th → 4th, press_and_pass 2nd → 10th). With
+  one match per pairing and per-match GD SD ≈ 3, those middle places are not resolved either
+  way; separating them needs repeated seeds.
 - No stalls in either sample; a dribbled ball stays at the kicker with two-phase friction
   (`test_dribble_with_friction.py`).
 
