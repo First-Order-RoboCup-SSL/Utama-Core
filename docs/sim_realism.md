@@ -205,6 +205,11 @@ speed in m/s, turn rate in rad/s; brackets are 95% bootstrap intervals over matc
   0.5 s after a kick, losing 2–4 m/s², then rolls at about 0.3. The rsim ball loses a constant
   0.65. It keeps too much speed early and loses twice too much while rolling. Phase 2 needs
   two-phase ball friction in the C++ fork, not one damping value.
+- **Robot motion measures driving, not just hardware.** The baseline ran the FPP planner on
+  both sides with a 4 m/s² configured acceleration limit, so the sim's 2.85 / 2.96 m/s² are how
+  FPP drives. Real values mix each team's planner (often bang-bang or trajectory sampling) with
+  its hardware. Per-robot sim limits are hardware caps applied below any planner; take their
+  range from real peaks (a lower bound, because of tracker smoothing), not typical driving.
 - **Sim teams are near-identical:** acceleration 2.80–2.89 across teams against 1.5–3.5 real;
   real top speeds differ about 3× between teams. Per-team and per-robot draws are justified.
 - Caveats: the tracker smooths peaks (robot values and sliding deceleration are lower bounds;
