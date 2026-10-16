@@ -49,18 +49,41 @@ What a converted replay holds:
   Commands keep their protocol values, including `GOAL_*` and, before 2021, `INDIRECT_FREE_*`,
   with one change: a free kick reads `NORMAL_START` once it is taken (`free_kick_taken`), as in
   our referee. The real game controller keeps the free-kick command through the play after it.
-- `<stem>.source.json`: the log, teams, final score, tracker source and field geometry.
+- `<stem>.source.json`: the log, teams, final score, tracker source and field geometry, and
+  under `extras` which of the sidecars below were written.
+
+Sidecars, for measuring physics and vision rather than replaying (`tools/convert_ssl_log.py`
+can add them to a replay already converted). Teams are in kick-off colours like the replay
+(yellow friendly), positions in metres in field coordinates, times `ts` in seconds on the
+replay's clock. The arrays are `np.savez_compressed` archives named `.zip`, so a glob for
+replays (`*.npz`) skips them; `np.load` reads them as usual.
+- `<stem>.kicks.json` (tracker logs): every kick the tracker reported (`KickedBall`), once per
+  kick: start time, kicker (the last robot the tracker named; `kickers` counts how many it
+  named), start position, the first and the last (most refined) velocity estimate, on how
+  many ticks it was reported, and the stop time and position when the tracker gave them.
+- `<stem>.tracker.zip` (tracker logs): per tick, the `visibility` (0-1) of the ball and every
+  robot, and robots' angular velocity, NaN where not given. Robot arrays are `[tick, team, id]`,
+  team 0 yellow and 1 blue, ids 0-15.
+Not every autoref's tracker sends kicks or visibility (in 2026 ER-Force sent neither, TIGERs
+both), so each comes from the replay's tracker if it sends it, else from the source that sends
+it most (`source.json`'s `extras.kicks_source` / `visibility_source`); angular velocity always
+from the replay's tracker.
+- `<stem>.vision.zip` (`raw_vision=True`): every camera detection inside the replay window,
+  unfiltered: one row per camera frame (`frame_*`: receive time `ts`, capture and send time on
+  the camera clock, camera id, frame number), per ball detection (`ball_*`) and per robot
+  detection (`robot_*`), with confidence, pixel position and the row of the frame they came in.
 """
 
 from __future__ import annotations
 
+import array
 import dataclasses
 import gzip
 import json
 import math
 import struct
 import urllib.parse
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -113,6 +136,7 @@ FREE_KICKS = frozenset(
     )
 )
 IN_PLAY_M = 0.05  # the rulebook's ball in play: moved at least 0.05 m
+_SAME_KICK_S = 0.05  # tracker kick reports whose start times differ by less than this are one kick
 
 
 def read_records(path) -> Iterator[tuple[int, int, bytes]]:
@@ -206,12 +230,16 @@ def referee_data(msg: Referee, received_s: float, swapped: bool = False) -> Refe
 
 class _Scan:
     """One pass over a log: the referee messages that change something, every tracker source's
-    frames, the camera detections and the field geometry."""
+    frames, the camera detections (kept only without a tracker) and the field geometry; with
+    `raw_vision`, every camera detection as `_VisionRows` too."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, raw_vision: bool = False):
         self.referee: list[tuple[int, Referee]] = []
         self.trackers: dict[str, list[tuple[int, bytes]]] = defaultdict(list)
         self.vision: dict[int, list[tuple[int, bytes]]] = defaultdict(list)  # by record type
+        self.raw_vision = _VisionRows() if raw_vision else None
+        self.kick_frames: Counter[str] = Counter()  # per tracker source, frames with a `KickedBall`
+        self.visibility_frames: Counter[str] = Counter()  # ... and with the ball's visibility
         self.geometry = None
         self.last_ns = 0
         last_key = None
@@ -227,19 +255,113 @@ class _Scan:
                 packet = TrackerWrapperPacket()
                 packet.ParseFromString(payload)
                 if packet.HasField("tracked_frame"):
-                    self.trackers[packet.source_name or packet.uuid].append((ts_ns, payload))
+                    name, frame = packet.source_name or packet.uuid, packet.tracked_frame
+                    self.trackers[name].append((ts_ns, payload))
                     self.vision.clear()
+                    # not every autoref's tracker sends these (2026: ER-Force neither, TIGERs both)
+                    self.kick_frames[name] += frame.HasField("kicked_ball")
+                    self.visibility_frames[name] += bool(frame.balls) and frame.balls[0].HasField("visibility")
             elif msg_type in (VISION_2010, VISION_2014):
                 if not self.trackers:  # camera detections are only read when there is no tracker
                     self.vision[msg_type].append((ts_ns, payload))
-                if msg_type == VISION_2014 and self.geometry is None:
+                if msg_type == VISION_2014 and (self.geometry is None or self.raw_vision is not None):
                     packet = SSL_WrapperPacket()
                     packet.ParseFromString(payload)
-                    if packet.HasField("geometry"):
+                    if packet.HasField("geometry") and self.geometry is None:
                         self.geometry = packet.geometry.field
+                    if packet.HasField("detection") and self.raw_vision is not None:
+                        self.raw_vision.add(ts_ns, packet.detection)
             else:
                 continue  # the index record (type 6) has no meaningful time
             self.last_ns = max(self.last_ns, ts_ns)
+
+
+class _VisionRows:
+    """Camera detections as flat typed columns, appended while scanning: a match's vision packets
+    kept as messages would not fit in memory. Positions in millimetres, as sent."""
+
+    FRAME = {"recv_ns": "q", "t_capture": "d", "t_sent": "d", "camera": "i", "number": "q"}
+    BALL = {"frame": "q", "x": "f", "y": "f", "z": "f", "pixel_x": "f", "pixel_y": "f", "confidence": "f", "area": "i"}
+    ROBOT = {
+        "frame": "q",
+        "team": "b",
+        "id": "i",
+        "x": "f",
+        "y": "f",
+        "orientation": "f",
+        "pixel_x": "f",
+        "pixel_y": "f",
+        "height": "f",
+        "confidence": "f",
+    }
+
+    def __init__(self):
+        self.columns = {
+            f"{table}_{name}": array.array(code)
+            for table, fields in (("frame", self.FRAME), ("ball", self.BALL), ("robot", self.ROBOT))
+            for name, code in fields.items()
+        }
+
+    def add(self, recv_ns: int, detection) -> None:
+        c = self.columns
+        row = len(c["frame_recv_ns"])
+        for name, value in (
+            ("recv_ns", recv_ns),
+            ("t_capture", detection.t_capture),
+            ("t_sent", detection.t_sent),
+            ("camera", detection.camera_id),
+            ("number", detection.frame_number),
+        ):
+            c[f"frame_{name}"].append(value)
+        for b in detection.balls:
+            for name, value in (
+                ("frame", row),
+                ("x", b.x),
+                ("y", b.y),
+                ("z", b.z),
+                ("pixel_x", b.pixel_x),
+                ("pixel_y", b.pixel_y),
+                ("confidence", b.confidence),
+                ("area", b.area if b.HasField("area") else -1),
+            ):
+                c[f"ball_{name}"].append(value)
+        for team, robots in ((_YELLOW, detection.robots_yellow), (_BLUE, detection.robots_blue)):
+            for r in robots:
+                for name, value in (
+                    ("frame", row),
+                    ("team", team),
+                    ("id", r.robot_id if r.HasField("robot_id") else -1),
+                    ("x", r.x),
+                    ("y", r.y),
+                    ("orientation", r.orientation if r.HasField("orientation") else math.nan),
+                    ("pixel_x", r.pixel_x),
+                    ("pixel_y", r.pixel_y),
+                    ("height", r.height if r.HasField("height") else math.nan),
+                    ("confidence", r.confidence),
+                ):
+                    c[f"robot_{name}"].append(value)
+
+    def arrays(self, start_ns: int, end_ns: int, tick_ns: np.ndarray, swapped: np.ndarray) -> dict[str, np.ndarray]:
+        """The frames received inside [start_ns, end_ns) and their detections: receive times as
+        `frame_ts` on the replay clock, positions in metres, teams in kick-off colours."""
+        a = {name: np.frombuffer(col, dtype=col.typecode) for name, col in self.columns.items()}
+        recv = a["frame_recv_ns"]
+        keep = (recv >= start_ns) & (recv < end_ns)
+        new_row = np.cumsum(keep) - 1  # a kept frame's row among the kept frames
+        tick = np.clip(np.searchsorted(tick_ns, recv, side="right") - 1, 0, max(len(tick_ns) - 1, 0))
+        frame_swapped = swapped[tick] if len(swapped) else np.zeros(len(recv), dtype=bool)
+        out = {"frame_ts": (recv[keep] - start_ns) / 1e9}
+        out.update({f"frame_{name}": a[f"frame_{name}"][keep] for name in ("t_capture", "t_sent", "camera", "number")})
+        for table, fields in (("ball", self.BALL), ("robot", self.ROBOT)):
+            rows = a[f"{table}_frame"]
+            kept = keep[rows]
+            for name in fields:
+                column = a[f"{table}_{name}"][kept]
+                out[f"{table}_{name}"] = column / 1000 if name in ("x", "y", "z") else column
+            out[f"{table}_frame"] = new_row[rows[kept]]
+            if table == "robot":
+                out["robot_team"] = (out["robot_team"] ^ frame_swapped[rows[kept]]).astype(np.int8)
+        return out
 
 
 class _World:
@@ -252,6 +374,11 @@ class _World:
         self.ball_p = np.full((n_ticks, 3), np.nan)
         self.ball_v = np.full((n_ticks, 3), np.nan)
         self.ball_seen = np.zeros(n_ticks, dtype=bool)
+        # from a tracker only (NaN from camera detections): the `.tracker.zip` and `.kicks.json` sidecars
+        self.ball_visibility = np.full(n_ticks, np.nan)
+        self.robot_visibility = np.full((n_ticks, 2, _MAX_ID), np.nan)
+        self.robot_vel_angular = np.full((n_ticks, 2, _MAX_ID), np.nan)
+        self.kicks: list[dict] = []  # see `_add_kick`
 
     def finish(self) -> None:
         """Fill what the source did not give: missing velocities from positions, accelerations
@@ -303,7 +430,8 @@ def _tracker_world(frames: list[tuple[int, bytes]], tick_ns: np.ndarray) -> tupl
     for k, i in enumerate(latest):
         if i < 0:
             continue
-        if i != decoded:
+        new_frame = i != decoded
+        if new_frame:
             packet.ParseFromString(frames[i][1])
             decoded = i
         frame = packet.tracked_frame
@@ -316,13 +444,50 @@ def _tracker_world(frames: list[tuple[int, bytes]], tick_ns: np.ndarray) -> tupl
             world.robot_orientation[k, team, rid] = robot.orientation
             if robot.HasField("vel"):
                 world.robot_v[k, team, rid] = (robot.vel.x, robot.vel.y)
+            if robot.HasField("vel_angular"):
+                world.robot_vel_angular[k, team, rid] = robot.vel_angular
+            if robot.HasField("visibility"):
+                world.robot_visibility[k, team, rid] = robot.visibility
         if frame.balls:
             ball = frame.balls[0]  # the primary ball
             world.ball_p[k] = (ball.pos.x, ball.pos.y, ball.pos.z)
             world.ball_seen[k] = True
             if ball.HasField("vel"):
                 world.ball_v[k] = (ball.vel.x, ball.vel.y, ball.vel.z)
+            if ball.HasField("visibility"):
+                world.ball_visibility[k] = ball.visibility
+        if new_frame and frame.HasField("kicked_ball"):  # a kick lasts many frames: those between ticks can go
+            _add_kick(world.kicks, frame.kicked_ball, frames[i][0], frame.timestamp)
     return world, dropped
+
+
+def _add_kick(kicks: list[dict], kick, recv_ns: int, frame_timestamp: float) -> None:
+    """Fold one tracked frame's `KickedBall` into `kicks`. The tracker repeats a kick in every
+    frame until the ball stops, refining it: a report starting within `_SAME_KICK_S` of the last
+    kick's start is that kick, with its velocity, stop and kicker updated (the tracker sometimes
+    gives a kick to another robot a few frames in; `kickers` counts the robots it named).
+    Times move to the log's receive clock by the frame's receive time minus its tracker time."""
+    kicker = (kick.robot_id.team - 1, kick.robot_id.id) if kick.HasField("robot_id") else None
+    last = kicks[-1] if kicks else None
+    if last is None or abs(kick.start_timestamp - last["start_timestamp"]) >= _SAME_KICK_S:
+        last = {
+            "start_timestamp": kick.start_timestamp,
+            "start_ns": recv_ns - round((frame_timestamp - kick.start_timestamp) * 1e9),
+            "kicker": kicker,
+            "pos": [kick.pos.x, kick.pos.y],
+            "vel_first": [kick.vel.x, kick.vel.y, kick.vel.z],
+            "reports": 0,
+            "kickers": set(),
+        }
+        kicks.append(last)
+    last["kicker"] = kicker
+    last["kickers"].add(kicker)
+    last["vel"] = [kick.vel.x, kick.vel.y, kick.vel.z]
+    last["reports"] += 1
+    if kick.HasField("stop_timestamp"):
+        last["stop_ns"] = recv_ns - round((frame_timestamp - kick.stop_timestamp) * 1e9)
+    if kick.HasField("stop_pos"):
+        last["stop_pos"] = [kick.stop_pos.x, kick.stop_pos.y]
 
 
 def _vision_world(packets: list[tuple[int, bytes]], tick_ns: np.ndarray) -> tuple[_World, int]:
@@ -498,12 +663,19 @@ def _geometry(field) -> Optional[dict]:
     return geometry
 
 
-def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
-    """Convert one game log to `<out_dir>/<stem>.npz` (+ `.sparse_referee.pkl`, `.source.json`).
-    Returns what `source.json` holds. See the module docstring for what the replay contains."""
+def convert_log(
+    log_path, out_dir, stem: Optional[str] = None, raw_vision: bool = False, write_replay: bool = True
+) -> dict:
+    """Convert one game log to `<out_dir>/<stem>.npz` (+ `.sparse_referee.pkl`, `.source.json`)
+    and the sidecars (`.kicks.json`, `.tracker.zip`, and `.vision.zip` with `raw_vision`).
+    Returns what `source.json` holds. See the module docstring for what each file contains.
+
+    `write_replay=False` writes only the sidecars, for a replay converted before they existed:
+    the replay is left as it is, and its `source.json` only gains `extras`. It must be the
+    replay of this log (same duration), or this raises."""
     log_path, out_dir = Path(log_path), Path(out_dir)
     stem = stem or log_stem(log_path.name)
-    scan = _Scan(log_path)
+    scan = _Scan(log_path, raw_vision=raw_vision)
     if not scan.referee:
         raise ValueError(f"{log_path}: no referee messages")
 
@@ -529,8 +701,7 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         source = "vision"
         vision = scan.vision[VISION_2014] or scan.vision[VISION_2010]
         world, dropped_ids = _vision_world(vision, tick_ns)
-    for robots in (world.robot_p, world.robot_v, world.robot_orientation):
-        robots[swapped] = robots[swapped][:, ::-1]  # back to the kick-off colours
+    _to_kick_off_colours(world, swapped)
     field = _geometry(scan.geometry)
     walls = (
         (field["field_length"] / 2 + field["boundary_width"], field["field_width"] / 2 + field["boundary_width"])
@@ -559,6 +730,16 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
     side_is_right ^= inverted
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    duration_s = round(float(ts[-1]) if len(ts) else 0.0, 3)
+    source_path = out_dir / f"{stem}.source.json"
+    if not write_replay:
+        summary = json.loads(source_path.read_text())
+        if summary["duration_s"] != duration_s:
+            raise ValueError(f"{source_path}: {summary['duration_s']} s, but {log_path.name} gives {duration_s} s")
+        summary["extras"] = _write_extras(out_dir, stem, world, source, scan, start_ns, end_ns, tick_ns, swapped)
+        source_path.write_text(json.dumps(summary, indent=2) + "\n")
+        return summary
+
     seen = ~np.isnan(world.robot_p[..., 0])
     writer = ColumnarReplayWriter(
         ColumnarReplayWriterConfig(replay_name=stem, overwrite_existing=True, checkpoint_every_s=0),
@@ -604,7 +785,7 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         "score": {"yellow": last.yellow_team.score, "blue": last.blue_team.score},
         "colours_swapped": bool(swapped_msg.any()),
         "start_unix_s": start_ns / 1e9,
-        "duration_s": round(float(ts[-1]) if len(ts) else 0.0, 3),
+        "duration_s": duration_s,
         "world_source": source,
         "tracker_frames": tracker_frames,
         "ball_unseen_share": round(float(1 - world.ball_seen.mean()) if len(ts) else 1.0, 4),
@@ -612,6 +793,100 @@ def convert_log(log_path, out_dir, stem: Optional[str] = None) -> dict:
         "sides_from_goalkeepers": bool(unknown.any()),
         "sides_inverted_share": round(float(inverted.mean()) if len(ts) else 0.0, 4),
         "field": field,
+        "extras": _write_extras(out_dir, stem, world, source, scan, start_ns, end_ns, tick_ns, swapped),
     }
-    (out_dir / f"{stem}.source.json").write_text(json.dumps(summary, indent=2) + "\n")
+    source_path.write_text(json.dumps(summary, indent=2) + "\n")
     return summary
+
+
+def _to_kick_off_colours(world: _World, swapped: np.ndarray) -> None:
+    for robots in (
+        world.robot_p,
+        world.robot_v,
+        world.robot_orientation,
+        world.robot_visibility,
+        world.robot_vel_angular,
+    ):
+        robots[swapped] = robots[swapped][:, ::-1]
+
+
+def _extras_source(frames: Counter, source: str) -> Optional[str]:
+    """The tracker source to take kicks or visibility from: the replay's own if it sends them,
+    else the one that sends them in the most frames; None if none does."""
+    if frames[source] > 0:
+        return source
+    best = max(frames, key=lambda name: (frames[name], name), default=None)
+    return best if best is not None and frames[best] > 0 else None
+
+
+def _write_extras(
+    out_dir: Path, stem: str, world: _World, source: str, scan: _Scan, start_ns, end_ns, tick_ns, swapped
+) -> dict:
+    """Write the sidecars (module docstring) this log has data for; returns `source.json`'s
+    `extras`, which names the tracker source the kicks and the visibility came from. The
+    replay's tracker (`world`, from `source`) may not send them; another autoref's may."""
+    extras = {"kicks": None, "kicks_source": None, "visibility_source": None, "tracker": False, "raw_vision": False}
+    if scan.trackers:
+        worlds = {source: world}
+
+        def world_of(name: Optional[str]) -> _World:
+            if name is None:
+                return world  # NaN visibility and no kicks, as sent
+            if name not in worlds:
+                worlds[name] = _tracker_world(scan.trackers[name], tick_ns)[0]
+                _to_kick_off_colours(worlds[name], swapped)
+            return worlds[name]
+
+        kicks_source = _extras_source(scan.kick_frames, source)
+        visibility_source = _extras_source(scan.visibility_frames, source)
+        kicks = _kick_rows(world_of(kicks_source).kicks, start_ns, end_ns, tick_ns, swapped)
+        (out_dir / f"{stem}.kicks.json").write_text(json.dumps(kicks, indent=1) + "\n")
+        shown = world_of(visibility_source)
+        _save_arrays(
+            out_dir / f"{stem}.tracker.zip",
+            ts=(tick_ns - start_ns) / 1e9,
+            ball_visibility=shown.ball_visibility.astype(np.float32),
+            robot_visibility=shown.robot_visibility.astype(np.float32),
+            robot_vel_angular=world.robot_vel_angular.astype(np.float32),
+        )
+        extras.update(kicks=len(kicks), kicks_source=kicks_source, visibility_source=visibility_source, tracker=True)
+    if scan.raw_vision is not None:
+        _save_arrays(out_dir / f"{stem}.vision.zip", **scan.raw_vision.arrays(start_ns, end_ns, tick_ns, swapped))
+        extras["raw_vision"] = True
+    return extras
+
+
+def _save_arrays(path: Path, **arrays: np.ndarray) -> None:
+    """`np.savez_compressed` under `path` exactly (it appends `.npz` to a name that lacks it)."""
+    with open(path, "wb") as f:
+        np.savez_compressed(f, **arrays)
+
+
+def _kick_rows(kicks: list[dict], start_ns: int, end_ns: int, tick_ns: np.ndarray, swapped: np.ndarray) -> list[dict]:
+    """The tracker's kicks (`_add_kick`) that started inside the replay window, as `.kicks.json` rows."""
+    rows = []
+    for kick in kicks:
+        if not start_ns <= kick["start_ns"] < end_ns:
+            continue
+        team = rid = None
+        if kick["kicker"] is not None and kick["kicker"][0] in (_YELLOW, _BLUE):
+            tick = max(int(np.searchsorted(tick_ns, kick["start_ns"], side="right")) - 1, 0)
+            team = ("yellow", "blue")[kick["kicker"][0] ^ int(swapped[tick])]
+            rid = kick["kicker"][1]
+        row = {
+            "ts": round((kick["start_ns"] - start_ns) / 1e9, 4),
+            "team": team,
+            "robot_id": rid,
+            "pos": [round(v, 4) for v in kick["pos"]],
+            "vel_first": [round(v, 4) for v in kick["vel_first"]],
+            "vel": [round(v, 4) for v in kick["vel"]],
+            "speed": round(math.hypot(*kick["vel"]), 4),
+            "reports": kick["reports"],
+            "kickers": len(kick["kickers"]),
+        }
+        if "stop_ns" in kick:
+            row["stop_ts"] = round((kick["stop_ns"] - start_ns) / 1e9, 4)
+        if "stop_pos" in kick:
+            row["stop_pos"] = [round(v, 4) for v in kick["stop_pos"]]
+        rows.append(row)
+    return rows

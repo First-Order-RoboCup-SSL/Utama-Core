@@ -1,7 +1,8 @@
 """Official RoboCup SSL game logs as replays in our format (`utama_core/replay/ssl_log.py`).
 
-    pixi run python tools/convert_ssl_log.py LOG_OR_DIR ... --out DIR
+    pixi run python tools/convert_ssl_log.py LOG_OR_DIR ... --out DIR [--raw-vision]
     pixi run python tools/convert_ssl_log.py --corpus 2022-2026 --out DIR [--division div-b] [--jobs 4]
+        [--raw-vision] [--backfill-extras]
 
 The first form converts game logs (`*.log.gz`; a directory: every log under it). The second
 lists the logs the league publishes (https://ssl.robocup.org/game-logs/, the public share
@@ -13,6 +14,12 @@ so an interrupted run resumes; `DIR/corpus.json` lists every log with its outcom
 Each replay is `<stem>.npz` + `<stem>.sparse_referee.pkl` + `<stem>.source.json` (teams, score,
 tracker source, field geometry), `<stem>` the log's name without `.log.gz`. Yellow is the
 friendly team. Downloads are parsed as data only. Do not write them into `replays/`.
+
+Sidecars for measuring physics (see `ssl_log`): `<stem>.kicks.json` (the tracker's kicks) and
+`<stem>.tracker.zip` (visibility, angular velocity) always, `<stem>.vision.zip` (every raw
+camera detection, about the replay's size again) with `--raw-vision`. `--backfill-extras`
+downloads a log whose replay exists but lacks a sidecar asked for, and adds the sidecars
+without rewriting the replay; without it such a log is skipped.
 """
 
 from __future__ import annotations
@@ -83,20 +90,27 @@ def _summary_line(stem: str, summary: dict) -> str:
     )
 
 
+def has_extras(out_dir: Path, stem: str, raw_vision: bool) -> bool:
+    """Whether a converted replay has the sidecars asked for (per its `source.json`)."""
+    extras = json.loads((out_dir / f"{stem}.source.json").read_text()).get("extras")
+    return extras is not None and (extras["raw_vision"] or not raw_vision)
+
+
 def _corpus_job(job: dict) -> dict:
-    """Download, convert and delete one published log."""
+    """Download, convert (or only add sidecars to) and delete one published log."""
     stem = log_stem(job["name"])
     out_dir, raw = Path(job["out"]) / str(job["year"]), Path(job["raw_dir"]) / f"{stem}.log.gz"
     row = {"year": job["year"], "log": job["name"], "stem": stem, "bytes": job["bytes"]}
-    if (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists():
+    exists = (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists()
+    if exists and (not job["backfill_extras"] or has_extras(out_dir, stem, job["raw_vision"])):
         return {**row, "status": "exists"}
     started = time.time()
     try:
         _download(job["url"], raw)
-        summary = convert_log(raw, out_dir, stem=stem)
+        summary = convert_log(raw, out_dir, stem=stem, raw_vision=job["raw_vision"], write_replay=not exists)
         return {
             **row,
-            "status": "converted",
+            "status": "extras added" if exists else "converted",
             "seconds": round(time.time() - started),
             "line": _summary_line(stem, summary),
         }
@@ -107,14 +121,31 @@ def _corpus_job(job: dict) -> dict:
         raw.with_name(raw.name + ".part").unlink(missing_ok=True)
 
 
-def run_corpus(years: list[int], division: str, out: Path, raw_dir: Path, jobs: int) -> list[dict]:
+def run_corpus(
+    years: list[int],
+    division: str,
+    out: Path,
+    raw_dir: Path,
+    jobs: int,
+    raw_vision: bool = False,
+    backfill_extras: bool = False,
+) -> list[dict]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     work = []
     for year in years:
         logs = list_logs(year, division)
         print(f"{year}/{division}: {len(logs)} logs, {sum(log['bytes'] for log in logs) / 1e9:.1f} GB", flush=True)
-        work += [{**log, "out": str(out), "raw_dir": str(raw_dir)} for log in logs]
+        work += [
+            {
+                **log,
+                "out": str(out),
+                "raw_dir": str(raw_dir),
+                "raw_vision": raw_vision,
+                "backfill_extras": backfill_extras,
+            }
+            for log in logs
+        ]
     rows = []
     with ProcessPoolExecutor(max_workers=jobs) as pool:
         for row in pool.map(_corpus_job, work):
@@ -140,10 +171,24 @@ def main() -> None:
     parser.add_argument("--division", default="div-b", help="share directory per year (default div-b)")
     parser.add_argument("--raw-dir", type=Path, help="where downloads go while converted (default OUT/raw)")
     parser.add_argument("--jobs", type=int, default=1, help="logs downloaded and converted at once")
+    parser.add_argument("--raw-vision", action="store_true", help="also keep every raw camera detection")
+    parser.add_argument(
+        "--backfill-extras",
+        action="store_true",
+        help="add missing sidecars to replays already converted, without rewriting them",
+    )
     args = parser.parse_args()
 
     if args.corpus:
-        rows = run_corpus(_years(args.corpus), args.division, args.out, args.raw_dir or args.out / "raw", args.jobs)
+        rows = run_corpus(
+            _years(args.corpus),
+            args.division,
+            args.out,
+            args.raw_dir or args.out / "raw",
+            args.jobs,
+            raw_vision=args.raw_vision,
+            backfill_extras=args.backfill_extras,
+        )
         failed = [row for row in rows if row["status"] == "failed"]
         print(f"{len(rows) - len(failed)}/{len(rows)} logs converted or already there; failed: {len(failed)}")
         sys.exit(1 if failed else 0)
@@ -154,8 +199,14 @@ def main() -> None:
     if not logs:
         parser.error("no game logs given")
     for log in logs:
-        summary = convert_log(log, args.out)
-        print(_summary_line(log_stem(log.name), summary), flush=True)
+        stem = log_stem(log.name)
+        exists = (args.out / f"{stem}.npz").exists() and (args.out / f"{stem}.source.json").exists()
+        if exists and args.backfill_extras and has_extras(args.out, stem, args.raw_vision):
+            print(f"{stem}: sidecars already there", flush=True)
+            continue
+        replay = not (exists and args.backfill_extras)
+        summary = convert_log(log, args.out, raw_vision=args.raw_vision, write_replay=replay)
+        print(_summary_line(stem, summary) + ("" if replay else " (sidecars added)"), flush=True)
 
 
 if __name__ == "__main__":
