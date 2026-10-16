@@ -28,6 +28,11 @@ try:
 except ImportError:
     _HAS_NATIVE_ROBOSIM = False
 
+_OLD_BINARY = (
+    "this robosim binary has no set_physics_params: ball friction, kick direction and substep settings "
+    "need one built from vendor/rSim (see vendor/rSim/FORK_NOTES.md)"
+)
+
 # Sim reuse (opt-in, `enable_sim_reuse`): a process that plays many short scenarios keeps its
 # sim subprocesses, since starting one (`pixi run`, imports, world build) costs about as much
 # CPU as a second of play. Idle sims wait here by their constructor arguments; `acquire`
@@ -119,6 +124,11 @@ class RSimNativeWrapper:
 
     def get_field_params(self):
         return self.sim.get_field_params()
+
+    def set_physics_params(self, **params):
+        if not hasattr(self.sim, "set_physics_params"):
+            raise RuntimeError(_OLD_BINARY)
+        self.sim.set_physics_params(**params)
 
     def get_state(self):
         if hasattr(self.sim, "get_state_array"):
@@ -282,6 +292,12 @@ class RSimSubprocessWrapper:
 
     def get_state(self):
         return self._request({"get_state": True})["state"]
+
+    def set_physics_params(self, **params):
+        try:
+            self._request({"set_physics_params": params})
+        except RuntimeError as e:
+            raise RuntimeError(f"{_OLD_BINARY} ({e})") from e
 
     def close(self):
         """Done with this sim: parked for the next `acquire` when reuse is on, else terminated."""

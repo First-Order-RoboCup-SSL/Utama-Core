@@ -27,7 +27,9 @@ from utama_core.rsoccer_simulator.src.Utils import KDTree
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import (
     CommandDelay,
+    KickAngleNoise,
     KickSpeedNoise,
+    MotionLimits,
     SimNoise,
 )
 
@@ -166,6 +168,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self.sim_draw = None
         self._command_delay: Optional[CommandDelay] = None
         self._kick_noise: Optional[KickSpeedNoise] = None
+        self._kick_angle: Optional[KickAngleNoise] = None
+        self._motion_limits: Optional[MotionLimits] = None
         self._noise_rng = None  # None: `gaussian_noise`/`vanishing` use the global RNG, as before
         if sim_noise is not None:
             assert gaussian_noise == RsimGaussianNoise() and not vanishing, "pass vision noise in sim_noise only"
@@ -181,6 +185,21 @@ class SSLStandardEnv(SSLBaseEnv):
             if sim_noise.kick_speed_offset_sd or sim_noise.kick_speed_sd:
                 self._kick_noise = KickSpeedNoise(
                     self.sim_draw.kick_offset, sim_noise.kick_speed_sd, sim_noise.kick_rngs(n_robots)
+                )
+            if sim_noise.kick_angle_offset_sd_deg or sim_noise.kick_angle_sd_deg:
+                self._kick_angle = KickAngleNoise(
+                    self.sim_draw.kick_angle_offset, sim_noise.kick_angle_sd_deg, sim_noise.kick_angle_rngs(n_robots)
+                )
+            if sim_noise.motion_limits:
+                self._motion_limits = MotionLimits(self.sim_draw, self.time_step)
+            if sim_noise.native_physics:
+                roll = self.sim_draw.ball_roll_decel
+                slide = self.sim_draw.ball_slide_decel
+                self.rsim.set_physics_params(
+                    substeps=sim_noise.substeps,
+                    ball_slide_decel=(slide if slide is not None else roll) if roll is not None else -1.0,
+                    ball_roll_decel=roll if roll is not None else -1.0,
+                    ball_slide_fraction=sim_noise.ball_slide_fraction,
                 )
 
     def reset(self, *, seed=None, options=None):
@@ -200,6 +219,8 @@ class SSLStandardEnv(SSLBaseEnv):
             self._command_delay.reset()
         if self._kick_noise is not None:
             self._kick_noise.reset()
+        if self._kick_angle is not None:
+            self._kick_angle.reset()
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -216,6 +237,8 @@ class SSLStandardEnv(SSLBaseEnv):
 
         # Apply any implicit kicks caused by dribbler state transitions.
         self._apply_dribbler_release_kicks(commands)
+        if self._motion_limits is not None:
+            self._apply_motion_limits(commands)
 
         # Send command to simulator
         self.rsim.send_commands(commands)
@@ -319,6 +342,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
             dribbler = actions["team_blue"][i][4] > 0
             kick_v_x = self._kick_speed("team_blue", i, actions["team_blue"][i][3] > 0)
+            kick_angle = self._kick_direction("team_blue", i, actions["team_blue"][i][3] > 0)
 
             cmd = Robot(
                 yellow=False,  # Blue team
@@ -327,6 +351,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_y=v_y,
                 v_theta=v_theta,
                 kick_v_x=kick_v_x,
+                kick_angle=kick_angle,
                 dribbler=dribbler,
             )
             commands.append(cmd)
@@ -339,6 +364,7 @@ class SSLStandardEnv(SSLBaseEnv):
 
             dribbler = actions["team_yellow"][i][4] > 0
             kick_v_x = self._kick_speed("team_yellow", i, actions["team_yellow"][i][3] > 0)
+            kick_angle = self._kick_direction("team_yellow", i, actions["team_yellow"][i][3] > 0)
 
             cmd = Robot(
                 yellow=True,  # Yellow team
@@ -347,11 +373,24 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_y=v_y,
                 v_theta=v_theta,
                 kick_v_x=kick_v_x,
+                kick_angle=kick_angle,
                 dribbler=dribbler,
             )
             commands.append(cmd)
 
         return commands
+
+    def _kick_direction(self, colour: str, robot_id: int, kicking: bool) -> float:
+        if self._kick_angle is not None:
+            return self._kick_angle.angle(colour, robot_id, kicking)
+        return 0.0
+
+    def _apply_motion_limits(self, commands: list[Robot]) -> None:
+        for cmd in commands:
+            colour, robots = (
+                ("team_yellow", self.frame.robots_yellow) if cmd.yellow else ("team_blue", self.frame.robots_blue)
+            )
+            self._motion_limits.apply(colour, cmd.id, cmd, robots[cmd.id])
 
     def _kick_speed(self, colour: str, robot_id: int, kicking: bool) -> float:
         if self._kick_noise is not None:

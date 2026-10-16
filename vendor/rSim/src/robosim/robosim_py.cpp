@@ -112,12 +112,29 @@ struct SSL {
         delete m_world;
         m_world = new SSLWorld(m_fieldType, m_nRobotsBlue, m_nRobotsYellow, m_timeStep_ms / 1000.0,
                                ballPos, blueRobotsPos, yellowRobotsPos);
+        applyPhysics();
     }
 
     std::unordered_map<std::string, double> getFieldParams() const { return m_world->getFieldParams(); }
 
+    // Kept across reset(), which builds a new world. See SSLWorld::setPhysicsParams.
+    void setPhysicsParams(int substeps, double ballSlideDecel, double ballRollDecel, double ballSlideFraction) {
+        if (substeps < 1) throw std::runtime_error("substeps must be at least 1");
+        m_substeps = substeps;
+        m_ballSlideDecel = ballSlideDecel;
+        m_ballRollDecel = ballRollDecel;
+        m_ballSlideFraction = ballSlideFraction;
+        applyPhysics();
+    }
+
+    void applyPhysics() const {
+        m_world->setPhysicsParams(m_substeps, m_ballSlideDecel, m_ballRollDecel, m_ballSlideFraction);
+    }
+
     SSLWorld *m_world;
     int m_fieldType, m_nRobotsBlue, m_nRobotsYellow, m_timeStep_ms;
+    int m_substeps = 5;
+    double m_ballSlideDecel = -1, m_ballRollDecel = -1, m_ballSlideFraction = 5.0 / 7.0;
 };
 
 
@@ -138,7 +155,9 @@ PYBIND11_MODULE(_robosim, m) {
             .def("get_state", &SSL::getState)
             .def("get_state_array", &SSL::getStateArray)
             .def("reset", &SSL::reset)
-            .def("get_field_params", &SSL::getFieldParams);
+            .def("get_field_params", &SSL::getFieldParams)
+            .def("set_physics_params", &SSL::setPhysicsParams, py::arg("substeps"), py::arg("ball_slide_decel"),
+                 py::arg("ball_roll_decel"), py::arg("ball_slide_fraction"));
 }
 
 

@@ -221,7 +221,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             Defaults to 0 for each.
         rsim_vanishing (float, optional): When running in rsim, cause robots and ball to vanish with the given probability.
             Defaults to 0.
-        sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick speed noise and vision noise
+        sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick and ball physics, motion limits
+            and vision noise
             (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
             Recorded in a columnar replay. Defaults to None (off).
         filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.

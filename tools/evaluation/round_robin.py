@@ -309,9 +309,10 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
-    # `--sim-noise JSON` plays every match with the same seeded latency, kick speed noise and
-    # vision noise: a `SimNoise` as inline JSON or a path to a JSON file, e.g.
-    # '{"seed": 1, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.3}'. Every pairing gets the same
+    # `--sim-noise JSON` plays every match with the same seeded latency, kick speed and direction
+    # noise, ball friction, per-robot motion limits and vision noise: a `SimNoise` as inline JSON or
+    # a path to a JSON file, e.g. '{"seed": 1, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.3}'
+    # (field list in `SimNoise`'s docstring). Every pairing gets the same
     # draws (they depend on colour and robot id, not strategy), so standings stay paired.
     sim_noise: Optional[SimNoise] = None
     if "--sim-noise" in args:

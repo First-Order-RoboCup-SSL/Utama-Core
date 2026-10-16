@@ -66,6 +66,34 @@ re-clone upstream and re-apply the diffs by hand first.
    at all on this machine's GCC 13 (pybind11 2.6.2's vendored headers assume
    `<cstdint>`/`<cstddef>` are transitively included; forces them via
    `-include`). May not be needed on other toolchains.
+5. Tunable physics for `SimNoise` (2026-10-16, `realism/physics-knobs`). Every default
+   reproduces the old physics bit for bit (checked: a 30 s split_shape vs tiki_taka match's
+   replay arrays hash the same as with the installed binary, `00c94df54af6231f`).
+   - `SSL.set_physics_params(substeps, ball_slide_decel, ball_roll_decel, ball_slide_fraction)`
+     (`robosim_py.cpp`, `SSLWorld::setPhysicsParams`). Kept across `reset()`; a new `SSL`
+     object starts at the defaults (5, -1, -1, 5/7).
+   - **Substeps** — physics steps per `step()`; was a hard-coded 5. At 5 the substep length is
+     still computed as `timeStep * 0.2`, exactly as before (`timeStep / 5` rounds differently).
+   - **Two-phase ball friction** (`SSLWorld::applyBallFriction`) — with `ball_roll_decel >= 0`
+     the constant friction force on the ball (about 0.65 m/s^2) is replaced, while the ball is
+     on the ground (z <= 1.5 r), by a direct speed decrement each substep: `ball_slide_decel`
+     from a kick until the speed falls to `ball_slide_fraction` of the post-kick speed, then
+     `ball_roll_decel`. Below 0.01 m/s the ball stops. The angular velocity is set to pure
+     rolling each substep, so in this mode the ball carries no spin into collisions. A ball
+     given speed by anything other than a kick (a teleport, a deflection) rolls at once.
+     `-1` (default) keeps the old force. Real balls: slide about 0.5 s at 2-4 m/s^2, then roll
+     at about 0.29 m/s^2 (per-match IQR 0.29-0.33).
+   - **Kick direction** — `setActions` reads an optional 9th action field, an angle in radians
+     the kick is rotated by from the robot's facing (`SSLRobot::kick(..., angle)`, counter-
+     clockwise in rsim's own frame, which is the mirror of ours). An 8-field action, or 0,
+     kicks exactly as before. Python sends 9 fields only on ticks where some kick has an angle.
+   - `CMakeLists.txt` — `-march=native` is now opt-in (`-DRSIM_NATIVE_ARCH=ON`). It was added
+     in #144 and changes floating-point results (FMA contraction): the same source built with
+     it plays a different match from tick 9 (differences of 1e-8 that grow), and differently
+     on another CPU. The installed `.pixi/envs/robosim` binary was built without it, so a
+     plain build now matches it. (The default env's `robosim/_robosim.so`, used only with
+     `UTAMA_USE_NATIVE_RSIM=1`, was copied from a native build, so native mode does not replay
+     subprocess-mode matches exactly.)
 
 ## Known issue: test fragility, not a robot-behavior bug (root-caused 2026-08-16)
 
@@ -187,6 +215,31 @@ rm -rf _skbuild
 #   .pixi/envs/robosim/bin/python -m pip install --force-reinstall --no-deps rc-robosim==1.2
 /path/to/Utama-Core/.pixi/envs/robosim/bin/python -m pip install --force-reinstall --no-deps /tmp/wheelout/rc_robosim-*.whl
 ```
+
+## Building into a worktree without installing (for trying changes)
+
+The rsim subprocess (`robosim_subprocess.py`, run by `.pixi/envs/robosim/bin/python`) inherits
+the environment, so a build placed first on `PYTHONPATH` overrides the installed binary for one
+process tree only, leaving the shared env alone:
+
+```bash
+cmake -S vendor/rSim -B build/rsim-py310 \
+  -DPYTHON_EXECUTABLE=$(pwd)/.pixi/envs/robosim/bin/python -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build build/rsim-py310 -j2
+mkdir -p build/rsim-override/robosim
+echo "from ._robosim import SSL, VSS" > build/rsim-override/robosim/__init__.py
+ln -s $(pwd)/build/rsim-py310/_robosim.cpython-310-x86_64-linux-gnu.so build/rsim-override/robosim/
+PYTHONPATH=$(pwd)/build/rsim-override pixi run pytest utama_core/tests/rsoccer_simulator --headless
+```
+
+Installing for everyone is then a copy of that `.so` over
+`.pixi/envs/robosim/lib/python3.10/site-packages/robosim/_robosim.cpython-310-x86_64-linux-gnu.so`
+(or the wheel procedure above), revertable with
+`.pixi/envs/robosim/bin/python -m pip install --force-reinstall --no-deps rc-robosim==1.2`
+(which restores upstream 1.2, without this fork's earlier fixes; keep a copy of the current
+`.so` to go back to it instead). The match cache's code fingerprint includes the installed
+binary, so installing one reruns every cached match; with the knobs off a non-native build
+plays them identically.
 
 ## Testing tip: `get_state()` is stateful, not idempotent
 
