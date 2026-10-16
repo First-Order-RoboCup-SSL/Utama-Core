@@ -292,6 +292,11 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
   keeper: real 0.29, sim 0.56). Lead to check when the 2025–26 kick sidecars exist: about 10% of
   real kicks leave the ground (tracker `KickedBall` vertical speed, 2022–24), and a chip beats a
   keeper standing on the line; our strategies rarely chip.
+  **Checked 2026-10-16, ruled out:** joined to the 2025–26 tracker kicks, only 21 of 1,180 real
+  shots (1.8%) leave the ground (vertical speed > 0.5 m/s; 2% of all 2025–26 kicks, against
+  ~10% in 2022–24). Flat shots alone are saved 0.17 of the time, the same as all shots, so the
+  sim's 0.38 is not about chips. Next suspects: what happens when the ball reaches the keeper
+  (contact and rebound, sim keeper body), and shot speed at the keeper.
 - **First sensitivity sweep** (v2 with one change each, 6 matches per run, same 4 strategies;
   `~/dev/ssl/xg-analysis/sens/summary_all.json`). Changing only the seed moves goals per match by
   0.5 and pass completion by 0.06, and reshuffles every place below the top: split_shape
