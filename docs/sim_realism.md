@@ -435,6 +435,14 @@ already 0.30. So V does not yet save matches; it is for explaining results and f
 paired bench starts cut off at T s. 12.7% of sim states have some feature outside the real
 1st–99th percentile range (mostly ball speed toward goal).
 
+Pass 3 (2026-10-17, `report3.md`): converted real logs hold an unseen ball at its last
+position with zero velocity and do not keep the seen flag (`ssl_log.py` `finish()`), so a hidden
+ball reads as a stopped one. Dropping balls held over 0.5 s, frames with no robots of a team and
+the last 80 live s, and weighting matches equally, changes little: H = 10 s AUC 0.805 (pass 2
+0.821, on a different set of states); in the ranking test the best V estimator rises to
+split-half 0.42 (discounted goals alone 0.39, goal difference per live minute 0.30).
+Writing `ball_seen` into converted logs would let a later pass tell hidden from stopped.
+
 ## P2: Structured strategy search
 
 Search over what the repo already composes:
