@@ -187,9 +187,9 @@ source at all.
 dependency), so `pixi install` builds it with the machine's C++ compiler: no hand install, and
 CI and every checkout run this fork. Needed for that: `setup.py` pins the version
 (`1.2.0+utama`; setuptools_scm cannot read one from a vendored subtree) and `FindODE.cmake`
-also looks in `$CONDA_PREFIX`, where the env's `libode` lives. A source change needs
-`pixi install -e robosim --force-reinstall`-style rebuild: delete `.pixi/envs/robosim` and run
-`pixi install -e robosim`. Built this way (gcc 13, no `-march=native`), a 30 s split_shape vs
+also looks in `$CONDA_PREFIX`, where the env's `libode` lives. After changing the C++
+source, rebuild by deleting `.pixi/envs/robosim` and running `pixi install -e robosim` (a
+cached build may otherwise be reused). Built this way (gcc 13, no `-march=native`), a 30 s split_shape vs
 tiki_taka_plus match hashes the same as the hand-installed binary (`7c27555e8249abc6`).
 Matches still differ across CPUs and compilers (see the `-march=native` note above), so
 compare results from one machine.
