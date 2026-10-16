@@ -421,6 +421,20 @@ calls these expected threat and VAEP.
 - The 2026-10-12 sim-trained value model failed as a cheaper outcome partly because it was
   trained on sim outcomes; this one is not.
 
+**First results, 2026-10-16** (`~/dev/ssl/xg-analysis/value/`, report2.md and
+estimators/report.md). Fitted on the 118 real matches only (486 goals): two boosted-tree
+classifiers, "we score next within H s" and "they do", V their difference. On held-out years at
+H = 10 s, AUC 0.82 and R² 0.23 (0.17 without the last second before goals), against 0.73 / 0.08
+for ball position alone. V rises toward the opponent goal and orders our ball > loose > theirs.
+On the 66-match v3 baseline, as a way to rank strategies with fewer matches: mean V (k = 0)
+fails again (split-half 0.05 against 0.27 for goal difference). Real goals for k s and then V
+improves with k, but the best (k = 20 s, split-half 0.41) is only a little better than
+discounted goals with no V at all (0.39), and both are inside each other's noise.
+Most of the gain over goal difference needs no model: goal difference per live minute is
+already 0.30. So V does not yet save matches; it is for explaining results and for scoring
+paired bench starts cut off at T s. 12.7% of sim states have some feature outside the real
+1st–99th percentile range (mostly ball speed toward goal).
+
 ## P2: Structured strategy search
 
 Search over what the repo already composes:
