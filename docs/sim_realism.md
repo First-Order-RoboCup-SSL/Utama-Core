@@ -292,6 +292,14 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
   keeper: real 0.29, sim 0.56). Lead to check when the 2025–26 kick sidecars exist: about 10% of
   real kicks leave the ground (tracker `KickedBall` vertical speed, 2022–24), and a chip beats a
   keeper standing on the line; our strategies rarely chip.
+- **First sensitivity sweep** (v2 with one change each, 6 matches per run, same 4 strategies;
+  `~/dev/ssl/xg-analysis/sens/summary_all.json`). Changing only the seed moves goals per match by
+  0.5 and pass completion by 0.06, and reshuffles every place below the top: split_shape
+  wins every run, the other three swap places by chance alone. Latency 0–0.05 / 0.10–0.15 s:
+  goals per match 4.0 / 3.8 against 5.2, finishing 0.80 / 0.73. Kick direction 1° / 6°: goals
+  per match 6.0 / 3.5, pass completion 0.80 / 0.39 (real 0.50), keeper saves 0.34 / 0.27.
+  Kick direction moves the most and needs measuring on our kicker (Phase 5). No knob closes
+  the keeper gap without overshooting another row (at 6°, saves 0.27 but completion 0.39).
 - No stalls in either sample; a dribbled ball stays at the kicker with two-phase friction
   (`test_dribble_with_friction.py`).
 
