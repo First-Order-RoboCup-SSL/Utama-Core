@@ -262,3 +262,79 @@ class TestOutOfBoundsDefenseAreaProjection:
         v = rule.check(frame_out, GEO, RefereeCommand.NORMAL_START)
         assert v is not None
         assert v.designated_position == pytest.approx((0.0, 2.75))  # half_width (3.0) - 0.25
+
+
+# ---------------------------------------------------------------------------
+# DefenseAreaRule — the goalkeeper's own touch is not a Multiple Defenders foul
+# ---------------------------------------------------------------------------
+
+
+def _with_goalkeepers(frame, yellow_goalkeeper: int, blue_goalkeeper: int = 0):
+    """`frame` carrying the referee's goalkeeper ids (the rule reads them from `game_frame.referee`)."""
+    from dataclasses import replace
+
+    from utama_core.entities.data.referee import RefereeData
+    from utama_core.entities.game.team_info import TeamInfo
+    from utama_core.entities.referee.stage import Stage
+
+    referee = RefereeData(
+        source_identifier=None,
+        time_sent=0.0,
+        time_received=0.0,
+        referee_command=RefereeCommand.NORMAL_START,
+        referee_command_timestamp=0.0,
+        stage=Stage.NORMAL_FIRST_HALF,
+        stage_time_left=0.0,
+        blue_team=TeamInfo(name="blue", goalkeeper=blue_goalkeeper),
+        yellow_team=TeamInfo(name="yellow", goalkeeper=yellow_goalkeeper),
+    )
+    return replace(frame, referee=referee)
+
+
+class TestGoalkeeperTouchIsExempt:
+    # Yellow (friendly, my_team_is_yellow=True, my_team_is_right=False) defends the LEFT box.
+    def test_keeper_alone_touching_with_teammate_in_area_is_no_call(self):
+        rule = DefenseAreaRule(max_defenders=1)
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True, has_ball=True),  # keeper touches
+            1: _robot(1, -4.3, 0.5, is_friendly=True),  # teammate in the box, no touch
+        }
+        frame = _with_goalkeepers(
+            _frame(ball=_ball(-4.3, 0.0), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True),
+            yellow_goalkeeper=0,
+        )
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+
+    def test_non_keeper_touch_with_keeper_in_area_is_called(self):
+        rule = DefenseAreaRule(max_defenders=1)
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True),  # keeper, no touch
+            1: _robot(1, -4.3, 0.5, is_friendly=True, has_ball=True),  # non-keeper touches
+        }
+        frame = _with_goalkeepers(
+            _frame(ball=_ball(-4.3, 0.5), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True),
+            yellow_goalkeeper=0,
+        )
+        v = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
+        assert v is not None
+        assert v.next_command == RefereeCommand.PREPARE_PENALTY_BLUE
+
+    def test_keeper_id_comes_from_the_referee_not_assumed_zero(self):
+        # Yellow's keeper is robot 5: robot 0's touch is now a non-keeper touch and is called,
+        # while robot 5's own touch is exempt.
+        rule = DefenseAreaRule(max_defenders=1)
+        friendly = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True, has_ball=True),
+            5: _robot(5, -4.3, 0.5, is_friendly=True),
+        }
+        frame = _frame(ball=_ball(-4.3, 0.0), friendly_robots=friendly, my_team_is_right=False, my_team_is_yellow=True)
+        assert rule.check(_with_goalkeepers(frame, yellow_goalkeeper=5), GEO, RefereeCommand.NORMAL_START) is not None
+
+        friendly_keeper_touch = {
+            0: _robot(0, -4.3, 0.0, is_friendly=True),
+            5: _robot(5, -4.3, 0.5, is_friendly=True, has_ball=True),
+        }
+        frame = _frame(
+            ball=_ball(-4.3, 0.5), friendly_robots=friendly_keeper_touch, my_team_is_right=False, my_team_is_yellow=True
+        )
+        assert rule.check(_with_goalkeepers(frame, yellow_goalkeeper=5), GEO, RefereeCommand.NORMAL_START) is None

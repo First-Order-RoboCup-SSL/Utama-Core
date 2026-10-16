@@ -29,7 +29,9 @@ Every saved `tools/evaluation/round_robin.py` run prints its sections and writes
 round-robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on what stands out.
 
 **Offline only** (not in a round-robin's output): `tools/metric_correlation.py <run_dir> ...`
-replays a run at 10 Hz for the signals marked *offline* below.
+replays a run at 10 Hz for the signals marked *offline* below, and
+`python -m utama_core.analysis.goal_ledger <run_dir>` writes the goal ledger
+([Where do goals come from?](#where-do-goals-come-from)).
 
 **Sides.** Per-match stats are config_a's view ("friendly"); a strategy's row reads its own
 side of every match. Signals marked *config_a* need the intentions log, which only config_a
@@ -97,6 +99,30 @@ Check these first: a broken strategy's other signals mean nothing.
 | Free kick to shot | see "Does it create chances?" | | | |
 | Restart to first entry | `results[*].stats.restart_to_first_entry_s`, `n_restarts`, `n_restarts_with_entry` | seconds from a restart until the possessing side's ball reaches its attacking third; restarts with no entry are counted, not averaged | — | Slow or rarely entering: restarts are played backward or lost |
 | Restart outcomes | RESTARTS | see "Is something broken?" | | |
+
+## Where do goals come from?
+
+The goal ledger (`analysis/goal_ledger.py`, *offline*) gives every goal to the situation that
+started the play it ended, if that was less than 10 s before: a restart going live (kickoff,
+free kick, penalty, force start) or a side winning the ball in open play, each named from the
+strategy's side ("own" / "opponent") with the third in the owner's attack frame. Goals with no
+start that recent are "sustained possession". A strategy's goals per match is then exactly the
+sum over situations of situations per match × P(goal), for goals scored and conceded alike: a
+result splits into which situations a strategy creates or allows, and how well it converts or
+defends them. It reads only the replay and its referee file, so it runs on converted official
+logs too. The rules are in the module's docstring. `--rates PATH` writes how often each
+situation happens per team per live minute, whoever owns it: the weights of the
+[situation bench](STRATEGY_DEVELOPMENT.md#the-situation-bench), whose P(goal) also counts a goal
+that comes after a later situation started, unlike the table below.
+
+Reference: `split_shape` in `tournament_20261011_230119` (17 matches; 6.76 scored, 4.41
+conceded per match).
+
+| Signal | Where | Meaning | Reference | If it's off |
+|---|---|---|---|---|
+| Situations per match | `goal_ledger.json` `strategies[*].types[*].situations_per_match` | how often each situation happens in a strategy's matches | own free kicks in the attacking third 6.7, the opponent's 6.2; balls won in the attacking third: own 3.4, opponent's 3.6; in the defensive third ~19 each | Many "opponent ball won, attacking third": losing the ball near our own goal (build-up). Many opponent free kicks in the attacking third: fouls and clearances out near our goal |
+| P(goal) per situation | `p_scored`, `p_conceded` | share of a situation's occurrences followed by a goal before the next situation starts, within 10 s | scored: own penalty 88%, own ball won in the attacking third 47%, own free kick in the attacking third 28%; conceded: opponent penalty 100%, opponent free kick in the attacking third 20%, opponent ball won in the attacking third 20% | High P(conceded) from opponent free kicks: set-piece defence (wall, marking). High from balls the opponent wins high: nobody covers behind the press |
+| Goals per match by situation | `scored_per_match`, `conceded_per_match` | situations per match × P(goal); the column sums to goals per match | conceded 4.41 = opponent balls won 1.41 + free kicks 1.35 + penalties 0.76 + sustained possession 0.71 + kickoffs 0.18 | The largest row is where a fix pays most |
 
 ## Adding a signal
 

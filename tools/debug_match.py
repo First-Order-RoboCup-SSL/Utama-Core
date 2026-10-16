@@ -127,7 +127,12 @@ def main() -> None:
     parser.add_argument(
         "--control-scheme",
         default="fpp",
-        help="motion control scheme for both sides, e.g. fpp, dwa, trajsample (default fpp)",
+        help="motion control scheme for yellow side, e.g. fpp, dwa, trajsample (default fpp)",
+    )
+    parser.add_argument(
+        "--opp-control-scheme",
+        default=None,
+        help="motion control scheme for blue side (default matches --control-scheme)",
     )
     parser.add_argument(
         "--stats-path",
@@ -165,6 +170,7 @@ def main() -> None:
         match_log_path=args.match_log,
         stats_path=args.stats_path,
         control_scheme=args.control_scheme,
+        opp_control_scheme=args.opp_control_scheme,
     )
 
     targets = _record_targets(runner) if args.dump_ticks else {}

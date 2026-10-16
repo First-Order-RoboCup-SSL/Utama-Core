@@ -33,11 +33,18 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 
 | Script | Purpose |
 |---|---|
-| `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of 20 s starts harvested from a round-robin; also builds new banks (`--harvest-from`), and plays one start with a timeline and picture (`--play`) |
+| `tools/scenario_bench.py` | Paired A/B of a candidate against a baseline on a bank of situation starts harvested from a round-robin (10 s each, against the opponent each came from): change in P(goal) per situation type, weighted by real or sim situation rates (`--weights`) into goals per match; also builds new banks (`--harvest-from`), and plays one start with a timeline and picture (`--play`) |
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
-| `tools/bench_vs_standings.py` | How far scenario-bench scores rank strategies the way round-robin standings do (Spearman) |
+| `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates the scenario bench weights by. See [signals.md](signals.md#where-do-goals-come-from) |
+| `tools/bench_vs_standings.py` | How well the scenario bench's effect on goal difference per match predicts a round-robin's, for several candidates against one baseline (Pearson, Spearman) |
 | `tools/metric_correlation.py` | Offline study of which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
+
+## Real matches
+
+| Script | Purpose |
+|---|---|
+| `tools/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted. What a converted match holds and its limits: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md#real-matches) |
 
 ## Debugging a match
 

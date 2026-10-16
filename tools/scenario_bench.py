@@ -1,30 +1,44 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402
-"""Outer-loop scenario bench: score a candidate strategy against a baseline
-on a bank of short scenarios, always as a paired differential.
+"""Situation bench: how a candidate strategy changes goals per match, estimated from short
+paired replays of the situations goals come from.
+
+    effect = sum over situation types of (how often it happens per match)
+                                          x (candidate's P(goal) from it - baseline's)
+
+Each start of the bank is a situation of the goal ledger (`utama_core.analysis.goal_ledger`)
+from the candidate's view: own or opponent ball won or free kick in each third, own or
+opponent kickoff or penalty, force start. Its outcome is the first goal within `--horizon`
+(default 10 s, the ledger's window): for, against, or none. P(for) and P(against) per type
+are means over the type's starts, and the change is paired: the candidate and the baseline
+play the same starts. How often each type happens comes from a `--weights` file of situation
+rates (`goal_ledger --rates`): real Division B matches (default) or our own round-robin.
+
+What the effect is not: the bank's starts are fixed, so a candidate that changes how often
+situations happen (wins the ball higher up, concedes fewer free kicks) is credited only for
+what it does from each one. A goal counts for every situation that started in the 10 s
+before it, so the effect over-counts goals by about 1.2x under sim rates and 1.6x under
+real ones (`docs/STRATEGY_DEVELOPMENT.md`). It is a screen; round-robins confirm.
 
 This is the "outer loop, fast half" from `docs/roadmap.md` item 14 — a
 benchmark like `tools/motion_planning_benchmark.py`, non-blocking, reporting
-numbers rather than gating a merge. See that roadmap item's 2026-09-04
-design pass for the full rationale behind every design choice below;
-this docstring only summarizes what the tool actually does.
+numbers rather than gating a merge.
 
 Bank sources, in the order this tool can use them today:
   - Hand-authored anchors (`utama_core.scenario_bench.hand_authored_scenarios`) —
-    always available, no dependency on any replay data.
-  - Harvested restart-transition scenarios (`--harvest-from RUN_DIR`) — only
-    from a tagged, trustworthy tournament run (`.stats.json` with zero
+    loaded when no bank is given, no dependency on any replay data; they have no
+    situation type or opponent (pass `--opponent`), and count only in the per-start table.
+  - Harvested starts (`--harvest-from RUN_DIR`): every restart and ball won of
+    a tagged, trustworthy tournament run (`.stats.json` with zero
     `stall_events`, see `utama_core.scenario_bench.scenario_harvester`'s module
-    docstring for why this gate exists). NOT run by this tool — point it at
-    an already-completed `round_robin.py` run directory. `--open-play N`
-    adds up to N open-play starts of each kind per match (a pass about to be
-    made, a ball just lost).
+    docstring for why this gate exists), up to `--per-situation N` of each type.
+    NOT run by this tool — point it at an already-completed `round_robin.py` run
+    directory.
 
-For each scenario, both `--candidate` and `--baseline` play the SAME
-scenario against the SAME `--opponent` (paired comparison, per item 14's
-"Compute discipline" section — the variance of the *difference* is what
-matters, not either absolute score). The report is the per-scenario and
-per-family paired outcome delta, never an absolute score.
+For each start, both `--candidate` and `--baseline` play the SAME start from config_a's
+side, against the opponent it came from (its source match's config_b), so the bank's
+opponents are the round-robin's; `--opponent` plays every start against one config
+instead. A start whose opponent does not exist on this branch is skipped and counted.
 
 rsim is deterministic, so a scenario can also be played from `--repeats` starts
 (`start.jittered`: robots away from the ball nudged a few cm; seed 0
@@ -40,11 +54,12 @@ commit A, then at commit B with `--against-results` pointing at A's JSON. The
 opponent, horizon and repeats must match. With neither, it only records the
 candidate's outcomes, e.g. to serve as a later run's `--against-results`.
 
-Scenario outcomes count real ball losses and flag stalls; see
-`utama_core.scenario_bench.scenario_scorer`.
+Each start's record keeps the scorer's ordinal outcome (GOAL_AGAINST=-3 ... GOAL_FOR=+3,
+see `utama_core.scenario_bench.scenario_scorer`), its signals, fouls and stalls; the
+per-start `delta` and `--stop-at-t` are on that ordinal.
 
-`--save-bank PATH` persists the currently-loaded scenario set (hand-authored
-+ optional `--harvest-from`, after `--families` filtering) to a single JSON
+`--save-bank PATH` persists the currently-loaded scenario set (hand-authored, or
+`--harvest-from`, after `--families` and `--where` filtering) to a single JSON
 file via `start.save_bank` — a few KB even for hundreds of
 scenarios, since a scenario is field state only, no trajectories. `--load-bank
 PATH` loads scenarios from a previously-saved bank instead of hand-authored/
@@ -56,7 +71,7 @@ play-forward screen (one was tried: it kept starts where the OPPONENT changed
 the outcome, and threw away as many starts where the candidate did). To grow a
 bank from a new round-robin, `--merge-into` the current bank: harvested
 scenarios that duplicate it are dropped, and the new bank is the old one plus
-the rest. `--workers N` scores N scenarios at a time.
+the rest. `--workers N` scores (and harvests) N scenarios at a time.
 
 `--reuse` takes a start's outcome from `replays/match_cache/` instead of playing it
 when nothing that start runs has changed since it was stored
@@ -67,9 +82,10 @@ replays that fraction of the reusable starts and compares them with their record
 difference means the fingerprint missed a dependency, is printed loudly, evicts the
 records this run used, and makes the run exit non-zero.
 `--play ID [ID ...]` plays the given starts once each (per `--repeats` seed) for
-`--candidate` against `--opponent` and shows what happened, instead of scoring a bank:
+`--candidate` and shows what happened, instead of scoring a bank:
 its outcome and signals, and a timeline of the referee, the ball, the robot of each side
-nearest it and every change in the candidate's tactic assignments. The replay
+nearest it and every change in the candidate's tactic assignments. Each start is played
+against its own opponent unless `--opponent` is given. The replay
 (`.npz`) and the candidate's match log (`.intentions.jsonl`) are kept under
 `replays/scenario_play/<start id>/`, with the timeline as `.trace.txt` and, with
 `--render png|mp4`, a picture of the whole window. Use it to test a change in a
@@ -80,42 +96,32 @@ ladder (slow half).
 
 Run from the repository root, for example:
 
-    pixi run python tools/scenario_bench.py \\
-        --candidate build_split_shape_kernel_strategy \\
-        --baseline build_default_kernel_strategy \\
-        --opponent build_high_press_kernel_strategy
+    # A candidate against the baseline on the current bank, real Division B weights:
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --candidate build_counter_flow_kernel_strategy --baseline build_split_shape_kernel_strategy --workers 15
 
-    pixi run python tools/scenario_bench.py --list-scenarios
+    # The same, weighted by our own round-robin's situation rates:
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --candidate counter_flow --baseline split_shape --workers 15 \\
+        --weights utama_core/scenario_bench/banks/situation_rates_sim.json
 
-    pixi run python tools/scenario_bench.py \\
-        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_high_press_kernel_strategy --harvest-from replays/tournament_20260905_090000
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --list-scenarios --where third=attacking
 
-    # Freeze a bank from a harvest for reuse across sessions:
-    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20260905_090000 \\
-        --save-bank utama_core/scenario_bench/banks/bank_v5.json --bank-id bank_v5 --list-scenarios
+    # Harvest and freeze a bank (up to 40 starts per situation type, kickoffs 20):
+    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_20261011_230119 \\
+        --per-situation 40 --workers 15 --save-bank utama_core/scenario_bench/banks/bank_v8.json --list-scenarios
 
-    # Grow a bank from a new round-robin (harvest, drop duplicates, save):
-    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --open-play 2 \\
-        --merge-into utama_core/scenario_bench/banks/bank_v5.json --save-bank utama_core/scenario_bench/banks/bank_v6.json \\
-        --list-scenarios
-
-    # Play two starts and watch them (timeline printed, replay and picture kept):
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v7.json \\
-        --play kickoff_center_v1 split_shape_vs_three_slot_t51.9_candidate_kicking \\
-        --candidate high_press --opponent split_shape --render png
+    # Play a start and watch it (timeline printed, replay and picture kept):
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --play counter_flow_vs_split_shape_t426.3_own_ball_won_attacking --candidate high_press --render png
 
     # A/B a code change: record at commit A, compare at commit B.
-    pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy
-    pixi run python tools/scenario_bench.py --load-bank bank_v5.json \\
-        --candidate build_split_shape_kernel_strategy --opponent build_high_press_kernel_strategy \\
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --candidate build_split_shape_kernel_strategy --workers 15
+    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \\
+        --candidate build_split_shape_kernel_strategy --workers 15 \\
         --against-results scenario_bench_results/scenario_bench_<commit A>.json
-
-    # Score against the frozen bank later, without re-harvesting:
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v5.json \\
-        --candidate build_split_shape_kernel_strategy --baseline build_default_kernel_strategy \\
-        --opponent build_high_press_kernel_strategy
 """
 
 from __future__ import annotations
@@ -139,6 +145,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.replay_trace import trace
+from utama_core.analysis.goal_ledger import TYPES, WINDOW_S, per_match
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
 from utama_core.replay.fingerprint import CodeGraph, bench_key
@@ -151,6 +158,7 @@ from utama_core.scenario_bench.hand_authored_scenarios import (
 from utama_core.scenario_bench.scenario_harvester import harvest_run_dir
 from utama_core.scenario_bench.scenario_scorer import (
     SIGNALS,
+    ScenarioOutcome,
     _resolve_config_name,
     score_scenario,
 )
@@ -166,6 +174,8 @@ from utama_core.scenario_bench.start import (
 )
 
 SCHEMA_VERSION = 1
+BANKS = REPO_ROOT / "utama_core" / "scenario_bench" / "banks"
+DEFAULT_WEIGHTS = BANKS / "situation_rates_real.json"
 
 
 def _git_revision() -> str | None:
@@ -199,15 +209,15 @@ def _load_bank(args: argparse.Namespace) -> tuple[list[BenchScenario], list[Benc
         # `start.save_bank`'s "immutable per bank version" note),
         # not a starting point to silently mix fresh sources into.
         _bank_id, scenarios = load_bank(args.load_bank)
+    elif args.harvest_from is not None:
+        scenarios, harvest_report = harvest_run_dir(
+            args.harvest_from,
+            evaluator_version=_git_revision() or "unknown",
+            per_situation=args.per_situation,
+            workers=args.workers,
+        )
     else:
         scenarios = list(all_hand_authored_scenarios())
-        if args.harvest_from is not None:
-            harvested, harvest_report = harvest_run_dir(
-                args.harvest_from,
-                evaluator_version=_git_revision() or "unknown",
-                open_play_per_match=args.open_play,
-            )
-            scenarios.extend(harvested)
 
     if args.families:
         wanted = set(args.families)
@@ -231,6 +241,19 @@ def _save(args: argparse.Namespace, scenarios: list[BenchScenario]) -> None:
         bank_id = args.bank_id or args.save_bank.stem
         save_bank(scenarios, args.save_bank, bank_id=bank_id)
         print(f"Saved {len(scenarios)} scenarios to {args.save_bank} (bank_id={bank_id})")
+
+
+def start_opponent(bench_scenario: BenchScenario, override: Optional[str] = None) -> Optional[str]:
+    """Who a start is played against: `override` (`--opponent`), else the opponent its situation
+    came from (its source match's config_b). None when that config does not exist here (a
+    start harvested from another branch's strategies) or the start has no source match."""
+    name = override or bench_scenario.scenario.config_b_name
+    if name is None:
+        return None
+    try:
+        return _resolve_config_name(name)
+    except ValueError:
+        return None
 
 
 PLAY_DIR = "scenario_play"  # under REPLAY_BASE_PATH: where --play keeps its replays
@@ -389,6 +412,7 @@ def _score_one(
     bench_scenario, plan = item
     enable_sim_reuse()  # a worker plays many starts: keep its sim subprocess between them
     fresh: dict = {}
+    opponent = start_opponent(bench_scenario, opponent)
     cand = _runs(bench_scenario, candidate, opponent, horizon_s, repeats, plan, fresh)
     base = _runs(bench_scenario, baseline, opponent, horizon_s, repeats, plan, fresh) if baseline else None
     return cand, base, fresh
@@ -398,7 +422,7 @@ class _Reuse:
     """`--reuse`'s bookkeeping for one bench run: every start's key, the records it may
     reuse, the ones it replays to check, and what it played."""
 
-    def __init__(self, scenarios, configs, opponent: str, horizon_s: float, repeats: int, spot_check: float):
+    def __init__(self, scenarios, configs, opponent: Optional[str], horizon_s: float, repeats: int, spot_check: float):
         self.args = (scenarios, configs, opponent, horizon_s, repeats)
         self.cache = match_cache.MatchCache()
         self.keys = self._keys()
@@ -415,7 +439,7 @@ class _Reuse:
                 graph,
                 jittered(bs, seed).to_dict(),
                 _resolve_config_name(config),
-                _resolve_config_name(opponent),
+                start_opponent(bs, opponent),
                 horizon_s=horizon_s,
             )
             for bs in scenarios
@@ -575,6 +599,7 @@ def _score_batch(rows: list[dict], batch: list[BenchScenario], results: Iterable
             {
                 "scenario_id": sid,
                 "family": bench_scenario.provenance.family.value,
+                "situation": bench_scenario.provenance.situation,
                 "trigger": bench_scenario.provenance.trigger.value,
                 "perspective": bench_scenario.provenance.perspective,
                 "candidate_outcomes": cand["outcomes"],
@@ -617,34 +642,104 @@ def _signal_summary(rows: list[dict]) -> dict[str, dict]:
     return summary
 
 
-def _aggregate_by_family(rows: list[dict]) -> list[dict]:
+def _type_order(situation: str) -> int:
+    return TYPES.index(situation) if situation in TYPES else len(TYPES)
+
+
+def _goal_rates(outcomes: list[int]) -> tuple[float, float]:
+    """(P(for), P(against)) over one start's runs: the first goal within the horizon."""
+    return (
+        statistics.fmean(o == ScenarioOutcome.GOAL_FOR for o in outcomes),
+        statistics.fmean(o == ScenarioOutcome.GOAL_AGAINST for o in outcomes),
+    )
+
+
+def _mean_se(values: list[float]) -> tuple[float, Optional[float]]:
+    """Mean and its standard error; no standard error from one value."""
+    return statistics.fmean(values), statistics.stdev(values) / math.sqrt(len(values)) if len(values) > 1 else None
+
+
+def situation_effect(rows: list[dict], weights: dict) -> dict:
+    """The candidate's effect on goals per match (module docstring), from the paired starts of
+    `rows` that have a situation type. Per type: n starts; the candidate's and the baseline's
+    P(for) and P(against); the mean paired difference of each, with its standard error across
+    the type's starts; how often the type happens per match under `weights`
+    (`goal_ledger.situation_rates`); and what it adds to goals scored, conceded and the goal
+    difference per match. The total's standard error takes the types as independent, and is
+    None when a type has a single start."""
+    by_type: dict[str, list[dict]] = {}
+    for r in rows:
+        if (
+            r.get("situation")
+            and r["baseline_outcomes"] is not None
+            and not (r["candidate_errors"] or r["baseline_errors"])
+        ):
+            by_type.setdefault(r["situation"], []).append(r)
+    types = {}
+    for typ in sorted(by_type, key=_type_order):
+        cand = [_goal_rates(r["candidate_outcomes"]) for r in by_type[typ]]
+        base = [_goal_rates(r["baseline_outcomes"]) for r in by_type[typ]]
+        d_for, se_for = _mean_se([c[0] - b[0] for c, b in zip(cand, base)])
+        d_against, se_against = _mean_se([c[1] - b[1] for c, b in zip(cand, base)])
+        d_net, se_net = _mean_se([(c[0] - c[1]) - (b[0] - b[1]) for c, b in zip(cand, base)])
+        f = per_match(weights, typ)
+        types[typ] = {
+            "n": len(cand),
+            "per_match": f,
+            "candidate_p_for": statistics.fmean(c[0] for c in cand),
+            "candidate_p_against": statistics.fmean(c[1] for c in cand),
+            "baseline_p_for": statistics.fmean(b[0] for b in base),
+            "baseline_p_against": statistics.fmean(b[1] for b in base),
+            "delta_p_for": d_for,
+            "delta_p_for_se": se_for,
+            "delta_p_against": d_against,
+            "delta_p_against_se": se_against,
+            "scored_per_match": f * d_for,
+            "conceded_per_match": f * d_against,
+            "net_per_match": f * d_net,
+            "net_per_match_se": None if se_net is None else f * se_net,
+        }
+    ses = [t["net_per_match_se"] for t in types.values()]
+    total = {
+        key: sum(t[key] for t in types.values()) for key in ("scored_per_match", "conceded_per_match", "net_per_match")
+    }
+    total["net_per_match_se"] = None if None in ses else math.sqrt(sum(se * se for se in ses))
+    return {"types": types, "total": total}
+
+
+def load_weights(path: Path) -> dict:
+    """A situation rates file (`goal_ledger --rates`), with the `path` it came from."""
+    return {"path": str(path), **json.loads(Path(path).read_text())}
+
+
+def _effect_line(effect: dict, weights: dict) -> Optional[str]:
+    """One line: the effect on goal difference per match, its standard error, and the weights."""
+    if not effect["types"]:
+        return None
+    total = effect["total"]
+    se = total["net_per_match_se"]
+    return (
+        f"Effect on goal difference per match: {total['net_per_match']:+.2f}"
+        + (f" ± {se:.2f}" if se is not None else "")
+        + f" (scored {total['scored_per_match']:+.2f}, conceded {total['conceded_per_match']:+.2f}); "
+        f"weights {Path(weights['path']).name}, a match being {weights['live_min_per_match']:.1f} live minutes"
+    )
+
+
+def _aggregate_by_situation(rows: list[dict]) -> list[dict]:
+    """Stalls and signals per situation type (per family for a start with none)."""
     grouped: dict[str, list[dict]] = {}
     for row in rows:
-        grouped.setdefault(row["family"], []).append(row)
-
-    aggregates = []
-    for family, family_rows in grouped.items():
-        deltas = [r["delta"] for r in family_rows if r["delta"] is not None]
-        n = len(deltas)
-        aggregates.append(
-            {
-                "family": family,
-                "n_scenarios": len(family_rows),
-                "n_paired": n,
-                "mean_delta": statistics.fmean(deltas) if n else None,
-                # standard error of the mean delta across scenarios: a mean delta within
-                # about two of these of zero is not a difference
-                "stderr": statistics.stdev(deltas) / math.sqrt(n) if n > 1 else None,
-                "wins": sum(1 for d in deltas if d > 0),
-                "losses": sum(1 for d in deltas if d < 0),
-                "ties": sum(1 for d in deltas if d == 0),
-                # mean over scenarios of the candidate's outcome stdev across jittered starts
-                "seed_noise": statistics.fmean(statistics.pstdev(r["candidate_outcomes"]) for r in family_rows),
-                "candidate_stalls": sum(r["candidate_stalls"] for r in family_rows),
-                "signals": _signal_summary(family_rows),
-            }
-        )
-    return sorted(aggregates, key=lambda a: a["family"])
+        grouped.setdefault(row.get("situation") or row["family"], []).append(row)
+    return [
+        {
+            "situation": key,
+            "n_scenarios": len(grouped[key]),
+            "candidate_stalls": sum(r["candidate_stalls"] for r in grouped[key]),
+            "signals": _signal_summary(grouped[key]),
+        }
+        for key in sorted(grouped, key=_type_order)
+    ]
 
 
 def _overall(rows: list[dict]) -> Optional[str]:
@@ -680,24 +775,26 @@ def _signal_cell(summary: dict) -> str:
 
 def _signal_report(payload: dict) -> list[str]:
     """The signals table: per signal, the mean paired delta per start and its t, overall and
-    per family."""
+    per situation."""
     if not payload.get("signals") or not any(s["n_paired"] for s in payload["signals"].values()):
         return []
-    families = payload["aggregates"]
+    groups = [("all", payload["signals"])] + [(a["situation"], a["signals"]) for a in payload["aggregates"]]
     lines = [
         "",
         "## Signals",
         "",
         "Mean paired delta per start (candidate minus baseline) of the candidate's signals over the "
-        "scored window, see `docs/signals.md`. Better is the direction that usually helps the candidate.",
+        "scored window, see `docs/signals.md`. More is usually better for "
+        + ", ".join(n for n, d in SIGNALS.items() if d > 0)
+        + "; less for "
+        + ", ".join(n for n, d in SIGNALS.items() if d < 0)
+        + ".",
         "",
-        "| Signal | Better | All | " + " | ".join(a["family"] for a in families) + " |",
-        "|---|---|---:|" + "---:|" * len(families),
+        "| Situation | " + " | ".join(SIGNALS) + " |",
+        "|---|" + "---:|" * len(SIGNALS),
     ]
-    for name, direction in SIGNALS.items():
-        cells = [_signal_cell(payload["signals"][name])]
-        cells += [_signal_cell(a["signals"][name]) for a in families]
-        lines.append(f"| {name} | {'more' if direction > 0 else 'less'} | " + " | ".join(cells) + " |")
+    for label, signals in groups:
+        lines.append(f"| {label} | " + " | ".join(_signal_cell(signals[name]) for name in SIGNALS) + " |")
     return lines
 
 
@@ -715,28 +812,46 @@ def _markdown_report(payload: dict) -> str:
         f"Git revision: `{payload['git_revision'] or 'unknown'}`  ",
         f"Candidate: `{payload['candidate']}`  ",
         f"Baseline: {baseline or 'none'}  ",
-        f"Opponent: `{payload['opponent']}`  ",
+        "Opponent: "
+        + (f"`{payload['opponent']}`" if payload["opponent"] else "each start's own (its source match's config_b)")
+        + "  ",
         f"Horizon: {payload['horizon_s']}s, {payload.get('repeats', 1)} jittered starts per scenario  ",
+        f"Weights: `{payload['weights']['path']}` ({payload['weights']['matches']} matches; a match is "
+        f"{payload['weights']['live_min_per_match']:.1f} live minutes)  ",
         f"Scenarios scored: {payload.get('n_scored', payload['n_scenarios'])} of {payload['n_scenarios']}"
-        + (f" (stopped early: {payload['stopped']})" if payload.get("stopped") else ""),
+        + (f" (stopped early: {payload['stopped']})" if payload.get("stopped") else "")
+        + (
+            f"; {payload['skipped_no_opponent']} more skipped, their opponent not on this branch"
+            if payload.get("skipped_no_opponent")
+            else ""
+        ),
         "",
-        "Delta is mean candidate outcome minus mean baseline outcome over the same jittered starts, "
-        "on the ordinal scale (GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3), same opponent. "
-        "`stderr` is across scenarios; `seed noise` is the candidate's own spread across starts. "
-        "Stalls are counted, not ranked. "
-        "This is a proxy signal, not an acceptance gate — see roadmap item 14's Goodhart guard.",
+        "A start's outcome is the first goal within the horizon: for the candidate, against it, or none. "
+        "Per situation type, P(for) and P(against) are means over its starts, and the change is paired "
+        "(candidate minus baseline on the same starts, ± one standard error across them). Per match, the "
+        "change is weighted by how often the type happens in a match under the weights. A goal counts for "
+        "every situation in the 10 s before it, so goals per match are over-counted (about 1.2x under sim "
+        "weights, 1.6x under real ones). Stalls are counted, not ranked. A screen, not a ranking: "
+        "round-robins confirm.",
         "",
-        *([f"**{_overall(payload['results'])}**", ""] if _overall(payload["results"]) else []),
-        "## By family",
+        *([f"**{_effect_line(payload['effect'], payload['weights'])}**", ""] if payload["effect"]["types"] else []),
+        "## By situation",
         "",
-        "| Family | N | Mean delta | Stderr | Wins | Losses | Ties | Seed noise | Stalls |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Situation | N | Per match | Candidate P(for) / P(against) | Baseline P(for) / P(against) | "
+        "ΔP(for) | ΔP(against) | Scored /match | Conceded /match | Difference /match |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for agg in payload["aggregates"]:
+    for typ, t in payload["effect"]["types"].items():
         lines.append(
-            f"| {agg['family']} | {agg['n_scenarios']} | {_fmt(agg['mean_delta'])} | {_fmt(agg['stderr'], '.2f')} | "
-            f"{agg['wins']} | {agg['losses']} | {agg['ties']} | {agg['seed_noise']:.2f} | {agg['candidate_stalls']} |"
+            f"| {typ} | {t['n']} | {t['per_match']:.2f} | {t['candidate_p_for']:.2f} / {t['candidate_p_against']:.2f} | "
+            f"{t['baseline_p_for']:.2f} / {t['baseline_p_against']:.2f} | "
+            f"{_fmt(t['delta_p_for'])} ± {_fmt(t['delta_p_for_se'], '.2f')} | "
+            f"{_fmt(t['delta_p_against'])} ± {_fmt(t['delta_p_against_se'], '.2f')} | "
+            f"{_fmt(t['scored_per_match'])} | {_fmt(t['conceded_per_match'])} | "
+            f"{_fmt(t['net_per_match'])} ± {_fmt(t['net_per_match_se'], '.2f')} |"
         )
+    stalls = [f"{a['situation']} {a['candidate_stalls']}" for a in payload["aggregates"] if a["candidate_stalls"]]
+    lines += ["", f"Candidate stalls: {', '.join(stalls) if stalls else 'none'}."]
 
     lines.extend(_signal_report(payload))
     lines.extend(
@@ -744,13 +859,15 @@ def _markdown_report(payload: dict) -> str:
             "",
             "## Per-scenario",
             "",
-            "| Scenario | Family | Candidate | Baseline | Delta | Stalls |",
+            "Outcomes on the scorer's ordinal scale (GOAL_AGAINST=-3 ... NEUTRAL=0 ... GOAL_FOR=+3).",
+            "",
+            "| Scenario | Situation | Candidate | Baseline | Delta | Stalls |",
             "|---|---|---|---|---:|---:|",
         ]
     )
     for row in payload["results"]:
         lines.append(
-            f"| {row['scenario_id']} | {row['family']} | {row['candidate_outcomes']} | "
+            f"| {row['scenario_id']} | {row.get('situation') or row['family']} | {row['candidate_outcomes']} | "
             f"{row['baseline_outcomes'] if row['baseline_outcomes'] is not None else '-'} | {_fmt(row['delta'])} | "
             f"{row['candidate_stalls']} |"
         )
@@ -816,8 +933,23 @@ def parse_args() -> argparse.Namespace:
         "t is looked at repeatedly, so 2 would give false alarms), or once the mean delta is confidently under "
         f"{FUTILE_BELOW} (futile); for screening candidates, not for a baseline",
     )
-    parser.add_argument("--opponent", help="opponent strategy config both candidate and baseline play against")
-    parser.add_argument("--horizon", type=float, default=20.0, help="sim seconds ticked per scenario (default 20)")
+    parser.add_argument(
+        "--opponent",
+        help="play every start against this config (default: each start's own opponent, its source match's config_b)",
+    )
+    parser.add_argument(
+        "--horizon",
+        type=float,
+        default=WINDOW_S,
+        help=f"sim seconds ticked per scenario (default {WINDOW_S:g}, the goal ledger's window)",
+    )
+    parser.add_argument(
+        "--weights",
+        type=Path,
+        default=DEFAULT_WEIGHTS,
+        help="situation rates to weight the effect with (goal_ledger --rates; default: real Division B, "
+        f"{DEFAULT_WEIGHTS.name}; ours: situation_rates_sim.json)",
+    )
     parser.add_argument(
         "--harvest-from",
         type=Path,
@@ -825,11 +957,11 @@ def parse_args() -> argparse.Namespace:
         help="a completed round_robin.py run dir to harvest restart scenarios from",
     )
     parser.add_argument(
-        "--open-play",
+        "--per-situation",
         type=int,
-        default=0,
-        help="with --harvest-from, also harvest up to this many open-play scenarios of each kind per match "
-        "(see scenario_harvester.find_open_play_events; default 0)",
+        default=40,
+        help="with --harvest-from, keep up to this many starts of each situation type, kickoffs half as many "
+        "(scenario_harvester.sample_by_situation; default 40)",
     )
     parser.add_argument("--families", nargs="+", default=None, help="restrict to these ScenarioFamily values")
     parser.add_argument(
@@ -848,7 +980,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=None,
         metavar="ID",
-        help="play these starts of the loaded bank (one per --repeats seed) for --candidate against --opponent, "
+        help="play these starts of the loaded bank (one per --repeats seed) for --candidate against its opponent, "
         "print each one's outcome, signals and timeline, and keep its replay under replays/scenario_play/",
     )
     parser.add_argument(
@@ -898,9 +1030,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     if not args.list_scenarios:
-        missing = [name for name in ("candidate", "opponent") if getattr(args, name) is None]
-        if missing:
-            parser.error(f"--{', --'.join(missing)} required unless --list-scenarios")
+        if args.candidate is None:
+            parser.error("--candidate required unless --list-scenarios")
         if args.baseline and args.against_results:
             parser.error("--baseline and --against-results are alternatives")
     if args.play is not None and (args.baseline or args.against_results or args.stop_at_t is not None):
@@ -922,7 +1053,7 @@ def main() -> int:
     if args.list_scenarios:
         for bs in scenarios:
             tags = " ".join(f"{k}={v}" for k, v in start_tags(bs).items())
-            print(f"{bs.scenario_id:<58} {bs.provenance.family.value:<22} {tags}")
+            print(f"{bs.scenario_id:<58} {bs.provenance.situation or bs.provenance.family.value:<36} {tags}")
         print(f"{len(scenarios)} starts")
         if harvest_report:
             print(f"\nHarvest: {harvest_report}")
@@ -940,11 +1071,16 @@ def main() -> int:
             return 1
         failed = False
         for sid in args.play:
+            opponent = start_opponent(by_id[sid], args.opponent)
+            if opponent is None:
+                print(f"{sid}: its opponent is not on this branch; pass --opponent", file=sys.stderr)
+                failed = True
+                continue
             for seed in range(args.repeats):
                 play = play_start(
                     by_id[sid],
                     candidate=args.candidate,
-                    opponent=args.opponent,
+                    opponent=opponent,
                     horizon_s=args.horizon,
                     seed=seed,
                     render=args.render,
@@ -956,6 +1092,12 @@ def main() -> int:
     generated_at = datetime.now(timezone.utc)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
+
+    n_loaded = len(scenarios)
+    scenarios = [bs for bs in scenarios if start_opponent(bs, args.opponent) is not None]
+    if len(scenarios) < n_loaded:
+        print(f"{n_loaded - len(scenarios)} of {n_loaded} starts skipped: their opponent is not on this branch")
+    weights = load_weights(args.weights)
 
     against, against_source = None, None
     if args.against_results:
@@ -979,7 +1121,7 @@ def main() -> int:
         reuse=reuse,
     )
     reuse_report = reuse.finish() if reuse else None
-    aggregates = _aggregate_by_family(rows)
+    effect = situation_effect(rows, weights)
 
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -991,14 +1133,17 @@ def main() -> int:
         "opponent": args.opponent,
         "horizon_s": args.horizon,
         "repeats": args.repeats,
+        "weights": weights,
         "n_scenarios": len(scenarios),
         "n_scored": len(rows),
+        "skipped_no_opponent": n_loaded - len(scenarios),
         "stop_at_t": args.stop_at_t,
         # why scoring ended early: "detected" (|t| reached stop_at_t) or "futile" (see
         # FUTILE_BELOW); None when every scenario was scored
         "stopped": stopped,
         "reuse": reuse_report,
-        "aggregates": aggregates,
+        "effect": effect,
+        "aggregates": _aggregate_by_situation(rows),
         "signals": _signal_summary(rows),
         "results": rows,
         "harvest_report": harvest_report,
@@ -1010,8 +1155,8 @@ def main() -> int:
     md_path.write_text(_markdown_report(payload))
 
     print(f"\nWrote {json_path}\nWrote {md_path}")
-    if _overall(rows):
-        print(_overall(rows) + (f" (stopped early: {stopped})" if stopped else ""))
+    if _effect_line(effect, weights):
+        print(_effect_line(effect, weights) + (f" (stopped early: {stopped})" if stopped else ""))
     return 1 if reuse_report and reuse_report["mismatches"] else 0
 
 

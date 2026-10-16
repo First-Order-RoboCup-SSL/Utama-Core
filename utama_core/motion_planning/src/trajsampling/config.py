@@ -4,10 +4,9 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 class trajsamplingconfig:
     ROBOT_RADIUS = ROBOT_RADIUS
 
-    # Number of random intermediate targets tried when the direct trajectory
-    # collides, per TIGERs 2024 champion paper section 2.2 ("Currently, we
-    # use the random-based implementation with five targets").
-    N_INTERMEDIATE_TARGETS = 5
+    # Number of intermediate targets tried when the direct trajectory collides.
+    # Systematic fan around the target direction (e.g. +-15 deg, +-30 deg, +-45 deg ...).
+    N_INTERMEDIATE_TARGETS = 11
 
     # How far (metres) an intermediate target is placed from the robot's
     # current position -- large enough to route around a robot-sized

@@ -308,6 +308,7 @@ class SideRuntime:
     velocity_refiner: VelocityRefiner
     robot_info_refiner: RobotInfoRefiner
     motion_controller: type[MotionController]
+    control_scheme: str = "fpp"
 
     game: Optional[Game] = field(init=False, default=None)
     game_history: Optional[GameHistory] = field(init=False, default=None)
@@ -332,8 +333,10 @@ class StrategyRunner:
             gRSim/SSL-Vision — a RuntimeError is raised on the first vision packet if they differ.
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
-        control_scheme (str, optional): Name of the motion control scheme to use.
-        opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set, uses same as friendly.
+        control_scheme (str, optional): Name of the motion control scheme to use. If not set (or None),
+            defaults to strategy.control_scheme, falling back to 'fpp'.
+        opp_control_scheme (str, optional): Name of the opponent motion control scheme to use. If not set,
+            defaults to opp_strategy.control_scheme, falling back to the friendly control scheme.
         replay_writer_config (ReplayWriterConfig | ColumnarReplayWriterConfig, optional): Configuration for the
             replay writer. If unset, replay is disabled. `ReplayWriterConfig` writes the original one-pickle-
             per-frame `.pkl` format; `ColumnarReplayWriterConfig` writes the columnar `.npz` format, ~5x smaller
@@ -396,7 +399,7 @@ class StrategyRunner:
         full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
         field_bounds: Optional[FieldBounds] = None,
         opp_strategy: Optional[AbstractStrategy] = None,
-        control_scheme: str = "fpp",  # This is also the default control scheme used in the motion planning tests
+        control_scheme: Optional[str] = None,  # If None, resolved from strategy.control_scheme (defaulting to "fpp")
         opp_control_scheme: Optional[str] = None,
         replay_writer_config: Optional[Union[ReplayWriterConfig, ColumnarReplayWriterConfig]] = None,
         show_live_status: bool = False,  # Turn this on for simulator debugging
@@ -514,6 +517,8 @@ class StrategyRunner:
             allowed_yellow_ids=_allowed_yellow,
             allowed_blue_ids=_allowed_blue,
         )
+        self.control_scheme = self.my.control_scheme
+        self.opp_control_scheme = self.opp.control_scheme if self.opp is not None else None
 
         ### functions below rely on self.my and self.opp ###
 
@@ -800,7 +805,7 @@ class StrategyRunner:
         my_strategy: AbstractStrategy,
         opp_strategy: Optional[AbstractStrategy],
         filtering: bool,
-        control_scheme: str,
+        control_scheme: Optional[str],
         opp_control_scheme: Optional[str],
         my_trusted_ir_robots: Optional[FrozenSet[int]] = None,
         opp_trusted_ir_robots: Optional[FrozenSet[int]] = None,
@@ -812,8 +817,8 @@ class StrategyRunner:
             my_strategy (AbstractStrategy): The strategy for the friendly team.
             opp_strategy (Optional[AbstractStrategy]): The strategy for the opponent team. If None, opponent side will be None.
             filtering (bool): Whether to use filtering in the position refiners.
-            control_scheme (str): Name of the motion control scheme to use for the friendly team.
-            opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses same as friendly.
+            control_scheme (Optional[str]): Name of the motion control scheme to use for the friendly team. If None, uses strategy.control_scheme or 'fpp'.
+            opp_control_scheme (Optional[str]): Name of the motion control scheme to use for the opponent team. If not set, uses opp_strategy.control_scheme or friendly scheme.
             my_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of friendly robots whose IR sensor is trusted.
             opp_trusted_ir_robots (FrozenSet[int], optional): Vision IDs of opponent robots whose IR sensor is trusted.
             allowed_yellow_ids (FrozenSet[int], optional): Vision IDs of yellow robots in play; others are ignored.
@@ -833,13 +838,17 @@ class StrategyRunner:
             allowed_yellow_ids=allowed_yellow_ids,
             allowed_blue_ids=allowed_blue_ids,
         )
-        my_motion_controller = get_control_scheme(control_scheme)
+        my_scheme = (
+            control_scheme if control_scheme is not None else getattr(my_strategy, "control_scheme", None) or "fpp"
+        )
+        my_motion_controller = get_control_scheme(my_scheme)
         my_side = SideRuntime(
             strategy=my_strategy,
             position_refiner=my_pos_ref,
             velocity_refiner=my_vel_ref,
             robot_info_refiner=my_robot_ref,
             motion_controller=my_motion_controller,
+            control_scheme=my_scheme,
         )
 
         if opp_strategy is not None:
@@ -851,15 +860,22 @@ class StrategyRunner:
                 allowed_yellow_ids=allowed_yellow_ids,
                 allowed_blue_ids=allowed_blue_ids,
             )
-            opp_motion_controller = (
-                get_control_scheme(opp_control_scheme) if opp_control_scheme is not None else my_motion_controller
-            )
+            if opp_control_scheme is not None:
+                opp_scheme = opp_control_scheme
+            elif getattr(opp_strategy, "control_scheme", None) is not None:
+                opp_scheme = opp_strategy.control_scheme
+            elif control_scheme is not None:
+                opp_scheme = my_scheme
+            else:
+                opp_scheme = my_scheme
+            opp_motion_controller = get_control_scheme(opp_scheme)
             opp_side = SideRuntime(
                 strategy=opp_strategy,
                 position_refiner=opp_pos_ref,
                 velocity_refiner=opp_vel_ref,
                 robot_info_refiner=opp_robot_ref,
                 motion_controller=opp_motion_controller,
+                control_scheme=opp_scheme,
             )
 
         return my_side, opp_side

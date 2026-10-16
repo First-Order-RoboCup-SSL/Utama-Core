@@ -179,11 +179,17 @@ class VelocityRefiner(BaseRefiner):
             return zero_vector(twod)
 
         if twod:
-            previous_pos = Vector2D(previous_pos_floats[0], previous_pos_floats[1])
+            inv_dt = 1.0 / dt_secs
+            return Vector2D(
+                (current_pos.x - previous_pos_floats[0]) * inv_dt, (current_pos.y - previous_pos_floats[1]) * inv_dt
+            )
         else:
-            previous_pos = Vector3D(previous_pos_floats[0], previous_pos_floats[1], previous_pos_floats[2])
-
-        return (current_pos - previous_pos) / dt_secs
+            inv_dt = 1.0 / dt_secs
+            return Vector3D(
+                (current_pos.x - previous_pos_floats[0]) * inv_dt,
+                (current_pos.y - previous_pos_floats[1]) * inv_dt,
+                (current_pos.z - previous_pos_floats[2]) * inv_dt,
+            )
 
     def _calculate_object_acceleration(
         self, game_history: GameHistory, object_key: ObjectKey, twod: bool
@@ -211,7 +217,7 @@ class VelocityRefiner(BaseRefiner):
         the same order, so the result is the same float; the ball goes through the general
         helper.
         """
-        if not twod or any(len(vec) != 2 for _, vec in entries):
+        if not twod:
             # Plain floats, as `.tolist()` of the stacked arrays gave, without stacking them.
             return self._windowed_average_derivative(
                 [float(ts) for ts, _ in entries],
@@ -223,13 +229,23 @@ class VelocityRefiner(BaseRefiner):
             )
         window = self.ACCELERATION_WINDOW_SIZE
         averages = []  # (ts, vx, vy) per window
-        for start in range(len(entries) - self.ACCELERATION_N_WINDOWS * window, len(entries), window):
-            ts_sum = vx_sum = vy_sum = 0.0
-            for ts, (vx, vy) in entries[start : start + window]:
-                ts_sum += float(ts)
-                vx_sum += vx
-                vy_sum += vy
-            averages.append((ts_sum / window, vx_sum / window, vy_sum / window))
+        try:
+            for start in range(len(entries) - self.ACCELERATION_N_WINDOWS * window, len(entries), window):
+                ts_sum = vx_sum = vy_sum = 0.0
+                for ts, (vx, vy) in entries[start : start + window]:
+                    ts_sum += float(ts)
+                    vx_sum += vx
+                    vy_sum += vy
+                averages.append((ts_sum / window, vx_sum / window, vy_sum / window))
+        except (ValueError, TypeError):
+            return self._windowed_average_derivative(
+                [float(ts) for ts, _ in entries],
+                [vec for _, vec in entries],
+                self.ACCELERATION_N_WINDOWS,
+                self.ACCELERATION_WINDOW_SIZE,
+                twod,
+                log_prefix="ACCEL",
+            )
 
         ax = ay = 0.0
         valid_segments = 0

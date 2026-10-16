@@ -102,15 +102,17 @@ def _segments_intersect_nb(
 @njit(cache=True, fastmath=True)
 def _distance_between_segments_nb(
     ax0: float, ay0: float, ax1: float, ay1: float, bx0: float, by0: float, bx1: float, by1: float
-) -> float:
-    """Exact port of `math_utils.distance_between_line_segments`."""
+) -> tuple:
+    """Computes distance between line segments and distance from point b0 to segment a.
+    Returns (min_dist, d_b0_to_a).
+    """
+    d3 = distance_point_to_segment_nb(bx0, by0, ax0, ay0, ax1, ay1)
     if _segments_intersect_nb(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1):
-        return 0.0
+        return 0.0, d3
     d1 = distance_point_to_segment_nb(ax0, ay0, bx0, by0, bx1, by1)
     d2 = distance_point_to_segment_nb(ax1, ay1, bx0, by0, bx1, by1)
-    d3 = distance_point_to_segment_nb(bx0, by0, ax0, ay0, ax1, ay1)
     d4 = distance_point_to_segment_nb(bx1, by1, ax0, ay0, ax1, ay1)
-    return min(d1, d2, d3, d4)
+    return min(d1, d2, d3, d4), d3
 
 
 @njit(cache=True, fastmath=True)
@@ -159,9 +161,10 @@ def scan_collides_nb(
         if o_max_y < seg_min_y or o_min_y > seg_max_y:
             continue
 
-        dist_between_segs = _distance_between_segments_nb(ox0i, oy0i, ox1i, oy1i, seg_x0, seg_y0, seg_x1, seg_y1)
+        dist_between_segs, dist_to_robot = _distance_between_segments_nb(
+            ox0i, oy0i, ox1i, oy1i, seg_x0, seg_y0, seg_x1, seg_y1
+        )
         if dist_between_segs < clearance:
-            dist_to_robot = distance_point_to_segment_nb(seg_x0, seg_y0, ox0i, oy0i, ox1i, oy1i)
             if i == sticky_idx:
                 sticky_dist_to_robot = dist_to_robot
             if dist_to_robot < min_dist_to_robot:

@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BangBang1D:
     """Time-optimal 1D trajectory from (p0, v0) to (p1, v=0) respecting
     |velocity| <= v_max and |acceleration| <= a_max.
@@ -171,7 +171,7 @@ class BangBang1D:
         return self.p0 + sign * d_signed, v_signed * sign
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Trajectory2D:
     """A single `BangBang1D` profile along the straight line from p0 to p1,
     mapped back onto x/y by the direction unit vector.

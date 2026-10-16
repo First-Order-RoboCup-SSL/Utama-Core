@@ -53,7 +53,7 @@ def test_growing_a_bank_adds_every_new_harvested_start_and_drops_duplicates(tmp_
 
     assert scenario_bench.main() == 0
 
-    # the hand-authored scenarios the tool always loads, and the near-copy, duplicate the old bank
+    # the near-copy duplicates the old bank
     bank_id, saved = load_bank(new_bank)
     assert bank_id == "bank_new"
     assert [s.scenario_id for s in saved] == [s.scenario_id for s in existing] + ["new_a", "new_b"]
@@ -296,3 +296,75 @@ def test_where_must_name_a_tag_and_a_value(monkeypatch, capsys):
     assert "expected TAG=VALUE" in capsys.readouterr().err
     monkeypatch.setattr(sys, "argv", ["scenario_bench.py", "--list-scenarios", "--where", "ball=theirs,loose"])
     assert scenario_bench.parse_args().where == {"ball": {"theirs", "loose"}}
+
+
+def _from_match(config_b):
+    base = list(all_hand_authored_scenarios())[0]
+    return dataclasses.replace(base, scenario=dataclasses.replace(base.scenario, config_b_name=config_b))
+
+
+def test_a_start_is_played_against_the_opponent_it_came_from_unless_one_is_given(monkeypatch):
+    start = _from_match("build_high_press_kernel_strategy")
+    assert scenario_bench.start_opponent(start) == "build_high_press_kernel_strategy"
+    assert scenario_bench.start_opponent(start, "counter_flow") == "build_counter_flow_kernel_strategy"
+    # a strategy that lives on another branch, and a start with no source match: not playable
+    assert scenario_bench.start_opponent(_from_match("build_not_on_this_branch_kernel_strategy")) is None
+    assert scenario_bench.start_opponent(_from_match(None)) is None
+
+    played = []
+
+    def fake_runs(bench_scenario, config, opponent, horizon_s, repeats, *_reuse):
+        played.append((config, opponent))
+        return {"outcomes": [0] * repeats, "fouls": 0, "stalls": 0, "errors": []}
+
+    monkeypatch.setattr(scenario_bench, "_runs", fake_runs)
+    scenario_bench._score([start], candidate="cand", opponent=None, horizon_s=1.0, repeats=1, baseline="base")
+
+    assert played == [("cand", "build_high_press_kernel_strategy"), ("base", "build_high_press_kernel_strategy")]
+
+
+def _row(situation, candidate, baseline, errors=()):
+    return {
+        "situation": situation,
+        "candidate_outcomes": candidate,
+        "baseline_outcomes": baseline,
+        "candidate_errors": list(errors),
+        "baseline_errors": [],
+    }
+
+
+def test_the_effect_weights_each_situation_s_paired_change_by_how_often_it_happens():
+    # own free kicks in the attacking third: 0.5 per team per live minute x 10 live minutes = 5
+    # a match; the opponent winning the ball in midfield: 0.2 x 10 = 2 a match
+    weights = {
+        "live_min_per_match": 10.0,
+        "per_team_live_min": {"free kick, attacking third": 0.5, "ball won, middle third": 0.2},
+    }
+    goal_for, goal_against, nothing = 3, -3, 0
+    rows = [
+        _row("own free kick, attacking third", [goal_for], [nothing]),
+        _row("own free kick, attacking third", [nothing], [nothing]),
+        _row("opponent ball won, middle third", [goal_against], [goal_against]),
+        _row("opponent ball won, middle third", [nothing], [goal_against]),
+        _row(None, [goal_for], [nothing]),  # a hand-authored start has no situation
+        _row("own free kick, attacking third", [goal_for], [nothing], errors=["setup failed"]),
+    ]
+
+    effect = scenario_bench.situation_effect(rows, weights)
+
+    free_kick = effect["types"]["own free kick, attacking third"]
+    assert (free_kick["n"], free_kick["per_match"]) == (2, 5.0)
+    assert (free_kick["candidate_p_for"], free_kick["baseline_p_for"]) == (0.5, 0.0)
+    assert free_kick["delta_p_for"] == 0.5
+    assert free_kick["delta_p_for_se"] == pytest.approx(0.5)  # paired differences 1 and 0
+    assert free_kick["scored_per_match"] == 2.5
+    won = effect["types"]["opponent ball won, middle third"]
+    assert (won["candidate_p_against"], won["baseline_p_against"]) == (0.5, 1.0)
+    assert won["conceded_per_match"] == -1.0
+    assert won["net_per_match"] == 1.0
+    assert effect["total"] == {
+        "scored_per_match": 2.5,
+        "conceded_per_match": -1.0,
+        "net_per_match": 3.5,
+        "net_per_match_se": pytest.approx(math.sqrt(2.5**2 + 1.0**2)),
+    }

@@ -521,6 +521,86 @@ SCENARIOS = {
             timeout_s=12.0,
             endpoint_tolerance_m=0.15,
         ),
+        Scenario(
+            name="box_clearing_scrum",
+            description=(
+                "A defender breaks out of a congested penalty area scrum past two pressing attackers"
+                " and a shuttling marker to reach a flank outlet."
+            ),
+            friendly_starts=((-3.0, 0.4), (-3.2, -0.4)),
+            friendly_targets=((-1.0, 1.8), (-3.2, -0.4)),
+            enemy_starts=((-2.4, 0.6), (-2.4, -0.2), (-1.8, 0.8)),
+            enemy_targets=((-2.7, 0.2), (-2.7, -0.3), (-1.8, 0.8)),
+            enemy_target_trajectories={2: _shuttling((-1.8, 0.8), (-1.8, -0.8), 0.5)},
+            timeout_s=15.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="wall_rebound",
+            description=(
+                "An attacker rounds a 3-robot defensive wall to collect a loose rebound while an"
+                " opposing defender recovers to contest the lane."
+            ),
+            friendly_starts=((-0.5, 0.0),),
+            friendly_targets=((2.5, -1.0),),
+            enemy_starts=((1.5, -0.38), (1.5, 0.0), (1.5, 0.38), (1.8, 0.8)),
+            enemy_targets=((1.5, -0.38), (1.5, 0.0), (1.5, 0.38), (2.5, -0.6)),
+            timeout_s=15.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="pinching_contest",
+            description=(
+                "One robot sprints through midfield while two opposing defenders converge from"
+                " 45-degree diagonal flanks to squeeze the corridor."
+            ),
+            friendly_starts=((-2.5, 0.0),),
+            friendly_targets=((1.5, 0.0),),
+            enemy_starts=((-0.5, 1.5), (-0.5, -1.5)),
+            enemy_targets=((1.2, 0.45), (1.2, -0.45)),
+            timeout_s=12.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="stop_transition",
+            description=(
+                "Four friendly and two enemy robots disperse from an offensive cluster around a"
+                " central ball keep-out anchor to legal STOP positions."
+            ),
+            friendly_starts=((0.8, 0.7), (0.8, -0.7), (-0.5, 0.6), (-0.5, -0.6)),
+            friendly_targets=((-1.5, 1.2), (-1.5, -1.2), (-2.2, 0.6), (-2.2, -0.6)),
+            enemy_starts=((0.0, 0.0), (-0.6, -0.1), (-0.3, 0.3)),
+            enemy_targets=((0.0, 0.0), (1.5, -0.6), (1.5, 0.6)),
+            timeout_s=20.0,
+            endpoint_tolerance_m=0.25,
+        ),
+        Scenario(
+            name="keeper_switchback",
+            description=(
+                "A defender executes a sharp hairpin switchback around an advancing pressing attacker"
+                " to reach an opposite-flank outlet."
+            ),
+            friendly_starts=((-2.7, 0.8),),
+            friendly_targets=((-2.7, -0.8),),
+            enemy_starts=((-2.3, 0.1), (-1.7, -0.3)),
+            enemy_targets=((-2.9, 0.6), (-1.7, -0.3)),
+            timeout_s=12.0,
+            endpoint_tolerance_m=0.2,
+        ),
+        Scenario(
+            name="trailing_intercept",
+            description=(
+                "A defender pursues and cuts off an opponent sprinting down the wing at 1.8 m/s"
+                " from an oblique trailing position."
+            ),
+            friendly_starts=((-0.5, 1.2),),
+            friendly_targets=((2.5, 2.0),),
+            enemy_starts=((0.0, 2.0),),
+            enemy_targets=((3.5, 2.0),),
+            enemy_target_trajectories={0: lambda t: (min(3.5, 0.0 + 1.8 * t), 2.0)},
+            timeout_s=10.0,
+            endpoint_tolerance_m=0.2,
+        ),
     )
 }
 
