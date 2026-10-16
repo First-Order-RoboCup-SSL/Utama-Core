@@ -3,7 +3,14 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from utama_core.analysis.realism import scorecard, shot_outcomes, shots, xg
+from utama_core.analysis.realism import (
+    passes,
+    reaction,
+    scorecard,
+    shot_outcomes,
+    shots,
+    xg,
+)
 from utama_core.entities.referee.referee_command import RefereeCommand as C
 from utama_core.entities.referee.stage import Stage
 
@@ -205,5 +212,123 @@ def test_scorecard_rates_pool_matches_and_drop_short_ones():
     rows = scorecard.rows(scorecard.usable([long_match, other, short]), model, n_boot=20)
     # 3 attempts over 6 live minutes for 2 teams
     assert rows["attempts per team per live minute"]["value"] == pytest.approx(3 / 12)
-    assert rows["outcome: wide or post"]["value"] == pytest.approx(1 / 3)
+    assert rows["outcome: wide, post or crossed"]["value"] == pytest.approx(1 / 3)
+    assert rows["outcome: wide"]["value"] == pytest.approx(1 / 3)
     assert rows["restarts per match"]["value"] == pytest.approx(3.0)
+
+
+def _outcome(frames):
+    scanned = shots.scan(frames)
+    shot_outcomes.follow(frames, scanned["shots"])
+    return scanned["shots"][0]
+
+
+def _aimed_at(y):
+    # from x = 2.0 the line reaches the goal line after 2.5 m; the post is at y = 0.5
+    return _kick(2.0, 0.0, 4.0, 4.0 * y / 2.5)[0]
+
+
+def test_where_an_unscored_shot_crosses_the_line_splits_wide_post_and_crossed_no_goal():
+    wide = _outcome(_aimed_at(0.6))
+    assert wide["outcome"] == "wide" and wide["miss_m"] == pytest.approx(0.1, abs=0.01)
+    assert _outcome(_aimed_at(0.5 + shot_outcomes.POST_BAND_M - 0.005))["outcome"] == "post"
+    assert _outcome(_aimed_at(0.5 + shot_outcomes.POST_BAND_M + 0.01))["outcome"] == "wide"
+    crossed = _outcome(_aimed_at(0.3))
+    assert crossed["outcome"] == "crossed_no_goal" and crossed["cross_y"] == pytest.approx(0.3, abs=0.02)
+
+
+def test_a_ball_bouncing_back_off_the_post_is_post():
+    frames, _ = _kick(2.0, 0.0, 4.0, 4.0 * 0.5 / 2.5)
+    frames = [f for f in frames if f.ball.p.x <= 4.47]  # up to 3 cm short of the post
+    last = frames[-1]
+    x, y = last.ball.p.x, last.ball.p.y
+    for k in range(1, 30):
+        frames.append(_frame(last.ts + k * _DT, x - 3.0 * k * _DT, y, -3.0, 0.0))
+    assert _outcome(frames)["outcome"] == "post"
+
+
+def _keeper_frames(move_at_s, vy_after, x=4.4, y0=0.4):
+    """Shot straight down y = 0 from x = 2.0 at 4 m/s; the keeper stands off the line at
+    (x, y0) and from `move_at_s` after the kick moves across at `vy_after`."""
+    frames, t_kick = _kick(2.0, 0.0, 4.0, 0.0)
+    for f in frames:
+        dt = max(0.0, f.ts - t_kick - move_at_s)
+        f.enemy_robots = {_KEEPER: _robot(x, y0 + vy_after * dt)}
+    return frames
+
+
+def _react(frames):
+    scanned = shots.scan(frames)
+    reaction.measure(frames, scanned["shots"])
+    return scanned["shots"][0]
+
+
+def test_the_keeper_reaction_is_the_first_velocity_change_toward_the_shot_line():
+    s = _react(_keeper_frames(0.2, -1.0))
+    assert s["keeper_toward_s"] == pytest.approx(0.2, abs=0.04)
+    assert s["keeper_react_s"] == pytest.approx(0.2, abs=0.04)
+    assert s["keeper_window_s"] == pytest.approx(0.6, abs=0.03)  # the ball passes x = 4.4
+    assert s["keeper_line_m"] == pytest.approx(0.4)
+
+
+def test_a_keeper_moving_away_from_the_line_reacts_but_not_toward_it_and_a_still_one_not_at_all():
+    away = _react(_keeper_frames(0.2, 1.0))
+    assert away["keeper_react_s"] is not None and away["keeper_toward_s"] is None
+    assert _react(_keeper_frames(0.0, 0.0))["keeper_react_s"] is None
+
+
+def _passes(frames):
+    scanned = shots.scan(frames)
+    assert scanned["shots"] == []
+    return passes.follow(frames, [])
+
+
+def _pass_frames(enemy=None, speed=3.0):
+    """Friendly robot 0 at (0, -0.1) kicks the ball from (0, 0) up the y axis; friendly robot 1
+    waits at (0.1, 2.0)."""
+    friendly = {0: _robot(0.0, -0.1), 1: _robot(0.1, 2.0)}
+    return _kick(0.0, 0.0, 0.0, speed, friendly=friendly, enemy=enemy, roll_s=2.0)[0]
+
+
+def test_a_kick_toward_a_teammate_is_a_pass_with_its_line_offset_and_completion():
+    (p,) = _passes(_pass_frames())
+    assert p["side"] == "friendly" and p["completed"]
+    assert p["offset_m"] == pytest.approx(0.1, abs=1e-3)
+
+
+def test_a_pass_softer_than_a_shot_kick_still_counts_but_one_below_the_pass_threshold_does_not():
+    (p,) = _passes(_pass_frames(speed=passes.KICK_MPS + 0.1))
+    assert p["completed"]
+    assert _passes(_pass_frames(speed=passes.KICK_MPS - 0.1)) == []
+
+
+def test_a_kick_that_is_a_shot_is_not_also_a_pass():
+    frames = _pass_frames()
+    kick_t = frames[passes.kicks(frames)[0][0]].ts
+    assert passes.follow(frames, [kick_t - 0.05]) == []
+
+
+def test_a_pass_an_opponent_reaches_first_is_incomplete_and_a_kick_to_nobody_is_no_pass():
+    (p,) = _passes(_pass_frames(enemy={5: _robot(0.05, 1.0)}))
+    assert not p["completed"]
+    lonely, _ = _kick(0.0, 0.0, 0.0, 3.0, friendly={0: _robot(0.0, -0.1)})
+    assert _passes(lonely) == []
+
+
+def test_reaction_rows_use_only_shots_that_leave_time_and_count_no_reaction_in_time_as_none():
+    model = xg.Logit().fit(np.array([xg.row(_attempt(False)), xg.row(_attempt(True))]), np.array([0.0, 1.0]))
+    react = dict(keeper_window_s=0.6, keeper_line_m=0.3, keeper_react_s=0.2)
+    attempts = [
+        {**_attempt(False), **react, "keeper_toward_s": 0.2},
+        {**_attempt(False), **react, "keeper_toward_s": None},
+        {**_attempt(False), **react, "keeper_window_s": 0.2, "keeper_toward_s": 0.1},  # no time
+    ]
+    match = {"match": "m", "live_s": 120.0, "restarts": 0, "shots": attempts}
+    rows = scorecard.rows(scorecard.usable([match]), model, n_boot=5)
+    assert rows["keeper moves toward the shot line within 0.4 s, share"]["value"] == pytest.approx(0.5)
+    assert rows["keeper moves toward the shot line, median (s)"]["value"] == pytest.approx(0.2)
+
+
+def test_the_broken_tracker_match_is_excluded():
+    (stem,) = scorecard.EXCLUDED_MATCHES
+    assert scorecard.usable([{"match": stem, "live_s": 600.0, "shots": []}]) == []

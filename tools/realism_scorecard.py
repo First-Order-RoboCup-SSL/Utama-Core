@@ -60,6 +60,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--real", nargs="+", type=Path, help="converted real logs (dirs or .npz): rebuild the reference")
     p.add_argument("--real-cache", type=Path, default=DEFAULT_REAL_CACHE)
+    p.add_argument("--sim-cache", type=Path, help=f"sim shot records (default <run_dir>/{SIM_CACHE_NAME})")
     p.add_argument("--sim", type=Path, help="a round-robin run dir to score against the reference")
     p.add_argument("--reference", type=Path, default=scorecard.REFERENCE_PATH)
     p.add_argument("--workers", type=int, default=1, help="processes for the replay pass (each holds a match)")
@@ -81,7 +82,7 @@ def main(argv=None) -> int:
         )
     if a.sim:
         ref = json.loads(a.reference.read_text())
-        records = _records([a.sim], a.sim / SIM_CACHE_NAME, a.workers, a.refresh)
+        records = _records([a.sim], a.sim_cache or a.sim / SIM_CACHE_NAME, a.workers, a.refresh)
         lines = scorecard.compare(ref, records)
         print(f"\n{a.sim.name} vs real ({ref['matches']} matches)\n")
         print(scorecard.format_table(lines))

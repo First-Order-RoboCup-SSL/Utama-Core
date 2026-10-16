@@ -5,15 +5,20 @@ records the first of:
 
 - `goal`: the shot is marked scored;
 - `keeper` / `defender` / `teammate`: a robot comes within `TOUCH_M` of the ball;
+- `post`: the ball deflects within `POST_NEAR_M` of a post (its direction turns by
+  `POST_TURN_DEG` or its speed drops to `POST_SLOW` of what it was `POST_LOOKBACK_S` earlier,
+  with no robot touching), or crosses the goal line within `POST_BAND_M` of a post (ball
+  radius plus post thickness: the frame it hit the post);
 - `wide`: the ball crosses the goal line outside the mouth;
-- `line_unawarded`: it crosses inside the mouth but no goal was given (mostly the post: the
-  tracker loses the ball at the frame, or a rebound off it);
+- `crossed_no_goal`: it crosses inside the mouth but no goal was given;
 - `stopped`: the ball slows below `STOP_MPS` short of the goal;
 - `open`: none of these within `FOLLOW_S`.
 
 Also measured at the kick: the keeper's distance from the shot line (origin to where the line
 meets the goal line), its depth off the goal line and its offset across from the aim point, and
-the ball speed when it reaches 1 m from the goal line, for the ball's slow-down.
+the ball speed when it reaches 1 m from the goal line, for the ball's slow-down. Where the ball
+crossed the goal line (`cross_y`, shooter's view) and, for a wide shot, how far outside the post
+(`miss_m`).
 
 **Attempts** (`is_attempt`), the default shot definition for the scorecard and the xG fit: a
 shot whose next touch is not a teammate (that is a pass) and that starts at most
@@ -40,7 +45,28 @@ TOUCH_M = 0.14  # robot radius 0.09 + ball radius 0.0215 + tracking slack
 STOP_MPS = 0.3
 SKIP_S = 0.1  # ignore the kicker's own contact just after the kick
 MAX_ATTEMPT_M = 6.0
-OUTCOMES = ("goal", "keeper", "defender", "teammate", "wide", "line_unawarded", "stopped", "open")
+BALL_RADIUS_M = 0.0215
+POST_THICKNESS_M = 0.02
+POST_BAND_M = BALL_RADIUS_M + POST_THICKNESS_M
+POST_NEAR_M = 0.1
+POST_TURN_DEG = 30.0
+POST_SLOW = 0.6
+POST_LOOKBACK_S = 0.05  # the real tracker smooths a bounce over a few frames
+OUTCOMES = ("goal", "keeper", "defender", "teammate", "post", "wide", "crossed_no_goal", "stopped", "open")
+
+
+def _seen(ball) -> bool:
+    return ball is not None and not math.isnan(ball.p.x)
+
+
+def _deflected(v_then, v_now) -> bool:
+    s0, s1 = math.hypot(*v_then), math.hypot(*v_now)
+    if s0 < STOP_MPS:
+        return False
+    if s1 < POST_SLOW * s0:
+        return True
+    cos = (v_then[0] * v_now[0] + v_then[1] * v_now[1]) / (s0 * s1)
+    return math.degrees(math.acos(max(-1.0, min(1.0, cos)))) > POST_TURN_DEG
 
 
 def is_attempt(shot: dict) -> bool:
@@ -80,21 +106,34 @@ def follow(frames, shots: list[dict]) -> None:
             s["keeper_depth_m"] = round(abs(goal_x - kp.p.x), 3)
             s["keeper_y_off"] = round(abs(kp.p.y - aim_y), 3)
         nxt = next((t for t in times if t > s["t"] + 1e-6), math.inf)
-        outcome, speed_1m = "open", None
+        outcome, speed_1m, cross_y, prev = "open", None, None, None
+        recent = []  # (ts, vx, vy) over the last POST_LOOKBACK_S, for a bounce off a post
         for f in frames[i:]:
             dt = f.ts - s["t"]
-            if dt > FOLLOW_S or f.ts >= nxt:
+            if dt > FOLLOW_S or f.ts > nxt + 1e-3:  # the next kick's own frame still counts (a bounce off a post)
                 break
             b = f.ball
+            if not _seen(b):
+                continue
             if speed_1m is None and abs(goal_x - b.p.x) <= 1.0:
                 speed_1m = math.hypot(b.v.x, b.v.y)
+            crossed = (b.p.x - goal_x) * g >= 0
+            if crossed and cross_y is None:
+                cross_y = b.p.y
+                if prev is not None and b.p.x != prev[0]:  # interpolate to the goal line
+                    cross_y = prev[1] + (b.p.y - prev[1]) * (goal_x - prev[0]) / (b.p.x - prev[0])
+                cross_y *= g
+            prev = (b.p.x, b.p.y)
             if s["scored"]:
                 outcome = "goal"
-                if speed_1m is not None:
+                if speed_1m is not None and cross_y is not None:
                     break
                 continue
-            if (b.p.x - goal_x) * g >= 0:
-                outcome = "line_unawarded" if abs(b.p.y) <= HALF_GOAL else "wide"
+            if crossed:
+                off = abs(cross_y) - HALF_GOAL
+                outcome = "post" if abs(off) <= POST_BAND_M else ("wide" if off > 0 else "crossed_no_goal")
+                if outcome == "wide":
+                    s["miss_m"] = round(off, 3)
                 break
             if dt > SKIP_S:
                 hit = None
@@ -108,8 +147,16 @@ def follow(frames, shots: list[dict]) -> None:
                 if hit:
                     outcome = hit
                     break
+                near_post = min(math.hypot(b.p.x - goal_x, b.p.y - y) for y in (HALF_GOAL, -HALF_GOAL))
+                if near_post <= POST_NEAR_M and recent and _deflected(recent[0][1:], (b.v.x, b.v.y)):
+                    outcome = "post"
+                    break
                 if math.hypot(b.v.x, b.v.y) < STOP_MPS:
                     outcome = "stopped"
                     break
+            recent.append((f.ts, b.v.x, b.v.y))
+            while recent and f.ts - recent[0][0] > POST_LOOKBACK_S:
+                recent.pop(0)
         s["outcome"] = outcome
         s["speed_1m"] = None if speed_1m is None else round(speed_1m, 2)
+        s["cross_y"] = None if cross_y is None else round(cross_y, 3)
