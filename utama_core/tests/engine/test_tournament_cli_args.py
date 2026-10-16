@@ -180,3 +180,44 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
     assert calls == [SimNoise(seed=3, latency_s=(0.05, 0.1), kick_speed_sd=0.2)]
     (summary_path,) = tmp_path.glob("tournament_*/summary.json")
     assert json.loads(summary_path.read_text())["sim_noise"]["seed"] == 3
+
+
+def test_match_seconds_keys_the_match_cache_and_is_recorded_in_the_summary(tmp_path, monkeypatch):
+    # A shortened run's matches must not be cached under the full-length key, or a later
+    # full-length `--reuse` run would serve them as full matches.
+    durations = []
+
+    def _fake_match_key(_graph, _a, _b, *, duration_seconds, **_kwargs):
+        durations.append(duration_seconds)
+        return f"key-{duration_seconds}"
+
+    class _EmptyCache:
+        def get(self, _key):
+            return None
+
+        def put(self, _key, _record):
+            pass
+
+    monkeypatch.setattr(tournament, "run_match", _stub_result)
+    monkeypatch.setattr(tournament, "match_key", _fake_match_key)
+    monkeypatch.setattr(tournament, "CodeGraph", lambda: None)
+    monkeypatch.setattr(tournament.match_cache, "MatchCache", _EmptyCache)
+    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "tournament.py",
+            "--sequential",
+            "--reuse",
+            "--match-seconds",
+            "300",
+            "build_low_block_kernel_strategy",
+            "build_tiki_taka_kernel_strategy",
+        ],
+    )
+
+    tournament.main()
+
+    assert durations and set(durations) == {300.0}
+    (summary_path,) = tmp_path.glob("tournament_*/summary.json")
+    assert json.loads(summary_path.read_text())["max_match_seconds"] == 300.0
