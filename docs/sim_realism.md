@@ -45,7 +45,8 @@ baseline round-robin `tournament_20261014_144456` (66 matches). An expected-goal
 was fitted on real shots. On held-out matches it ranks shots with AUC 0.82 and its predicted
 rates agree with observed ones.
 
-Goals per team per live minute are the same in sim and real. That agreement hides two
+Goal attempts per live minute, their real xG and finishing (goals ÷ xG) each sit inside the
+real 95% interval (pooled sim ÷ real: ×1.09, ×1.12, ×1.11). That agreement hides two
 differences that cancel:
 
 | Shots of equal quality (xG band) | Real | Sim |
@@ -64,7 +65,7 @@ Other differences:
 - **Kick speed:** every sim kick is 4.75 m/s; real kicks range from 3.9 to 5.5 m/s (interquartile).
 - **Keeper position:** the sim keeper always stands on the goal line, 0.09 m deep; real keepers stand about 0.2 m out.
 - **Shot count:** with passes and clearances counted, sim teams make 1.8× more goalward kicks than real teams.
-- **Live time:** real matches have about 5.5 live minutes; the sim has about 9.1. This, not finishing, is why sim matches have more goals per match.
+- **Live time:** real matches have about 7.4 live minutes; the sim has about 9.1. Together with the slightly higher per-minute rates above, this is why sim matches have more goals per match.
 
 Lesson: **never judge realism by goal totals.** They can match for the wrong reasons.
 Compare the components, as in the [scorecard](#the-realism-scorecard).
@@ -146,7 +147,13 @@ round-robin.
 Each phase ends with a checkpoint: results reported, decision taken, then the next phase
 starts. Evaluation changes and strategy changes go in separate commits.
 
-### Phase 0: Bring the analysis into the repo (2–3 days)
+### Phase 0: Bring the analysis into the repo (2–3 days) — done 2026-10-16
+
+`pixi run python tools/realism_scorecard.py` (see `docs/tools.md`); package
+`utama_core/analysis/realism/`, real reference `real_2025_2026.json`. On the baseline it
+reproduces the outcome numbers above. Rows failing on the baseline: goal rate in every xG
+band, keeper and defender share, wide or post, ball speed kept, kick speed spread, keeper
+depth. Keeper reaction time is not a row yet (Phase 1).
 
 The xG and shot-outcome analysis currently lives outside the repo (`~/dev/ssl/xg-analysis/`).
 
