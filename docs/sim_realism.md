@@ -224,6 +224,65 @@ speed in m/s, turn rate in rad/s; brackets are 95% bootstrap intervals over matc
   message (kick time, kicker, velocity) and per-object `visibility`. Keeping them gives
   vision noise and a direct kick-speed source.
 
+#### More measurements (2026-10-16, from the raw-vision and kick sidecars)
+
+| Measure | Real | Source |
+|---|---|---|
+| Raw robot position noise per detection | 0.4–1.0 mm | 2022 `.vision.zip`, 2nd difference / √6, 4 matches, one camera each |
+| Raw robot heading noise | 0.2–0.3° | same |
+| A robot missing for one camera frame | 0.1–0.9% | same |
+| Kick speed spread at full power, within one team | IQR 0.7–1.1 m/s, SD about 0.45 | 2022 `.kicks.json`: kicks at or above 0.8 × the team's 90th percentile |
+| Full-power kick speed, between teams | 4.1–6.3 m/s (team medians) | same |
+
+- **Kick speed spread across all kicks (IQR 1.66) is mostly teams choosing a speed**, not
+  kicker noise. Our kicker is fixed power, so the within-team full-power spread is the range to
+  draw from; the scorecard's all-kicks IQR row should not be expected to match.
+- **Vision noise is small and must be set from the measurement.** A provisional 5 mm / 1° made
+  the recorded sim positions jitter 7 mm frame to frame (real tracker output: 0.6–0.8 mm), and
+  that jitter read as robots reacting: keeper "velocity change within 0.4 s" went from 68% to
+  98%. Our replay records the positions after our own Kalman filter, as the strategy sees them;
+  real logs are another team's tracker output. Rows built on velocities are only comparable when
+  the sim's vision noise is realistic.
+
+#### First calibration samples (2026-10-16)
+
+Six matches each (split_shape, tiki_taka_plus, press_trigger_flow, score_aware_counter_flow,
+full length, `--sim-noise ~/dev/ssl/xg-analysis/calib/v{1,2}.json`), against the 53-match real
+reference. Common to both: latency 0.05–0.10 s, kick speed SD 0.45 (per robot 0.2), kick
+direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m/s², acceleration cap
+1.5–3.5 m/s². v1 vision noise 5 mm / 1° / 2% dropped (provisional); v2 0.7 mm / 0.3° / 0.5%
+(measured). Six matches give wide intervals: read directions, not passes.
+
+| Row | Real | Baseline (knobs off) | v1 | v2 |
+|---|---|---|---|---|
+| Goals per match | about 3 | 6.2 | 3.7 | 5.2 |
+| Finishing (goals / xG) | 1.00 | 1.10 | 0.89 | 1.01 |
+| Keeper saves | 0.17 | 0.39 | 0.35 | 0.38 |
+| Keeper velocity change, median (s) | 0.18 | 0.12 | 0.12 | 0.19 |
+| Keeper moves toward the line, median (s) | 0.22 | 0.12 | 0.18 | 0.20 |
+| Wide | 0.11 | 0.05 | 0.13 | 0.10 |
+| Aim outside the posts | 0.20 | 0.11 | 0.21 | 0.20 |
+| Ball speed kept 1 m from goal | 0.67 | 0.57 | 0.66 | 0.65 |
+| Pass line offset, median (m) | 0.26 | 0.09 | 0.19 | 0.10 |
+| Pass completion | 0.50 | 0.70 | 0.52 | 0.63 |
+| Live minutes per match | 7.1 | 9.1 | 7.2 | 7.4 |
+| Restarts per match | 42 | 25 | 44 | 48 |
+
+- With measured vision noise, **keeper reaction times match real** (0.19 s vs 0.18) with
+  latency 0.05–0.10 s, and so does the nearest defender's. The latency range is consistent with
+  real reactions, though it is still a stand-in for our own hardware's (Phase 5).
+- **Keepers still save about twice as often as real ones**, at every xG band, with reaction
+  times now matching. Not explained yet. Candidates: our keeper's positioning (0.09 m off the
+  line vs 0.21 real), contact physics (a real ball off a keeper deflects unpredictably; rsim's
+  bounces cleanly), and real shots the scorecard counts as on target that real keepers cannot
+  reach. Look before adding a knob.
+- **v1's better passing rows came from vision noise, not kick noise.** With realistic vision,
+  pass offset falls back to 0.10 m against 0.26 real. Real pass error includes other teams'
+  decisions and receivers moving, so it is not purely kick error; do not raise kick direction
+  noise to close it without a hardware measurement of our kicker.
+- No stalls in either sample; a dribbled ball stays at the kicker with two-phase friction
+  (`test_dribble_with_friction.py`).
+
 **Checkpoint:** review which ranges are trustworthy.
 
 ### Phase 2: Knobs in the sim (1–2 weeks)
