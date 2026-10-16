@@ -79,6 +79,12 @@ def test_a_kick_just_outside_the_on_target_margin_or_too_slow_is_not_a_shot():
     assert shots.scan(slow)["shots"] == []
 
 
+def test_a_ball_kicked_on_inside_the_goal_after_crossing_the_line_is_not_a_shot():
+    # real logs: after a goal, play runs on until a human confirms it, and the ball bounces in the net
+    frames, _ = _kick(4.6, 0.1, 4.0, 0.0)  # at rest 0.1 m past the +x goal line, then driven deeper
+    assert shots.scan(frames)["shots"] == []
+
+
 def test_a_kick_in_a_stoppage_is_not_a_shot():
     frames, _ = _kick(2.0, 0.0, 4.0, 0.0, cmd=C.STOP)
     assert shots.scan(frames)["shots"] == []

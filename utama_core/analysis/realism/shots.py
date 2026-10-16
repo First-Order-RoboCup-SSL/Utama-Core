@@ -240,7 +240,9 @@ def scan(frames) -> dict:
             t_line = (gsign * HALF_LEN - ball.p.x) / ball.v.x
             y_at = ball.p.y + ball.v.y * t_line
             reaches = speed * speed / (2 * REACH_DECEL) >= speed * t_line
-            if live and reaches and abs(y_at) <= HALF_GOAL + ON_TARGET_MARGIN_M:
+            # t_line <= 0: the ball is already past that goal line, bouncing inside the goal after
+            # a goal (real logs: play runs on until a human confirms it), not a shot
+            if live and t_line > 0 and reaches and abs(y_at) <= HALF_GOAL + ON_TARGET_MARGIN_M:
                 start = pending["before"]
                 shots.append(_shot(frame, start, attacker_of(frame, gsign), gsign, pending["t"], restart, y_at))
                 open_kick, pending = shots[-1], None
