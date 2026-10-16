@@ -305,6 +305,15 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
   per match 6.0 / 3.5, pass completion 0.80 / 0.39 (real 0.50), keeper saves 0.34 / 0.27.
   Kick direction moves the most and needs measuring on our kicker (Phase 5). No knob closes
   the keeper gap without overshooting another row (at 6°, saves 0.27 but completion 0.39).
+- **v3, 28 matches** (v2 with latency widened to 0.03–0.15 s, 8 strategies, 3 workers;
+  `replays/tournament_20261016_185615`, `~/dev/ssl/xg-analysis/calib/v3_compare.json`):
+  3.2 goals per match (real ~3). Matching real: attempts per team per live minute 1.23 vs 1.27,
+  open-play and set-piece attempts, attempt distance, xG per attempt, aim outside the posts, kick
+  speed median, keeper reaction times. Still off: keeper saves 0.33 vs 0.18, so finishing 0.75
+  vs 1.00; defender blocks 0.22 vs 0.35; wide 0.17 vs 0.10; pass completion 0.66 vs 0.50 and
+  pass line offset 0.11 vs 0.26 m; keeper depth 0.09 vs 0.21 m (strategy). With 8 strategies
+  instead of 4, attempt volume matches; the 4-strategy samples' excess was those strategies.
+  The knobs cost about 1% of match time (120 s match: 28.0 s off, 28.3 s on).
 - No stalls in either sample; a dribbled ball stays at the kicker with two-phase friction
   (`test_dribble_with_friction.py`).
 
