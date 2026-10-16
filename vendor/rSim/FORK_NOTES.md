@@ -94,6 +94,10 @@ re-clone upstream and re-apply the diffs by hand first.
      plain build now matches it. (The default env's `robosim/_robosim.so`, used only with
      `UTAMA_USE_NATIVE_RSIM=1`, was copied from a native build, so native mode does not replay
      subprocess-mode matches exactly.)
+   - **Installed 2026-10-16** into `.pixi/envs/robosim` (plain cmake Release build, no
+     `-march=native`). Knobs off, a 30 s split_shape vs tiki_taka_plus match's replay hashes the
+     same as with the binary it replaced (`7c27555e8249abc6`). The replaced binary and this one
+     are kept in `~/dev/ssl/rsim-backup/` (outside the repo) to go back to.
 
 ## Known issue: test fragility, not a robot-behavior bug (root-caused 2026-08-16)
 
