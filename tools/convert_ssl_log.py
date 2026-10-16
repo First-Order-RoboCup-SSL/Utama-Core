@@ -23,12 +23,17 @@ without rewriting the replay; without it such a log is skipped. `--keep-raw` kee
 download in `--raw-dir/<year>/` instead of deleting it (about 15–20 GB for 2022–2026 Division
 B), reuses a kept download instead of fetching it again, and downloads the raw log of a match
 that is otherwise complete.
+
+Each conversion may use at most `--max-memory-gb` of address space (default 7): a 350 MB log peaks
+near 4 GB resident. A log that needs more fails with `MemoryError` (listed in `corpus.json`)
+instead of exhausting the machine's memory.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import resource
 import shutil
 import sys
 import time
@@ -99,6 +104,12 @@ def has_extras(out_dir: Path, stem: str, raw_vision: bool) -> bool:
     return extras is not None and (extras["raw_vision"] or not raw_vision)
 
 
+def limit_memory(gigabytes: float) -> None:
+    """Cap this process's address space, so an allocation past it raises `MemoryError`."""
+    limit = int(gigabytes * 2**30)
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+
+
 def _corpus_job(job: dict) -> dict:
     """Download, convert (or only add sidecars to) and delete (unless kept) one published log."""
     stem = log_stem(job["name"])
@@ -142,6 +153,7 @@ def run_corpus(
     raw_vision: bool = False,
     backfill_extras: bool = False,
     keep_raw: bool = False,
+    max_memory_gb: float = 7.0,
 ) -> list[dict]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
@@ -161,7 +173,7 @@ def run_corpus(
             for log in logs
         ]
     rows = []
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
+    with ProcessPoolExecutor(max_workers=jobs, initializer=limit_memory, initargs=(max_memory_gb,)) as pool:
         for row in pool.map(_corpus_job, work):
             rows.append(row)
             print(
@@ -194,6 +206,9 @@ def main() -> None:
     parser.add_argument(
         "--keep-raw", action="store_true", help="keep each download in RAW_DIR/<year>/ instead of deleting it"
     )
+    parser.add_argument(
+        "--max-memory-gb", type=float, default=7.0, help="address space one conversion may use (default 7)"
+    )
     args = parser.parse_args()
 
     if args.corpus:
@@ -206,6 +221,7 @@ def main() -> None:
             raw_vision=args.raw_vision,
             backfill_extras=args.backfill_extras,
             keep_raw=args.keep_raw,
+            max_memory_gb=args.max_memory_gb,
         )
         failed = [row for row in rows if row["status"] == "failed"]
         print(f"{len(rows) - len(failed)}/{len(rows)} logs converted or already there; failed: {len(failed)}")
@@ -216,6 +232,7 @@ def main() -> None:
         logs += sorted([*path.rglob("*.log.gz"), *path.rglob("*.log")]) if path.is_dir() else [path]
     if not logs:
         parser.error("no game logs given")
+    limit_memory(args.max_memory_gb)
     for log in logs:
         stem = log_stem(log.name)
         exists = (args.out / f"{stem}.npz").exists() and (args.out / f"{stem}.source.json").exists()

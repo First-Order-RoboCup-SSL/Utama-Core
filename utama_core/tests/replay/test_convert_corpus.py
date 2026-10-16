@@ -80,3 +80,20 @@ def test_keep_raw_reuses_a_download_left_by_an_interrupted_run(tmp_path, monkeyp
     assert convert_ssl_log._corpus_job(_job(tmp_path, keep_raw=True))["status"] == "converted"
 
     assert calls == {"download": 0, "convert": 1}
+
+
+def test_limit_memory_turns_an_oversized_allocation_into_memory_error():
+    # in a child process: the limit cannot be raised again once lowered
+    import subprocess
+    import sys
+
+    code = (
+        "from tools.convert_ssl_log import limit_memory\n"
+        "limit_memory(1.5)\n"
+        "try:\n"
+        "    bytearray(2 * 2**30)\n"
+        "except MemoryError:\n"
+        "    print('MemoryError')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "MemoryError"
