@@ -87,6 +87,9 @@ friction). **Within** means kick-to-kick noise for the same robot.
 | Vision noise and dropped frames (ball especially, also when blocked) | Every decision; keeper tracking | Yes from raw vision packets in the logs; the converter currently reads the filtered tracker | `rsim_noise`, `rsim_vanishing` in `StrategyRunner`, unused by the round-robin |
 | Dribbler: hold strength, ball loss when turning or touched, release speed | Possession, passing | Weak: only possession-loss rates as a proxy | Fixed, with the fork's dribbler fixes (`vendor/rSim/FORK_NOTES.md`) |
 | Ball bounce off robots and walls | Rebounds, deflections | Partly: speed before and after contact | Fixed |
+| Robots fielded per team | Defenders in the way of each shot (real 4.5 on average, sim always 6) | Yes: robots on the field in live play, per match | Always 6 |
+| Robot breakdowns and lost commands | Gaps in defence and support | Partly: robots that stop mid-play. Lost radio commands only from our hardware | None |
+| Stoppages: how often, and how long (ball placement, human-confirmed goals) | Game flow: set pieces vs continuous pressing | Yes: restarts and dead time per match (real 41.6 restarts, sim 25.4) | Our referee's rules and timings |
 
 ### What the official logs can and cannot give
 
@@ -261,6 +264,9 @@ were tuned at 5. Physics was 46% of match time (2026-10-10), so 3 substeps saves
 - **Calibrate:** set each kept knob to its league range and check the scorecard moves into the
   real intervals, keeper saves and the wide rate above all. Where a knob at the league range
   overshoots or does nothing, record it. That usually means a modelling gap, not a tuning problem.
+- **Held-out check:** calibrate on 2025–2026, then check the scorecard on 2022–2024 (rules
+  changed in 2022, so compare per year). A sim that passes only on the years it was calibrated on
+  has fitted the scorecard, not reality.
 - Done when: the scorecard passes on its main rows, or the remaining gaps are named with a cause.
 
 **Checkpoint:** decide which knobs become the evaluation default.
@@ -288,6 +294,7 @@ Replace league ranges with measurements of our robots. Tests, each short and rep
 | Speed and acceleration ramps, per robot | Motion limits, spread across robots |
 | Dribble while turning or being touched; release | Hold strength, loss rate, release speed |
 | Ball at rest under the cameras | Vision noise and dropped frames for our setup |
+| A long run with radio logging, through a full battery | Lost commands, robot dropouts, speed and kick drop as the battery drains |
 
 Ranges for our robots then replace the league ranges for our side only. Opponents keep the
 league ranges.
