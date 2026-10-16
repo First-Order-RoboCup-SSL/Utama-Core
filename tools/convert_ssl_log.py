@@ -19,7 +19,10 @@ Sidecars for measuring physics (see `ssl_log`): `<stem>.kicks.json` (the tracker
 `<stem>.tracker.zip` (visibility, angular velocity) always, `<stem>.vision.zip` (every raw
 camera detection, about the replay's size again) with `--raw-vision`. `--backfill-extras`
 downloads a log whose replay exists but lacks a sidecar asked for, and adds the sidecars
-without rewriting the replay; without it such a log is skipped.
+without rewriting the replay; without it such a log is skipped. `--keep-raw` keeps each
+download in `--raw-dir/<year>/` instead of deleting it (about 15–20 GB for 2022–2026 Division
+B), reuses a kept download instead of fetching it again, and downloads the raw log of a match
+that is otherwise complete.
 """
 
 from __future__ import annotations
@@ -97,16 +100,24 @@ def has_extras(out_dir: Path, stem: str, raw_vision: bool) -> bool:
 
 
 def _corpus_job(job: dict) -> dict:
-    """Download, convert (or only add sidecars to) and delete one published log."""
+    """Download, convert (or only add sidecars to) and delete (unless kept) one published log."""
     stem = log_stem(job["name"])
-    out_dir, raw = Path(job["out"]) / str(job["year"]), Path(job["raw_dir"]) / f"{stem}.log.gz"
+    keep_raw = job.get("keep_raw", False)
+    out_dir = Path(job["out"]) / str(job["year"])
+    raw_dir = Path(job["raw_dir"]) / str(job["year"]) if keep_raw else Path(job["raw_dir"])
+    raw = raw_dir / f"{stem}.log.gz"
     row = {"year": job["year"], "log": job["name"], "stem": stem, "bytes": job["bytes"]}
     exists = (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists()
-    if exists and (not job["backfill_extras"] or has_extras(out_dir, stem, job["raw_vision"])):
+    complete = exists and (not job["backfill_extras"] or has_extras(out_dir, stem, job["raw_vision"]))
+    if complete and (not keep_raw or raw.exists()):
         return {**row, "status": "exists"}
     started = time.time()
     try:
-        _download(job["url"], raw)
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        if not raw.exists():  # `_download` writes `.part` and renames it once complete
+            _download(job["url"], raw)
+        if complete:
+            return {**row, "status": "raw kept", "seconds": round(time.time() - started)}
         summary = convert_log(raw, out_dir, stem=stem, raw_vision=job["raw_vision"], write_replay=not exists)
         return {
             **row,
@@ -117,7 +128,8 @@ def _corpus_job(job: dict) -> dict:
     except Exception as exc:  # one bad log must not stop the corpus
         return {**row, "status": "failed", "error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()}
     finally:
-        raw.unlink(missing_ok=True)
+        if not keep_raw:
+            raw.unlink(missing_ok=True)
         raw.with_name(raw.name + ".part").unlink(missing_ok=True)
 
 
@@ -129,6 +141,7 @@ def run_corpus(
     jobs: int,
     raw_vision: bool = False,
     backfill_extras: bool = False,
+    keep_raw: bool = False,
 ) -> list[dict]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
@@ -143,6 +156,7 @@ def run_corpus(
                 "raw_dir": str(raw_dir),
                 "raw_vision": raw_vision,
                 "backfill_extras": backfill_extras,
+                "keep_raw": keep_raw,
             }
             for log in logs
         ]
@@ -177,6 +191,9 @@ def main() -> None:
         action="store_true",
         help="add missing sidecars to replays already converted, without rewriting them",
     )
+    parser.add_argument(
+        "--keep-raw", action="store_true", help="keep each download in RAW_DIR/<year>/ instead of deleting it"
+    )
     args = parser.parse_args()
 
     if args.corpus:
@@ -188,6 +205,7 @@ def main() -> None:
             args.jobs,
             raw_vision=args.raw_vision,
             backfill_extras=args.backfill_extras,
+            keep_raw=args.keep_raw,
         )
         failed = [row for row in rows if row["status"] == "failed"]
         print(f"{len(rows) - len(failed)}/{len(rows)} logs converted or already there; failed: {len(failed)}")
