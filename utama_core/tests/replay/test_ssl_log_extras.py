@@ -255,7 +255,9 @@ def test_backfill_adds_the_sidecars_without_touching_the_replay(log, tmp_path, m
     (out / f"{stem}.source.json").write_text(json.dumps(source))
     assert not convert_ssl_log.has_extras(out, stem, raw_vision=False)
 
-    monkeypatch.setattr(convert_ssl_log, "_download", lambda url, path: path.write_bytes(log.read_bytes()))
+    monkeypatch.setattr(
+        convert_ssl_log, "_download", lambda url, path, _expected_bytes=0: path.write_bytes(log.read_bytes())
+    )
     job = {
         "name": log.name,
         "year": 2026,
