@@ -280,6 +280,18 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
   pass offset falls back to 0.10 m against 0.26 real. Real pass error includes other teams'
   decisions and receivers moving, so it is not purely kick error; do not raise kick direction
   noise to close it without a hardware measurement of our kicker.
+- **Real "crossed, no goal" was mostly the ball bouncing inside the goal after a goal**, before a
+  human confirmed it (hand check: 10 of 12 cases, 8 followed by the score rising). Those kicks
+  no longer count as shots; the reference dropped from 1,055 to 959 attempts and real crossed-
+  no-goal from 7.7% to 2.8%. Against the rebuilt reference v2 reads: attempts per team per live
+  minute 1.85 vs 1.27 real, finishing 0.87 vs 1.00, keeper saves 0.38 vs 0.18, wide 0.10 vs
+  0.10. The table above uses the old reference.
+- **Keeper gap, first look** (`~/dev/ssl/xg-analysis/keeper/`): keeper depth, distance to the
+  shot line and the speed needed to reach it have the same distributions real and sim, and at
+  matched values the sim keeper still saves about twice as often (shot line within 0.1 m of the
+  keeper: real 0.29, sim 0.56). Lead to check when the 2025–26 kick sidecars exist: about 10% of
+  real kicks leave the ground (tracker `KickedBall` vertical speed, 2022–24), and a chip beats a
+  keeper standing on the line; our strategies rarely chip.
 - No stalls in either sample; a dribbled ball stays at the kicker with two-phase friction
   (`test_dribble_with_friction.py`).
 
