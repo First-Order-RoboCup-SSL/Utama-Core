@@ -74,18 +74,29 @@ def list_logs(year: int, division: str) -> list[dict]:
     return sorted(logs, key=lambda log: log["name"])
 
 
-def _download(url: str, path: Path, attempts: int = 3) -> None:
+def _download(url: str, path: Path, expected_bytes: int = 0, attempts: int = 5) -> None:
+    """Fetch `url` into `path` via `path.part`, resuming a partial `.part`. The share sometimes
+    closes a connection early without an error, so a download shorter than `expected_bytes`
+    (when known) is resumed too, not taken as complete."""
     part = path.with_name(path.name + ".part")
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=120) as response:
-                with open(part, "wb") as f:
+            have = part.stat().st_size if part.exists() else 0
+            headers = {**HEADERS, **({"Range": f"bytes={have}-"} if have else {})}
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as response:
+                resumed = have and response.status == 206
+                with open(part, "ab" if resumed else "wb") as f:
                     shutil.copyfileobj(response, f, length=1 << 20)
+            size = part.stat().st_size
+            if expected_bytes and size != expected_bytes:
+                if size > expected_bytes:
+                    part.unlink()
+                raise OSError(f"{path.name}: got {size} of {expected_bytes} bytes")
             part.replace(path)
             return
         except OSError:
-            part.unlink(missing_ok=True)
             if attempt == attempts - 1:
+                part.unlink(missing_ok=True)
                 raise
             time.sleep(5 * (attempt + 1))
 
@@ -120,13 +131,16 @@ def _corpus_job(job: dict) -> dict:
     row = {"year": job["year"], "log": job["name"], "stem": stem, "bytes": job["bytes"]}
     exists = (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists()
     complete = exists and (not job["backfill_extras"] or has_extras(out_dir, stem, job["raw_vision"]))
-    if complete and (not keep_raw or raw.exists()):
+    raw_ok = raw.exists() and (not job["bytes"] or raw.stat().st_size == job["bytes"])
+    if complete and (not keep_raw or raw_ok):
         return {**row, "status": "exists"}
     started = time.time()
     try:
         raw_dir.mkdir(parents=True, exist_ok=True)
+        if raw.exists() and not raw_ok:
+            raw.replace(raw.with_name(raw.name + ".part"))  # a cut-short download: resume it
         if not raw.exists():  # `_download` writes `.part` and renames it once complete
-            _download(job["url"], raw)
+            _download(job["url"], raw, job["bytes"])
         if complete:
             return {**row, "status": "raw kept", "seconds": round(time.time() - started)}
         summary = convert_log(raw, out_dir, stem=stem, raw_vision=job["raw_vision"], write_replay=not exists)

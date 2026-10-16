@@ -11,7 +11,7 @@ def _job(tmp_path, keep_raw):
     return {
         "name": "2024-07-01_10-00_A-vs-B.log.gz",
         "url": "https://example.invalid/log",
-        "bytes": 1,
+        "bytes": 3,  # the fake download, b"log"
         "year": 2024,
         "out": str(tmp_path / "out"),
         "raw_dir": str(tmp_path / "raw"),
@@ -24,9 +24,9 @@ def _job(tmp_path, keep_raw):
 def _fakes(monkeypatch):
     calls = {"download": 0, "convert": 0}
 
-    def _download(_url, path):
+    def _download(_url, path, _expected_bytes=0):
         calls["download"] += 1
-        path.write_bytes(b"log")
+        path.write_bytes(b"log")  # 3 bytes
 
     def _convert(_raw, out_dir, stem, raw_vision, write_replay):
         calls["convert"] += 1
@@ -97,3 +97,50 @@ def test_limit_memory_turns_an_oversized_allocation_into_memory_error():
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "MemoryError"
+
+
+class _Response:
+    def __init__(self, body, status):
+        self._body, self.status = body, status
+
+    def read(self, n=-1):
+        chunk, self._body = (self._body, b"") if n < 0 else (self._body[:n], self._body[n:])
+        return chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def test_a_download_cut_short_resumes_from_where_it_stopped(tmp_path, monkeypatch):
+    body = b"0123456789"
+    requests = []
+
+    def _urlopen(request, timeout):
+        start = int(request.get_header("Range", "bytes=0-")[6:-1])
+        requests.append(start)
+        if start == 0:
+            return _Response(body[:6], 200)  # the share closes the connection early, no error
+        return _Response(body[start:], 206)
+
+    monkeypatch.setattr(convert_ssl_log.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(convert_ssl_log.time, "sleep", lambda _s: None)
+    path = tmp_path / "log.gz"
+
+    convert_ssl_log._download("https://example.invalid/log", path, expected_bytes=len(body))
+
+    assert path.read_bytes() == body
+    assert requests == [0, 6]
+
+
+def test_a_kept_download_of_the_wrong_size_is_fetched_again(tmp_path, monkeypatch):
+    calls = _fakes(monkeypatch)
+    job = {**_job(tmp_path, keep_raw=True), "bytes": 3}
+    raw = tmp_path / "raw" / "2024" / "2024-07-01_10-00_A-vs-B.log.gz"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"lo")  # cut short by an earlier run
+
+    assert convert_ssl_log._corpus_job(job)["status"] == "converted"
+    assert calls["download"] == 1
