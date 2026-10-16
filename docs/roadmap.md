@@ -272,7 +272,15 @@ resolved, replace it with a one-line pointer under "Done".
        and compare velocity jitter and lag against a constant-velocity filter, before
        changing anything.
 
-11. **Deferred, revisit only when forced** (minimalism):
+11. **Sim realism (plan, 2026-10-14):** [`sim_realism.md`](sim_realism.md). Real 2025–2026
+    Division B logs against the baseline round-robin: goals per live minute match, but sim
+    keepers save about twice as many good chances and sim shots almost never go wide. Plan: a
+    realism scorecard, parameter ranges from the official logs, seeded per-match physics draws
+    (latency, kick noise, ball deceleration, per-robot limits, vision noise), a sensitivity
+    sweep, then adoption in the round-robin. P0 ahead of a real-data value model (P1) and
+    structured strategy search scored by it (P2).
+
+12. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
     - `@pytest.mark.engine` marker for kernel tests — wait for real CI bottleneck data.
