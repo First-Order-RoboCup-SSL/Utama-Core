@@ -3,6 +3,7 @@ find_path(
         NAMES
         ode/ode.h
         HINTS
+        $ENV{CONDA_PREFIX}/include
         $ENV{HOME}/include
         /usr/local/include
         /usr/include
@@ -14,6 +15,7 @@ find_library(
         NAMES
         oded debugdll/ode
         HINTS
+        $ENV{CONDA_PREFIX}/lib
         $ENV{HOME}/lib
         /usr/local/lib
         /usr/lib
@@ -25,6 +27,7 @@ find_library(
         NAMES
         ode releasedll/ode
         HINTS
+        $ENV{CONDA_PREFIX}/lib
         $ENV{HOME}/lib
         /usr/local/lib
         /usr/lib

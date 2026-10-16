@@ -181,6 +181,21 @@ GitHub and convert this to a submodule, or use pixi's own git-source
 dependency support to point directly at that fork instead of vendoring
 source at all.
 
+## Installed from source by pixi (2026-10-16)
+
+`pixi.toml` installs this directory as the robosim environment's `rc-robosim` (a pypi path
+dependency), so `pixi install` builds it with the machine's C++ compiler: no hand install, and
+CI and every checkout run this fork. Needed for that: `setup.py` pins the version
+(`1.2.0+utama`; setuptools_scm cannot read one from a vendored subtree) and `FindODE.cmake`
+also looks in `$CONDA_PREFIX`, where the env's `libode` lives. After changing the C++
+source, rebuild by deleting `.pixi/envs/robosim` and running `pixi install -e robosim` (a
+cached build may otherwise be reused). Built this way (gcc 13, no `-march=native`), a 30 s split_shape vs
+tiki_taka_plus match hashes the same as the hand-installed binary (`7c27555e8249abc6`).
+Matches still differ across CPUs and compilers (see the `-march=native` note above), so
+compare results from one machine.
+
+The manual procedure below is kept for trying changes without touching the env.
+
 ## How to rebuild
 
 From the `Utama-Core` repo root, using the `robosim` pixi environment's own

@@ -43,7 +43,7 @@ cmake = "<3.27"
 libode = ">=0.16.2,<0.17"
 
 [feature.robosim.pypi-dependencies]
-rc-robosim = ">=1.2,<2"
+rc-robosim = { path = "vendor/rSim" }  # our fork (vendor/rSim/FORK_NOTES.md), built on install
 numpy = "<=2.0.2"
 
 [tasks]
