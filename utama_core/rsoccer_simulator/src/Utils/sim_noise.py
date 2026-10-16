@@ -96,7 +96,9 @@ class SimNoise:
         for name in _RANGE_FIELDS:
             r = getattr(self, name)
             assert r is None or 0 <= r[0] <= r[1], f"{name} must be a non-negative (low, high) range"
-        assert self.ball_slide_decel is None or self.ball_roll_decel is not None, "ball_slide_decel needs ball_roll_decel"
+        assert (
+            self.ball_slide_decel is None or self.ball_roll_decel is not None
+        ), "ball_slide_decel needs ball_roll_decel"
         assert 0 < self.ball_slide_fraction <= 1
         assert self.kick_angle_offset_sd_deg >= 0 and self.kick_angle_sd_deg >= 0
         assert self.substeps >= 1

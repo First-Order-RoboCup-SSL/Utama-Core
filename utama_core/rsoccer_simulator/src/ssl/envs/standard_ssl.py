@@ -387,7 +387,9 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _apply_motion_limits(self, commands: list[Robot]) -> None:
         for cmd in commands:
-            colour, robots = ("team_yellow", self.frame.robots_yellow) if cmd.yellow else ("team_blue", self.frame.robots_blue)
+            colour, robots = (
+                ("team_yellow", self.frame.robots_yellow) if cmd.yellow else ("team_blue", self.frame.robots_blue)
+            )
             self._motion_limits.apply(colour, cmd.id, cmd, robots[cmd.id])
 
     def _kick_speed(self, colour: str, robot_id: int, kicking: bool) -> float:

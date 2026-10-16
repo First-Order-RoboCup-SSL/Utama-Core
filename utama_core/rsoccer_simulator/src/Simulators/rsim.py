@@ -67,7 +67,9 @@ class RSim:
     def get_field_params(self):
         return Field(**self.simulator.get_field_params())
 
-    def set_physics_params(self, substeps: int, ball_slide_decel: float, ball_roll_decel: float, ball_slide_fraction: float):
+    def set_physics_params(
+        self, substeps: int, ball_slide_decel: float, ball_roll_decel: float, ball_slide_fraction: float
+    ):
         """The fork's tunable physics (`SSLWorld::setPhysicsParams`); kept across `reset()`."""
         self.simulator.set_physics_params(
             substeps=substeps,

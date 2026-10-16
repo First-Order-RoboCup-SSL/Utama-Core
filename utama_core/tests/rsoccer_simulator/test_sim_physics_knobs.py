@@ -100,9 +100,7 @@ def _limits(speed=None, accel=None, brake=None) -> MotionLimits:
     def per(v):
         return None if v is None else {"team_blue": (v, v), "team_yellow": (v, v)}
 
-    draw = SimDraw(
-        latency_ticks={}, kick_offset={}, max_speed=per(speed), max_accel=per(accel), max_brake=per(brake)
-    )
+    draw = SimDraw(latency_ticks={}, kick_offset={}, max_speed=per(speed), max_accel=per(accel), max_brake=per(brake))
     return MotionLimits(draw, 0.1)
 
 
