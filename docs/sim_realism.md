@@ -179,6 +179,36 @@ One script per parameter, each giving a between-range and a within-spread with i
 
 Done when: a table with each range and its caveats has been added to this doc.
 
+#### Results so far (2026-10-16, `python -m utama_core.analysis.physics_ranges`)
+
+54 real 2025–2026 Division B matches against the 66-match sim baseline. Deceleration in m/s²,
+speed in m/s, turn rate in rad/s; brackets are 95% bootstrap intervals over matches.
+
+| Measure | Real | Sim |
+|---|---|---|
+| Ball rolling deceleration (1 s or more after a kick) | 0.29 [0.28, 0.30]; per-match IQR 0.29–0.33; within-match IQR 0.09 | 0.65 at every speed, no spread |
+| Ball sliding deceleration, 0.1–0.2 / 0.2–0.3 / 0.3–0.5 s after a kick | 3.7 / 2.7 / 1.9 | 0.9 / 0.65 / 0.65 |
+| Robot speed, 95th percentile (team medians) | 1.37 (0.65–2.04) | 1.66 (1.32–1.92) |
+| Acceleration, 95th percentile (team medians) | 2.56 (1.54–3.49) | 2.85 (2.80–2.89) |
+| Braking, 95th percentile (team medians) | 4.09 (1.77–5.79) | 2.96 (2.92–3.07) |
+| Turn rate, 95th percentile (team medians) | 3.02 (1.01–6.43) | 2.56 (2.32–2.78) |
+| Ball unseen in live play (tracker output) | 1% per match; 4.9 gaps per live minute, median 0.05 s, p90 0.2 s | none |
+
+- **The sim ball has the wrong shape, not just the wrong level.** A real ball slides for about
+  0.5 s after a kick, losing 2–4 m/s², then rolls at about 0.3. The rsim ball loses a constant
+  0.65. It keeps too much speed early and loses twice too much while rolling. Phase 2 needs
+  two-phase ball friction in the C++ fork, not one damping value.
+- **Sim teams are near-identical:** acceleration 2.80–2.89 across teams against 1.5–3.5 real;
+  real top speeds differ about 3× between teams. Per-team and per-robot draws are justified.
+- Caveats: the tracker smooths peaks (robot values and sliding deceleration are lower bounds;
+  the first 0.1 s after a kick is unusable). Tracker dropouts understate vision dropouts,
+  because the tracker bridges short occlusions. Exclude 2026-07-02 TurtleRabbit vs NAMeC
+  (broken tracker: ball unseen 57%). Robots moving with a 95th-percentile speed under
+  0.5 m/s are dropped, which also drops keepers.
+- Next data: the converter discards raw camera detections and the tracker's `KickedBall`
+  message (kick time, kicker, velocity) and per-object `visibility`. Keeping them gives
+  vision noise and a direct kick-speed source.
+
 **Checkpoint:** review which ranges are trustworthy.
 
 ### Phase 2: Knobs in the sim (1–2 weeks)
