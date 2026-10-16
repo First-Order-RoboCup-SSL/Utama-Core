@@ -45,6 +45,7 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 | Script | Purpose |
 |---|---|
 | `tools/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted. What a converted match holds and its limits: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md#real-matches) |
+| `tools/realism_scorecard.py` | Our sim against real Division B matches, component by component: attempts per live minute, real xG per attempt, finishing, goal rate per xG band, shot outcomes (keeper, defender, wide or post), ball slow-down, kick speed, keeper depth. Each row: the real value and 95% interval, the sim value, and whether it is inside. `--real` rebuilds the committed reference (`utama_core/analysis/realism/real_2025_2026.json`: the real xG model and rows) from converted logs; `--sim RUN_DIR` scores a round-robin against it. Attempts exclude passes and kicks from beyond 6 m. See [sim_realism.md](sim_realism.md) |
 
 ## Debugging a match
 
