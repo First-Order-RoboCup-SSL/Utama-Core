@@ -19,6 +19,34 @@ Geometry, colours/sides, rsim noise and the sampler seed are fixed; `--repeats` 
 deterministic setup stays repeatable. Exits non-zero if any cell fails (after writing reports)
 unless `--allow-failures`; `--output-dir PATH` redirects output.
 
+## Control schemes
+
+Every scheme is a `MotionController`, and `move()` calls its `calculate` once per robot per tick. The
+scheme name picks the class through `CONTROL_SCHEME_MAP`; `StrategyRunner` resolves it per side from
+`strategy.control_scheme` (default `fpp`, and `pid` is also registered). Each `calculate` returns a
+global velocity and an angular velocity, which `move()` rotates into the robot frame.
+
+```mermaid
+flowchart LR
+    move["move(), skills/src/utils/move_utils.py<br/>calls calculate(game, robot_id, target, orientation)"]
+    reg["get_control_scheme(name), common/control_schemes.py<br/>chosen per side by StrategyRunner"]
+    fpp["fpp: FastPathPlanningController<br/>controllers/fastpathplanning.py<br/>carrot from _path_to, then TwoDPID toward carrot"]
+    dwa["dwa: DWAController<br/>controllers/dwa_controller.py<br/>DWATranslationController picks the velocity"]
+    ts["trajsample: TrajectorySamplingController<br/>controllers/trajsampling.py<br/>TrajectorySamplingPlanner.plan, braked if closing too fast"]
+    pid["pid: PIDController<br/>controllers/pid_controller.py<br/>TwoDPID straight at the target, no obstacle planning"]
+    ret["(global velocity, angular velocity)<br/>orientation always from get_pids"]
+
+    move --> reg
+    reg --> fpp
+    reg --> dwa
+    reg --> ts
+    reg --> pid
+    fpp --> ret
+    dwa --> ret
+    ts --> ret
+    pid --> ret
+```
+
 ## Scenarios
 
 | Name | Exercises | Timeout | Tolerance |
@@ -59,6 +87,51 @@ put (`sudden_obstacle`'s is teleported into the corridor).
 The four crowd scenarios (`ball_scrum` to `kickoff_reset`) and the six match-derived stress scenarios
 (`box_clearing_scrum` to `trailing_intercept`) are built on where real match congestion and tactical
 restarts occur.
+
+### FastPathPlanner (`fpp`) decisions per tick
+
+Each tick, `FastPathPlanner._path_to` turns the robot's target into a carrot point for the PID. The
+flowchart is that call's decision order. `tools/plan_snapshot.py` draws the carrot and the planner's
+inputs for one logged tick.
+
+```mermaid
+flowchart TD
+    start["_path_to(game, robot_id, target)<br/>fastpathplanning/planner.py"]
+    obs["Obstacles: moving robots within LOOK_AHEAD_RANGE as ghost segments, plus static walls<br/>_get_obstacles, _refresh_obstacle_cache"]
+    filt["Drop boundary walls if the target is off the field;<br/>drop defense-area walls if _enemy_defense_area_retrieval_exempt"]
+    tgt["Target: project out of enemy box unless exempt, then sanitize_target<br/>ball-adjacent walls exempt when the target is at the ball"]
+    lv{"Robot inside a robot's clearance and moving away from it?<br/>_leaving"}
+    line{"Straight run to target collides?<br/>check_segment, collides"}
+    det["Detour via subgoal on either side, with side hysteresis (DETOUR_SWITCH_MARGIN)<br/>recompute-skip reuses the last detour if target and robot barely moved"]
+    carrot["Carrot: smooth_path, PROJECTION_DISTANCE along the first segment,<br/>clamped to clearance, averaged with the next segment"]
+    box{"Carrot inside enemy box and not exempt?"}
+    ball{"STOP, or the other team's restart?<br/>_keeps_off_ball"}
+    out{"Robot outside BALL_KEEP_OUT_DISTANCE?"}
+    circ["detour_around_circle round the ball (0.8 m)"]
+    app{"Robot inside keep-out and carrot closer to ball?<br/>_approaches"}
+    push["Push out along the ray from the ball to BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN"]
+    done["Carrot returned to FastPathPlanningController, then TwoDPID"]
+
+    start --> obs
+    obs --> filt
+    filt --> tgt
+    tgt --> lv
+    lv --> line
+    line -- "yes" --> det
+    line -- "no" --> carrot
+    det --> carrot
+    carrot --> box
+    box -- "yes, project out" --> ball
+    box -- "no" --> ball
+    ball -- "no" --> done
+    ball -- "yes" --> out
+    out -- "yes" --> circ
+    out -- "no" --> app
+    app -- "yes" --> push
+    app -- "no" --> done
+    circ --> done
+    push --> done
+```
 
 ### Trajectory Sampling (`trajsample`) Architecture & Optimizations
 
