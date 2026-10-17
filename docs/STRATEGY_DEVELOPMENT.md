@@ -246,8 +246,9 @@ it, a reference range from the latest round-robin and what an off value usually 
 there before adding a metric: it probably exists.
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that
-never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L), and use
-the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
+never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L) and by
+shots on target, the one outcome estimator (EXPECTED STANDINGS; why and its rules in
+`docs/signals.md`, "Ranking"), and use the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
 ## Real matches

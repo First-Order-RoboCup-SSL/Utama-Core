@@ -51,6 +51,9 @@ One term per thing; reuse these instead of coining new ones.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
+- **Outcome estimator / expected standings** — a match stat validated to predict other matches'
+  results better than goals do, used to rank and screen (today only shots on target; the round-robin's
+  EXPECTED STANDINGS). Kept only while it keeps predicting; decide with goals. `docs/signals.md`, "Ranking".
 - **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
@@ -154,7 +157,7 @@ need most:
   created and conceded, ball losses, pass receptions, restarts), grouped by the question it
   answers, with where it lives in `summary.json`, a reference range and what an off value means.
   Read it when designing or debugging a strategy, and before adding a metric; they are
-  diagnostics, not objectives.
+  diagnostics, not objectives, except the outcome estimators in its "Ranking" section.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
   results per `build_*_kernel_strategy` factory.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real

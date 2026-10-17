@@ -105,6 +105,7 @@ from tools.evaluation.match import (  # noqa: F401 -- re-exported for callers im
 )
 from tools.evaluation.match import run_match as _lib_run_match
 from utama_core.analysis import restart_outcomes, turnover_breakdown
+from utama_core.analysis.expected_standings import expected_standings
 from utama_core.analysis.strategy_table import strategy_table
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_cache
@@ -646,6 +647,8 @@ def main() -> None:
 
     summary["strategies"] = strategy_table(summary["results"], real_losses_by_match, chances_by_match)
     _print_strategy_table(summary["strategies"])
+    summary["expected_standings"] = expected_standings(summary["results"])
+    _print_expected_standings(summary["expected_standings"])
     _print_loss_kinds(summary["strategies"])
     _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
@@ -837,6 +840,14 @@ def _print_strategy_table(table: dict[str, dict]) -> None:
             f"{t['goals_against'] / n:>5.2f} {t['shots'] / n:>6.2f} {t['completed_passes'] / n:>7.1f} "
             f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7} {t['stalled']:>8}"
         )
+
+
+def _print_expected_standings(table: dict[str, dict[str, float]]) -> None:
+    """Strengths from goals and from shots on target (`analysis.expected_standings`)."""
+    print("\nEXPECTED STANDINGS (margin per match over an average opponent; shots predict other matches better):")
+    print(f"  {'strategy':<32} {'shots':>6} {'goals':>6}")
+    for name, t in sorted(table.items(), key=lambda kv: -kv[1]["shots"]):
+        print(f"  {_short_name(name):<32} {t['shots']:>+6.2f} {t['goals']:>+6.2f}")
 
 
 def _print_loss_kinds(table: dict[str, dict]) -> None:
