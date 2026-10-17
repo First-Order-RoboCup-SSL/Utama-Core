@@ -170,6 +170,16 @@ every outfield robot *before* any `Tactic` ticks, reusing the `*Step` classes in
 `custom_referee/actions.py`. Strategies can override a restart formation via
 `Strategy(referee_overrides=...)`. See `docs/custom_referee.md`.
 
+To see where the override sends every robot for a restart, run `tools/restart_picture.py`
+(`REPLAY.npz --t S`, or `--all-restarts` for one small panel per restart command in the replay). It
+records each commanded target without changing the engine, and flags a target inside the 0.8 m keep-out
+or a defence area it must avoid. Shown below: one match's restarts from our side (top) and from the other
+team's side (bottom), and a free kick against us where the robot inside the keep-out is moved to its edge.
+
+![Referee override targets for each restart, our side](img/restart_picture/restarts_friendly.png)
+![Referee override targets for each restart, the other team's side](img/restart_picture/restarts_enemy.png)
+![A free kick against us: the robot inside the keep-out is cleared to its edge](img/restart_picture/free_kick_against_us.png)
+
 What each referee command makes our robots do, and when tactics take control again. "Ours" and
 "theirs" are resolved against our team colour in `RefereeOverride._step_for`.
 
