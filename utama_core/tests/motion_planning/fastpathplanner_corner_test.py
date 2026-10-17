@@ -38,7 +38,9 @@ _ARRIVED_M = 0.1
 # Real enemy defense area with my_team_is_right=False (enemy goal at +x).
 _BOX = (3.5, 4.5, -1.0, 1.0)
 _SEEDS = range(40)
-_KNOWN_STUCK = {0, 19, 26, 30}
+# 19 and 30 arrive since a robot pressed against a blocker may drive straight away from it
+# (planner.py step 3b).
+_KNOWN_STUCK = {0, 26}
 
 
 def _in_box(x: float, y: float) -> bool:

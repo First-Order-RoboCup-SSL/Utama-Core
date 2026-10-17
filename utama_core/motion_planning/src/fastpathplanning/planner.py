@@ -16,6 +16,7 @@ from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
     detour_around_circle,
     distance,
+    distance_between_line_segments,
     distance_point_to_segment,
     find_intersection,
 )
@@ -113,6 +114,15 @@ def _keeps_off_ball(game: Game) -> bool:
     if command not in _TEAM_RESTART_COMMANDS:
         return False
     return command.name.endswith("_YELLOW") != game.my_team_is_yellow
+
+
+def _leaving(our_pos: np.ndarray, target: np.ndarray, obstacle, clearance: float) -> bool:
+    """True if the robot at `our_pos` is inside `obstacle`'s clearance and the straight run
+    to `target` never takes it closer to the obstacle than it is now."""
+    here = distance_point_to_segment(our_pos, obstacle[0], obstacle[1])
+    if here >= clearance:
+        return False
+    return distance_between_line_segments(our_pos, target, obstacle[0], obstacle[1]) >= here - 1e-9
 
 
 class FastPathPlanner:
@@ -1566,6 +1576,21 @@ class FastPathPlanner:
         routing_obstacles = (
             obstacles if not routing_exempt else [o for o in obstacles if _segment_key(o) not in routing_exempt]
         )
+
+        # 3b. A robot already inside another robot's clearance (pressed against it) can plan
+        # no segment out: each starts in collision, the straight one away too, and the detour
+        # round it can run back through it. Leave out of routing each robot obstacle the robot
+        # is inside whose distance only grows along the straight run to the target; it counts
+        # again once the robot is clear. Not static obstacles (box edges, field lines): there
+        # the clearance itself is the margin a robot must keep, and hugging it fails the
+        # defense-area and corner-route tests. Moments placement_in_corner_traps_defender and
+        # free_kick_defender_dodges_into_ball: defenders pressed against another robot were
+        # routed back through it and toward the ball.
+        routing_obstacles = [
+            o
+            for o in routing_obstacles
+            if _segment_key(o) in self._obstacle_cache_static_keys or not _leaving(our_pos, safe_target, o, clearance)
+        ]
 
         # 4. Plan geometric path. Recompute-skip: if this robot was asked for
         # essentially the same target last call and every segment of the

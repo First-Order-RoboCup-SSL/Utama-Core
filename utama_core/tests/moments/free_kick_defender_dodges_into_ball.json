@@ -11,7 +11,7 @@
   "checks": [
     "keeps_clear"
   ],
-  "known_failure": "planner.py step 8 leaves a robot already inside the keep-out circle unguarded, so its sidestep round a teammate can cut toward the ball",
+  "known_failure": null,
   "designated_position": null,
   "sim_noise": {
     "seed": 2,
