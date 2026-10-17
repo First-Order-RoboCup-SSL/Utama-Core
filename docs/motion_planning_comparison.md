@@ -100,7 +100,7 @@ flowchart TD
     obs["Obstacles: moving robots within LOOK_AHEAD_RANGE as ghost segments, plus static walls<br/>_get_obstacles, _refresh_obstacle_cache"]
     filt["Drop boundary walls if the target is off the field;<br/>drop defense-area walls if _enemy_defense_area_retrieval_exempt"]
     tgt["Target: project out of enemy box unless exempt, then sanitize_target<br/>ball-adjacent walls exempt when the target is at the ball"]
-    lv{"Robot inside a robot's clearance and moving away from it?<br/>_leaving"}
+    lv["Routing obstacles: drop each robot the robot is inside the clearance of<br/>and moving away from (_leaving), so it can drive straight out"]
     line{"Straight run to target collides?<br/>check_segment, collides"}
     det["Detour via subgoal on either side, with side hysteresis (DETOUR_SWITCH_MARGIN)<br/>recompute-skip reuses the last detour if target and robot barely moved"]
     carrot["Carrot: smooth_path, PROJECTION_DISTANCE along the first segment,<br/>clamped to clearance, averaged with the next segment"]

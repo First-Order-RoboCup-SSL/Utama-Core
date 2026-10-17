@@ -82,7 +82,7 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | `DefenseAreaRule` | live play | An extra defender (> `max_defenders`) touching the ball in its own area: penalty. An attacker touching the ball while at least partly in ours: non-stopping, 2 s re-raise (§8.4.2). |
 | `KeepOutRule` | `DIRECT_FREE_*`, `PREPARE_KICKOFF_*` | Defending team within 0.5m for 30 consecutive frames: non-stopping, 2 s re-raise, restarts the free kick's 10 s clock (§8.4.3). Not during bare `STOP` or penalties, nor once a free kick is taken (stage 3 of the state machine: the ball moved 0.05m, so it is live). |
 | `PenaltyTimeLimitRule` | `NORMAL_START`/`FORCE_START` after `PREPARE_PENALTY_*` | Penalty still in play 10 s after its normal start: goal kick for the defenders (§5.3.5). |
-| `NoProgressRule` | live play | Ball hasn't moved 0.05 m in 10 s: `STOP` then `FORCE_START` where it lies (§8.1). The clock waits for the ball to be in play (a `NORMAL_START` restart: 0.05 m of movement or the 10 s auto-in-play) and is held while the ball is inside either defense area. Last in the list, so a real foul on the same tick wins. |
+| `NoProgressRule` | live play | Ball hasn't moved 0.05 m in 10 s: `STOP` then `FORCE_START` where it lies, moved out of the opponent's defense area if it is inside it (`legal_restart_position`, §8.1). The clock waits for the ball to be in play (a `NORMAL_START` restart: 0.05 m of movement or the 10 s auto-in-play) and is held while the ball is inside either defense area. Last in the list, so a real foul on the same tick wins. |
 | `PushingRule`, `KeeperHeldBallRule`, `ExcessiveDribblingRule`, `RobotStopSpeedRule`, `CrashingRule`, `DefenseAreaStoppageRule`, `BallPlacementInterferenceRule` | see each rule file | SSL §8.3/8.4 audit (`434ab29`). Rationale per rule: `custom_referee_design_decisions.md`. |
 
 ## State machine and auto-advance
@@ -94,7 +94,7 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 | # | Transition | Trigger |
 |---|---|---|
 | 1 | `STOP` → queued restart | all robots ≥0.5m from ball (15s clear timeout) |
-| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position (kick-off: and every robot in its own half, waited for at most 10 s), held 2s |
+| 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position (kick-off: and every robot in its own half, waited for at most 10 s past the prepare timer, `_KICKOFF_POSITIONING_CAP_S`), held 2s |
 | 3 | `DIRECT_FREE_*` → `NORMAL_START` | the free kick is taken: the ball has moved ≥0.05m from where it was when the command began (at once, from any kick during the preparation); or kicker ≤0.3m from ball, defenders ≥0.5m, held 2s |
 | 4 | `BALL_PLACEMENT_*` → next command | ball ≤0.15m from target, held 2s (10s placement timeout) |
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |
@@ -185,9 +185,10 @@ relaxed profile). Copy `simulation.yaml`/`human.yaml` to start a new profile.
 
 Pass `StrategyRunner(..., referee=CustomReferee(...))`. Then the UDP `RefereeMessageReceiver` is
 not started; `referee.step()` runs each tick and feeds `ref_buffer`
-(→ `RefereeRefiner` → `game.referee` → `RefereeOverride`); and on the edge into `STOP` with a
-`designated_position`, the ball is teleported there when a `sim_controller` exists (skipped in
-Real). `StrategyRunner` only checks `isinstance(referee, CustomReferee)`, so subclasses work
+(→ `RefereeRefiner` → `game.referee` → `RefereeOverride`); and when a `sim_controller` exists (skipped in
+Real) the ball is teleported to the restart's `designated_position`: on entry to `BALL_PLACEMENT_*`
+for a restart with a spot (fouls, goals, half time; the restart itself follows), or on the edge into
+a `STOP` whose next command is `FORCE_START` (no progress), which then force-starts. `StrategyRunner` only checks `isinstance(referee, CustomReferee)`, so subclasses work
 unchanged. `CustomReferee.reset()` restores score/stage/command/timers for a new RL episode
 (`BaseRule.reset_for_new_episode()` also clears `GoalRule`'s cooldown); call `seed_clock()`
 again afterwards.
