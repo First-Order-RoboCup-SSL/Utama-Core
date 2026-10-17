@@ -104,11 +104,10 @@ from tools.evaluation.match import (  # noqa: F401 -- re-exported for callers im
     _stats_to_dict,
 )
 from tools.evaluation.match import run_match as _lib_run_match
-from utama_core.analysis import restart_outcomes, turnover_breakdown
-from utama_core.analysis.expected_standings import expected_standings
+from utama_core.analysis import ratings, restart_outcomes, turnover_breakdown
 from utama_core.analysis.strategy_table import strategy_table
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.replay import match_cache
+from utama_core.replay import eval_ledger, match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 
@@ -647,8 +646,8 @@ def main() -> None:
 
     summary["strategies"] = strategy_table(summary["results"], real_losses_by_match, chances_by_match)
     _print_strategy_table(summary["strategies"])
-    summary["expected_standings"] = expected_standings(summary["results"])
-    _print_expected_standings(summary["expected_standings"])
+    summary["ratings"] = _ratings(summary["results"])
+    _print_ratings(summary["ratings"])
     _print_loss_kinds(summary["strategies"])
     _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
@@ -658,6 +657,7 @@ def main() -> None:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
         print(f"\nFull results + stats: replays/{run_id}/summary.json")
+        _append_to_ledger(results, run_id, match_seconds, control_scheme, fuzz_seed, sim_noise_dict)
 
     if strict and reuse and mismatches:
         raise SystemExit(f"--strict: {len(mismatches)} spot-checked match(es) differ from their stored records")
@@ -666,6 +666,34 @@ def main() -> None:
             f"--strict: {len(stalled_matches)} match(es) with stall events, "
             f"{len(backstop_matches)} match(es) flagged by the possession backstop"
         )
+
+
+def _append_to_ledger(
+    results: list[MatchResult],
+    run_id: str,
+    match_seconds: float,
+    control_scheme: str,
+    fuzz_seed: Optional[int],
+    sim_noise_dict: Optional[dict],
+) -> None:
+    """Add the run's matches to the evaluation ledger (`replay/eval_ledger.py`), so
+    `evaluate.py`'s ratings count them. Only matches in `evaluate.py`'s setting: config_a on
+    the right kicking off, no restart fuzzing."""
+    if fuzz_seed is not None:
+        return
+    graph = CodeGraph()
+    env = eval_ledger.environment(
+        graph, duration_seconds=match_seconds, sim_noise=sim_noise_dict, control_scheme=control_scheme
+    )
+    seed = sim_noise_dict.get("seed") if sim_noise_dict else None
+    eval_ledger.append(
+        (
+            eval_ledger.entry(env, graph, dataclasses.asdict(r), seed, source=run_id)
+            for r in results
+            if r.a_is_right and r.a_kicks_off
+        ),
+        Path(REPLAY_BASE_PATH) / "eval" / "ledger.jsonl",  # this module's, so tests can redirect it
+    )
 
 
 def _tag(pair: tuple[str, str]) -> str:
@@ -842,12 +870,16 @@ def _print_strategy_table(table: dict[str, dict]) -> None:
         )
 
 
-def _print_expected_standings(table: dict[str, dict[str, float]]) -> None:
-    """Strengths from goals and from shots on target (`analysis.expected_standings`)."""
-    print("\nEXPECTED STANDINGS (margin per match over an average opponent; shots predict other matches better):")
-    print(f"  {'strategy':<32} {'shots':>6} {'goals':>6}")
-    for name, t in sorted(table.items(), key=lambda kv: -kv[1]["shots"]):
-        print(f"  {_short_name(name):<32} {t['shots']:>+6.2f} {t['goals']:>+6.2f}")
+def _ratings(results: list[dict]) -> dict[str, dict[str, float]]:
+    """Each config's strength from goal margins, with its SD (`analysis.ratings`)."""
+    fit = ratings.fit([(r["config_a"], r["config_b"], r["score_a"] - r["score_b"]) for r in results])
+    return {n: dict(zip(("strength", "sd"), (round(v, 2) for v in fit.strength(n)))) for n in fit.names}
+
+
+def _print_ratings(table: dict[str, dict[str, float]]) -> None:
+    print("\nRATINGS (goals per match over an average opponent, ± SD; evaluate.py decides one candidate):")
+    for name, t in sorted(table.items(), key=lambda kv: -kv[1]["strength"]):
+        print(f"  {_short_name(name):<32} {t['strength']:>+6.2f} ± {t['sd']:.2f}")
 
 
 def _print_loss_kinds(table: dict[str, dict]) -> None:

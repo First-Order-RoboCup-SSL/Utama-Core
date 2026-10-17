@@ -7,41 +7,29 @@ reference range, and follow "if it's off". Add a signal here when you add one an
 Signals are diagnostics, not objectives: use them to explain a result, to find what a strategy
 does badly, and to notice a shared primitive (reception, carrying, the planner, the referee)
 failing every strategy at once. A strategy that never passes or shoots loses the ball least, so
-no signal is "better" on its own. Ranking is the one exception, under strict rules: see
-[Ranking](#ranking).
+no signal is "better" on its own. Ranking uses goals alone: see [Ranking](#ranking).
 
 ## Ranking
 
-Three tiers, each with its own use:
+Strategies are ranked by goals only, through ratings fitted on match margins
+(`tools/evaluation/evaluate.py`; `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy").
+Signals explain a result; none of them ranks or is a search objective.
 
-| Tier | What | Used for |
-|---|---|---|
-| Signals | everything else on this page: possession, territory, ball losses, stalls, passes ... | explaining; never ranking, never a search objective |
-| Outcome estimators | shots on target (EXPECTED STANDINGS, `expected_standings[*].shots`) | ranking and screening, while they keep predicting results |
-| Goals | match results (`standings`, `expected_standings[*].goals`) | the final decision on anything kept |
+Tested and rejected as rankers (2026-10-17, two noisy round-robins of the same 12 strategies with
+different seeds, `tournament_20261016_201213` and `tournament_20261017_002337`; scripts in
+`~/dev/ssl/eval-infra/` and `~/dev/ssl/xg-analysis/metrics_quick/`):
 
-An outcome estimator is a less noisy reading of who wins, not a way to play: it earns its tier
-only by predicting the goal differences of matches it was not fitted on. On the 66-match noisy
-baseline `tournament_20261016_201213`, strengths fitted on half the matches predicted the other
-half's goal differences better from shots on target (r 0.28) than from goals (0.17) and agreed
-between halves more (0.53 against 0.28), for roughly a third of the matches for the same
-predictive power. Shots on target with goals taken out predict as well, so it is not goals
-counted twice. On the deterministic sim (`tournament_20261014_144456`) the two were level.
-
-- **Check it every run**: compare the shots ranking with the next run's goals. If it stops
-  predicting better than goals, drop it back to a signal.
-- **Signals in this tier must be hard to inflate without nearly scoring.** Possession,
-  completed passes and possession under pressure agreed between halves (0.60-0.64) but
-  predicted the *other* way (r -0.22 to -0.37 on that baseline): in this pool the strategies
-  that keep the ball lose. Territory and attacking-third entries predicted nothing.
-- **Candidates, tested and not adopted** (same test, `~/dev/ssl/xg-analysis/metrics_quick/`):
-  shots after free kicks predicted best (r 0.36, agreement 0.71), but 43% of sim shots on target
-  follow a free kick against ~19% of real goals from set pieces, so it would rank how well a
-  strategy uses a sim weakness; xG difference (real-data model, `analysis/realism/xg.py`; 0.22,
-  0.65) needs the scorecard's shot pass; a ridge combination of all metrics (0.25-0.30, 0.48-0.61)
-  adds nothing over shots and needs its weights refitted for every pool.
-- **Decide with goals.** A search may screen by an estimator but keeps a candidate only on match
-  results over enough matches.
+- **Shots on target.** Within one run, strengths from shots predicted held-out matches about as
+  well as goals; across runs, goal strengths from run 1 predicted run 2's goal strengths better
+  (rank correlation 0.57) than shot strengths did (0.37), leaving out split_shape, whose margin
+  swung from +1.5 to +4.9 between seeds and dominates any correlation that includes it.
+- **xG** (real-data model, `analysis/realism/xg.py`): sim keepers save twice as often as real
+  ones, so it misjudges sim strategies by how they shoot.
+- **Possession, completed passes, possession under pressure**: consistent between runs but
+  predict *losing* in this pool. Territory and attacking-third entries predict nothing.
+- **Weighted combinations** of match stats: the weights depend on the strategy pool they are
+  fitted on, so a new strategy's score would depend on unrelated strategies.
+- **A value model** of the game state (`docs/sim_realism.md`): no more reliable than goals.
 
 ## Where they come from
 
@@ -53,7 +41,7 @@ Every saved `tools/evaluation/round_robin.py` run prints its sections and writes
 | Standings, STRATEGIES | `standings`, `strategies[*]` | `MatchStats` (live, every match) |
 | LOSS KINDS, BALL LOSSES, `passes:` line | `strategies[*].real_loss_kinds_as_a`, `ball_losses` (tables in `ball_losses.md`) | `analysis/turnover_breakdown.py` |
 | CHANCES | `strategies[*].chances`, `pass_progress_m`, `forward_pass_share` | `analysis/chances.py` |
-| EXPECTED STANDINGS | `expected_standings` | `analysis/expected_standings.py` ([Ranking](#ranking)) |
+| RATINGS | `ratings` | `analysis/ratings.py` ([Ranking](#ranking)) |
 | FOULS | `fouls` | `MatchStats` |
 | STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `MatchStats` stall watchdog |
 | RESTARTS | `restarts` | `analysis/restart_outcomes.py` |

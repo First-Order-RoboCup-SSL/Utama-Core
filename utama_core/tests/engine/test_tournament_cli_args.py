@@ -96,6 +96,10 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
     summary = json.loads((run_dirs[0] / "summary.json").read_text())
     assert summary["fuzz_seed"] is None
     assert summary["fuzz_interval_s"] is None
+    # The run's matches go to the evaluation ledger under REPLAY_BASE_PATH, so a test run never
+    # writes into the real one.
+    (line,) = (tmp_path / "eval" / "ledger.jsonl").read_text().splitlines()
+    assert json.loads(line)["source"] == run_dirs[0].name
 
 
 def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkeypatch):
@@ -201,6 +205,7 @@ def test_match_seconds_keys_the_match_cache_and_is_recorded_in_the_summary(tmp_p
     monkeypatch.setattr(tournament, "run_match", _stub_result)
     monkeypatch.setattr(tournament, "match_key", _fake_match_key)
     monkeypatch.setattr(tournament, "CodeGraph", lambda: None)
+    monkeypatch.setattr(tournament, "_append_to_ledger", lambda *a: None)  # needs real fingerprints
     monkeypatch.setattr(tournament.match_cache, "MatchCache", _EmptyCache)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(

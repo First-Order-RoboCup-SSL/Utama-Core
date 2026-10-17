@@ -145,3 +145,12 @@ def test_one_deterministic_freeze_against_two_opponents_is_one_incident():
         ["overload_flow_vs_low_block"],
     ]
     assert incidents[0]["kind"] == "COMMITTED_FROZEN"
+
+
+def test_ratings_table_ranks_by_goal_margin_with_an_sd():
+    from tools.evaluation.round_robin import _ratings
+
+    table = _ratings([_result("x", "y", 3, 0), _result("y", "z", 2, 0), _result("x", "z", 4, 1)])
+    x, z = table["build_x_kernel_strategy"], table["build_z_kernel_strategy"]
+    assert x["strength"] > table["build_y_kernel_strategy"]["strength"] > z["strength"]
+    assert x["sd"] > 0

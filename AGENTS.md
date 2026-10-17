@@ -28,8 +28,9 @@ exists yet: say so in your change rather than guessing.
 One term per thing; reuse these instead of coining new ones.
 
 - **Round-robin / tournament run** — every strategy config plays every other once
-  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
-  "which strategy is better". Slow in full; with `--reuse` only matches whose code changed rerun.
+  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the evaluation ledger.
+  The check for stalls and the occasional health check of the whole catalog; a single
+  strategy is judged with `evaluate.py` (below). With `--reuse` only matches whose code changed rerun.
 - **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
   `metric_correlation.py` uses points per match (3 a win, 1 a draw) and goal difference.
 - **Start** — one situation (see below) the scenario bench replays for 10 s, tagged with its
@@ -51,9 +52,14 @@ One term per thing; reuse these instead of coining new ones.
 - **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Outcome estimator / expected standings** — a match stat validated to predict other matches'
-  results better than goals do, used to rank and screen (today only shots on target; the round-robin's
-  EXPECTED STANDINGS). Kept only while it keeps predicting; decide with goals. `docs/signals.md`, "Ranking".
+- **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a
+  candidate stronger than the champion of a fixed, versioned reference pool
+  (`tools/evaluation/pools/pool_vN.json`)? Rounds of matches against the pool's opponents under
+  seeded sim noise, decided on paired results (candidate and champion against the same opponent
+  under the same noise) and stopping once the answer is clear; ratings (strength ± SD in goals
+  per match, `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
+  Goals only: shots, xG and the other signals were tested as rankers and rejected
+  (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
 - **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
@@ -157,7 +163,7 @@ need most:
   created and conceded, ball losses, pass receptions, restarts), grouped by the question it
   answers, with where it lives in `summary.json`, a reference range and what an off value means.
   Read it when designing or debugging a strategy, and before adding a metric; they are
-  diagnostics, not objectives, except the outcome estimators in its "Ranking" section.
+  diagnostics, not objectives.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
   results per `build_*_kernel_strategy` factory.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real

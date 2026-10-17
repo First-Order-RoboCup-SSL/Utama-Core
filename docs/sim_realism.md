@@ -443,6 +443,38 @@ the last 80 live s, and weighting matches equally, changes little: H = 10 s AUC 
 split-half 0.42 (discounted goals alone 0.39, goal difference per live minute 0.30).
 Writing `ball_seen` into converted logs would let a later pass tell hidden from stopped.
 
+## Evaluation infrastructure (2026-10-17)
+
+Built instead of a cheaper outcome (V, shots, xG, stat combinations: all rejected, see
+`docs/signals.md`, "Ranking"): `tools/evaluation/evaluate.py` judges a candidate against the
+champion of a fixed, versioned pool (`tools/evaluation/pools/pool_v1.json`) in rounds of seeded
+noisy matches, with ratings from goal margins (`analysis/ratings.py`) and a ledger of every
+match (`replays/eval/ledger.jsonl`); see `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy".
+This covers Phase 4's "several seeds per pairing, paired seeds for A/B".
+
+Measured on a second noisy round-robin (`tournament_20261017_002337`, seed 2, same 12
+strategies and code as `tournament_20261016_201213`, seed 1):
+- Per-match goal-difference SD 1.85 (seed 1) and 2.83 (seed 2); residual SD after strengths 1.9,
+  close to normal tails. "~3 goals" above was the old sim.
+- The noise is drawn per colour and robot, and config_a is always yellow: seed 1 gave yellow
+  +0.26 ± 0.23 goals per match, seed 2 gave blue +0.64 ± 0.35. split_shape went from +1.5 to
+  +4.9 between seeds. evaluate.py plays the candidate and the champion in the same colour for
+  each seed.
+- Same-seed matches against a common opponent correlate slightly between *different*
+  strategies (residual correlation +0.03 against -0.11 across seeds), but fully for identical
+  code: a match is a pure function of (both strategies' code, seed, colours). A byte copy of
+  split_shape (6 rounds, 2026-10-17) reproduced every one of the champion's 24 results against
+  the opponents, while the old decision rule (from the ratings fit, which treats every match
+  as independent) put P(copy better) at 0.93 after four lucky head-to-heads. The decision now
+  uses the paired differences, with their spread estimated from the data
+  (`ratings.paired_difference`): the copy stays at P 0.55-0.68, undecided. Small edits of a
+  strategy, the common case, sit between the two and gain the most.
+- Mirror matches of one strategy (yellow minus blue over seeds 1-6: +1, -4, +1, 0, -2, -9) show
+  how much a colour's robot draws can matter in one match. Giving both teams the same draws
+  narrowed it (+2, 0, -1, -5, +1, 0) but not to zero, the rest being the match's own chaos; not
+  adopted, since it would replay the whole ledger and the paired decision already cancels the
+  draws (candidate and champion get identical ones against each opponent).
+
 ## P2: Structured strategy search
 
 Search over what the repo already composes:
@@ -451,8 +483,8 @@ Search over what the repo already composes:
 - the partitioner that splits robots between slots (for example `split_shape`'s
   possession split).
 
-Candidates are scored by the value signal plus match results in the randomized sim, with paired
-seeds. The 2026-10-11 search (PR #142) is the manual version of this loop: candidates
+Candidates are scored by `evaluate.py` (match results in the randomized sim, paired seeds; the
+value signal was dropped as a scorer). The 2026-10-11 search (PR #142) is the manual version of this loop: candidates
 written by hand, screened by round-robin, held out on a ladder. Its lesson carries over: a lead
 from one match per pairing is not evidence.
 

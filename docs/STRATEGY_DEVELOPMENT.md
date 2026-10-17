@@ -93,9 +93,10 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
 2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
    Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
    before anything else.
-3. **Matches:** a strict round-robin with it in (`round_robin.py --strict --reuse`), 0 stalls.
-   With `--reuse` a change to one strategy plays only its own matches, one per other config, so this is the
-   judgement, not a final confirmation. Record the result in `docs/strategies.md`.
+3. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
+   is it better than the pool's champion, worse, or not clearly either? Several candidates go in
+   one call. A strict round-robin (`round_robin.py --strict --reuse`) is the check for stalls
+   and the occasional health check of the whole catalog, no longer the way to judge one change.
 4. **Bench A/B**, only when the round-robin can't answer: the change is too small to move a
    row of mostly draws, or you need to know which kind of start it changed. Run it against the
    nearest existing strategy, the one it differs from in a single idea, so the A/B tests that
@@ -130,6 +131,44 @@ error, about 2.3 goals a match, is wider than the spread between them: see
 and a bench result alone never accepts a change. Two round-robins of near-identical code agree
 at Spearman +0.97, but that is not a ceiling: rsim is deterministic, so they agree largely
 because the code is near-identical.
+
+### Evaluating a strategy
+
+`tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...]` answers one question per candidate: is
+it stronger than the champion of a fixed reference pool, in goals, under the realistic sim noise?
+
+- **The pool** (`tools/evaluation/pools/pool_v1.json`): a champion, six opponents chosen for
+  spread of styles, three held-out opponents and the sim noise. It changes only on purpose, as
+  a new version, so a result means the same thing next month; it does not follow the latest
+  standings.
+- **Rounds.** In round k every candidate plays each opponent and the champion once, and the
+  champion plays each opponent, all with noise seed k and the side under test in the same colour
+  (the noise is drawn per colour and robot, so one seed can favour a colour by half a goal). A
+  candidate and the champion are compared on the same opponents under the same noise.
+- **The decision** (`ratings.paired_difference`): the candidate's goal difference against each
+  opponent minus the champion's, same opponent, seed and colour, from rounds 1..k, plus their
+  head-to-head matches. Paired results face the same noise, so much of it cancels: all of it
+  for identical code (a byte copy of the champion gets 24 diffs of exactly 0 and stays
+  undecided), little for unrelated strategies. P(candidate stronger) >= 0.99 is **better**,
+  <= 0.2 **worse**, and after 6 rounds it is **undecided**: not clearly better, so drop it.
+  Simulated (match noise SD 1.9 goals): two equal strategies are called better at most 3% of the
+  time. An unrelated strategy one goal per match worse is dropped after ~2 rounds (~14
+  matches), one goal better found 61% of the time, half a goal 20%. A small edit of the champion
+  (paired results correlated ~0.9): one goal better found every time in ~3 rounds, half a goal
+  55%. Small gains of unrelated strategies are below what matches resolve at this cost.
+- **Ratings** (`analysis/ratings.py`): a strength per strategy in goals per match with its SD,
+  fitted on every match in the ledger; printed at the end, and the match noise for the decision.
+- **The ledger** (`replays/eval/ledger.jsonl`, `replay/eval_ledger.py`): one line per match from
+  evaluate.py and round-robins, keyed by the code that played it. A match is never played twice;
+  the champion's matches are played once per seed and reused by every candidate, and editing a
+  strategy starts its record afresh. Replays are not kept (rerun one with `round_robin.py --pair
+  A B --sim-noise` and the pool's noise with that seed).
+- **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
+  be clearly worse against opponents never used for selection. Then edit the pool's champion by
+  hand. Check its per-opponent table: a candidate far better against one opponent and worse
+  against the rest is a matchup, not a better strategy.
+- **Cost.** ~45 min of laptop per 66 matches on 8 workers. A clearly worse candidate costs ~14
+  matches (~10 min), a close one up to 42.
 
 ### Strategy branches
 
@@ -246,9 +285,8 @@ it, a reference range from the latest round-robin and what an off value usually 
 there before adding a metric: it probably exists.
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that
-never passes or shoots loses the ball least. Rank strategies by results (goals, W-D-L) and by
-shots on target, the one outcome estimator (EXPECTED STANDINGS; why and its rules in
-`docs/signals.md`, "Ranking"), and use the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
+never passes or shoots loses the ball least. Rank strategies by results (goals, through
+the ratings: `docs/signals.md`, "Ranking"), and use the rest to explain why one wins or loses, and which shared primitive (reception, carrying, the
 planner, the referee) is failing every strategy at once.
 
 ## Real matches
