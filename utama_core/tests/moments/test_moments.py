@@ -45,3 +45,16 @@ def test_keeps_clear_flags_a_robot_still_inside_after_the_grace_and_ignores_our_
     assert "inside the keep-out circle" in moments.keeps_clear(stuck)[0]
     ours = [_tick(i * dt, RefereeCommand.DIRECT_FREE_YELLOW, (0.0, 0.0), {2: (0.3, 0.0)}) for i in range(n)]
     assert moments.keeps_clear(ours) == []
+
+
+def test_a_tactic_that_is_never_applicable_fails_its_moment(monkeypatch):
+    """Its robots would hold position for the whole moment, so the moment must not pass."""
+    import dataclasses
+
+    from utama_core.tactics.give_and_go import GiveAndGoTactic
+
+    monkeypatch.setattr(GiveAndGoTactic, "applicable", lambda self, game: False)
+    m = moments.template("never_ran_probe", "a note", "NORMAL_START", ["keeps_clear"])
+    m = dataclasses.replace(m, seconds=0.2, tactic={"class": "GiveAndGoTactic", "robots": [1, 2], "mem": None})
+    failures = moments.judge(m, moments.play(m, moments.strategies_for(m)[0]))
+    assert "GiveAndGoTactic never ran on robots [1, 2]" in failures

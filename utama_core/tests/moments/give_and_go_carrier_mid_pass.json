@@ -1,12 +1,12 @@
 {
   "name": "give_and_go_carrier_mid_pass",
-  "note": "Our GiveAndGo carrier (robot 1) holds the ball mid-hop to receiver 2 at a 1.6 m lane. The hop must be a pass: the carrier must not dribble the ball more than the 1 m cap (SSL 8.4.1, excessive_dribbling) while it waits for the lane. double_touch is not checked: the rule only covers a restart kick (DIRECT_FREE/PREPARE_KICKOFF/PREPARE_PENALTY), and this moment starts live play.",
+  "note": "Our GiveAndGo carrier (robot 1) holds the ball with receiver 2 on a 1.2 m open lane; on noise seeds 0-4 it kicks about 0.2 s in. The moment checks only that no referee rule is broken during the carry and the pass (\"*\"; excessive_dribbling catches a carry over the 1 m cap, SSL 8.4.1). It does not check that the kick happens or is caught (at seed 1 it lands about 0.1 m wide). double_touch only covers a restart kick, so it cannot fire from live play.",
   "source": null,
   "strategy": "all",
   "opponent": "build_split_shape_kernel_strategy",
-  "seconds": 3.0,
+  "seconds": 2.0,
   "checks": [
-    "excessive_dribbling"
+    "*"
   ],
   "known_failure": null,
   "designated_position": null,
@@ -72,17 +72,17 @@
       },
       {
         "id": 1,
-        "x": 1.6,
-        "y": 0.3,
-        "orientation": 3.141592653589793,
+        "x": 1.4,
+        "y": 0.385,
+        "orientation": -2.13,
         "vx": 0.0,
         "vy": 0.0
       },
       {
         "id": 2,
-        "x": 0.4,
-        "y": -1.2,
-        "orientation": 3.141592653589793,
+        "x": 0.713,
+        "y": -0.717,
+        "orientation": 1.0,
         "vx": 0.0,
         "vy": 0.0
       },

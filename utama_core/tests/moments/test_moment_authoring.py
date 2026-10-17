@@ -266,3 +266,97 @@ def test_the_built_strategy_runs_the_tactic_from_its_mem_and_holds_the_rest():
     # An inapplicable or committed tactic is not offered: its robots hold instead.
     held = kernel._partitioner(None, free - {1, 2}, None, frozenset({moments.HOLD_ID}))
     assert held == {moments.HOLD_ID: frozenset({3, 4, 5})}
+
+
+# --- the tactic that never runs, `play --seed`, and the foul listing's restart side ---------------
+
+
+def test_a_tactic_moment_fails_for_the_robots_its_tactic_never_ticked_with():
+    from utama_core.entities.referee.referee_command import RefereeCommand
+
+    m = _tactic_moment()
+    never = [moments.Tick(t=0.0, command=RefereeCommand.NORMAL_START, ball=None, ours={}, our_speeds={}, our_foul=None)]
+    assert "GiveAndGoTactic never ran on robots [1, 2]" in moments.judge(m, never)
+    ran_one = [dataclasses.replace(never[0], tactic_robots=frozenset({1}))]
+    assert "GiveAndGoTactic never ran on robots [2]" in moments.judge(m, ran_one)
+    ran_both = [dataclasses.replace(never[0], tactic_robots=frozenset({1, 2}))]
+    assert not any("never ran" in f for f in moments.judge(m, ran_both))
+
+
+def test_with_seed_replaces_only_the_seed_and_does_not_mutate_the_moment():
+    m = _template()
+    seeded = moments.with_seed(m, 7)
+    assert seeded.sim_noise["seed"] == 7
+    assert {k: v for k, v in seeded.sim_noise.items() if k != "seed"} == {
+        k: v for k, v in m.sim_noise.items() if k != "seed"
+    }
+    assert m.sim_noise["seed"] == 1
+
+
+def test_with_seed_needs_noise_to_seed():
+    with pytest.raises(moments.MomentError, match=r"no sim_noise to seed"):
+        moments.with_seed(dataclasses.replace(_template(), sim_noise=None), 3)
+
+
+@pytest.mark.parametrize(
+    "command, we_are_yellow, side",
+    [
+        ("DIRECT_FREE_YELLOW", True, "ours"),
+        ("BALL_PLACEMENT_YELLOW", True, "ours"),
+        ("DIRECT_FREE_BLUE", True, "theirs"),
+        ("DIRECT_FREE_BLUE", False, "ours"),
+        ("NORMAL_START", True, None),
+        ("STOP", True, None),
+        ("TIMEOUT_YELLOW", True, None),
+    ],
+)
+def test_restart_side_is_ours_theirs_or_neither(command, we_are_yellow, side):
+    from utama_core.entities.referee.referee_command import RefereeCommand
+
+    assert moments.restart_side(RefereeCommand[command], we_are_yellow) == side
+    assert moments.restart_side(None, we_are_yellow) is None
+
+
+def test_our_fouls_names_the_command_active_and_the_restart_side(tmp_path):
+    import json
+
+    def foul(t, side="friendly", rule="keep_out"):
+        return {"rule": rule, "sim_time": t, "side": side, "robot_id": 1, "tactic": "X", "inferred": False}
+
+    results = [
+        {
+            "config_a": "build_a_kernel_strategy",
+            "config_b": "build_b_kernel_strategy",
+            "stats": {"fouls": [foul(1.0), foul(5.0), foul(12.0), foul(20.0), foul(6.0, side="enemy")]},
+        }
+    ]
+    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
+    rows = [
+        {"event": "referee", "sim_time": 0.0, "command": "NORMAL_START"},
+        {"event": "referee", "sim_time": 4.0, "command": "DIRECT_FREE_BLUE"},
+        {"event": "referee", "sim_time": 10.0, "command": "DIRECT_FREE_YELLOW"},
+    ]
+    (tmp_path / "a_vs_b.intentions.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+    fouls = moments.our_fouls(tmp_path)
+    assert [(f["sim_time"], f["command"], f["restart"]) for f in fouls] == [
+        (1.0, "NORMAL_START", None),
+        (5.0, "DIRECT_FREE_BLUE", "theirs"),
+        (12.0, "DIRECT_FREE_YELLOW", "ours"),
+        (20.0, "DIRECT_FREE_YELLOW", "ours"),
+    ]
+    kept = moments.without_own_restarts(fouls)
+    assert [f["sim_time"] for f in kept] == [1.0, 5.0]
+
+
+def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
+    import json
+
+    row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
+    results = [
+        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
+    ]
+    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
+    (fouls,) = moments.our_fouls(tmp_path)
+    assert fouls["command"] is None and fouls["restart"] is None
+    assert moments.without_own_restarts([fouls]) == [fouls]

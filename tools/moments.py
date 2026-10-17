@@ -32,23 +32,27 @@ outfield robots holding position, starting from `mem`: the tactic's own memory d
 fields by name (a field left out keeps its initial value; null means the initial memory). A
 value is None, bool, int, float, str, a tuple/list of those, or a Vector2D as [x, y]. Tactic
 moments are for live play (NORMAL_START, FORCE_START): the referee override still moves everyone
-during a restart. Their one entry is the tactic, so "strategy" must be left out.
+during a restart. Their one entry is the tactic, so "strategy" must be left out. A tactic moment
+fails when its tactic never ticks with one of its robots ("GiveAndGoTactic never ran on robots
+[1, 2]"): a tactic that is not applicable never runs, and its robots would silently hold.
 
 Hand-made moments: `new` writes a template (both teams in a fixed formation, ours on the right,
 the pool's noise with seed 1, source null) to edit by hand; `save` and `load` refuse an
 invalid one, naming each problem (ids, field lines, check and strategy names, tactic).
 
-List our side's fouls in a round-robin run, as starting points:
-    pixi run python tools/moments.py fouls replays/tournament_<id> [--rule keep_out]
-Capture one from a replay (its noise and designated position come with it):
+List our side's fouls in a round-robin run, as starting points, each with the referee command
+active then and whether that restart is ours or theirs (`--skip-own-restart` leaves out ours):
+    pixi run python tools/moments.py fouls replays/tournament_<id> [--rule keep_out] [--skip-own-restart]
+Capture one from a replay (its noise and designated position come with it; `--out` writes
+elsewhere than utama_core/tests/moments/):
     pixi run python tools/moments.py capture replays/tournament_<id>/<a>_vs_<b>.npz --t 254.65 \\
         --name free_kick_defender_drives_in --check keeps_clear --strategy <a> --opponent <b> \\
-        --note "..."
+        --note "..." [--out PATH]
 Write a hand-made one, then edit its positions and tactic in the JSON:
     pixi run python tools/moments.py new <name> --command NORMAL_START [--ball X Y] \\
         [--strategy NAME] [--seconds N] --check <checks> --note "..."
-Play one:
-    pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME]
+Play one (`--seed N` replays its noise with another seed, the JSON untouched):
+    pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
 """
 
 from __future__ import annotations
@@ -78,6 +82,7 @@ from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: 
 from utama_core.replay.scenario import (  # noqa: E402
     RobotState,
     Scenario,
+    _referee_command_at,
     scenario_from_replay,
 )
 
@@ -414,27 +419,33 @@ def _hint_name(hint) -> str:
     return hint if isinstance(hint, str) else getattr(hint, "__name__", None) or str(hint)
 
 
-def _started(cls: type, mem) -> type:
-    """`cls` whose `initial_mem()` is `mem` (a copy each time): a tactic that starts mid-play."""
-    return type(
-        cls.__name__,
-        (cls,),
-        {
-            "initial_mem": lambda self: copy.deepcopy(mem),
-            "__module__": cls.__module__,
-            "__qualname__": cls.__qualname__,
-        },
-    )
+def _started(cls: type, mem, ticked: Optional[set] = None) -> type:
+    """`cls` whose `initial_mem()` is `mem` (a copy each time): a tactic that starts mid-play.
+    With `ticked`, each tick adds its robot ids to that set, so a moment can tell it ran."""
+    attrs = {
+        "initial_mem": lambda self: copy.deepcopy(mem),
+        "__module__": cls.__module__,
+        "__qualname__": cls.__qualname__,
+    }
+    if ticked is not None:
+
+        def tick(self, game, ctx, robot_ids, memory):
+            ticked.update(robot_ids)
+            return cls.tick(self, game, ctx, robot_ids, memory)
+
+        attrs["tick"] = tick
+    return type(cls.__name__, (cls,), attrs)
 
 
 HOLD_ID = "hold"
 
 
-def build_tactic_kernel_strategy(outfield_robot_ids: tuple[int, ...], tactic: dict):
+def build_tactic_kernel_strategy(outfield_robot_ids: tuple[int, ...], tactic: dict, ticked: Optional[set] = None):
     """`build_kernel_strategy` for a tactic moment, built like the `build_*_kernel_strategy`
     factories (`strategy/clear_danger.py`): the moment's Tactic on its robots, the other outfield
     robots holding position (no motion command), and a partition that never changes. A tactic
-    that is committed (pinned) or not applicable keeps its robots out of the partition."""
+    that is committed (pinned) or not applicable keeps its robots out of the partition. `ticked`
+    collects the robot ids the Tactic ticks with (see `_started`)."""
     from utama_core.engine.context import TickContext
     from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
     from utama_core.engine.tactic import BaseTactic, TacticTag
@@ -452,7 +463,7 @@ def build_tactic_kernel_strategy(outfield_robot_ids: tuple[int, ...], tactic: di
     cls = tactic_classes()[tactic["class"]]
     tactic_id = cls.__name__
     robots = frozenset(tactic["robots"])
-    started = _started(cls, decode_mem(cls, tactic.get("mem")))
+    started = _started(cls, decode_mem(cls, tactic.get("mem")), ticked)
 
     def partitioner(game, free_robots, prev_partition, available_tactic_ids):
         mine = robots & free_robots
@@ -519,6 +530,13 @@ def template(
     )
 
 
+def with_seed(m: Moment, seed: int) -> Moment:
+    """`m` played with its sim noise's seed replaced (`play --seed`), the JSON untouched."""
+    if m.sim_noise is None:
+        raise MomentError(f"{m.name}: no sim_noise to seed (it plays without noise)")
+    return dataclasses.replace(m, sim_noise={**m.sim_noise, "seed": seed})
+
+
 @dataclasses.dataclass(frozen=True)
 class Tick:
     """What the checks see of one played tick, in our side's frame."""
@@ -529,14 +547,24 @@ class Tick:
     ours: dict[int, tuple[float, float]]  # robot id -> position
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
+    tactic_robots: frozenset[int] = frozenset()  # robots the moment's tactic ticked with this tick
+
+
+def restart_side(command: Optional[RefereeCommand], we_are_yellow: bool = True) -> Optional[str]:
+    """ "ours" for a restart our team takes, "theirs" for one the other team takes, None for
+    STOP, live play and timeouts."""
+    if command is None or command.name.startswith("TIMEOUT"):
+        return None
+    if command.name.endswith("YELLOW" if we_are_yellow else "BLUE"):
+        return "ours"
+    if command.name.endswith("BLUE" if we_are_yellow else "YELLOW"):
+        return "theirs"
+    return None
 
 
 def _restart_against_us(command: Optional[RefereeCommand], we_are_yellow: bool) -> bool:
     """STOP, or a restart the other team takes: when every robot of ours keeps out."""
-    if command is RefereeCommand.STOP:
-        return True
-    theirs = "BLUE" if we_are_yellow else "YELLOW"
-    return command is not None and command.name.endswith(theirs) and not command.name.startswith("TIMEOUT")
+    return command is RefereeCommand.STOP or restart_side(command, we_are_yellow) == "theirs"
 
 
 def keeps_clear(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
@@ -605,6 +633,11 @@ CHECKS = {"keeps_clear": keeps_clear, "stop_speed": stop_speed}
 def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
     """Every way `ticks` broke `m.checks`."""
     failures = []
+    if m.tactic is not None:
+        ran = frozenset().union(*(t.tactic_robots for t in ticks))
+        never = sorted(r for r in m.tactic["robots"] if r not in ran)
+        if never:
+            failures.append(f"{m.tactic['class']} never ran on robots {never}")
     for name in m.checks:
         if name in CHECKS:
             failures += CHECKS[name](ticks, we_are_yellow)
@@ -629,10 +662,14 @@ def play(m: Moment, strategy: str) -> list[Tick]:
     def side(name: str) -> AbstractStrategy:
         return AbstractStrategy(build_kernel_strategy=getattr(kernel_strategy, name)(OUTFIELD_ROBOT_IDS))
 
+    ticked: set[int] = set()  # robots the tactic ticked with since the last played tick
+
     def ours() -> AbstractStrategy:
         if m.tactic is None:
             return side(strategy)
-        return AbstractStrategy(build_kernel_strategy=build_tactic_kernel_strategy(OUTFIELD_ROBOT_IDS, m.tactic))
+        return AbstractStrategy(
+            build_kernel_strategy=build_tactic_kernel_strategy(OUTFIELD_ROBOT_IDS, m.tactic, ticked)
+        )
 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
@@ -684,8 +721,10 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     ours={rid: (r.p.x, r.p.y) for rid, r in game.friendly_robots.items()},
                     our_speeds={rid: r.v.mag() for rid, r in game.friendly_robots.items()},
                     our_foul=foul,
+                    tactic_robots=frozenset(ticked),
                 )
             )
+            ticked.clear()
     finally:
         runner.close()
     return ticks
@@ -745,15 +784,33 @@ def _designated_position(replay: Path, t: float) -> Optional[tuple[float, float]
     return tuple(designated) if designated else None
 
 
+def without_own_restarts(fouls: list[dict]) -> list[dict]:
+    """`fouls` minus those during a restart our team takes: `keeps_clear` does not apply there."""
+    return [f for f in fouls if f.get("restart") != "ours"]
+
+
 def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
     """Every foul config_a (our side in the replay) committed in a round-robin run, from its
-    summary.json: the starting points for new moments."""
-    summary = json.loads((Path(run_dir) / "summary.json").read_text())
+    summary.json: the starting points for new moments. Each carries the referee `command` active
+    at its time (from the match's `.intentions.jsonl`, None if absent) and its `restart` side
+    ("ours", "theirs", or None for live play and STOP)."""
+    run_dir = Path(run_dir)
+    summary = json.loads((run_dir / "summary.json").read_text())
     out = []
     for r in summary["results"]:
+        sidecar = run_dir / f"{short_name(r['config_a'])}_vs_{short_name(r['config_b'])}.intentions.jsonl"
         for f in (r.get("stats") or {}).get("fouls") or []:
             if f.get("side") == "friendly" and (rule is None or f["rule"] == rule):
-                out.append({"config_a": r["config_a"], "config_b": r["config_b"], **f})
+                command = _referee_command_at(sidecar, f["sim_time"])
+                out.append(
+                    {
+                        "config_a": r["config_a"],
+                        "config_b": r["config_b"],
+                        **f,
+                        "command": command.name if command else None,
+                        "restart": restart_side(command),
+                    }
+                )
     return out
 
 
@@ -776,10 +833,16 @@ def main() -> None:
     p.add_argument("--opponent", default=DEFAULT_OPPONENT)
     p.add_argument("--seconds", type=float, default=DEFAULT_SECONDS)
     p.add_argument("--designated-position", type=float, nargs=2, default=None)
+    p.add_argument("--out", type=Path, default=None, help=f"where to write it (default {MOMENTS_DIR}/<name>.json)")
 
     p = sub.add_parser("fouls", help="list our side's fouls in a round-robin run")
     p.add_argument("run_dir", type=Path)
     p.add_argument("--rule", default=None)
+    p.add_argument(
+        "--skip-own-restart",
+        action="store_true",
+        help="leave out fouls during our own restarts (keeps_clear does not apply there)",
+    )
 
     p = sub.add_parser("new", help="write a hand-made moment template to edit by hand")
     p.add_argument("name", help="lowercase letters, digits and underscores")
@@ -793,6 +856,7 @@ def main() -> None:
     p = sub.add_parser("play", help="play a moment and print what broke its checks")
     p.add_argument("moment", type=Path)
     p.add_argument("--strategy", default=None, help="one strategy instead of the moment's own")
+    p.add_argument("--seed", type=int, default=None, help="the sim noise seed for this run (the JSON is not changed)")
 
     args = parser.parse_args()
     if args.cmd == "new":
@@ -826,17 +890,28 @@ def main() -> None:
             seconds=args.seconds,
             designated_position=tuple(args.designated_position) if args.designated_position else None,
         )
-        print(f"Wrote {save(m)} ({m.scenario.referee_command.name if m.scenario.referee_command else 'no command'})")
+        print(
+            f"Wrote {save(m, args.out)} ({m.scenario.referee_command.name if m.scenario.referee_command else 'no command'})"
+        )
     elif args.cmd == "fouls":
-        for f in our_fouls(args.run_dir, args.rule):
+        fouls = our_fouls(args.run_dir, args.rule)
+        if args.skip_own_restart:
+            fouls = without_own_restarts(fouls)
+        for f in fouls:
             print(
                 f"{f['rule']:<28} t={f['sim_time']:>7.2f}  robot {f.get('robot_id')}  {f.get('tactic') or '':<24} "
+                f"{(f['command'] or '?'):<22} {f['restart'] or 'live':<7} "
                 f"{short_name(f['config_a'])} vs {short_name(f['config_b'])}"
             )
     else:
         m = load(args.moment)
         if m.tactic is not None and args.strategy:
             parser.error("a tactic moment plays its tactic: --strategy does not apply")
+        if args.seed is not None:
+            try:
+                m = with_seed(m, args.seed)
+            except MomentError as e:
+                parser.error(str(e))
         for name in [_full_name(args.strategy)] if args.strategy else strategies_for(m):
             failures = judge(m, play(m, name))
             print(f"{short_name(name):<28} {'FAIL' if failures else 'ok'}")

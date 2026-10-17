@@ -255,13 +255,16 @@ outfield robot whatever the strategy, so a restart moment plays one strategy.
 To add one, after seeing a foul or failure in a match:
 
 1. `pixi run python tools/moments.py fouls replays/tournament_<id> --rule keep_out` lists our
-   side's fouls with time, robot and strategies; `tools/replay_trace.py` shows the window.
+   side's fouls with time, robot, strategies, the referee command then active and whether that
+   restart is ours or theirs (`--skip-own-restart` leaves out ours: `keeps_clear` does not apply
+   there); `tools/replay_trace.py` shows the window.
 2. `pixi run python tools/moments.py capture <replay>.npz --t <s> --name <what_goes_wrong>
-   --check <checks> --opponent <b> --note "<what goes wrong, why it must not>"` writes the
-   JSON, with the match's sim noise and the placement target. Start where the failure is about
+   --check <checks> --opponent <b> --note "<what goes wrong, why it must not>" [--out PATH]`
+   writes the JSON, with the match's sim noise and the placement target. Start where the failure is about
    to happen: robots start from rest and tactics from initial memory, and from seconds earlier
    they often take another path.
-3. `pixi run python tools/moments.py play <json>` must fail the way the match did. A check is
+3. `pixi run python tools/moments.py play <json> [--seed N]` must fail the way the match did
+   (`--seed` replays the moment's noise with another seed, the JSON untouched). A check is
    either one of `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or a referee rule
    name our side must not break; add a named check only for a failure no rule names.
 4. Commit it with `"known_failure": "<cause>"` (a strict xfail) if the fix is not in the same
@@ -280,9 +283,11 @@ by field name; fields left out keep their initial value; `null` for the initial 
 are None, bool, int, float, str, lists for tuples, and `[x, y]` for a Vector2D; another type is
 an error naming the field. The moment plays once, as its tactic (`strategy` stays `"all"`), and
 `test_moments.py` names the case `<name>-<TacticClass>`. Use it for live play (NORMAL_START or
-FORCE_START): a restart still runs the referee override. `give_and_go_carrier_mid_pass` is the
-example. Its check is `excessive_dribbling`: `double_touch` only covers a restart kick, so it
-cannot fire from live play.
+FORCE_START): a restart still runs the referee override. A tactic moment fails when its tactic
+never ticks with one of its robots (`GiveAndGoTactic never ran on robots [1, 2]`), e.g. when the
+tactic is never applicable, since its robots would otherwise hold silently. `give_and_go_carrier_mid_pass`
+is the example: a 2 s pass on a 1.2 m lane, checked with `"*"`; its note says what it does not
+guard (that the kick happens or is caught). `double_touch` only covers a restart kick, so it cannot fire from live play.
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
