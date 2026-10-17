@@ -249,34 +249,36 @@ A foul or failure seen in a match is a symptom: the cause may be the robot, the 
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot.
 
-1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> [--rule R]
-   [--skip-own-restart]` lists our side's fouls with the referee command then active and whose
-   restart it was; `tools/replay_trace.py REPLAY T0 T1` shows the window. `--by strategy,rule`
-   (any of strategy, rule, tactic, restart) prints counts instead of one line per foul, and
-   `out_of_bounds` (the ball leaving the field: a stoppage, not a rules foul) is left out unless
-   `--include-stoppages` is given.
-2. **Reproduce it.** `tools/moments.py capture REPLAY --t S --name ... --check ... --note "..."
-   [--out PATH]` saves the field state shortly before the foul (robots start from rest and
-   tactics from initial memory, so start close); `tools/moments.py play JSON --seed N` replays
-   it. Keep it only if it fails on at least 4 of seeds 0-4. `play JSON --seeds 0-4` prints one
-   ok/FAIL table; `--against REF` adds the code at REF side by side (its worktree is left for you
-   to remove); `--events` lists the referee changes, fouls, keep-out entries, kicks and closest
-   approaches; `play JSON --strategy path/to/scratch.py:factory` tries a tactic in a scratch file
-   without touching the repo. `tools/repro_from_replay.py` plays
-   the same state with the tactics' `match_log` tracing on, to look rather than keep.
-   A reproducing moment is not required to fix a bug. If the capture does not reproduce (common:
-   robots start from rest and tactics from fresh memory) but the cause can be shown by a pure unit
-   test (e.g. "a computed target is off the field"), fix it with that test and skip the moment. If
-   a capture does not reproduce, try: starting closer to the foul; checking the referee command the
-   capture stored against `replay_trace.py` at that time; or accepting the unit test as the proof.
-3. **Find the cause.** Per tick, print the override's target, the planner's next waypoint, the
-   obstacles and the distance to the ball. Ask whether the rule was really broken (real rules,
-   `docs/custom_referee_design_decisions.md`) and whether the check reads it right.
-4. **Fix the cause, with a unit test at the boundary** (CLAUDE.md, Testing). That test is the
-   protection; the moment is a cheap end-to-end check that the symptom is gone.
-5. **Keep the moment** in `utama_core/tests/moments/` if it failed before the fix and passes
-   after (on its stored seed). Its note says what went wrong and names the fix. If the fix is not
-   in the same change, commit it with `"known_failure": "<cause>"` (a strict xfail).
+1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`
+   counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
+   leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
+   lists each with its time, robot, tactic and the referee command then active
+   (`--skip-own-restart` drops fouls during our own restarts).
+2. **Look at it.** `tools/replay_trace.py REPLAY T0 T1` is the text timeline of the window:
+   referee command, ball, nearest robot per side. `tools/repro_from_replay.py REPLAY --t S`
+   replays that state with the tactics' `match_log` tracing on (trace keys name tactics, not
+   strategies).
+3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
+   robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
+   broken (real rules, `docs/custom_referee_design_decisions.md`) and whether the check reads it
+   right.
+4. **Fix the cause, with a unit test at the boundary** (CLAUDE.md, Testing), e.g. "a computed
+   target is off the field". That test is the protection, and it does not need the foul to
+   reproduce.
+5. **Optionally keep a moment**, where a field state alone decides the behaviour (restart and
+   placement geometry under the referee override). `tools/moments.py capture REPLAY --t S --name
+   ... --check ... --note "..." [--out PATH]` saves the state; `play JSON --seeds 0-4` must fail on
+   at least 4 of 5 before the fix (`--against REF` plays the code at REF beside it; `--events`
+   lists referee changes, fouls, keep-out entries and kicks; `--strategy scratch.py:factory`
+   tries a strategy from a scratch file). Its note names the fix; if the fix is not in the same
+   change, set `"known_failure": "<cause>"` (a strict xfail).
+
+Open-play fouls rarely reproduce from a captured state: robots start from rest, tactics from
+fresh memory, and the play diverges within a second. Of 21 fouls captured from
+tournament_20261017_002337, none reproduced on 4 of 5 seeds, and one did with the opponents
+steered along their recorded paths for 1-2 s (tried 2026-10-17, reverted in `9c224880`). Robot
+velocities cannot be set either: every rsim teleport resets all robots (`SSLWorld::replace`). So
+for open play, go from the trace to the code and a unit test.
 
 A moment's `checks` are `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or referee rule names; its `requires` (`restart_lasts`,
 `robot_near_ball`) fail it with `did not arise` when the situation it tests never happened. A
