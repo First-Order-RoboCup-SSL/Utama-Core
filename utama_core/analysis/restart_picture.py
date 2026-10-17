@@ -33,6 +33,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
 
+from utama_core.analysis.findings import Finding
 from utama_core.analysis.plan_snapshot import (
     AGAINST,
     DPI,
@@ -62,10 +63,13 @@ from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_reader import load_columnar_replay
-from utama_core.replay.scenario import Scenario
+from utama_core.replay.scenario import Scenario, scenario_from_replay
 
 # A red that is not in the categorical palette, reserved for the defects this picture exists to show.
 ALERT = "#b3261e"
+# The clearing step holds a robot whose commanded move is under 1 cm (dx^2 + dy^2 < 1e-4, actions.py), so a
+# target within 1 cm inside the keep-out edge is that deadband, not a robot sent into the circle.
+_DEADBAND_M = 0.01
 _KICKOFF = ("PREPARE_KICKOFF_YELLOW", "PREPARE_KICKOFF_BLUE")
 _CLEARS_OWN_AREA = ("STOP", "TIMEOUT_YELLOW", "TIMEOUT_BLUE") + _KICKOFF
 _FREE_KICKS = ("DIRECT_FREE_YELLOW", "DIRECT_FREE_BLUE", "INDIRECT_FREE_YELLOW", "INDIRECT_FREE_BLUE")
@@ -87,6 +91,7 @@ class RobotPlan:
     target: Optional[tuple[float, float]]
     role: Optional[str]  # "kicker", "placer", "keeper" or None
     flags: tuple[str, ...] = ()
+    measures: tuple[tuple[float, Optional[float], str], ...] = ()  # per flag: (value, threshold, unit)
 
 
 @dataclass(frozen=True)
@@ -165,26 +170,40 @@ def _roles(game: Game, command: RefereeCommand, ours: Optional[bool]) -> dict[in
     return roles
 
 
-def _flags(game: Game, rp: RobotPlan, ball: Optional[Vector2D], own_area_rank: Optional[int]) -> tuple[str, ...]:
+def _flags(
+    game: Game, rp: RobotPlan, ball: Optional[Vector2D], own_area_rank: Optional[int]
+) -> tuple[tuple[str, float, Optional[float], str], ...]:
+    """Each flag as (text, value, threshold, unit): the text is drawn; the numbers go to the findings."""
     if rp.target is None or rp.kind == "none":
         return ()
-    flags: list[str] = []
+    flags: list[tuple[str, float, Optional[float], str]] = []
     target = Vector2D(rp.target[0], rp.target[1])
     if rp.role in ("kicker", "placer"):
         return ()  # the robot that must reach the ball is allowed inside the keep-out
     if ball is not None:
         d = (target - ball).mag()
         if d < BALL_KEEP_OUT_DISTANCE - 1e-9:
-            # The clearing step holds a robot already within 1 cm of its edge (dx^2 + dy^2 < 1e-4), so a
-            # target 1 cm inside is that deadband, not a robot sent into the circle.
-            deadband = " (1 cm stop deadband)" if d > BALL_KEEP_OUT_DISTANCE - 0.02 else ""
-            flags.append(f"target inside keep-out ({d:.2f} m < {BALL_KEEP_OUT_DISTANCE:.2f} m){deadband}")
+            # The clearing step holds a robot already within 1 cm of its edge, so a target 1 cm inside
+            # is that deadband, not a robot sent into the circle.
+            deadband = " (1 cm stop deadband)" if d > BALL_KEEP_OUT_DISTANCE - _DEADBAND_M else ""
+            text = f"target inside keep-out ({d:.2f} m < {BALL_KEEP_OUT_DISTANCE:.2f} m){deadband}"
+            flags.append((text, d, BALL_KEEP_OUT_DISTANCE, "m"))
     projected = _actions._project_outside_opp_defense_area(game, target, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
     if projected != target:
-        flags.append(f"target inside opponent defence area (+{OPPONENT_DEFENSE_AREA_KEEP_DISTANCE:.2f} m)")
+        push = (projected - target).mag()
+        text = f"target inside opponent defence area (+{OPPONENT_DEFENSE_AREA_KEEP_DISTANCE:.2f} m)"
+        flags.append((text, push, None, "m"))  # no limit: the value is how far the target must move out
     if own_area_rank is not None and own_area_rank > 0:
-        flags.append("target inside own defence area beyond the one allowed defender")
+        text = "target inside own defence area beyond the one allowed defender"
+        flags.append((text, float(own_area_rank + 1), 1.0, "robots in own box"))
     return tuple(flags)
+
+
+def flag_kind(flag: str) -> str:
+    """The findings kind of a flag text from `_flags`."""
+    if flag.startswith("target inside keep-out"):
+        return "keep_out_short" if "deadband" in flag else "target_in_keep_out"
+    return "target_in_defense_area"
 
 
 def plan_restart(game: Game, command: RefereeCommand, *, sim_time: Optional[float] = None) -> RestartPlan:
@@ -235,7 +254,11 @@ def plan_restart(game: Game, command: RefereeCommand, *, sim_time: Optional[floa
         )
         own_rank = {rid: rank for rank, rid in enumerate(in_own)}
 
-    flagged = tuple(dataclasses.replace(rp, flags=_flags(game, rp, ball, own_rank.get(rp.robot_id))) for rp in robots)
+    def with_flags(rp: RobotPlan) -> RobotPlan:
+        measured = _flags(game, rp, ball, own_rank.get(rp.robot_id))
+        return dataclasses.replace(rp, flags=tuple(m[0] for m in measured), measures=tuple(m[1:] for m in measured))
+
+    flagged = tuple(with_flags(rp) for rp in robots)
     enemy = tuple((r.id, float(r.p.x), float(r.p.y)) for r in sorted(game.enemy_robots.values(), key=lambda r: r.id))
     return RestartPlan(
         command=command,
@@ -293,9 +316,9 @@ def restart_game(replay: Path, scenario: Scenario, side: str = "friendly") -> Ga
     return game_from_scenario(scenario, side, referee=restart_referee(replay, scenario))
 
 
-def restart_commands(replay: Path) -> list[tuple[float, RefereeCommand]]:
-    """The first occurrence of each distinct restart command in the replay's referee sidecar
-    (`<name>.intentions.jsonl`), in time order."""
+def restart_occurrences(replay: Path) -> list[tuple[float, RefereeCommand]]:
+    """Every restart the override handles, in the replay's referee sidecar (`<name>.intentions.jsonl`),
+    in time order."""
     sidecar = Path(replay).with_name(f"{Path(replay).stem}.intentions.jsonl")
     rows: list[tuple[float, RefereeCommand]] = []
     if sidecar.exists():
@@ -310,14 +333,61 @@ def restart_commands(replay: Path) -> list[tuple[float, RefereeCommand]]:
             except KeyError:
                 continue
             rows.append((float(row["sim_time"]), command))
+    return [(t, c) for t, c in sorted(rows, key=lambda r: r[0]) if is_override_command(c)]
+
+
+def restart_commands(replay: Path) -> list[tuple[float, RefereeCommand]]:
+    """The first occurrence of each distinct restart command, in time order."""
     seen: set[RefereeCommand] = set()
     first: list[tuple[float, RefereeCommand]] = []
-    for t, command in sorted(rows, key=lambda r: r[0]):
-        if command in seen or not is_override_command(command):
-            continue
-        seen.add(command)
-        first.append((t, command))
+    for t, command in restart_occurrences(replay):
+        if command not in seen:
+            seen.add(command)
+            first.append((t, command))
     return first
+
+
+def plan_findings(plan: RestartPlan, replay: Path, side: str, t: float) -> list[Finding]:
+    """One finding per flag on each flagged robot's target: a robot can carry two (keep-out and box)."""
+    out: list[Finding] = []
+    for rp in plan.flagged:
+        role = f" ({rp.role})" if rp.role else ""
+        for flag, (value, threshold, unit) in zip(rp.flags, rp.measures):
+            target = rp.target if rp.target is not None else (float("nan"), float("nan"))
+            out.append(
+                Finding(
+                    tool="restart_picture",
+                    kind=flag_kind(flag),
+                    replay=str(replay),
+                    side=side,
+                    t0=t,
+                    t1=t,
+                    robots=(rp.robot_id,),
+                    value=value,
+                    threshold=threshold,
+                    unit=unit,
+                    message=(
+                        f"R{rp.robot_id}{role} is commanded to ({target[0]:+.2f}, {target[1]:+.2f}) for "
+                        f"{plan.command.name} at t={t:g} s: {flag}."
+                    ),
+                )
+            )
+    return out
+
+
+def restart_findings(replay: Path, side: str = "friendly") -> list[Finding]:
+    """Findings for every restart in the replay, each occurrence (not only the first of each command), without
+    drawing. A restart whose state cannot be rebuilt from the replay is skipped."""
+    replay = Path(replay)
+    out: list[Finding] = []
+    for t, command in restart_occurrences(replay):
+        try:
+            scenario = scenario_from_replay(replay, t, showing=command)
+        except ValueError:
+            continue
+        game = restart_game(replay, scenario, side)
+        out.extend(plan_findings(plan_restart(game, command, sim_time=scenario.sim_time), replay, side, t))
+    return out
 
 
 # ---------------------------------------------------------------------------
