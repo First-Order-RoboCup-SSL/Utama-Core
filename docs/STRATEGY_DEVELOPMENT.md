@@ -243,6 +243,30 @@ whoever runs it.
 - **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
+### Regression moments
+
+A moment is a field state where our robots once did something obviously wrong, with a fixed
+check of what they must do instead. `utama_core/tests/moments/` holds them as JSON;
+`test_moments.py` (in `pixi run test`) plays each for a few seconds against every strategy it
+concerns, so a fix stays fixed. It is a pass/fail check of one behaviour, not a ranking: judge
+strategies with `evaluate.py`. Most moments are restarts, where the referee override moves every
+outfield robot whatever the strategy, so a restart moment plays one strategy.
+
+To add one, after seeing a foul or failure in a match:
+
+1. `pixi run python tools/moments.py fouls replays/tournament_<id> --rule keep_out` lists our
+   side's fouls with time, robot and strategies; `tools/replay_trace.py` shows the window.
+2. `pixi run python tools/moments.py capture <replay>.npz --t <s> --name <what_goes_wrong>
+   --check <checks> --opponent <b> --note "<what goes wrong, why it must not>"` writes the
+   JSON, with the match's sim noise and the placement target. Start where the failure is about
+   to happen: robots start from rest and tactics from initial memory, and from seconds earlier
+   they often take another path.
+3. `pixi run python tools/moments.py play <json>` must fail the way the match did. A check is
+   either one of `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or a referee rule
+   name our side must not break; add a named check only for a failure no rule names.
+4. Commit it with `"known_failure": "<cause>"` (a strict xfail) if the fix is not in the same
+   change; the fix then shows as XPASS and deletes the field.
+
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
 teleported robot facing the mirrored heading, which had silently corrupted teleported scenarios.
@@ -327,4 +351,4 @@ What a converted match holds, and where it differs from a sim replay (the detail
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
-The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one moment use `tools/repro_from_replay.py <replay> --t <s>`, and `analysis/goal_ledger.py` lists a replay's situations and goals.
+The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment (above), and `analysis/goal_ledger.py` lists a replay's situations and goals.

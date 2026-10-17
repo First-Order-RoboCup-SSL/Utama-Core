@@ -36,6 +36,10 @@ One term per thing; reuse these instead of coining new ones.
   verdict on a strategy; see Evaluation.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
+- **Moment / regression moment** — a field state (from a replay or by hand) where our robots
+  once did something obviously wrong, with a fixed check of the right behaviour
+  (`utama_core/tests/moments/*.json`, `tools/moments.py`). Pass/fail regression tests, run in
+  `pixi run test`; not a ranking.
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
