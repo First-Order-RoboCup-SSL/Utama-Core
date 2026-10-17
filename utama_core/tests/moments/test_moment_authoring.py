@@ -177,6 +177,31 @@ def test_our_fouls_names_the_command_active_and_the_restart_side(tmp_path):
     assert [f["sim_time"] for f in kept] == [1.0, 5.0]
 
 
+def test_our_fouls_names_the_match_replay_relative_to_the_repo(tmp_path):
+    import json
+
+    row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
+    results = [
+        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
+    ]
+    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
+    (fouls,) = moments.our_fouls(tmp_path)
+    assert fouls["replay"] is None  # no a_vs_b replay in the run dir
+
+    (tmp_path / "a_vs_b.npz").write_bytes(b"")
+    (fouls,) = moments.our_fouls(tmp_path)
+    assert fouls["replay"] == str(tmp_path / "a_vs_b.npz")  # outside the repo: as given
+
+    (tmp_path / "a_vs_b.npz").unlink()
+    (tmp_path / "a_vs_b.pkl").write_bytes(b"")
+    (fouls,) = moments.our_fouls(tmp_path)
+    assert fouls["replay"] == str(tmp_path / "a_vs_b.pkl")
+
+
+def test_repo_relative_paths_drop_the_repo_root():
+    assert moments._repo_relative(moments.REPO_ROOT / "replays" / "t" / "a_vs_b.npz") == "replays/t/a_vs_b.npz"
+
+
 def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
     import json
 

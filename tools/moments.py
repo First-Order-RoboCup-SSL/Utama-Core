@@ -778,13 +778,16 @@ def print_fouls_by(fouls: list[dict], columns: list[str]) -> None:
 def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
     """Every foul config_a (our side in the replay) committed in a round-robin run, from its
     summary.json: the starting points for new moments. Each carries the referee `command` active
-    at its time (from the match's `.intentions.jsonl`, None if absent) and its `restart` side
-    ("ours", "theirs", or None for live play and STOP)."""
+    at its time (from the match's `.intentions.jsonl`, None if absent), its `restart` side
+    ("ours", "theirs", or None for live play and STOP) and its match's `replay` (the .npz, else the
+    .pkl, relative to the repo root; None if neither is there), for replay_trace and repro."""
     run_dir = Path(run_dir)
     summary = json.loads((run_dir / "summary.json").read_text())
     out = []
     for r in summary["results"]:
-        sidecar = run_dir / f"{short_name(r['config_a'])}_vs_{short_name(r['config_b'])}.intentions.jsonl"
+        stem = run_dir / f"{short_name(r['config_a'])}_vs_{short_name(r['config_b'])}"
+        sidecar = Path(f"{stem}.intentions.jsonl")
+        replay = next((p for p in (Path(f"{stem}.npz"), Path(f"{stem}.pkl")) if p.exists()), None)
         for f in (r.get("stats") or {}).get("fouls") or []:
             if f.get("side") == "friendly" and (rule is None or f["rule"] == rule):
                 command = _referee_command_at(sidecar, f["sim_time"])
@@ -795,9 +798,18 @@ def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
                         **f,
                         "command": command.name if command else None,
                         "restart": restart_side(command),
+                        "replay": _repo_relative(replay) if replay is not None else None,
                     }
                 )
     return out
+
+
+def _repo_relative(path: Path) -> str:
+    """`path` relative to the repo root (as a string), or as given if it is outside the repo."""
+    try:
+        return str(Path(path).resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def parse_seeds(spec: str) -> list[int]:
