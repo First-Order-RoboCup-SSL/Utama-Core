@@ -26,6 +26,87 @@ default, `Strategy.set_goalkeeper()`) is pinned outside the scheduler.
 - **`AbstractStrategy`** (`engine/abstract_strategy.py`) — what `StrategyRunner` drives; wraps
   a `Strategy` built by a factory.
 
+The main classes and who holds or calls whom:
+
+```mermaid
+classDiagram
+    direction LR
+    class AbstractStrategy {
+        <<engine/abstract_strategy.py>>
+        +load_motion_controller(motion_controller)
+        +load_game(game)
+        +step()
+        +execute_default_action(game, role, robot_id)
+    }
+    class Strategy {
+        <<engine/strategy.py>>
+        +tick(game) commands
+        +set_goalkeeper(robot_id, tactic)
+        +single_tactic_picker(picker)$
+        +referee_overrides
+        +match_log
+    }
+    class _TacticSlot {
+        <<engine/strategy.py>>
+        +tactic
+        +mem
+        +assigned_robots
+        +committed_ticks
+    }
+    class Partitioner {
+        <<type alias, engine/strategy.py>>
+        +call(game, free_robots, prev_partition, available_tactic_ids) partition
+    }
+    class Tactic {
+        <<Protocol, engine/tactic.py>>
+        +tag
+        +initial_mem()
+        +tick(game, ctx, robot_ids, mem)
+        +applicable(game)
+        +is_committed(game, mem)
+    }
+    class BaseTactic {
+        <<engine/tactic.py>>
+        +applicable(game)
+        +is_committed(game, mem)
+        +suggest_next(game, mem)
+        +highlights(mem)
+    }
+    class RefereeOverride {
+        <<engine/referee_override.py>>
+        +tick(game, motion_controller, command)
+        +overrides
+    }
+    class RefereeActionOverride {
+        <<type alias, engine/referee_override.py>>
+        +call(game, motion_controller) commands
+    }
+    class TickContext {
+        <<engine/context.py>>
+        +motion_controller
+        +match_log
+    }
+    class MatchLog {
+        <<engine/match_log.py>>
+        +intention(...)
+        +trace(tick, sim_time, key, value)
+        +trace_if_changed(tick, sim_time, key, value)
+        +referee(...)
+        +to_jsonl(path)
+    }
+    AbstractStrategy "1" *-- "1" Strategy : _kernel_strategy, built by factory
+    Strategy "1" *-- "many" _TacticSlot : one per tactic id
+    Strategy *-- "1" RefereeOverride : _referee_override
+    Strategy *-- "1" TickContext : _ctx
+    Strategy o-- "0..1" MatchLog : match_log
+    Strategy ..> Partitioner : asks for the free-pool split
+    _TacticSlot --> Tactic : ticks
+    BaseTactic ..> Tactic : defaults for
+    Tactic ..> TickContext : tick() receives
+    TickContext o-- "0..1" MatchLog : ctx.match_log
+    RefereeOverride ..> RefereeActionOverride : strategy-supplied replacement
+```
+
 **Invariants:**
 - *Single writer:* the partition is decided once per tick, before any `Tactic` runs, so two
   tactics can never contend for a robot. Don't add a path that lets a `Tactic` claim or release
@@ -39,6 +120,48 @@ default, `Strategy.set_goalkeeper()`) is pinned outside the scheduler.
   barrier — every slot's `mem` and commitment clears. `STOP`/`HALT` alone only pause; a pause
   resumed by `NORMAL_START` keeps state.
 
+One tick, from the runner to the robot commands (the branches are the referee cases handled
+in `Strategy.tick`):
+
+```mermaid
+sequenceDiagram
+    participant SR as StrategyRunner<br/>run/strategy_runner.py
+    participant AS as AbstractStrategy<br/>engine/abstract_strategy.py
+    participant S as Strategy<br/>engine/strategy.py
+    participant RO as RefereeOverride<br/>engine/referee_override.py
+    participant P as Partitioner<br/>e.g. strategy/split_shape.py
+    participant T as Tactic<br/>tactics/*.py
+    participant SK as Skills<br/>skills/src/
+    participant RC as robot controller
+
+    SR->>AS: step() (side.strategy, after the frame is refined)
+    AS->>S: tick(game)
+    S->>S: barrier reset if entering or resuming a restart
+    alt restart in progress, or STOP / TIMEOUT
+        S->>RO: tick(game, motion_controller, command)
+        RO-->>S: legal-position commands for friendly robots
+        Note over S: no tactic ticks, pinned goalkeeper ticks only if not covered
+        S-->>AS: override commands
+    else HALT
+        S-->>AS: no commands
+    else normal play
+        S->>S: _choose_partition: pin committed slots, filter applicable()
+        S->>P: free robots, previous partition, available tactic ids
+        P-->>S: tactic id -> robots
+        S->>S: _validate_partition
+        loop each slot with robots
+            S->>T: tick(game, ctx, robot_ids, mem)
+            T->>SK: e.g. go_to_ball, go_to_point, move
+            SK-->>T: RobotCommand
+            T-->>S: commands, new mem
+        end
+        S->>T: pinned goalkeeper tick
+        S-->>AS: cmd_map
+    end
+    AS->>AS: robots missing from cmd_map get execute_default_action
+    AS->>RC: add_robot_commands, send_robot_commands
+```
+
 ## Referee handling
 
 `CustomReferee` (`utama_core/custom_referee/`) runs in-process and identically across
@@ -46,6 +169,41 @@ rsim/grsim/real. During a restart, `RefereeOverride` (`engine/referee_override.p
 every outfield robot *before* any `Tactic` ticks, reusing the `*Step` classes in
 `custom_referee/actions.py`. Strategies can override a restart formation via
 `Strategy(referee_overrides=...)`. See `docs/custom_referee.md`.
+
+What each referee command makes our robots do, and when tactics take control again. "Ours" and
+"theirs" are resolved against our team colour in `RefereeOverride._step_for`.
+
+```mermaid
+flowchart TD
+    barrier{"entering a restart, or resuming from one?<br/>(or FORCE_START out of a pause)<br/>engine/referee_reset.py"}
+    wipe["barrier reset: every slot's mem and<br/>commitments cleared (_barrier_reset)"]
+    sel{"referee command<br/>engine/referee_override.py"}
+    halt["HALT: no commands from tactics<br/>(execute_default_action stops robots)"]
+    stop["STOP, TIMEOUT_YELLOW / TIMEOUT_BLUE<br/>StopStep: encroaching robots pushed out of keep-out, rest stop"]
+    ko_o["PREPARE_KICKOFF (ours)<br/>PrepareKickoffOursStep: lowest-ID non-keeper to the ball,<br/>others to own-half support spots"]
+    ko_t["PREPARE_KICKOFF (theirs)<br/>PrepareKickoffTheirsStep: non-keepers to own half,<br/>outside the centre circle"]
+    pe_o["PREPARE_PENALTY (ours)<br/>PreparePenaltyOursStep: kicker to the penalty mark,<br/>others on a line behind it"]
+    pe_t["PREPARE_PENALTY (theirs)<br/>PreparePenaltyTheirsStep: keeper to our goal line centre,<br/>others behind the penalty mark"]
+    fk_o["DIRECT_FREE or INDIRECT_FREE (ours)<br/>DirectFreeOursStep: nearest robot becomes kicker,<br/>others stop"]
+    fk_t["DIRECT_FREE or INDIRECT_FREE (theirs)<br/>DirectFreeTheirsStep: clear robots out of keep-out"]
+    bp_o["BALL_PLACEMENT (ours)<br/>BallPlacementOursStep: closest robot carries ball to the spot,<br/>others clear"]
+    bp_t["BALL_PLACEMENT (theirs)<br/>BallPlacementTheirsStep: clear away from ball and target"]
+    resume["NORMAL_START / FORCE_START<br/>if their kickoff, penalty or free kick is still held<br/>(ball moved less than 5 cm): its positioning continues;<br/>otherwise tactics resume via _choose_partition"]
+
+    barrier -- yes --> wipe --> sel
+    barrier -- no --> sel
+    sel --> halt
+    sel --> stop
+    sel --> ko_o
+    sel --> ko_t
+    sel --> pe_o
+    sel --> pe_t
+    sel --> fk_o
+    sel --> fk_t
+    sel --> bp_o
+    sel --> bp_t
+    sel --> resume
+```
 
 ## Writing a Tactic
 
@@ -70,6 +228,42 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
 each gets. Most new strategies need no new tactic. When one does, add it as a new module in
 `tactics/` (on a strategy branch, never by changing an existing tactic: see below).
+
+How a strategy composes tactics, using `build_split_shape_kernel_strategy`: two tactic slots and
+one hand-written partitioner that switches on which side has the ball.
+
+```mermaid
+flowchart TD
+    tick["Strategy.tick, every frame<br/>engine/strategy.py"]
+    committed{"any slot committed?<br/>is_committed()"}
+    pinned["those slots keep their robots<br/>(not offered to the picker)"]
+    free["free pool = outfield robots not pinned"]
+    avail{"both slots available?<br/>(not pinned, applicable)"}
+    only["the one available slot<br/>takes every free robot"]
+    subgraph picker["_possession_split_picker<br/>strategy/split_shape.py"]
+        order["carrier_first(game, free)<br/>strategy/pickers.py: ball carrier first"]
+        edge{"friendly closer to the ball<br/>than the enemy?"}
+        hi["attack = (n+1)//2 + 1"]
+        lo["attack = n//2 - 1, clamped to 0..n"]
+        split["first attack robots to attack,<br/>the rest to defense"]
+    end
+    validate["Strategy._validate_partition, then each slot ticks<br/>(attack and defense slots below)"]
+    attack["attack: LeadAndSupportTactic<br/>tactics/lead_and_support.py"]
+    defense["defense: ShadowAndMarkTactic<br/>tactics/shadow_and_mark.py"]
+
+    tick --> committed
+    committed -- yes --> pinned --> free
+    committed -- no --> free
+    free --> avail
+    avail -- no --> only
+    avail -- yes --> order --> edge
+    edge -- yes --> hi --> split
+    edge -- no --> lo --> split
+    validate --> attack
+    validate --> defense
+    only --> validate
+    split --> validate
+```
 
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
