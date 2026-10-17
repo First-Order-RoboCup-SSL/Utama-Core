@@ -280,7 +280,7 @@ state to edit. Moments are not a gate on strategies: they pin shared-code bugs.
 | Defender boxed in a corner closes on the ball | robot driving in | planner detour led back toward the ball; the keep-out guard skipped robots already inside | `935da778` | `test_fpp_inside_ball_keep_out.py` |
 | Same moment still failing after the fix | robot driving in | `keeps_clear` counted the ball placed onto a robot standing still | `20ca1974` | `test_moments.py` |
 | keep_out foul on their free kick | robot driving in | referee: the kicker moved the ball 0.75 m in the preparation stage; it was in play | `12b46412` | `test_free_kick_taken.py` |
-| Our placement times out | slow placer | placer drives through the ball toward a point behind it (planner ignores the ball in our placement) | open | `our_placement_completes` (xfail) |
+| Our placement times out | slow placer | placer drove through the ball toward a point behind it (planner ignores the ball in our placement); now it goes round, but the round-the-circle creep and the carry still run past the 10 s limit | partial: this commit (round the ball); still open | `test_referee_unit.py` (TestBallPlacementOursApproachAroundBall); `our_placement_completes` (xfail) |
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a

@@ -568,6 +568,15 @@ class BallPlacementOursStep:
                         ball_pos_for_clamp.y - approach_dir.y * self._APPROACH_OFFSET,
                     )
                     target_for_move = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
+                    # Still on the designated side of the ball: go round it, not through it, to
+                    # the approach point (our_placement_completes: the straight run passed 0.03 m
+                    # from the ball, and the placer pushed it off the spot). Once behind the ball
+                    # the run to the approach point is the final approach and stays straight.
+                    robot_rel = robot.p - ball_pos_for_clamp
+                    if robot_rel.x * approach_dir.x + robot_rel.y * approach_dir.y > 0.0:
+                        target_for_move = detour_around_circle(
+                            robot.p, target_for_move, ball_pos_for_clamp, ROBOT_RADIUS + BALL_RADIUS
+                        )
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                     )
