@@ -81,10 +81,14 @@ def build_game(
     my_team_is_right: bool = True,
     my_team_is_yellow: bool = True,
     referee_command: Optional[RefereeCommand] = None,
+    referee: Optional[RefereeData] = None,
     field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
     ts: float = 0.0,
 ) -> Game:
-    """A real `Game` (not a mock) from robot dicts keyed by id, as the planner reads it."""
+    """A real `Game` (not a mock) from robot dicts keyed by id, as the planner reads it.
+
+    `referee`, when given, is used as the frame's referee data instead of one built from
+    `referee_command` (for a replay's own team and designated-position data)."""
     frame = GameFrame(
         ts=ts,
         my_team_is_yellow=my_team_is_yellow,
@@ -92,7 +96,7 @@ def build_game(
         friendly_robots=dict(friendly),
         enemy_robots=dict(enemy),
         ball=ball,
-        referee=_referee(referee_command),
+        referee=referee if referee is not None else _referee(referee_command),
     )
     field = Field(my_team_is_right=my_team_is_right, field_dims=field_dims, field_bounds=field_dims.full_field_bounds)
     return Game(GameHistory(10), frame, field=field)
@@ -110,11 +114,12 @@ def _robot(state, is_friendly: bool) -> Robot:
     )
 
 
-def game_from_scenario(scenario: Scenario, side: str = "friendly") -> Game:
+def game_from_scenario(scenario: Scenario, side: str = "friendly", referee: Optional[RefereeData] = None) -> Game:
     """The `Game` one side's planner sees in a replay scenario.
 
     The replay's friendly side is config_a: yellow, defending the right goal. `side="enemy"` makes
-    config_b the planned side: blue, defending the left goal, same coordinates."""
+    config_b the planned side: blue, defending the left goal, same coordinates. `referee` replaces
+    the referee data built from the scenario's command (see `build_game`)."""
     if side not in ("friendly", "enemy"):
         raise ValueError(f"side must be 'friendly' or 'enemy', not {side!r}")
     planned_is_replay_friendly = side == "friendly"
@@ -135,6 +140,7 @@ def game_from_scenario(scenario: Scenario, side: str = "friendly") -> Game:
         my_team_is_right=planned_is_replay_friendly,
         my_team_is_yellow=planned_is_replay_friendly,
         referee_command=scenario.referee_command,
+        referee=referee,
         ts=scenario.frame_ts,
     )
 
@@ -176,6 +182,69 @@ def _short(config_name: Optional[str]) -> str:
     return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
 
 
+def style_pitch_axes(ax):
+    """The axes every pitch picture uses: surface, equal aspect, light grid, thin spines."""
+    ax.set_facecolor(SURFACE)
+    ax.set_aspect("equal")
+    ax.set_axisbelow(True)
+    ax.grid(True, color=GRID, linewidth=0.5)
+    for spine in ax.spines.values():
+        spine.set_color(INK_3)
+        spine.set_linewidth(0.6)
+    ax.tick_params(colors=INK_2, labelsize=7, length=2)
+    return ax
+
+
+def draw_pitch(ax, field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> None:
+    """Outline, halfway line, centre circle, defence areas and goal mouths, in metres."""
+    half_w = field_dims.full_field_half_width
+    ax.add_patch(Polygon(field_dims.full_field, closed=True, fill=False, edgecolor=INK_3, linewidth=0.7))
+    ax.plot([0, 0], [-half_w, half_w], color=INK_3, linewidth=0.5)
+    ax.add_patch(Circle((0, 0), field_dims.center_circle_radius, fill=False, edgecolor=INK_3, linewidth=0.5))
+    for area in (field_dims.left_defense_area, field_dims.right_defense_area):
+        ax.add_patch(Polygon(area, closed=True, fill=False, edgecolor=INK_3, linewidth=0.5))
+    for goal in (field_dims.left_goal_line, field_dims.right_goal_line):
+        ax.plot(goal[:, 0], goal[:, 1], color=INK_2, linewidth=1.6, solid_capstyle="butt")
+
+
+def draw_robot(
+    ax,
+    x: float,
+    y: float,
+    colour: str,
+    label: str,
+    *,
+    edge: str = SURFACE,
+    edge_width: float = 0.6,
+    alpha: float = 0.92,
+    zorder: float = 5,
+) -> None:
+    """A robot at its real radius, with its id label on top."""
+    ax.add_patch(
+        Circle(
+            (x, y),
+            ROBOT_RADIUS,
+            facecolor=colour,
+            edgecolor=edge,
+            linewidth=edge_width,
+            alpha=alpha,
+            zorder=zorder,
+        )
+    )
+    ax.text(
+        x,
+        y,
+        label,
+        ha="center",
+        va="center",
+        fontsize=7,
+        color="white",
+        fontweight="bold",
+        alpha=alpha,
+        zorder=zorder + 6,
+    )
+
+
 def plan_snapshot(
     game: Game,
     robot_id: int,
@@ -214,25 +283,11 @@ def plan_snapshot(
 
     fig = Figure(figsize=(6.6, 7.2), dpi=DPI, facecolor=SURFACE)
     fig.subplots_adjust(left=0.13, right=0.97, top=0.92, bottom=0.16)
-    ax = fig.add_subplot(111)
-    ax.set_facecolor(SURFACE)
-    ax.set_aspect("equal")
-    ax.set_axisbelow(True)
-    ax.grid(True, color=GRID, linewidth=0.5)
-    for spine in ax.spines.values():
-        spine.set_color(INK_3)
-        spine.set_linewidth(0.6)
-    ax.tick_params(colors=INK_2, labelsize=7, length=2)
+    ax = style_pitch_axes(fig.add_subplot(111))
 
     # Pitch: outline, halfway line, centre circle, defence areas, goal mouths.
     half_l, half_w = field_dims.full_field_half_length, field_dims.full_field_half_width
-    ax.add_patch(Polygon(field_dims.full_field, closed=True, fill=False, edgecolor=INK_3, linewidth=0.7))
-    ax.plot([0, 0], [-half_w, half_w], color=INK_3, linewidth=0.5)
-    ax.add_patch(Circle((0, 0), field_dims.center_circle_radius, fill=False, edgecolor=INK_3, linewidth=0.5))
-    for area in (field_dims.left_defense_area, field_dims.right_defense_area):
-        ax.add_patch(Polygon(area, closed=True, fill=False, edgecolor=INK_3, linewidth=0.5))
-    for goal in (field_dims.left_goal_line, field_dims.right_goal_line):
-        ax.plot(goal[:, 0], goal[:, 1], color=INK_2, linewidth=1.6, solid_capstyle="butt")
+    draw_pitch(ax, field_dims)
 
     # Each robot obstacle: its predicted run (thin), and the clearance ring around that run.
     friendly_xy = {(float(r.p.x), float(r.p.y)) for r in game.friendly_robots.values()}
@@ -255,27 +310,14 @@ def plan_snapshot(
         colour = FOR if is_friendly else AGAINST
         for r in robots.values():
             planned = is_friendly and r.id == robot_id
-            ax.add_patch(
-                Circle(
-                    (r.p.x, r.p.y),
-                    ROBOT_RADIUS,
-                    facecolor=colour,
-                    edgecolor=INK if planned else SURFACE,
-                    linewidth=1.8 if planned else 0.6,
-                    alpha=0.92,
-                    zorder=5,
-                )
-            )
-            ax.text(
+            draw_robot(
+                ax,
                 r.p.x,
                 r.p.y,
+                colour,
                 str(r.id),
-                ha="center",
-                va="center",
-                fontsize=7,
-                color="white",
-                fontweight="bold",
-                zorder=11,
+                edge=INK if planned else SURFACE,
+                edge_width=1.8 if planned else 0.6,
             )
 
     # Target (x), the carrot the planner returned (filled dot), and the two runs from the robot.
