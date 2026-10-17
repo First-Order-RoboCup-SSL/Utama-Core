@@ -84,6 +84,53 @@ has its own panel. Each stall counts for both teams in the match.
 - The ball goes out 15–22 times a match for every strategy; most for `clear_press_plus` and
   `clear_danger`, the two with a clearance valve.
 
+## On the pitch
+
+Drawn by `tools/pitch_maps.py` from the same run (`pixi run python tools/pitch_maps.py replays/tournament_<id>`,
+about 3 minutes). Every panel attacks to the right: the strategy's own goal is on the left, and a
+team that attacks left is turned 180 degrees, so its left wing is the top of its panel too.
+Live play only. "With the ball" means the team's nearest robot is within reach of the ball and the
+ball is slow, the same radius `MatchStats` uses for possession.
+
+![Where the outfield robots stand with the ball](img/signals/positions_attack.png)
+
+Share of the live samples per cell, one scale for every panel; the five dots are each robot's mean
+position (the goalkeeper is left out).
+
+- `overload_press` is the most forward. 83% of its samples with the ball are in the attacking half,
+  and only 17% of its samples without it are in its own half. Its robots stack about 2 m into the
+  attacking half (the dark block in its panel).
+- `split_shape` builds from deep: 37% of its samples with the ball are in the attacking half, yet
+  72% of its shots are struck from the attacking third (below).
+
+![Where the outfield robots stand without the ball](img/signals/positions_defence.png)
+
+The same robots while the opponent has the ball.
+
+- `split_shape` and `score_aware_counter_flow` sit deepest: 68% and 69% of their samples without the
+  ball are in their own half, against 17% for `overload_press`.
+- In most panels a vertical stripe stands about 2.7 m in front of the strategy's own goal, in both
+  figures: robots that hold one line in their own half whether or not they have the ball.
+
+![Where each strategy shoots from, and where it concedes](img/signals/shots.png)
+
+Every shot at the spot it was struck from: filled if it scored, hollow if not. Conceded shots are at
+the other end, faded. The counts are shots and goals per strategy over the run.
+
+- `split_shape` takes the most shots (241, 22 a match, 65 goals). Its own shots are spread across the
+  attacking half, and its conceded shots sit on the left.
+- `decoy_and_overload` faces the most shots (127, 11.5 a match) and `clear_press_plus` the fewest (71,
+  6.5 a match); the faded conceded shots of `decoy_and_overload` fill the left half of its panel.
+
+![Where each strategy commits its fouls, by rule](img/signals/fouls_map.png)
+
+Each foul at the ball's spot. The four most common rules in the run have their own colours and the
+rest are "other rules"; ball out of play is not a foul.
+
+- `score_aware_counter_flow` commits the largest share in its own defensive third (41% of its fouls),
+  and `clear_press_plus` the smallest (12%); the script prints these shares.
+- Excessive dribbling (blue) and crashing (green) are spread across the pitch in most panels.
+
 ## The numbers
 
 Every value in the figures, one row per strategy, by points per match.
