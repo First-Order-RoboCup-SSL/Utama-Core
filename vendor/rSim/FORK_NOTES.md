@@ -6,9 +6,8 @@ same version this repo's `pixi.toml` pins via `rc-robosim>=1.2,<2` on PyPI).
 
 ## Why this is here
 
-`Utama-Core` depends on `rc-robosim` as a compiled PyPI package (the
-`robosim` feature environment in `pixi.toml`), not as source — normally
-nothing in this repo needs rSim's own source at all. This copy exists
+Since 2026-10-16 `pixi.toml` builds the `robosim` environment's `rc-robosim` from this
+directory, not from PyPI (see "Installed from source by pixi" below). This copy first existed
 because we found and fixed real bugs in rSim's native ball/dribbler/kicker
 physics (see `docs/roadmap.md`'s "TODO — add grsim as a CI/tournament
 environment" section, item 1, for the dribbler-release writeup, and the
@@ -170,16 +169,9 @@ fork relationship more explicit) but decided against it for now: a submodule
 needs a real pushed remote to point to (no `First-Order-RoboCup-SSL/rSim`
 fork exists on GitHub), and submodules have real day-to-day friction — not
 cloned by default, easy to leave uninitialized, need CI awareness — that
-isn't worth paying while this fix is unshipped and has an open regression
-(see below). This directory isn't referenced by `pixi.toml` or installed
-anywhere; it's a parked fix, not a build dependency.
-
-If this fix gets finished and actually adopted (regression resolved, and
-`pixi.toml` switched from the PyPI `rc-robosim` dependency to building from
-this fork), that's the point to revisit this — either push a real fork to
-GitHub and convert this to a submodule, or use pixi's own git-source
-dependency support to point directly at that fork instead of vendoring
-source at all.
+isn't worth paying. Now that `pixi.toml` builds from this fork, a pushed fork with a
+submodule or pixi's git-source dependency are the alternatives, if vendoring ever gets in
+the way.
 
 ## Installed from source by pixi (2026-10-16)
 
@@ -191,6 +183,9 @@ also looks in `$CONDA_PREFIX`, where the env's `libode` lives. After changing th
 source, rebuild by deleting `.pixi/envs/robosim` and running `pixi install -e robosim` (a
 cached build may otherwise be reused). Built this way (gcc 13, no `-march=native`), a 30 s split_shape vs
 tiki_taka_plus match hashes the same as the hand-installed binary (`7c27555e8249abc6`).
+From a fresh clone with empty pixi and uv caches (2026-10-17, gcc 13 from the system, as on CI's
+ubuntu runner) `pixi install -e robosim` took 9.5 min, most of it downloads, and the built binary
+steps 1800 ticks of 12 robots bit for bit like the installed one, with the knobs off and on.
 Matches still differ across CPUs and compilers (see the `-march=native` note above), so
 compare results from one machine.
 
