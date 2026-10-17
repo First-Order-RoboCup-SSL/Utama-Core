@@ -21,6 +21,11 @@ All the actual scenario-loading/coordinate-frame logic lives in
 build the runner the same way `tournament.run_match` does, apply the
 scenario, tick, print a summary.
 
+Sim noise: by default it plays with the replay's own `SimNoise` (its seed and settings, stored in
+the .npz), so latency, kick offsets and motion limits redraw the match's values; `--sim-noise PATH`
+uses another settings file, `--sim-noise none` plays noiseless. Vision and kick-speed noise are not
+replayed (their streams start afresh at `--t`).
+
 Known limitations (see `utama_core/replay/scenario.py`'s module docstring
 for the full rationale):
 - Tactic `mem` (each `Tactic`'s internal per-slot state — phase, committed
@@ -36,7 +41,7 @@ for the full rationale):
   starts with whatever the freshly-seeded `CustomReferee` defaults to.
 
 Usage:
-    pixi run python tools/repro_from_replay.py replays/tournament_.../match.pkl \\
+    pixi run python tools/repro_from_replay.py replays/tournament_.../match.npz \\
         --t 260 --duration 15 --control-scheme trajsample \\
         --trace-out /tmp/repro_trace.jsonl
 
@@ -76,6 +81,7 @@ import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before any import: hides pygame's banner
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -90,7 +96,9 @@ from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -115,6 +123,25 @@ def _resolve_config_name(explicit: Optional[str], from_scenario: Optional[str], 
             f"Unknown strategy config {name!r} (from {'CLI override' if explicit else 'replay metadata'})."
         )
     return name
+
+
+def resolve_sim_noise(override: Optional[str], replay_noise: Optional[dict]) -> tuple[Optional[SimNoise], str]:
+    """The `SimNoise` a repro plays with, and the line that says so.
+
+    `override` is `--sim-noise`: "none" for noiseless, a path to a `SimNoise` JSON file, or None for
+    the replay's own. `replay_noise` is what `load_sim_noise` returned for the replay (`{"settings":
+    ..., "draw": ...}`), or None when it had none. The replay's settings carry its seed, so
+    `SimNoise.draw` gives the same per-robot values the match drew.
+    """
+    if override == "none":
+        return None, "sim noise: none (--sim-noise none)"
+    if override is not None:
+        noise = SimNoise.from_dict(json.loads(Path(override).read_text()))
+        return noise, f"sim noise: {override} (--sim-noise, seed {noise.seed})"
+    if replay_noise is None:
+        return None, "sim noise: none (the replay stores none)"
+    noise = SimNoise.from_dict(replay_noise["settings"])
+    return noise, f"sim noise: the replay's own (seed {noise.seed})"
 
 
 SUMMARY_EVERY_S = 0.25
@@ -237,6 +264,13 @@ def main() -> None:
     )
     parser.add_argument("--print-trace", action="store_true", help="print every TraceEvent as it's written back")
     parser.add_argument(
+        "--sim-noise",
+        default=None,
+        metavar="PATH|none",
+        help="sim noise to play with: none (noiseless), or a SimNoise JSON file; default: the replay's own "
+        "(see the module docstring)",
+    )
+    parser.add_argument(
         "--summary",
         default=None,
         metavar="ROBOT_IDS",
@@ -246,6 +280,8 @@ def main() -> None:
     args = parser.parse_args()
 
     scenario: Scenario = scenario_from_replay(args.replay_path, args.t)
+    replay_noise = load_sim_noise(args.replay_path) if args.replay_path.suffix == ".npz" else None
+    sim_noise, noise_line = resolve_sim_noise(args.sim_noise, replay_noise)
 
     strategy_a_name = _resolve_config_name(args.strategy, scenario.config_a_name, "friendly")
     strategy_b_name = _resolve_config_name(args.opponent, scenario.config_b_name, "enemy")
@@ -273,8 +309,14 @@ def main() -> None:
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
         control_scheme=args.control_scheme,
         match_log_path=args.trace_out,
+        sim_noise=sim_noise,
     )
 
+    print(noise_line)
+    if sim_noise is not None and replay_noise is not None and args.sim_noise is None:
+        drawn = runner.rsim_env.sim_draw.to_dict()
+        same = json.loads(json.dumps(drawn)) == replay_noise["draw"]
+        print(f"  per-robot draws {'match' if same else 'DO NOT match'} the replay's stored draw")
     print(f"Loaded scenario from {args.replay_path} at t={args.t}s (nearest frame ts={scenario.frame_ts:.3f}s)")
     print(f"  friendly={strategy_a_name}  enemy={strategy_b_name}")
     print(f"  referee_command at load: {scenario.referee_command}")

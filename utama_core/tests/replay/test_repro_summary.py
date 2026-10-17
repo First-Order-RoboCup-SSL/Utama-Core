@@ -76,3 +76,43 @@ def test_format_caps_the_lines_and_counts_the_rest():
     assert len(lines) == repro.SUMMARY_MAX_LINES + 1
     assert lines[-1] == "... 5 more"
     assert "robot 1" in lines[0] and "ref STOP" in lines[0]
+
+
+def test_resolve_sim_noise_uses_the_replays_own_settings_by_default():
+    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+
+    settings = SimNoise(seed=2, latency_s=(0.03, 0.15), kick_speed_sd=0.45).to_dict()
+    noise, line = repro.resolve_sim_noise(None, {"settings": settings, "draw": {}})
+    assert noise == SimNoise.from_dict(settings) and noise.seed == 2
+    assert line == "sim noise: the replay's own (seed 2)"
+
+
+def test_resolve_sim_noise_without_one_in_the_replay_is_noiseless():
+    assert repro.resolve_sim_noise(None, None) == (None, "sim noise: none (the replay stores none)")
+
+
+def test_resolve_sim_noise_none_overrides_the_replays_noise():
+    replay = {"settings": {"seed": 2, "latency_s": [0.03, 0.15]}, "draw": {}}
+    assert repro.resolve_sim_noise("none", replay) == (None, "sim noise: none (--sim-noise none)")
+
+
+def test_resolve_sim_noise_reads_a_settings_file_over_the_replays(tmp_path):
+    path = tmp_path / "other.json"
+    path.write_text('{"seed": 7, "kick_speed_sd": 0.3}')
+    replay = {"settings": {"seed": 2}, "draw": {}}
+    noise, line = repro.resolve_sim_noise(str(path), replay)
+    assert noise.seed == 7 and noise.kick_speed_sd == 0.3
+    assert line == f"sim noise: {path} (--sim-noise, seed 7)"
+
+
+def test_the_replays_stored_settings_redraw_the_same_robots():
+    """The repro's draw is `SimNoise.draw` on the stored settings, so with the same robot counts and
+    time step it is the match's own draw: latency ticks and kick offsets per robot, exactly."""
+    from utama_core.config.settings import TIMESTEP
+    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+
+    noise = SimNoise(seed=2, latency_s=(0.03, 0.15), kick_speed_offset_sd=0.2, max_accel=(1.5, 3.5))
+    counts = {"team_blue": 6, "team_yellow": 6}
+    stored = noise.draw(counts, TIMESTEP).to_dict()  # what StrategyRunner stores with the replay
+    redrawn = repro.resolve_sim_noise(None, {"settings": noise.to_dict(), "draw": stored})[0].draw(counts, TIMESTEP)
+    assert redrawn.to_dict() == stored
