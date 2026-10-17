@@ -11,6 +11,7 @@ pixi run python tools/motion_planning_benchmark.py --scenarios direct static_sla
 pixi run python tools/motion_planning_benchmark.py --repeats 5          # expose instability
 pixi run python tools/motion_planning_benchmark.py --schemes fpp trajsample --scenarios mirror_swap --repeats 3
 pixi run python tools/motion_planning_benchmark.py --list-scenarios
+pixi run python tools/motion_planning_benchmark.py --scenarios direct --figures docs/img/motion_planning  # PNG figures too
 ```
 
 Runs are sequential (concurrent cells would contend for CPU and corrupt latency numbers).
@@ -98,6 +99,34 @@ clearance minus both radii (negative = overlap); collision count; largest final 
 fraction (robot-seconds below 0.05 m/s while unreached); mean/p95/max
 `MotionController.calculate()` latency (first 5 calls excluded for Numba warm-up,
 `--timing-warmup-calls`); max speed and acceleration.
+
+## Figures
+
+`--figures DIR` also writes `trajectories_<scenario>.png` (the pitch with each scheme's paths, then speed
+and clearance over time) and `summary.png` (one dot per scheme and scenario for each metric). It is off
+by default; turning it on records per-tick robot state during the runs and changes nothing else. Figures
+show the first repeat of each cell. Three scenarios from one run are committed in `docs/img/motion_planning/`:
+
+```bash
+pixi run python tools/motion_planning_benchmark.py --scenarios direct static_slalom crossing --allow-failures --figures docs/img/motion_planning
+```
+
+![Summary: one dot per scheme and scenario](img/motion_planning/summary.png)
+
+![static_slalom trajectories, speed and clearance](img/motion_planning/trajectories_static_slalom.png)
+
+![crossing trajectories, speed and clearance](img/motion_planning/trajectories_crossing.png)
+
+In this run (all three schemes, one repeat): in `static_slalom`, `dwa`'s path swerves round the first two
+obstacles and ends touching the lower one (clearance reaches 0 m: its failed cell), while `fpp` and
+`trajsample` keep a straight line with clearance of about 0.12 m. In `crossing`, `dwa` ends at 0 m clearance
+from the crossing opponent, `trajsample` keeps about 0.9 m or more but bends wide and finishes in about 5 s,
+and `fpp` passes at about 0.2 m and finishes in about 3.3 s. In `direct`, `fpp` and `trajsample` both reach the
+2 m/s speed limit, while `dwa` accelerates more slowly and never reaches it. Where two schemes' paths coincide
+(`direct`, and the straight part of `static_slalom`), the later scheme is drawn on top and hides the earlier one.
+
+The three-scenario command took about 8 s of wall time, including writing the figures. Its numbers are
+not the table in the results section above, which was made at an earlier revision.
 
 ## Reading it
 

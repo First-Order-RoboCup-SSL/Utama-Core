@@ -77,7 +77,7 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 
 | Script | Purpose |
 |---|---|
-| `tools/motion_planning_benchmark.py` | The motion planners (`fpp`, `dwa`, `trajsample`) on fixed headless rsim scenarios; see [motion_planning_comparison.md](motion_planning_comparison.md) |
+| `tools/motion_planning_benchmark.py` | The motion planners (`fpp`, `dwa`, `trajsample`) on fixed headless rsim scenarios; `--figures DIR` also writes trajectory and summary PNGs; see [motion_planning_comparison.md](motion_planning_comparison.md) |
 
 ## Demos and external environments
 
