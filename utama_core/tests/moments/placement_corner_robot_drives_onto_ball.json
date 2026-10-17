@@ -1,6 +1,6 @@
 {
   "name": "placement_corner_robot_drives_onto_ball",
-  "note": "Round-robin tournament_20261017_002337, overload_press vs press_trigger_flow, t=333.5 s (the source's ball_placement_interference foul by robot 1 at 334.27 s): their ball placement at (-4.0, -2.5) in our corner. Robot 1 of ours drives in to 0.11 m of the ball during the placement, far inside the 0.5 m keep-out. Unlike placement_in_corner_traps_defender (a push-out off the pitch), this is a drive-in toward the ball. Fails in 6 of 6 plays and at 14038121.",
+  "note": "Their placement at (-4.0, -2.5): robot 1 starts inside the keep-out circle, boxed in the corner by two opponents. It must leave without closing on the ball. Before 935da778 the planner's detour took it back toward the ball (fails at seeds 0, 1, 3, 4; seed 1 stored). The placement moves the ball onto robot 1, which keeps_clear does not count as driving in.",
   "source": {
     "replay": "replays/tournament_20261017_002337/overload_press_vs_press_trigger_flow.npz",
     "t": 333.5
@@ -12,13 +12,13 @@
     "keeps_clear",
     "ball_placement_interference"
   ],
-  "known_failure": "planner: robot 1 inside the keep-out circle was given a carrot back toward the ball (fixed: test_fpp_inside_ball_keep_out, planner step 8b). Still fails on seeds 0-4: the placement jumps the ball ~0.2 m to the designated point (-4.0, -2.5) at t~0.6-0.9 s, 0.14-0.22 m from robot 1, and keeps_clear compares ball positions across ticks, so it reads that jump as robot 1 driving in (robot-only approach is zero)",
+  "known_failure": null,
   "designated_position": [
     -4.0,
     -2.5
   ],
   "sim_noise": {
-    "seed": 2,
+    "seed": 1,
     "latency_s": [
       0.03,
       0.15

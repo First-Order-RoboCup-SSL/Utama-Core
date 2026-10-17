@@ -569,7 +569,9 @@ def _restart_against_us(command: Optional[RefereeCommand], we_are_yellow: bool) 
 
 def keeps_clear(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
     """During STOP and the other team's restarts, a robot of ours inside the keep-out circle
-    (0.5 m from the ball) never moves closer to the ball, and leaves within 2 s."""
+    (0.5 m from the ball) never moves closer to the ball, and leaves within 2 s. Moving closer is
+    the robot's own move, measured against where the ball is now: a ball that is placed or
+    rolls toward a robot standing still is not the robot driving in."""
     window = round(APPROACH_WINDOW_S * TICKS_PER_SECOND)
     failures = []
     inside_since: dict[int, float] = {}
@@ -594,7 +596,7 @@ def keeps_clear(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
             if rid not in before.ours or d_now >= KEEP_OUT_M:
                 continue
             bx, by = before.ours[rid]
-            d_before = math.hypot(bx - before.ball[0], by - before.ball[1])
+            d_before = math.hypot(bx - now.ball[0], by - now.ball[1])
             if d_before - d_now > APPROACH_TOLERANCE_M:
                 failures.append(
                     f"t={now.t:.2f}s {now.command.name}: robot {rid} drove in to {d_now:.2f} m from the ball "

@@ -1,6 +1,6 @@
 {
   "name": "free_kick_robot_drives_in_at_start",
-  "note": "Round-robin tournament_20261017_002337, decoy_and_overload vs overload_press, t=156.9 s (the source's keep_out foul by robot 3 at 157.72 s): their direct free kick at (2.59, 2.73), robot 3 of ours starts 0.7 m from the ball and drives in to 0.50 m within 0.3 s of the restart. The keep-out circle is 0.5 m: driving in is a keep_out foul. Fails in 6 of 6 plays (5 seeds plus the stored one twice); fails at 14038121 too.",
+  "note": "Round-robin tournament_20261017_002337, decoy_and_overload vs overload_press, t=156.9 s (the source's keep_out foul by robot 3 at 157.72 s). Their kicker pushed the ball off at 156.85 s, during DIRECT_FREE_BLUE with no NORMAL_START, and it rolled 0.75 m onto robot 3, which stood 0.79 m away. Robot 3 must not drive in (keeps_clear), and the referee must not charge it with keep_out once the ball has moved 0.05 m: the kick was taken and the ball is in play.",
   "source": {
     "replay": "replays/tournament_20261017_002337/decoy_and_overload_vs_overload_press.npz",
     "t": 156.9
@@ -9,9 +9,10 @@
   "opponent": "build_overload_press_kernel_strategy",
   "seconds": 3.0,
   "checks": [
+    "keep_out",
     "keeps_clear"
   ],
-  "known_failure": "robot 3 drives in from 0.70 m to 0.50 m of the ball in the first 0.3 s of their direct free kick; cause not diagnosed",
+  "known_failure": "referee: their kicker pushed the ball 0.75 m during DIRECT_FREE_BLUE without a NORMAL_START, and the referee still charged robot 3 (standing still) with keep_out; by the rules the ball was in play once it moved 0.05 m",
   "designated_position": null,
   "sim_noise": {
     "seed": 2,

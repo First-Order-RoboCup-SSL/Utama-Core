@@ -36,6 +36,15 @@ def test_keeps_clear_lets_a_robot_inside_leave_and_flags_one_driving_in():
     assert "drove in" in moments.keeps_clear(driving_in)[0]
 
 
+def test_keeps_clear_does_not_blame_a_robot_standing_still_for_the_ball_coming_to_it():
+    """placement_corner_robot_drives_onto_ball: the placement moved the ball 0.2 m onto a robot."""
+    from utama_core.entities.referee.referee_command import RefereeCommand
+
+    stop, dt = RefereeCommand.STOP, 1 / moments.TICKS_PER_SECOND
+    ball_comes = [_tick(i * dt, stop, (0.004 * i, 0.0), {1: (0.45, 0.0)}) for i in range(60)]
+    assert moments.keeps_clear(ball_comes) == []
+
+
 def test_keeps_clear_flags_a_robot_still_inside_after_the_grace_and_ignores_our_own_restart():
     from utama_core.entities.referee.referee_command import RefereeCommand
 
