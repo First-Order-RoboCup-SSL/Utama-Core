@@ -416,6 +416,25 @@ def test_a_replay_from_before_the_side_was_stored_per_tick_keeps_one_side(tmp_pa
     assert replay.frame_at(1).my_team_is_right is False
 
 
+def test_a_scenario_time_counts_from_the_first_frame_not_from_zero(tmp_path):
+    # The sidecar's and `fouls`' times count from the first frame (1/60 s here), so t=0.1 is the
+    # frame at 1/60 + 0.1 = 7/60 s. Counting from zero would pick the frame at 6/60 s instead.
+    from utama_core.replay.scenario import scenario_from_replay
+
+    frames = [
+        dataclasses.replace(
+            _side_frame(k / 60, True),
+            ball=Ball(p=Vector3D(float(k), 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0), a=Vector3D(0.0, 0.0, 0.0)),
+        )
+        for k in range(1, 9)
+    ]
+    _write(tmp_path, frames)
+
+    scenario = scenario_from_replay(tmp_path / "test_replay.npz", 0.1)
+
+    assert scenario.ball_x == pytest.approx(7.0)
+
+
 def test_a_scenario_from_the_second_half_is_turned_to_config_a_s_right_side(tmp_path):
     from utama_core.replay.scenario import scenario_from_replay
 
