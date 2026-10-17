@@ -11,6 +11,10 @@
   "checks": [
     "keeps_clear"
   ],
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ],
   "known_failure": null,
   "designated_position": [
     2.5,

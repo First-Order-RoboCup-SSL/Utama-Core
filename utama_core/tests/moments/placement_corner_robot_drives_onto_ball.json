@@ -154,5 +154,9 @@
         "vy": 0.07585639506578445
       }
     ]
-  }
+  },
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ]
 }

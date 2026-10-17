@@ -10,6 +10,8 @@ A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays 
      "seconds": how long to play (default 3),
      "checks": names from `CHECKS` below, or referee rule names our side must not break
                (`custom_referee/rules/`, "*" for any),
+     "requires": names from `REQUIRES` below: conditions that must hold during the play, so a
+               moment whose situation never arose fails ("did not arise: ...") instead of passing,
      "known_failure": null, or why it still fails (the test is then a strict xfail),
      "designated_position": a ball placement's target [x, y], else null,
      "sim_noise": the match's seeded noise (`sim_noise.py`), or null for none,
@@ -25,6 +27,11 @@ as the behaviour we want, so it does not wait on the referee's persistence befor
 "all" plays every strategy in the round-robin catalog, except that during a restart the
 referee override moves every outfield robot whatever the strategy, so then one strategy per
 distinct override (its `referee_overrides` and goalkeeper tactic) is enough.
+
+Requires vs checks: a check says what must not happen, or (`pass_received`, `placement_completes`)
+what must happen. A requirement says the situation the moment is about arose: a restart lasted,
+a robot came near the ball, the ball was kicked. Without them a moment passes when the opponent
+does something else, the ball goes elsewhere, or our robot never gets there.
 
 Tactic moments: "tactic": {"class": "GiveAndGoTactic", "robots": [1, 2], "mem": {"carrier_id": 1}}
 plays our side as that one Tactic (`utama_core/tactics/`) on the listed outfield robots, the other
@@ -78,6 +85,9 @@ from tools.evaluation.match import (  # noqa: E402
     OUTFIELD_ROBOT_IDS,
     TICKS_PER_SECOND,
 )
+from utama_core.config.referee_constants import (  # noqa: E402
+    BALL_PLACEMENT_DONE_DISTANCE,
+)
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
 from utama_core.replay.scenario import (  # noqa: E402
     RobotState,
@@ -107,6 +117,7 @@ class Moment:
     note: str
     scenario: Scenario
     checks: list[str]
+    requires: list[str] = dataclasses.field(default_factory=list)
     strategy: str = "all"
     opponent: str = DEFAULT_OPPONENT
     seconds: float = DEFAULT_SECONDS
@@ -137,6 +148,7 @@ def to_dict(m: Moment) -> dict:
         "opponent": m.opponent,
         "seconds": m.seconds,
         "checks": m.checks,
+        "requires": m.requires,
         "known_failure": m.known_failure,
         "designated_position": list(m.designated_position) if m.designated_position else None,
         "sim_noise": m.sim_noise,
@@ -171,6 +183,7 @@ def from_dict(d: dict) -> Moment:
         note=d["note"],
         scenario=scenario,
         checks=list(d["checks"]),
+        requires=list(d.get("requires", [])),
         strategy=_full_name(d.get("strategy", "all")),
         opponent=_full_name(d.get("opponent") or DEFAULT_OPPONENT),
         seconds=float(d.get("seconds", DEFAULT_SECONDS)),
@@ -276,6 +289,9 @@ def validate(m: Moment) -> None:
     for c in m.checks:
         if c not in CHECKS and c != "*" and c not in rules:
             problems.append(f"unknown check {c!r}: use one of {sorted([*CHECKS, '*', *sorted(rules)])}")
+    for r in m.requires:
+        if r not in REQUIRES:
+            problems.append(f"unknown requires {r!r}: use one of {sorted(REQUIRES)}")
     if m.seconds <= 0:
         problems.append(f"seconds must be positive, got {m.seconds}")
     names = catalog()
@@ -548,6 +564,8 @@ class Tick:
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
     tactic_robots: frozenset[int] = frozenset()  # robots the moment's tactic ticked with this tick
+    ball_speed: float = 0.0  # m/s
+    designated: Optional[tuple[float, float]] = None  # the referee's designated position (placement, free kick)
 
 
 def restart_side(command: Optional[RefereeCommand], we_are_yellow: bool = True) -> Optional[str]:
@@ -628,8 +646,118 @@ def _first_per_robot(failures: list[str]) -> list[str]:
     return out
 
 
-# Named checks a moment can ask for. Add one only for a failure no referee rule names.
-CHECKS = {"keeps_clear": keeps_clear, "stop_speed": stop_speed}
+# A kick: the ball at this speed or more (a moving ball at the start is below it).
+KICK_SPEED_MPS = 2.0
+# A receiver has the ball when it is this close to it: the dribbler takes it within ~0.08 m of the
+# centre, and a robot's edge is ~0.11 m, so 0.15 m with the ball slowed is a robot taking it.
+RECEIVE_M = 0.15
+# A restart's command holds this long from the start, so the restart happened (a free kick ends
+# only when it is taken; a ball placement needs the ball settled at the target for 2 s).
+RESTART_LASTS_S = 1.0
+# A robot of ours this close to the ball: the keep-out circle (0.5 m) was tested, not a robot far off.
+NEAR_BALL_M = 1.0
+
+
+def pass_received(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
+    """After the ball is kicked (`KICK_SPEED_MPS`), a robot of the moment's tactic other than the
+    carrier takes it: the ball slows below `KICK_SPEED_MPS` within `RECEIVE_M` of that robot before
+    the end. The carrier is our robot nearest the ball at the start; with no tactic ticking, any
+    other robot of ours counts."""
+    first = next((t for t in ticks if t.ball is not None and t.ours), None)
+    if first is None:
+        return ["pass_received: no ball or robots of ours to play"]
+    bx, by = first.ball
+    carrier = min(first.ours, key=lambda rid: math.hypot(first.ours[rid][0] - bx, first.ours[rid][1] - by))
+    tactic = frozenset().union(*(t.tactic_robots for t in ticks))
+    receivers = (tactic or frozenset(first.ours)) - {carrier}
+    kick = next((i for i, t in enumerate(ticks) if t.ball_speed >= KICK_SPEED_MPS), None)
+    if kick is None:
+        return [f"pass_received: the ball never reached kick speed ({KICK_SPEED_MPS} m/s), so no pass"]
+    for tick in ticks[kick:]:
+        if tick.ball is None or tick.ball_speed >= KICK_SPEED_MPS:
+            continue  # a ball still at pass speed past a robot is a miss, not a reception
+        for rid in receivers:
+            if rid in tick.ours and _dist(tick.ours[rid], tick.ball) <= RECEIVE_M:
+                return []
+    return [f"pass_received: no robot of {sorted(receivers)} got the ball from robot {carrier} by the end"]
+
+
+def placement_completes(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
+    """Our ball placement completes: the referee moves on from our BALL_PLACEMENT before the end,
+    and the ball is within the rule's tolerance (`BALL_PLACEMENT_DONE_DISTANCE`) of the designated
+    position at the last tick of the placement. A timed-out placement leaves it farther off."""
+    placing = RefereeCommand.BALL_PLACEMENT_YELLOW if we_are_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
+    if not ticks or ticks[0].command is not placing:
+        return [f"placement_completes: the moment does not start from our {placing.name}"]
+    left = next((i for i, t in enumerate(ticks) if t.command is not placing), None)
+    if left is None:
+        return [f"placement_completes: still {placing.name} at the end, the ball not placed"]
+    last = ticks[left - 1]
+    if last.ball is None or last.designated is None:
+        return ["placement_completes: no ball or designated position at the last placement tick"]
+    dist = _dist(last.ball, last.designated)
+    if dist > BALL_PLACEMENT_DONE_DISTANCE:
+        return [
+            f"placement_completes: {placing.name} ended at t={last.t:.2f}s with the ball {dist:.2f} m from "
+            f"the designated position (tolerance {BALL_PLACEMENT_DONE_DISTANCE} m)"
+        ]
+    return []
+
+
+def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def _restart_lasts(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[str]:
+    """None when the restart the moment starts from (its first tick's referee command) stays
+    active for `RESTART_LASTS_S`, else why not."""
+    if not ticks or restart_side(ticks[0].command, we_are_yellow) is None:
+        name = ticks[0].command.name if ticks and ticks[0].command else "none"
+        return f"the moment does not start from a restart (its first command is {name})"
+    start = ticks[0].command
+    for tick in ticks:
+        if tick.command is not start:
+            if tick.t < RESTART_LASTS_S:
+                return f"{start.name} ended at {tick.t:.2f} s, need {RESTART_LASTS_S} s"
+            return None
+    if ticks[-1].t < RESTART_LASTS_S:
+        return f"{start.name} still on at the end of the play, {ticks[-1].t:.2f} s, need {RESTART_LASTS_S} s"
+    return None
+
+
+def _robot_near_ball(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[str]:
+    """None when some robot of ours comes within `NEAR_BALL_M` of the ball, else the closest."""
+    dists = [_dist(pos, t.ball) for t in ticks if t.ball is not None for pos in t.ours.values()]
+    closest = min(dists, default=math.inf)
+    if closest <= NEAR_BALL_M:
+        return None
+    return f"the closest robot of ours to the ball was {closest:.2f} m, need {NEAR_BALL_M} m"
+
+
+def _ball_kicked(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[str]:
+    """None when the ball reaches `KICK_SPEED_MPS`, else its top speed."""
+    fastest = max((t.ball_speed for t in ticks), default=0.0)
+    if fastest >= KICK_SPEED_MPS:
+        return None
+    return f"the ball's top speed was {fastest:.2f} m/s, need {KICK_SPEED_MPS} m/s"
+
+
+# Named checks a moment can ask for. Add one only for a failure no referee rule names, or for an
+# outcome that must happen (`pass_received`, `placement_completes`).
+CHECKS = {
+    "keeps_clear": keeps_clear,
+    "stop_speed": stop_speed,
+    "pass_received": pass_received,
+    "placement_completes": placement_completes,
+}
+
+# Named conditions a moment can `require`: each returns None when it holds during the play, else
+# why it did not arise. Judged in `judge`, reported as "did not arise: <name> (<why>)".
+REQUIRES = {
+    "restart_lasts": _restart_lasts,
+    "robot_near_ball": _robot_near_ball,
+    "ball_kicked": _ball_kicked,
+}
 
 
 def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
@@ -640,6 +768,10 @@ def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]
         never = sorted(r for r in m.tactic["robots"] if r not in ran)
         if never:
             failures.append(f"{m.tactic['class']} never ran on robots {never}")
+    for name in m.requires:
+        why = REQUIRES[name](ticks, we_are_yellow)
+        if why:
+            failures.append(f"did not arise: {name} ({why})")
     for name in m.checks:
         if name in CHECKS:
             failures += CHECKS[name](ticks, we_are_yellow)
@@ -724,6 +856,12 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     our_speeds={rid: r.v.mag() for rid, r in game.friendly_robots.items()},
                     our_foul=foul,
                     tactic_robots=frozenset(ticked),
+                    ball_speed=game.ball.v.mag() if game.ball is not None else 0.0,
+                    designated=(
+                        tuple(game.referee.designated_position)
+                        if game.referee is not None and game.referee.designated_position is not None
+                        else None
+                    ),
                 )
             )
             ticked.clear()
