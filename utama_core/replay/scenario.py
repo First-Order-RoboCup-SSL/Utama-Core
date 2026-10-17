@@ -79,6 +79,12 @@ Known limitations, stated here once rather than re-derived by every caller:
   A frame shows the referee's decision on the frame before it, one tick
   after the sidecar's time for it: to start from a restart at the time the
   sidecar gives, pass `showing=` (see `_first_frame_showing`).
+- **Opponents diverge.** The enemy robots run their own strategy from fresh state too, so after a
+  fraction of a second they stop doing what they did in the match. `recorded_enemy_path` returns
+  their recorded poses from a frame on, so a caller can steer them along the record for a while
+  (`tools/moments.py play --follow S`). Teleporting them is not an option: rsim's `replace` zeroes
+  every robot's velocity and wheel speed on each teleport call, ours included. The ball cannot be
+  steered the same way for the same reason, so the ball still follows its own physics.
 """
 
 from __future__ import annotations
@@ -90,6 +96,8 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+import numpy as np
 
 from utama_core.config.settings import MAX_GAME_HISTORY
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -362,6 +370,58 @@ def scenario_from_replay(replay_path, t_seconds: float, *, showing: Optional[Ref
         config_b_name=config_b_name,
         frame_ts=frame.ts,
     )
+
+
+@dataclass(frozen=True)
+class RecordedRobots:
+    """The enemy robots' recorded poses from the frame `recorded_enemy_path` starts at, in the
+    same frame as a `Scenario` (turned when the recorded team defends the left goal).
+
+    `times`: seconds from that frame, ascending, starting at 0. `poses`: (n, len(ids), 3) of x, y,
+    orientation; `velocities`: (n, len(ids), 2). NaN where a robot was not seen.
+    """
+
+    times: np.ndarray
+    ids: tuple[int, ...]
+    poses: np.ndarray
+    velocities: np.ndarray
+
+
+_RECORDED_TICKS_PER_SECOND = 60  # rsim's step rate; a replay has one frame per tick
+
+
+def recorded_enemy_path(replay_path, t_seconds: float, seconds: float) -> RecordedRobots:
+    """The enemy robots' recorded poses for `seconds` from the frame nearest `t_seconds` (counted
+    as in `scenario_from_replay`). Columnar (`.npz`) replays only."""
+    from utama_core.replay.columnar_reader import load_columnar_replay
+
+    replay_path = Path(replay_path)
+    if replay_path.suffix != ".npz":
+        raise ValueError(f"recorded_enemy_path reads .npz replays, not {replay_path.name}")
+    columnar = load_columnar_replay(replay_path)
+    if columnar.n_ticks == 0:
+        raise ValueError(f"Replay {replay_path} contains no frames.")
+    start = int(abs((columnar.ts - columnar.ts[0]) - t_seconds).argmin())
+    end = min(columnar.n_ticks, start + int(math.ceil(seconds * _RECORDED_TICKS_PER_SECOND)) + 1)
+    rows = np.arange(start, end)
+    turn = np.array([not columnar.is_right_at(int(k)) for k in rows], dtype=bool)
+    k = np.where(turn, -1.0, 1.0)[:, None]
+    p = columnar.enemy_p[rows]
+    v = columnar.enemy_v[rows]
+    heading = columnar.enemy_orientation[rows] + np.where(turn, math.pi, 0.0)[:, None]
+    heading = np.arctan2(np.sin(heading), np.cos(heading))
+    return RecordedRobots(
+        times=columnar.ts[rows] - columnar.ts[start],
+        ids=tuple(int(i) for i in columnar.enemy_ids),
+        poses=np.stack([k * p[..., 0], k * p[..., 1], heading], axis=-1),
+        velocities=np.stack([k * v[..., 0], k * v[..., 1]], axis=-1),
+    )
+
+
+def recorded_index(times: np.ndarray, t_seconds: float) -> int:
+    """The index of the last recorded frame at or before `t_seconds`: the first before the path's
+    start, the last after its end."""
+    return int(min(max(np.searchsorted(times, t_seconds, side="right") - 1, 0), len(times) - 1))
 
 
 def _overwrite_current_game_frame(side, scenario: Scenario, *, my_is_friendly: bool) -> None:
