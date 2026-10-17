@@ -166,7 +166,7 @@ def test_editing_the_shared_pickers_changes_the_configs_that_import_them(repo):
 
 
 def test_the_registry_is_not_part_of_any_strategy_fingerprint(repo):
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == set()
+    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == set()
 
 
 def test_pointing_a_factory_at_another_module_changes_that_config(repo):
@@ -230,12 +230,12 @@ def test_shared_code_importing_kernel_strategy_puts_every_strategy_module_in_the
     path = repo / rel
     path.write_text("from utama_core.strategy.kernel_strategy import _shared_helper\n\n\n" + path.read_text())
     assert _changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4") == {"base", "build_b_kernel_strategy"}
-    assert _changed_after(repo, PICKERS_PY, "# used by the shared helper", "# edited") == {
+    assert _changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06") == {
         "base",
         "build_a_kernel_strategy",
         "build_b_kernel_strategy",
     }
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == {"base"}
+    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == {"base"}
 
 
 def test_the_rsim_subprocess_script_and_data_files_are_in_the_base(repo):
@@ -428,3 +428,28 @@ def test_every_reach_outside_the_import_graph_is_accounted_for(graph):
         graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.base_modules(BENCH_ENTRIES) | graph.closure([KERNEL_STRATEGY])
     )
     assert graph.audit(everything) == AUDIT
+
+
+_TACTIC = "utama_core/tactics/defend.py"
+_TACTIC_NAME = "utama_core.tactics.defend"
+_TACTIC_SRC = '"""Old module doc."""\n\nX = 1\n\n\ndef f(a, b):\n    """Old doc."""\n    return a + b\n'
+
+
+def _file_digest(root: Path, text: str) -> str:
+    (root / _TACTIC).write_text(text)
+    (row,) = CodeGraph(root).file_digests([_TACTIC_NAME])
+    return row
+
+
+def test_comments_docstrings_and_formatting_do_not_change_a_file_fingerprint(repo):
+    before = _file_digest(repo, _TACTIC_SRC)
+    edited = (
+        '"""New module doc, longer."""\n# a new comment\nX = 1  # trailing comment\n\n\n'
+        'def f(a,\n      b):\n    """New doc\n    spanning lines."""\n    return (a + b)\n'
+    )
+    assert _file_digest(repo, edited) == before
+
+
+def test_changing_a_constant_changes_the_file_fingerprint(repo):
+    before = _file_digest(repo, _TACTIC_SRC)
+    assert _file_digest(repo, _TACTIC_SRC.replace("X = 1", "X = 2")) != before

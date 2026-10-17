@@ -26,6 +26,9 @@ into the base. `audit()` lists every place the code reaches outside the import g
 `tests/replay/test_fingerprint.py` pins that list, so a new one fails a test until someone
 decides how it enters the fingerprint.
 
+A repo module counts by its syntax tree without docstrings (`_code_sha`): editing a comment, a
+docstring or the formatting changes no fingerprint.
+
 Standard library only. Nothing here imports the code it fingerprints: the repo's `.py`
 files are parsed, not run.
 """
@@ -88,6 +91,19 @@ _MUTATING_BUILTINS = frozenset({"setattr", "delattr", "exec", "eval", "__import_
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _code_sha(code: bytes) -> str:
+    """Hash of a module's syntax tree without docstrings, so comments, docstrings and formatting
+    don't move a fingerprint."""
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                if isinstance(body[0].value.value, str):
+                    node.body = body[1:] or [ast.Pass()]
+    return _sha(ast.dump(tree).encode())
 
 
 def _digest(parts: Iterable[str]) -> str:
@@ -201,7 +217,7 @@ class CodeGraph:
             mod = self.module(name)
             if mod is not None and mod.path is not None:
                 code = _VERSION_LINE.sub(b"", mod.source)
-                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_sha(code)}")
+                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_code_sha(code)}")
         return sorted(rows)
 
     def data_files(self, names: Iterable[str]) -> list[str]:
