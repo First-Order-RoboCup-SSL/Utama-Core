@@ -34,7 +34,7 @@ about 2 m of the ball and robot 4 stays 5-8 m away.
 
 ## 1. How a strategy plays
 
-### Where its robots stand
+### Where its robots stand: the position map
 
 ![positions in possession](img/signals/positions_attack.png)
 
@@ -47,14 +47,26 @@ are each robot's mean position. The same picture without the ball:
 What it shows:
 
 - Most strategies stand on **vertical lines**: robots spread across the pitch at one depth, one line
-  just outside our box (x ≈ −2.7 m) and one just outside theirs (x ≈ +2.8 m): robots holding spots
-  rather than following the ball, and the lines barely change between possession and not.
+  just outside our box (x ≈ −2.6 m) and one near theirs (x ≈ +3.0 m), with or without the ball.
+  Which tactic draws them, from the intentions log (live play, robots on the line):
+  - the line in our half is mostly `BlockShapeTactic`'s screen, held at a fixed depth by design
+    (`_SCREEN_OFFSET` in front of our box, shifting only sideways with the ball): 73-83% of the
+    samples there in `clear_danger`, `counter_flow`, `press_trigger_flow`, `score_aware_counter_flow`
+    and `clear_press_plus`. Those robots stand still 57-63% of the time, with the ball a median
+    2-3 m ahead of them. `split_shape` and `decoy_and_overload` draw the same kind of line with
+    `ShadowAndMarkTactic` a little deeper (x ≈ −3.0 m).
+  - the lines from `GiveAndGoTactic` (x ≈ −2.4 and +3.0 m in `give_and_go_solo` and `high_press`)
+    are not explained yet: the ball is at the same depth (median 0 m ahead), mostly near a
+    touchline (median |y| 2.4-2.6 m).
+  A fixed line is not by itself why a strategy loses: `clear_danger` holds the screen and ranks
+  fourth. Whether a ball-following depth beats it is a question for `evaluate.py`, not this
+  picture.
 - `split_shape`, the top scorer, keeps most of its outfield robots in **its own defensive third even
   with the ball**, and attacks with one or two. `overload_press` is the opposite: a block just past
   halfway, in and out of possession.
 - `decoy_and_overload` sits deep in a cluster in front of its own box.
 
-### Where it shoots from, and concedes
+### Where it shoots from, and concedes: the shot map
 
 ![shots for and against](img/signals/shots.png)
 

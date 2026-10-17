@@ -110,7 +110,9 @@ The same robots while the opponent has the ball.
 - `split_shape` and `score_aware_counter_flow` sit deepest: 68% and 69% of their samples without the
   ball are in their own half, against 17% for `overload_press`.
 - In most panels a vertical stripe stands about 2.7 m in front of the strategy's own goal, in both
-  figures: robots that hold one line in their own half whether or not they have the ball.
+  figures: robots that hold one line in their own half whether or not they have the ball. It is
+  mostly `BlockShapeTactic`'s fixed-depth screen; the breakdown by tactic is in
+  [visual_guide.md](visual_guide.md#where-its-robots-stand-the-position-map).
 
 ![Where each strategy shoots from, and where it concedes](img/signals/shots.png)
 

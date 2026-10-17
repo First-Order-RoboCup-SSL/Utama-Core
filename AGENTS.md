@@ -44,6 +44,11 @@ One term per thing; reuse these instead of coining new ones.
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
+- **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
+  `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always
+  turned so the strategy attacks right. Position map: a heatmap of where the outfield robots stand in
+  live play, with the ball and without it, plus each robot's mean position. Shot map: every shot at
+  the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 - **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a

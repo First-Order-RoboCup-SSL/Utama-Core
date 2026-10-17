@@ -188,6 +188,12 @@ resolved, replace it with a one-line pointer under "Done".
    already computes `{marker: opponent}` each tick and discards it. Tactic side is small via
    `MatchLog.trace_if_changed()`; `field_canvas.js` has no line/arrow primitive yet.
 
+9b. **Match timeline in the dashboard.** `tools/match_timeline.py` draws one window as swimlanes
+   (referee band, each robot's tactic, possession, distance to the ball, events); as a dashboard
+   panel under the Replay tab's field view it would follow the replay cursor, and clicking a lane
+   would seek to that tick. Data is all in the replay and its `intentions.jsonl` already
+   (`load_window` computes it without drawing). Not started (user idea, 2026-10-17).
+
 10. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones.
 

@@ -36,6 +36,22 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | Which script does what | [docs/tools.md](docs/tools.md) |
 | Everything else | [docs/README.md](docs/README.md), the index of every doc |
 
+## What our strategies look like
+
+Every strategy in the latest round-robin on one page, attacking right, best first (the number is points
+per match). The **position map**: where the five outfield robots stand in live play while their team
+has the ball, darker for more time; dots are each robot's mean position.
+
+![Position maps with the ball](docs/img/signals/positions_attack.png)
+
+The **shot map**: every shot at the spot it was struck from (filled: a goal), with the shots each
+strategy conceded faded at the other end.
+
+![Shot maps](docs/img/signals/shots.png)
+
+Drawn by `tools/pitch_maps.py` from a round-robin's replays. What they show, and the other pictures
+(one match over time, a restart, the motion planner): [docs/visual_guide.md](docs/visual_guide.md).
+
 Coding agents: read [AGENTS.md](AGENTS.md) first (`CLAUDE.md` is a symlink to it).
 
 ## Layout
