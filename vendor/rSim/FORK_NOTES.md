@@ -4,6 +4,10 @@ Upstream: https://github.com/robocin/rSim
 Forked at commit: `b413932b7b4bbc0fc399f6a979e4cfcc4f56264f` (tag `v1.2`, the
 same version this repo's `pixi.toml` pins via `rc-robosim>=1.2,<2` on PyPI).
 
+This fork is the physics step of the rsim stack. The diagram of the whole tick, from
+`StrategyRunner` through the seeded sim noise to this C++ code and back, is in
+[docs/sim_realism.md](../../docs/sim_realism.md#how-one-rsim-tick-is-built).
+
 ## Why this is here
 
 Since 2026-10-16 `pixi.toml` builds the `robosim` environment's `rc-robosim` from this

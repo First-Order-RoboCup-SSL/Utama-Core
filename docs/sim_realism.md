@@ -70,6 +70,43 @@ Other differences:
 Lesson: **never judge realism by goal totals.** They can match for the wrong reasons.
 Compare the components, as in the [scorecard](#the-realism-scorecard).
 
+## How one rsim tick is built
+
+Where the sim noise is applied in one tick: commands go down through the seeded command-side
+noise, and the observations come back through the seeded vision noise. The C++ physics is the
+fork in `vendor/rSim` ([FORK_NOTES.md](../vendor/rSim/FORK_NOTES.md) covers the build).
+
+```mermaid
+flowchart TD
+    subgraph layer["Strategy layer"]
+        sr["StrategyRunner._run_step<br/>run/strategy_runner.py"]
+        strat["Strategies, tactics, MotionController<br/>strategy/, tactics/, motion_planning/"]
+        ref["CustomReferee<br/>custom_referee/custom_referee.py"]
+    end
+
+    subgraph env["rsoccer_simulator (Python env)"]
+        step["SSLStandardEnv.step<br/>rsoccer_simulator/src/ssl/envs/standard_ssl.py"]
+        cmdn["Command noise, SimNoise.draw:<br/>CommandDelay, KickSpeedNoise, KickAngleNoise, MotionLimits<br/>Utils/sim_noise.py"]
+        visn["Vision noise, _frame_to_observations:<br/>gaussian offsets, vanishing (SimNoise.vision_rng)"]
+        rsim["RSimSSL<br/>Simulators/rsim.py"]
+    end
+
+    subgraph phys["Physics"]
+        wrap["RSimSubprocessWrapper<br/>Simulators/robosim/robosim_wrapper.py"]
+        sub["robosim_subprocess.py<br/>child process"]
+        cpp["_robosim binding, C++ physics<br/>vendor/rSim/src/robosim"]
+    end
+
+    strat -->|robot commands via RSimController<br/>team_controller/src/controllers/sim/rsim_controller.py| step
+    sr --> strat
+    step --> cmdn --> rsim
+    rsim --> wrap --> sub --> cpp
+    cpp -->|post-step state| rsim
+    rsim -->|frame| visn
+    visn -->|observations| sr
+    sr <-->|frames, referee| ref
+```
+
 ## Parameters
 
 Ordered by how much each one is likely to change match outcomes.
