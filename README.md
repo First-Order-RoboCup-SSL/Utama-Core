@@ -72,18 +72,9 @@ Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; s
 
 ## System design
 
-One tick of `StrategyRunner` (paths under `utama_core/`):
+One tick of `StrategyRunner`, from vision, robot and referee data to robot commands:
 
-1. **Input**: vision frames (rsim observations, grSim or SSL Vision) and referee data (the in-process
-   `custom_referee/` or the official GameController).
-2. **World model**: `data_processing/refiners/` turn them into one `Game` state (positions,
-   velocities, robot info, referee).
-3. **Decision**: `engine/strategy.py`. During a restart, STOP or timeout the referee override
-   (`engine/referee_override.py`) places the robots; otherwise the strategy (`strategy/`) splits the
-   robots between tactics (`tactics/`), which drive per-robot skills (`skills/`).
-4. **Motion**: `motion_planning/` turns each target into velocities (`fpp` by default; `dwa`,
-   `trajsample`).
-5. **Output**: `team_controller/` sends the commands to rsim, grSim or the real robots.
+![One tick of StrategyRunner](docs/img/pipeline/one_tick.png)
 
 The same tick as a diagram, with every module: [docs/architecture.md](docs/architecture.md). How
 vision, robot and referee data become one `Game`: [docs/pipeline_method.md](docs/pipeline_method.md).

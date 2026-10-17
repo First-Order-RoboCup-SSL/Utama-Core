@@ -1,6 +1,9 @@
 # Pipeline method
 
-The one-tick diagram: [architecture.md](architecture.md#one-tick).
+![One tick of StrategyRunner](img/pipeline/one_tick.png)
+
+Drawn by `docs/img/pipeline/make_one_tick.py`; rerun it when a box's name changes. The same tick as a
+Mermaid diagram with every module path: [architecture.md](architecture.md#one-tick).
 
 How vision, robot and referee data become one `Game` state, and how one tick turns that
 state into robot commands. Everything below runs inside `StrategyRunner`
