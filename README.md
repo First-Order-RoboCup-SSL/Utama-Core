@@ -70,9 +70,65 @@ Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; s
 
 ## System design
 
-![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
+One tick of `StrategyRunner`, from vision to robot (module paths under `utama_core/`):
 
-How vision, robot and referee data become one `Game` state: [docs/pipeline_method.md](docs/pipeline_method.md).
+```mermaid
+flowchart TD
+    subgraph input["Input"]
+        vis["Vision frames<br/>data_processing/receivers/vision_receiver.py (real, grSim)<br/>or rsim observations"]
+        refsrc["Referee data<br/>custom_referee/custom_referee.py (rsim)<br/>or data_processing/receivers/referee_receiver.py"]
+    end
+
+    subgraph world["World model (data_processing/refiners/)"]
+        pos["PositionRefiner<br/>refiners/position.py"]
+        vel["VelocityRefiner<br/>refiners/velocity.py"]
+        rinfo["RobotInfoRefiner<br/>refiners/robot_info.py"]
+        rref["RefereeRefiner<br/>refiners/referee.py"]
+        game["Game / GameFrame<br/>entities/game/game.py"]
+    end
+
+    subgraph decision["Decision (engine/, strategy/)"]
+        strat["Strategy.tick<br/>engine/strategy.py"]
+        restart{"Restart, STOP or TIMEOUT?<br/>engine/referee_override.py"}
+        halt{"HALT?<br/>engine/referee_reset.py"}
+        ovr["RefereeOverride.tick<br/>engine/referee_override.py<br/>custom_referee/actions.py"]
+        part["Partitioner (robots per tactic)<br/>engine/strategy.py, strategy/*.py"]
+        tac["Tactic.tick<br/>tactics/*.py"]
+        skill["Skills<br/>skills/src/*.py"]
+    end
+
+    subgraph motion["Motion (motion_planning/)"]
+        mc["MotionController.calculate<br/>motion_planning/src/controllers/<br/>fpp, dwa, trajsample"]
+    end
+
+    subgraph output["Output (team_controller/)"]
+        ctrl["RobotController.send_robot_commands<br/>team_controller/src/controllers/"]
+        rsim["rsim<br/>rsoccer_simulator/ (sim/rsim_robot_controller.py)"]
+        grsim["grSim over UDP<br/>sim/grsim_robot_controller.py"]
+        real["Real robots over radio<br/>real/real_robot_controller.py"]
+    end
+
+    vis --> pos
+    pos --> vel --> rinfo --> rref
+    refsrc --> rref
+    rref --> game
+    game --> strat
+    game -. "previous frame" .-> refsrc
+    strat --> restart
+    restart -- "yes" --> ovr
+    restart -- "no" --> halt
+    halt -- "yes: no tactic commands" --> ctrl
+    halt -- "no" --> part
+    part --> tac --> skill --> mc
+    ovr --> mc
+    mc --> ctrl
+    ctrl --> rsim
+    ctrl --> grsim
+    ctrl --> real
+```
+
+How vision, robot and referee data become one `Game` state, and the rest of the tick in more
+detail: [docs/pipeline_method.md](docs/pipeline_method.md).
 
 ## Contributing
 
