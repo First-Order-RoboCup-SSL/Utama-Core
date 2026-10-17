@@ -15,6 +15,23 @@ is context), the pitch is in metres with the centre at (0, 0), and the strategy 
 so the studied strategy attacks right. Zone names (defensive third, the box, ...) are the ones in
 [pitch_zones.md](pitch_zones.md).
 
+## Start here: triage
+
+`pixi run python tools/triage.py RUN_DIR --strategy NAME` picks the strategy's worst matches (by goal
+difference, among those it played as config_a), collects every problem the tools flag (tactic flip-backs,
+stalls, and with `--restarts` illegal restart targets), and draws the worst few with the picture for that
+kind. Read its `index.md` first: each problem's numbers, then the picture path. About 20 s a match
+(a minute with `--restarts`); `evaluate.py --explain` runs it on the candidate's two worst matches.
+
+A stall it found in `split_shape` against `tiki_taka_plus`: from 783 to 786 s, four of our robots
+oscillate with the ball frozen. The picture is the match timeline around it, recorded data only:
+
+![a stall in the match timeline](img/match_timeline/stall_split_shape_773-796.png)
+
+Robots 2-4 switch between `ShadowAndMarkTactic` and `LeadAndSupportTactic` together, three times within
+half a second at 780.5 s and again at 782.4, 783.2 and 785.2 s, while robots 0, 1, 2 and 5 stay within
+about 2 m of the ball and robot 4 stays 5-8 m away.
+
 ## 1. How a strategy plays
 
 ### Where its robots stand
