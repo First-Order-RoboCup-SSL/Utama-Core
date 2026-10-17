@@ -261,6 +261,11 @@ this way (table below), two were the referee or the check, not the robot.
    `match_log` tracing on and prints each listed robot's tactic, position and target every
    0.25 s (trace keys name tactics, not strategies). In a parallel worktree, run
    `tools/setup_worktree.sh` first.
+   When a robot does something odd near an obstacle or a keep-out zone (a carrot that swings round a robot,
+   a robot parked just inside a circle), `tools/plan_snapshot.py REPLAY --t S --robot ID --target X Y`
+   draws what the planner decided on that tick: the obstacles and clearance rings, the keep-out circle,
+   the target and the carrot it returned (`--side enemy` for the other strategy's robot; example:
+   ![kick-off robot parked inside the keep-out circle](img/plan_snapshot/kickoff_keep_out.png)).
 3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
    robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
    broken (real rules, `docs/custom_referee_design_decisions.md`) and whether the check reads it
