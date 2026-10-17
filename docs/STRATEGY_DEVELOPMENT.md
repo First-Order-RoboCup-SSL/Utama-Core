@@ -500,6 +500,12 @@ A foul or failure seen in a match is a symptom: the cause may be the robot, the 
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot.
 
+Start with `tools/triage.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
+and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it
+means, and confirm with the numbers in its message (or `replay_trace.py --events`) before concluding anything. Triage reads only the friendly side of
+each match (the intentions log is written for it): a strategy's matches where it is config_a. In a round-robin each pair plays once,
+so a strategy gets only the pairs where it comes first in the config order.
+
 The same steps as a flowchart; the moment branch is the optional step 5.
 
 ```mermaid
