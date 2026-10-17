@@ -125,6 +125,11 @@ def _leaving(our_pos: np.ndarray, target: np.ndarray, obstacle, clearance: float
     return distance_between_line_segments(our_pos, target, obstacle[0], obstacle[1]) >= here - 1e-9
 
 
+def _approaches(our_pos: np.ndarray, target: np.ndarray, point: np.ndarray) -> bool:
+    """True if the straight run from `our_pos` to `target` gets closer to `point` than the robot is now."""
+    return distance_point_to_segment(point, our_pos, target) < np.linalg.norm(point - our_pos) - 1e-9
+
+
 class FastPathPlanner:
     def __init__(self, env: SSLStandardEnv | None):
         self._env = env
@@ -1710,11 +1715,20 @@ class FastPathPlanner:
         # defender sidestepping teammates queued at them reached 0.38 m from
         # the ball and KeepOutRule voided the penalty. A robot already inside is
         # left to the referee step's own straight push-out: a detour waypoint
-        # swings it round the ball and can clip it.
+        # swings it round the ball and can clip it. It is not left free to
+        # close in, though: a carrot whose first run gets closer to the ball
+        # (round a robot it is pressed against) is replaced by the ray out from
+        # the ball through the robot, which only gets farther (moment
+        # placement_corner_robot_drives_onto_ball; test_fpp_inside_ball_keep_out).
         ball = Vector2D(game.ball.p.x, game.ball.p.y) if game.ball is not None else None
-        if ball is not None and _keeps_off_ball(game) and (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
-            waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
-            new_target = np.array([waypoint.x, waypoint.y])
+        if ball is not None and _keeps_off_ball(game):
+            ball_np = np.array([ball.x, ball.y])
+            if (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
+                waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
+                new_target = np.array([waypoint.x, waypoint.y])
+            elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
+                away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
+                new_target = ball_np + away * BALL_KEEP_OUT_DISTANCE
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")

@@ -12,7 +12,7 @@
     "keeps_clear",
     "ball_placement_interference"
   ],
-  "known_failure": "robot 1 drives in to 0.11 m of the ball during their placement at (-4.0, -2.5) and stays in the keep-out circle; cause not diagnosed",
+  "known_failure": "planner: robot 1 inside the keep-out circle was given a carrot back toward the ball (fixed: test_fpp_inside_ball_keep_out, planner step 8b). Still fails on seeds 0-4: the placement jumps the ball ~0.2 m to the designated point (-4.0, -2.5) at t~0.6-0.9 s, 0.14-0.22 m from robot 1, and keeps_clear compares ball positions across ticks, so it reads that jump as robot 1 driving in (robot-only approach is zero)",
   "designated_position": [
     -4.0,
     -2.5
