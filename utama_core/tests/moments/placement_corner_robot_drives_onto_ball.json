@@ -12,6 +12,10 @@
     "keeps_clear",
     "ball_placement_interference"
   ],
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ],
   "known_failure": "robot 1 drives in to 0.11 m of the ball during their placement at (-4.0, -2.5) and stays in the keep-out circle; cause not diagnosed",
   "designated_position": [
     -4.0,

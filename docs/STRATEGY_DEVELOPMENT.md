@@ -265,10 +265,21 @@ To add one, after seeing a foul or failure in a match:
    they often take another path.
 3. `pixi run python tools/moments.py play <json> [--seed N]` must fail the way the match did
    (`--seed` replays the moment's noise with another seed, the JSON untouched). A check is
-   either one of `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or a referee rule
-   name our side must not break; add a named check only for a failure no rule names.
+   either one of `tools/moments.py`'s `CHECKS` or a referee rule name our side must not break;
+   add a named check only for a failure no rule names.
 4. Commit it with `"known_failure": "<cause>"` (a strict xfail) if the fix is not in the same
    change; the fix then shows as XPASS and deletes the field.
+
+`"requires"` names conditions (`REQUIRES` in `tools/moments.py`) that must hold during the play,
+or the moment fails with `did not arise: <name> (<why>)`. Without them a moment passes when the
+situation never arose: the opponent did something else, the ball went elsewhere, our robot never
+got there. `restart_lasts` (the starting restart command holds 1 s), `robot_near_ball` (one of
+ours within 1 m of the ball), `ball_kicked` (the ball reaches 2 m/s). Each moment lists only what
+makes its situation real. The outcome checks `CHECKS` also name what must happen: `pass_received`
+(after a kick, a tactic robot other than the carrier takes the ball within 0.15 m, slowed below
+2 m/s) and `placement_completes` (our `BALL_PLACEMENT_*` ends with the ball within the rule's
+0.15 m of the designated position). `our_placement_completes` is a hand-made moment: our placement
+from 4 m away, a strict xfail, since the placer carries the ball away from the target.
 
 **Hand-made moment:** no replay needed. `pixi run python tools/moments.py new <name> --command
 NORMAL_START [--ball X Y] --check <checks> --note "..."` writes a template (both teams in a fixed
@@ -287,7 +298,9 @@ FORCE_START): a restart still runs the referee override. A tactic moment fails w
 never ticks with one of its robots (`GiveAndGoTactic never ran on robots [1, 2]`), e.g. when the
 tactic is never applicable, since its robots would otherwise hold silently. `give_and_go_carrier_mid_pass`
 is the example: a 2 s pass on a 1.2 m lane, checked with `"*"`; its note says what it does not
-guard (that the kick happens or is caught). `double_touch` only covers a restart kick, so it cannot fire from live play.
+guard it: `requires` ball_kicked, and `pass_received` checks the pass is taken. It receives on 3 of
+the 5 seeds 0-4 (its note: a 1.3 m lane misses about 40% of kicks by kick-angle noise, and shorter
+lanes stop the carrier kicking). `double_touch` only covers a restart kick, so it cannot fire from live play.
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a

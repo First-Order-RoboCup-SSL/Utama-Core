@@ -11,6 +11,10 @@
   "checks": [
     "keeps_clear"
   ],
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ],
   "known_failure": "robot 3 drives in from 0.70 m to 0.50 m of the ball in the first 0.3 s of their direct free kick; cause not diagnosed",
   "designated_position": null,
   "sim_noise": {

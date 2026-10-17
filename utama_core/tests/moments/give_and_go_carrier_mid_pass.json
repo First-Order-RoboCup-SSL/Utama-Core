@@ -1,12 +1,16 @@
 {
   "name": "give_and_go_carrier_mid_pass",
-  "note": "Our GiveAndGo carrier (robot 1) holds the ball with receiver 2 on a 1.2 m open lane; on noise seeds 0-4 it kicks about 0.2 s in. The moment checks only that no referee rule is broken during the carry and the pass (\"*\"; excessive_dribbling catches a carry over the 1 m cap, SSL 8.4.1). It does not check that the kick happens or is caught (at seed 1 it lands about 0.1 m wide). double_touch only covers a restart kick, so it cannot fire from live play.",
+  "note": "Our GiveAndGo carrier (robot 1) holds the ball with receiver 2 on a 1.3 m open lane and kicks about 0.1-0.2 s in. The moment checks that no referee rule is broken during the carry and the pass (\"*\"; excessive_dribbling catches a carry over the 1 m cap, SSL 8.4.1), that the pass is taken (requires ball_kicked) and that a tactic robot other than the carrier takes it (pass_received: the ball slows below 2 m/s within 0.15 m of that robot after the kick). The stored seed 0 is a reception; seeds 2 and 4 are too, but seeds 1 and 3 kick about 0.1 m wide (the ball passes robot 2 at about 4 m/s, 0.11-0.12 m off its centre) and fail pass_received: the kick-angle noise at this lane, not a keep-out foul. A shorter lane stops the carrier kicking at all (no kick on seeds 1-4 at 1.0-1.1 m). double_touch only covers a restart kick, so it cannot fire from live play.",
   "source": null,
   "strategy": "all",
   "opponent": "build_split_shape_kernel_strategy",
   "seconds": 2.0,
   "checks": [
-    "*"
+    "*",
+    "pass_received"
+  ],
+  "requires": [
+    "ball_kicked"
   ],
   "known_failure": null,
   "designated_position": null,
@@ -37,7 +41,7 @@
       1.5,
       3.5
     ],
-    "seed": 1
+    "seed": 0
   },
   "tactic": {
     "class": "GiveAndGoTactic",
