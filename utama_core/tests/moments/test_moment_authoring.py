@@ -188,3 +188,52 @@ def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
     (fouls,) = moments.our_fouls(tmp_path)
     assert fouls["command"] is None and fouls["restart"] is None
     assert moments.without_own_restarts([fouls]) == [fouls]
+
+
+def _foul_row(config_a, rule, restart=None, tactic="X"):
+    return {
+        "config_a": f"build_{config_a}_kernel_strategy",
+        "config_b": "build_b_kernel_strategy",
+        "rule": rule,
+        "tactic": tactic,
+        "restart": restart,
+    }
+
+
+def test_count_fouls_groups_by_the_given_columns_most_common_first():
+    fouls = [
+        _foul_row("a", "keep_out"),
+        _foul_row("b", "crashing"),
+        _foul_row("a", "keep_out"),
+        _foul_row("a", "crashing"),
+        _foul_row("b", "crashing"),
+        _foul_row("b", "crashing"),
+    ]
+    assert moments.count_fouls(fouls, ["strategy", "rule"]) == [
+        (("b", "crashing"), 3),
+        (("a", "keep_out"), 2),
+        (("a", "crashing"), 1),
+    ]
+
+
+def test_count_fouls_names_a_missing_restart_live_and_a_missing_tactic_dash():
+    fouls = [_foul_row("a", "keep_out", restart=None, tactic=None), _foul_row("a", "keep_out", restart="theirs")]
+    assert moments.count_fouls(fouls, ["restart", "tactic"]) == [(("live", "-"), 1), (("theirs", "X"), 1)]
+
+
+def test_count_fouls_ties_are_in_name_order():
+    fouls = [_foul_row("b", "keep_out"), _foul_row("a", "keep_out")]
+    assert [key for key, _ in moments.count_fouls(fouls, ["strategy"])] == [("a",), ("b",)]
+
+
+def test_without_stoppages_drops_out_of_bounds_and_keeps_rules_fouls():
+    fouls = [_foul_row("a", "out_of_bounds"), _foul_row("a", "defense_area_stoppage"), _foul_row("a", "keep_out")]
+    assert [f["rule"] for f in moments.without_stoppages(fouls)] == ["defense_area_stoppage", "keep_out"]
+
+
+def test_print_fouls_by_prints_header_counts_and_total(capsys):
+    moments.print_fouls_by([_foul_row("a", "keep_out"), _foul_row("a", "keep_out")], ["strategy", "rule"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].split() == ["count", "strategy", "rule"]
+    assert lines[1].split() == ["2", "a", "keep_out"]
+    assert lines[2].split() == ["2", "total"]

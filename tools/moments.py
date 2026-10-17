@@ -39,6 +39,8 @@ invalid one, naming each problem (ids, field lines, check and strategy names).
 List our side's fouls in a round-robin run, as starting points, each with the referee command
 active then and whether that restart is ours or theirs (`--skip-own-restart` leaves out ours):
     pixi run python tools/moments.py fouls replays/tournament_<id> [--rule keep_out] [--skip-own-restart]
+(`--by strategy,rule` counts them per combination instead; `out_of_bounds`, the ball leaving the
+field, is a stoppage and is left out unless `--include-stoppages`.)
 Capture one from a replay (its noise and designated position come with it; `--out` writes
 elsewhere than utama_core/tests/moments/):
     pixi run python tools/moments.py capture replays/tournament_<id>/<a>_vs_<b>.npz --t 254.65 \\
@@ -69,6 +71,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -725,6 +728,40 @@ def without_own_restarts(fouls: list[dict]) -> list[dict]:
     return [f for f in fouls if f.get("restart") != "ours"]
 
 
+# Rules that stop play without being a rules foul: the ball leaving the field.
+STOPPAGE_RULES = frozenset({"out_of_bounds"})
+FOUL_COLUMNS = ("strategy", "rule", "tactic", "restart")
+
+
+def without_stoppages(fouls: list[dict]) -> list[dict]:
+    return [f for f in fouls if f["rule"] not in STOPPAGE_RULES]
+
+
+def _foul_column(f: dict, column: str) -> str:
+    if column == "strategy":
+        return short_name(f["config_a"])
+    if column == "restart":
+        return f.get("restart") or "live"
+    return str(f.get(column) or "-")
+
+
+def count_fouls(fouls: list[dict], columns: list[str]) -> list[tuple[tuple[str, ...], int]]:
+    """How many of `fouls` fall in each combination of `columns` (names from `FOUL_COLUMNS`),
+    most common first; ties in name order."""
+    counts = Counter(tuple(_foul_column(f, c) for c in columns) for f in fouls)
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def print_fouls_by(fouls: list[dict], columns: list[str]) -> None:
+    """`count_fouls` as a table: a count column, then one column per name, then the total."""
+    rows = count_fouls(fouls, columns)
+    widths = [max([len(c)] + [len(key[i]) for key, _ in rows]) for i, c in enumerate(columns)]
+    print(f"{'count':>5}  " + "  ".join(f"{c:<{w}}" for c, w in zip(columns, widths)))
+    for key, n in rows:
+        print(f"{n:>5}  " + "  ".join(f"{v:<{w}}" for v, w in zip(key, widths)))
+    print(f"{sum(n for _, n in rows):>5}  total")
+
+
 def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
     """Every foul config_a (our side in the replay) committed in a round-robin run, from its
     summary.json: the starting points for new moments. Each carries the referee `command` active
@@ -888,6 +925,18 @@ def main() -> None:
         action="store_true",
         help="leave out fouls during our own restarts (keeps_clear does not apply there)",
     )
+    p.add_argument(
+        "--include-stoppages",
+        action="store_true",
+        help="also list out_of_bounds (the ball leaving the field: a stoppage, not a rules foul)",
+    )
+    p.add_argument(
+        "--by",
+        default=None,
+        metavar="COLUMNS",
+        help=f"print counts per combination of these columns, comma-separated, of {', '.join(FOUL_COLUMNS)} "
+        "(e.g. strategy,rule), instead of one line per foul",
+    )
 
     p = sub.add_parser("new", help="write a hand-made moment template to edit by hand")
     p.add_argument("name", help="lowercase letters, digits and underscores")
@@ -954,12 +1003,21 @@ def main() -> None:
         fouls = our_fouls(args.run_dir, args.rule)
         if args.skip_own_restart:
             fouls = without_own_restarts(fouls)
-        for f in fouls:
-            print(
-                f"{f['rule']:<28} t={f['sim_time']:>7.2f}  robot {f.get('robot_id')}  {f.get('tactic') or '':<24} "
-                f"{(f['command'] or '?'):<22} {f['restart'] or 'live':<7} "
-                f"{short_name(f['config_a'])} vs {short_name(f['config_b'])}"
-            )
+        if not args.include_stoppages:
+            fouls = without_stoppages(fouls)
+        if args.by:
+            columns = [c.strip() for c in args.by.split(",")]
+            unknown = [c for c in columns if c not in FOUL_COLUMNS]
+            if unknown:
+                parser.error(f"--by: unknown column(s) {unknown}; choose from {', '.join(FOUL_COLUMNS)}")
+            print_fouls_by(fouls, columns)
+        else:
+            for f in fouls:
+                print(
+                    f"{f['rule']:<28} t={f['sim_time']:>7.2f}  robot {f.get('robot_id')}  {f.get('tactic') or '':<24} "
+                    f"{(f['command'] or '?'):<22} {f['restart'] or 'live':<7} "
+                    f"{short_name(f['config_a'])} vs {short_name(f['config_b'])}"
+                )
     else:
         m = load(args.moment)
         if args.seed is not None and args.seeds:
