@@ -182,8 +182,8 @@ def _short(config_name: Optional[str]) -> str:
     return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
 
 
-def style_pitch_axes(ax):
-    """The axes every pitch picture uses: surface, equal aspect, light grid, thin spines."""
+def style_axes(ax):
+    """The look every pitch picture shares (plan_trace, restart_picture): surface, grid, muted spines and ticks."""
     ax.set_facecolor(SURFACE)
     ax.set_aspect("equal")
     ax.set_axisbelow(True)
@@ -196,7 +196,7 @@ def style_pitch_axes(ax):
 
 
 def draw_pitch(ax, field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> None:
-    """Outline, halfway line, centre circle, defence areas and goal mouths, in metres."""
+    """Outline, halfway line, centre circle, defence areas and goal mouths."""
     half_w = field_dims.full_field_half_width
     ax.add_patch(Polygon(field_dims.full_field, closed=True, fill=False, edgecolor=INK_3, linewidth=0.7))
     ax.plot([0, 0], [-half_w, half_w], color=INK_3, linewidth=0.5)
@@ -207,26 +207,49 @@ def draw_pitch(ax, field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> None:
         ax.plot(goal[:, 0], goal[:, 1], color=INK_2, linewidth=1.6, solid_capstyle="butt")
 
 
+def robot_obstacles_for(planner: FastPathPlanner, game: Game, robot_id: int, field_bounds):
+    """The planner's robot obstacles (predicted runs) and this robot's clearance, as `_get_obstacles`
+    computes them after `_path_to`. The static field and defence-area edges are left out."""
+    robot = game.friendly_robots[robot_id]
+    our_pos = np.array([robot.p.x, robot.p.y], dtype=float)
+    obstacles, clearance, _ = planner._get_obstacles(game, robot_id, our_pos, field_bounds)
+    n_static = len(planner._obstacle_cache_static)
+    return obstacles[: len(obstacles) - n_static], clearance
+
+
+def draw_obstacles(ax, game: Game, robot_obstacles, clearance: float, *, alpha: float = 1.0) -> None:
+    """Each robot obstacle's predicted run (thin) and the clearance ring around it."""
+    friendly_xy = {(float(r.p.x), float(r.p.y)) for r in game.friendly_robots.values()}
+    for a, b in robot_obstacles:
+        colour = FOR if (float(a[0]), float(a[1])) in friendly_xy else AGAINST
+        ring = _stadium(np.asarray(a, dtype=float), np.asarray(b, dtype=float), clearance)
+        ax.add_patch(
+            Polygon(ring, closed=True, fill=False, edgecolor=colour, linewidth=0.6, linestyle=":", alpha=0.8 * alpha)
+        )
+        ax.plot([a[0], b[0]], [a[1], b[1]], color=colour, linewidth=0.8, alpha=0.6 * alpha)
+
+
 def draw_robot(
     ax,
     x: float,
     y: float,
+    robot_id,
     colour: str,
-    label: str,
     *,
-    edge: str = SURFACE,
-    edge_width: float = 0.6,
+    planned: bool = False,
+    edge: Optional[str] = None,
     alpha: float = 0.92,
-    zorder: float = 5,
+    zorder: int = 5,
 ) -> None:
-    """A robot at its real radius, with its id label on top."""
+    """A robot at its real radius with its id; the planned robot, or one given an `edge` colour, gets a
+    heavier outline."""
     ax.add_patch(
         Circle(
             (x, y),
             ROBOT_RADIUS,
             facecolor=colour,
-            edgecolor=edge,
-            linewidth=edge_width,
+            edgecolor=edge or (INK if planned else SURFACE),
+            linewidth=1.8 if planned or edge else 0.6,
             alpha=alpha,
             zorder=zorder,
         )
@@ -234,15 +257,32 @@ def draw_robot(
     ax.text(
         x,
         y,
-        label,
+        str(robot_id),
         ha="center",
         va="center",
         fontsize=7,
         color="white",
         fontweight="bold",
-        alpha=alpha,
+        alpha=min(1.0, alpha + 0.1),
         zorder=zorder + 6,
     )
+
+
+def draw_robots(ax, game: Game, planned_id: Optional[int] = None) -> None:
+    """Every robot of both teams, the planned one (friendly `planned_id`) outlined."""
+    for is_friendly, robots in ((True, game.friendly_robots), (False, game.enemy_robots)):
+        colour = FOR if is_friendly else AGAINST
+        for r in robots.values():
+            draw_robot(ax, r.p.x, r.p.y, r.id, colour, planned=is_friendly and r.id == planned_id)
+
+
+def draw_ball(ax, ball_pos: np.ndarray, keeps_off: bool) -> None:
+    """The ball, and its keep-out circle while the planner keeps out of it."""
+    if keeps_off:
+        ax.add_patch(
+            Circle(ball_pos, BALL_KEEP_OUT_DISTANCE, fill=False, edgecolor=INK_2, linewidth=0.8, linestyle="--")
+        )
+    ax.plot(ball_pos[0], ball_pos[1], "o", color=INK, markersize=3.5, zorder=6)
 
 
 def plan_snapshot(
@@ -283,42 +323,14 @@ def plan_snapshot(
 
     fig = Figure(figsize=(6.6, 7.2), dpi=DPI, facecolor=SURFACE)
     fig.subplots_adjust(left=0.13, right=0.97, top=0.92, bottom=0.16)
-    ax = style_pitch_axes(fig.add_subplot(111))
-
-    # Pitch: outline, halfway line, centre circle, defence areas, goal mouths.
+    ax = fig.add_subplot(111)
+    style_axes(ax)
     half_l, half_w = field_dims.full_field_half_length, field_dims.full_field_half_width
     draw_pitch(ax, field_dims)
-
-    # Each robot obstacle: its predicted run (thin), and the clearance ring around that run.
-    friendly_xy = {(float(r.p.x), float(r.p.y)) for r in game.friendly_robots.values()}
-    for a, b in robot_obstacles:
-        colour = FOR if (float(a[0]), float(a[1])) in friendly_xy else AGAINST
-        ring = _stadium(np.asarray(a, dtype=float), np.asarray(b, dtype=float), clearance)
-        ax.add_patch(Polygon(ring, closed=True, fill=False, edgecolor=colour, linewidth=0.6, linestyle=":", alpha=0.8))
-        ax.plot([a[0], b[0]], [a[1], b[1]], color=colour, linewidth=0.8, alpha=0.6)
-
-    # The ball and, while the planner keeps out of it, the keep-out circle.
+    draw_obstacles(ax, game, robot_obstacles, clearance)
     if ball_pos is not None:
-        if keeps_off:
-            ax.add_patch(
-                Circle(ball_pos, BALL_KEEP_OUT_DISTANCE, fill=False, edgecolor=INK_2, linewidth=0.8, linestyle="--")
-            )
-        ax.plot(ball_pos[0], ball_pos[1], "o", color=INK, markersize=3.5, zorder=6)
-
-    # Robots at their real radius, with ids. The planned robot gets a heavier outline.
-    for is_friendly, robots in ((True, game.friendly_robots), (False, game.enemy_robots)):
-        colour = FOR if is_friendly else AGAINST
-        for r in robots.values():
-            planned = is_friendly and r.id == robot_id
-            draw_robot(
-                ax,
-                r.p.x,
-                r.p.y,
-                colour,
-                str(r.id),
-                edge=INK if planned else SURFACE,
-                edge_width=1.8 if planned else 0.6,
-            )
+        draw_ball(ax, ball_pos, keeps_off)
+    draw_robots(ax, game, robot_id)
 
     # Target (x), the carrot the planner returned (filled dot), and the two runs from the robot.
     ax.plot([our_pos[0], carrot[0]], [our_pos[1], carrot[1]], color=INK, linewidth=0.9, zorder=4)

@@ -45,7 +45,7 @@ from utama_core.analysis.plan_snapshot import (
     draw_pitch,
     draw_robot,
     game_from_scenario,
-    style_pitch_axes,
+    style_axes,
 )
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
@@ -361,7 +361,7 @@ def _draw_plan(ax, plan: RestartPlan, *, compact: bool) -> None:
         ax.plot(plan.ball[0], plan.ball[1], "o", color=INK, markersize=3.5 if compact else 4.5, zorder=6)
 
     for rid, x, y in plan.enemy:
-        draw_robot(ax, x, y, AGAINST, str(rid), alpha=0.3, zorder=4)
+        draw_robot(ax, x, y, rid, AGAINST, alpha=0.3, zorder=4)
 
     for rp in plan.robots:
         colour = ALERT if rp.flags else INK_2
@@ -372,10 +372,9 @@ def _draw_plan(ax, plan: RestartPlan, *, compact: bool) -> None:
             ax,
             rp.pos[0],
             rp.pos[1],
+            rp.robot_id,
             FOR,
-            str(rp.robot_id),
-            edge=ALERT if rp.flags else SURFACE,
-            edge_width=1.8 if rp.flags else 0.6,
+            edge=ALERT if rp.flags else None,
         )
         if rp.role:
             ax.text(
@@ -452,7 +451,7 @@ def _legend_handles() -> list[Line2D]:
 def render_restart(plan: RestartPlan, out_path: Path, *, title: Optional[str] = None) -> Path:
     """One restart as a single picture: the full pitch, the text box beneath it and a legend."""
     fig = Figure(figsize=(6.6, 7.4), dpi=DPI, facecolor=SURFACE)
-    ax = style_pitch_axes(fig.add_axes([0.1, 0.42, 0.86, 0.52]))
+    ax = style_axes(fig.add_axes([0.1, 0.42, 0.86, 0.52]))
     _draw_plan(ax, plan, compact=False)
     ax.set_xlabel("x (m)", fontsize=8, color=INK_2)
     ax.set_ylabel("y (m)", fontsize=8, color=INK_2)
@@ -492,7 +491,7 @@ def render_restart_grid(
     nrows = math.ceil(len(plans) / ncols)
     fig = Figure(figsize=(4.3 * ncols, 3.4 * nrows + 0.5), dpi=DPI, facecolor=SURFACE)
     for i, plan in enumerate(plans):
-        ax = style_pitch_axes(fig.add_subplot(nrows, ncols, i + 1))
+        ax = style_axes(fig.add_subplot(nrows, ncols, i + 1))
         _draw_plan(ax, plan, compact=True)
         ax.tick_params(labelsize=5)
         when = f"  t={plan.sim_time:.1f}s" if plan.sim_time is not None else ""
