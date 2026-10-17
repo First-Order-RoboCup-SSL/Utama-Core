@@ -60,7 +60,7 @@ These check how far cheap metrics agree with round-robin results. They do not ju
 |---|---|
 | `tools/replay_trace.py` | Text trace of a replay window: referee commands, ball, nearest robot per side. The first thing to run on a stall or a voided restart |
 | `tools/repro_from_replay.py` | Load a replay's field state at a timestamp into a fresh headless rsim match and tick forward with tracing on |
-| `tools/moments.py` | Regression moments (`utama_core/tests/moments/`): `fouls RUN_DIR` lists our side's fouls in a round-robin, `capture REPLAY --t S` writes a moment from a replay, `play JSON` plays one and prints what broke its checks. See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Regression moments" |
+| `tools/moments.py` | Regression moments (`utama_core/tests/moments/`): `fouls RUN_DIR` lists our side's fouls in a round-robin, `capture REPLAY --t S` writes a moment from a replay, `new NAME --command CMD` writes a hand-made template, `play JSON` plays one and prints what broke its checks. See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Regression moments" |
 | `tools/debug_match.py` | One ad hoc match between two strategies for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
 
 Library helpers for the same job (`render_window`, `render_clip`, `MatchLog.trace()`) are

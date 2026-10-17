@@ -1,0 +1,165 @@
+{
+  "name": "give_and_go_carrier_mid_pass",
+  "note": "Our GiveAndGo carrier (robot 1) holds the ball mid-hop to receiver 2 at a 1.6 m lane. The hop must be a pass: the carrier must not dribble the ball more than the 1 m cap (SSL 8.4.1, excessive_dribbling) while it waits for the lane. double_touch is not checked: the rule only covers a restart kick (DIRECT_FREE/PREPARE_KICKOFF/PREPARE_PENALTY), and this moment starts live play.",
+  "source": null,
+  "strategy": "all",
+  "opponent": "build_split_shape_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "excessive_dribbling"
+  ],
+  "known_failure": null,
+  "designated_position": null,
+  "sim_noise": {
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ],
+    "seed": 1
+  },
+  "tactic": {
+    "class": "GiveAndGoTactic",
+    "robots": [
+      1,
+      2
+    ],
+    "mem": {
+      "carrier_id": 1,
+      "receiver_id": 2,
+      "hop_count": 1,
+      "ticks_held": 30,
+      "hop_ticks": 10
+    }
+  },
+  "scenario": {
+    "referee_command": "NORMAL_START",
+    "ball": [
+      1.35,
+      0.3,
+      0.0,
+      0.0
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.0,
+        "y": 0.0,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 1,
+        "x": 1.6,
+        "y": 0.3,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 2,
+        "x": 0.4,
+        "y": -1.2,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 3,
+        "x": 1.0,
+        "y": 2.0,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 4,
+        "x": 1.0,
+        "y": -2.0,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 5,
+        "x": 0.6,
+        "y": 0.0,
+        "orientation": 3.141592653589793,
+        "vx": 0.0,
+        "vy": 0.0
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.0,
+        "y": 0.0,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 1,
+        "x": -2.2,
+        "y": 1.2,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 2,
+        "x": -2.2,
+        "y": -1.2,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 3,
+        "x": -1.0,
+        "y": 2.0,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 4,
+        "x": -1.0,
+        "y": -2.0,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      },
+      {
+        "id": 5,
+        "x": -0.6,
+        "y": 0.0,
+        "orientation": 0.0,
+        "vx": 0.0,
+        "vy": 0.0
+      }
+    ]
+  }
+}

@@ -267,6 +267,23 @@ To add one, after seeing a foul or failure in a match:
 4. Commit it with `"known_failure": "<cause>"` (a strict xfail) if the fix is not in the same
    change; the fix then shows as XPASS and deletes the field.
 
+**Hand-made moment:** no replay needed. `pixi run python tools/moments.py new <name> --command
+NORMAL_START [--ball X Y] --check <checks> --note "..."` writes a template (both teams in a fixed
+formation, ours on the right, the pool's noise with seed 1), then edit the robot positions in the
+JSON by hand. `save` and `load` refuse a moment with a problem (ids 0-5 once per side, robots and
+ball on the pitch, unknown check, strategy or opponent) and name each one.
+
+**Tactic moment:** add `"tactic": {"class": "GiveAndGoTactic", "robots": [1, 2], "mem": {...}}` to
+a hand-made moment. Our side then plays that one Tactic (`utama_core/tactics/`) on the listed
+outfield robots, the others hold position, and the tactic starts from `mem` (its memory dataclass
+by field name; fields left out keep their initial value; `null` for the initial memory). Values
+are None, bool, int, float, str, lists for tuples, and `[x, y]` for a Vector2D; another type is
+an error naming the field. The moment plays once, as its tactic (`strategy` stays `"all"`), and
+`test_moments.py` names the case `<name>-<TacticClass>`. Use it for live play (NORMAL_START or
+FORCE_START): a restart still runs the referee override. `give_and_go_carrier_mid_pass` is the
+example. Its check is `excessive_dribbling`: `double_touch` only covers a restart kick, so it
+cannot fire from live play.
+
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
 teleported robot facing the mirrored heading, which had silently corrupted teleported scenarios.
