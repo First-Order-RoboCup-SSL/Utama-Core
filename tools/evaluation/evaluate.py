@@ -11,6 +11,10 @@ Run:
                       champion joins the opponents, and a baseline from the pool leaves them
     --max-rounds N    rounds before a candidate is called undecided (default 6)
     --max-workers N   matches at once (default 8)
+    --explain         also write on-pitch pictures of each candidate against the champion to
+                      replays/eval/explain/<candidate>_<run id>/ (positions, shots, fouls and a
+                      summary; see tools/evaluation/explain.py). Explains the verdict, never
+                      changes it. Off by default; the matches are kept until it has run.
 
 How it decides
 --------------
@@ -102,9 +106,9 @@ def verdict(p_better: float, rounds: int, max_rounds: int) -> str | None:
     return "undecided" if rounds >= max_rounds else None
 
 
-def play(a: str, b: str, seed: int, noise: dict, run_dir: Path) -> dict:
+def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool = False) -> dict:
     """One fixture's `MatchResult` as a dict. The match is recorded like a round-robin's (same
-    play), then its files are deleted: only the result is kept."""
+    play), then its files are deleted unless `keep` (`--explain` reads them): only the result is kept."""
     tag = f"{_short_name(a)}_vs_{_short_name(b)}_s{seed}"
     result = run_match(
         a,
@@ -114,8 +118,9 @@ def play(a: str, b: str, seed: int, noise: dict, run_dir: Path) -> dict:
         match_tag_suffix=f"_s{seed}",
         sim_noise=SimNoise.from_dict({**noise, "seed": seed}),
     )
-    for f in run_dir.glob(f"{tag}.*"):
-        f.unlink()
+    if not keep:
+        for f in run_dir.glob(f"{tag}.*"):
+            f.unlink()
     return {
         "config_a": result.config_a,
         "config_b": result.config_b,
@@ -125,7 +130,7 @@ def play(a: str, b: str, seed: int, noise: dict, run_dir: Path) -> dict:
     }
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("candidates", nargs="+")
     parser.add_argument("--pool", type=Path, default=DEFAULT_POOL)
@@ -133,7 +138,12 @@ def main() -> None:
     parser.add_argument("--baseline")
     parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
     parser.add_argument("--max-workers", type=int, default=min(8, max(1, (os.cpu_count() or 1) - 1)))
-    args = parser.parse_args()
+    parser.add_argument("--explain", action="store_true", help="also write on-pitch pictures per candidate (see above)")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
 
     pool = json.loads(args.pool.read_text())
     champion = _resolve_config_names([args.baseline or pool["champion"]])[0]
@@ -173,7 +183,7 @@ def main() -> None:
             ledger = eval_ledger.load(env)
             todo = [f for f in round_fixtures(open_, champion, opponents, k) if fixture_id(f) not in ledger]
             reused += len(round_fixtures(open_, champion, opponents, k)) - len(todo)
-            futures = {executor.submit(play, *f, noise, run_dir): f for f in todo}
+            futures = {executor.submit(play, *f, noise, run_dir, args.explain): f for f in todo}
             while futures:
                 done, _ = wait(futures, return_when=FIRST_COMPLETED)
                 for future in done:
@@ -198,6 +208,8 @@ def main() -> None:
                     report[c] = {"verdict": v, "rounds": k, "p_better": round(p, 3), "margin": round(margin, 2)}
                     report[c]["margin_sd"] = round(sd, 2)
             print()
+    if args.explain:
+        _explain(run_dir, run_id, candidates, champion)
     shutil.rmtree(run_dir, ignore_errors=True)  # this run's own scratch dir; results are in the ledger
 
     final = _fit(env, fps, {*candidates, champion, *opponents})
@@ -240,6 +252,20 @@ def main() -> None:
         )
     )
     print(f"\nReport: {out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out}")
+
+
+def _explain(run_dir: Path, run_id: str, candidates: list[str], champion: str) -> None:
+    """`--explain`: pictures of each candidate against the champion, from this run's kept matches.
+    Runs before the scratch dir is removed; a failure is printed and never loses the verdicts."""
+    from tools.evaluation import explain  # matplotlib: imported only when asked for
+
+    for c in candidates:
+        out = Path(REPLAY_BASE_PATH) / "eval" / "explain" / f"{_short_name(c)}_{run_id}"
+        try:
+            explain.explain(run_dir, c, champion, out)
+            print(f"explain: {_short_name(c)} vs {_short_name(champion)} written to {out}")
+        except Exception as exc:  # noqa: BLE001 - the pictures are optional; the verdicts are not
+            print(f"explain: {_short_name(c)} failed ({type(exc).__name__}: {exc}); verdicts are unaffected")
 
 
 def _fit(env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:

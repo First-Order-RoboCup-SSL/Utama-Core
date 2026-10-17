@@ -247,6 +247,7 @@ def _pitch(ax) -> None:
 
 def _panel_grid(n: int, cols: int = 3):
     """A grid of pitch panels for `n` strategies; unused cells are hidden at the end of drawing."""
+    cols = min(cols, n)  # two strategies get one row of two panels, not a row with a hole
     rows = -(-n // cols)
     return plt.subplots(rows, cols, figsize=(3.6 * cols, 2.55 * rows + 0.8), squeeze=False)
 
@@ -416,6 +417,13 @@ def _match(job: tuple[str, str, str, list[dict]]) -> list[MatchView]:
     return build_views(load_columnar_replay(npz), names, shots, fouls)
 
 
+def views_for_matches(jobs: list[tuple[str, str, str, list[dict]]], workers: int) -> list[MatchView]:
+    """The views of any list of matches, one job per match: (replay .npz path, config_a, config_b,
+    the match's `stats.fouls` records). `run_views` and `explain.py` both build their jobs here."""
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return [v for views in pool.map(_match, jobs) for v in views]
+
+
 def run_views(run_dir: Path, workers: int) -> list[MatchView]:
     summary = json.loads((run_dir / "summary.json").read_text())
     jobs = []
@@ -424,8 +432,7 @@ def run_views(run_dir: Path, workers: int) -> list[MatchView]:
         npz = run_dir / f"{stem}.npz"
         if npz.exists():
             jobs.append((str(npz), r["config_a"], r["config_b"], (r.get("stats") or {}).get("fouls") or []))
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        return [v for views in pool.map(_match, jobs) for v in views]
+    return views_for_matches(jobs, workers)
 
 
 def main() -> None:
