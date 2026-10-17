@@ -18,6 +18,12 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio |
 
+## Worktrees
+
+| Script | Purpose |
+|---|---|
+| `tools/setup_worktree.sh` | Run inside a git worktree: links `.pixi` to the main checkout's and copies the gitignored compiled `.so` extensions (planner, rsim). Idempotent; one line per action |
+
 ## Playing matches
 
 | Script | Purpose |
