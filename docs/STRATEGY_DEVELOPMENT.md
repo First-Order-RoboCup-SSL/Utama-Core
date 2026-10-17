@@ -381,12 +381,21 @@ flowchart TD
 - **The ledger** (`replays/eval/ledger.jsonl`, `replay/eval_ledger.py`): one line per match from
   evaluate.py and round-robins, keyed by the code that played it. A match is never played twice;
   the champion's matches are played once per seed and reused by every candidate, and editing a
-  strategy starts its record afresh. Replays are not kept (rerun one with `round_robin.py --pair
+  strategy starts its record afresh. Replays are not kept, except during a `--explain` run (rerun one with `round_robin.py --pair
   A B --sim-noise` and the pool's noise with that seed).
 - **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
   be clearly worse against opponents never used for selection. Then edit the pool's champion by
   hand. Check its per-opponent table: a candidate far better against one opponent and worse
   against the rest is a matchup, not a better strategy.
+- **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
+  where both strategies' robots stand with and without the ball, their shots for and against,
+  their fouls by rule, and a `summary.json` of the numbers behind them, written to
+  `replays/eval/explain/<name>_<run id>/`. The run's matches are kept until they are written. They
+  explain a verdict and never make one: the verdict is still goals, and a picture is not a ranking.
+  Matches reused from the ledger have no replay in the run, so the pictures cover only what was
+  played; the paired goal difference in `summary.json` is only as complete as that. Example, from a
+  round-robin (`explain.py replays/tournament_<id> split_shape clear_press_plus --out ...`):
+  ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
 - **Cost.** ~45 min of laptop per 66 matches on 8 workers. A clearly worse candidate costs ~14
   matches (~10 min), a close one up to 42.
 
