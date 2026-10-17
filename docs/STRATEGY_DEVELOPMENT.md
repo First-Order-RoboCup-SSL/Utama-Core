@@ -255,10 +255,12 @@ this way (table below), two were the referee or the check, not the robot.
    lists each with its time, robot, tactic and the referee command then active
    (`--skip-own-restart` drops fouls during our own restarts; `--json` writes either form as JSON).
 2. **Look at it.** `tools/replay_trace.py REPLAY T0 T1` is the text timeline of the window:
-   referee command, ball, nearest robot per side; `--events` lists the kicks, possession and
-   referee changes and fouls instead. `tools/repro_from_replay.py REPLAY --t S --summary 3`
-   replays that state with the tactics' `match_log` tracing on and prints each listed robot's
-   tactic, position and target every 0.25 s (trace keys name tactics, not strategies).
+   referee command, ball, nearest robot per side; `--events` lists the kicks, possession,
+   referee changes and fouls instead; `--json` gives either as JSON.
+   `tools/repro_from_replay.py REPLAY --t S --summary 3` replays that state with the tactics'
+   `match_log` tracing on and prints each listed robot's tactic, position and target every
+   0.25 s (trace keys name tactics, not strategies). In a parallel worktree, run
+   `tools/setup_worktree.sh` first.
 3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
    robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
    broken (real rules, `docs/custom_referee_design_decisions.md`) and whether the check reads it
