@@ -243,47 +243,44 @@ whoever runs it.
 - **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
-### Regression moments
+### Debugging a foul or failure
 
-A moment is a field state where our robots once did something obviously wrong, with a fixed
-check of what they must do instead. `utama_core/tests/moments/` holds them as JSON;
-`test_moments.py` (in `pixi run test`) plays each for a few seconds against every strategy it
-concerns, so a fix stays fixed. It is a pass/fail check of one behaviour, not a ranking: judge
-strategies with `evaluate.py`. Most moments are restarts, where the referee override moves every
-outfield robot whatever the strategy, so a restart moment plays one strategy.
+A foul or failure seen in a match is a symptom: the cause may be the robot, the shared referee
+override, the planner, the referee itself, or the check that flagged it. Of the first six found
+this way (table below), two were the referee or the check, not the robot.
 
-To add one, after seeing a foul or failure in a match:
+1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> [--rule R]
+   [--skip-own-restart]` lists our side's fouls with the referee command then active and whose
+   restart it was; `tools/replay_trace.py REPLAY T0 T1` shows the window.
+2. **Reproduce it.** `tools/moments.py capture REPLAY --t S --name ... --check ... --note "..."
+   [--out PATH]` saves the field state shortly before the foul (robots start from rest and
+   tactics from initial memory, so start close); `tools/moments.py play JSON --seed N` replays
+   it. Keep it only if it fails on at least 4 of seeds 0-4. `tools/repro_from_replay.py` plays
+   the same state with the tactics' `match_log` tracing on, to look rather than keep.
+3. **Find the cause.** Per tick, print the override's target, the planner's next waypoint, the
+   obstacles and the distance to the ball. Ask whether the rule was really broken (real rules,
+   `docs/custom_referee_design_decisions.md`) and whether the check reads it right.
+4. **Fix the cause, with a unit test at the boundary** (CLAUDE.md, Testing). That test is the
+   protection; the moment is a cheap end-to-end check that the symptom is gone.
+5. **Keep the moment** in `utama_core/tests/moments/` if it failed before the fix and passes
+   after (on its stored seed). Its note says what went wrong and names the fix. If the fix is not
+   in the same change, commit it with `"known_failure": "<cause>"` (a strict xfail).
 
-1. `pixi run python tools/moments.py fouls replays/tournament_<id> --rule keep_out` lists our
-   side's fouls with time, robot, strategies, the referee command then active and whether that
-   restart is ours or theirs (`--skip-own-restart` leaves out ours: `keeps_clear` does not apply
-   there); `tools/replay_trace.py` shows the window.
-2. `pixi run python tools/moments.py capture <replay>.npz --t <s> --name <what_goes_wrong>
-   --check <checks> --opponent <b> --note "<what goes wrong, why it must not>" [--out PATH]`
-   writes the JSON, with the match's sim noise and the placement target. Start where the failure is about
-   to happen: robots start from rest and tactics from initial memory, and from seconds earlier
-   they often take another path.
-3. `pixi run python tools/moments.py play <json> [--seed N]` must fail the way the match did
-   (`--seed` replays the moment's noise with another seed, the JSON untouched). A check is
-   either one of `tools/moments.py`'s `CHECKS` or a referee rule name our side must not break;
-   add a named check only for a failure no rule names.
-4. Commit it with `"known_failure": "<cause>"` (a strict xfail) if the fix is not in the same
-   change; the fix then shows as XPASS and deletes the field.
+A moment's `checks` are `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`,
+`placement_completes`) or referee rule names; its `requires` (`restart_lasts`,
+`robot_near_ball`) fail it with `did not arise` when the situation it tests never happened. A
+restart moment plays one strategy, since the referee override moves every outfield robot the same
+way whatever the strategy. `tools/moments.py new NAME --command CMD ...` writes a hand-made field
+state to edit. Moments are not a gate on strategies: they pin shared-code bugs.
 
-`"requires"` names conditions (`REQUIRES` in `tools/moments.py`) that must hold during the play,
-or the moment fails with `did not arise: <name> (<why>)`. Without them a moment passes when the
-situation never arose: the opponent did something else, the ball went elsewhere, our robot never
-got there. `restart_lasts` (the starting restart command holds 1 s), `robot_near_ball` (one of
-ours within 1 m of the ball). Each moment lists only what
-makes its situation real. The outcome checks `CHECKS` also name what must happen: `placement_completes` (our `BALL_PLACEMENT_*` ends with the ball within the rule's
-0.15 m of the designated position). `our_placement_completes` is a hand-made moment: our placement
-from 4 m away, a strict xfail, since the placer carries the ball away from the target.
-
-**Hand-made moment:** no replay needed. `pixi run python tools/moments.py new <name> --command
-NORMAL_START [--ball X Y] --check <checks> --note "..."` writes a template (both teams in a fixed
-formation, ours on the right, the pool's noise with seed 1), then edit the robot positions in the
-JSON by hand. `save` and `load` refuse a moment with a problem (ids 0-5 once per side, robots and
-ball on the pitch, unknown check, strategy or opponent) and name each one.
+| Symptom | Looked like | Cause | Fix | Test |
+|---|---|---|---|---|
+| Defender pushed off the pitch during their corner placement | robot leaving the field | override push-out target off the pitch in a corner | `14038121` | `tests/referee/test_referee_unit.py` |
+| Defender stuck against their placer | robot ignoring the restart | planner found no path out for a robot inside another's clearance | `c64fc6f9` | `test_fpp_pressed_against_robot.py` |
+| Defender boxed in a corner closes on the ball | robot driving in | planner detour led back toward the ball; the keep-out guard skipped robots already inside | `935da778` | `test_fpp_inside_ball_keep_out.py` |
+| Same moment still failing after the fix | robot driving in | `keeps_clear` counted the ball placed onto a robot standing still | `20ca1974` | `test_moments.py` |
+| keep_out foul on their free kick | robot driving in | referee: the kicker moved the ball 0.75 m in the preparation stage; it was in play | `12b46412` | `test_free_kick_taken.py` |
+| Our placement times out | slow placer | placer drives through the ball toward a point behind it (planner ignores the ball in our placement) | open | `our_placement_completes` (xfail) |
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
@@ -369,4 +366,4 @@ What a converted match holds, and where it differs from a sim replay (the detail
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
-The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment (above), and `analysis/goal_ledger.py` lists a replay's situations and goals.
+The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_ledger.py` lists a replay's situations and goals.

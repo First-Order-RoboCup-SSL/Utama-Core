@@ -36,10 +36,11 @@ One term per thing; reuse these instead of coining new ones.
   verdict on a strategy; see Evaluation.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
-- **Moment / regression moment** — a field state (from a replay or by hand) where our robots
-  once did something obviously wrong, with a fixed check of the right behaviour
-  (`utama_core/tests/moments/*.json`, `tools/moments.py`). Pass/fail regression tests, run in
-  `pixi run test`; not a ranking.
+- **Moment / regression moment** — a field state (from a replay or by hand) that reproduced a
+  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/moments.py`).
+  A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
+  the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
+  the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
