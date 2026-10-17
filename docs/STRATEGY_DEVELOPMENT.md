@@ -255,7 +255,11 @@ this way (table below), two were the referee or the check, not the robot.
 2. **Reproduce it.** `tools/moments.py capture REPLAY --t S --name ... --check ... --note "..."
    [--out PATH]` saves the field state shortly before the foul (robots start from rest and
    tactics from initial memory, so start close); `tools/moments.py play JSON --seed N` replays
-   it. Keep it only if it fails on at least 4 of seeds 0-4. `tools/repro_from_replay.py` plays
+   it. Keep it only if it fails on at least 4 of seeds 0-4. `play JSON --seeds 0-4` prints one
+   ok/FAIL table; `--against REF` adds the code at REF side by side (its worktree is left for you
+   to remove); `--events` lists the referee changes, fouls, keep-out entries, kicks and closest
+   approaches; `play JSON --strategy path/to/scratch.py:factory` tries a tactic in a scratch file
+   without touching the repo. `tools/repro_from_replay.py` plays
    the same state with the tactics' `match_log` tracing on, to look rather than keep.
 3. **Find the cause.** Per tick, print the override's target, the planner's next waypoint, the
    obstacles and the distance to the ball. Ask whether the rule was really broken (real rules,

@@ -49,18 +49,28 @@ Write a hand-made one, then edit its positions in the JSON:
         [--strategy NAME] [--seconds N] --check <checks> --note "..."
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):
     pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
+Play it under several seeds as one table, compare with the code at a git ref (a worktree under
+`AGAINST_DIR`, to remove with `git worktree remove`), look at its events (referee changes, fouls,
+keep-out entries, kicks, closest approaches), or try a scratch strategy file's factory:
+    pixi run python tools/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
+    pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:build_my_kernel_strategy
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib.util
 import json
 import math
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -92,6 +102,18 @@ APPROACH_TOLERANCE_M = 0.05
 APPROACH_WINDOW_S = 0.25
 # ... and leaves it within the rulebook's grace for placement interference and STOP speed.
 LEAVE_WITHIN_S = 2.0
+# A ball faster than this has been kicked (`events`).
+KICK_SPEED_MPS = 2.0
+# `events` prints at most this many lines.
+MAX_EVENT_LINES = 30
+# `play --against`: worktrees live beside the repo (not in it), each with the compiled extensions
+# below copied in (gitignored, so a new worktree lacks them; without them the planner falls back to
+# Python and results differ).
+AGAINST_DIR = REPO_ROOT.parent / "moments-work-20261017" / "against"
+BUILD_ARTIFACTS = (
+    "utama_core/motion_planning/src/fastpathplanning/_fastpathplanner.cpython-*.so",
+    "utama_core/rsoccer_simulator/src/Simulators/robosim/_robosim.cpython-*.so",
+)
 
 
 @dataclasses.dataclass
@@ -115,9 +137,14 @@ def short_name(name: str) -> str:
 
 
 def _full_name(name: str) -> str:
-    if name == "all" or name.startswith("build_"):
+    if name == "all" or name.startswith("build_") or _is_file_spec(name):
         return name
     return f"build_{name}_kernel_strategy"
+
+
+def _is_file_spec(name: str) -> bool:
+    """`PATH.py:FACTORY`: a factory in a scratch file, not a catalog name."""
+    return name.rpartition(":")[0].endswith(".py")
 
 
 def to_dict(m: Moment) -> dict:
@@ -340,6 +367,7 @@ class Tick:
     ours: dict[int, tuple[float, float]]  # robot id -> position
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
+    ball_speed: Optional[float] = None  # m/s, for `events`' kicks
 
 
 def restart_side(command: Optional[RefereeCommand], we_are_yellow: bool = True) -> Optional[str]:
@@ -489,6 +517,86 @@ def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]
     return failures
 
 
+def _command_name(command: Optional[RefereeCommand]) -> str:
+    return command.name if command is not None else "none"
+
+
+def events(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
+    """A compact account of `ticks`: the referee command changes, our fouls, our robots entering
+    and leaving the keep-out circle during STOP or the other team's restart, the ball's kicks
+    (speed rising above `KICK_SPEED_MPS`), in time order; then each of our robots' closest
+    approach to the ball. At most `MAX_EVENT_LINES` lines, the rest counted in a "... N more"."""
+    body: list[str] = []
+    inside: set[int] = set()  # robots in the keep-out circle during a restart against us
+    prev: Optional[Tick] = None
+    for tick in ticks:
+        if prev is not None and tick.command is not prev.command:
+            body.append(f"t={tick.t:.2f}s referee: {_command_name(prev.command)} -> {_command_name(tick.command)}")
+        if tick.our_foul is not None and tick.our_foul != (prev.our_foul if prev else None):
+            rule, robots = tick.our_foul
+            body.append(f"t={tick.t:.2f}s foul: {rule} by robot(s) {list(robots)}")
+        against = tick.ball is not None and _restart_against_us(tick.command, we_are_yellow)
+        for rid, pos in tick.ours.items():
+            d = _dist(pos, tick.ball) if tick.ball is not None else math.inf
+            near = against and d < KEEP_OUT_M
+            if near and rid not in inside:
+                inside.add(rid)
+                body.append(
+                    f"t={tick.t:.2f}s {_command_name(tick.command)}: robot {rid} enters the keep-out circle at {d:.2f} m"
+                )
+            elif not near and rid in inside:
+                inside.discard(rid)
+                body.append(f"t={tick.t:.2f}s robot {rid} leaves the keep-out circle at {d:.2f} m")
+        fast = tick.ball_speed is not None and tick.ball_speed > KICK_SPEED_MPS
+        was_fast = prev is not None and prev.ball_speed is not None and prev.ball_speed > KICK_SPEED_MPS
+        if fast and not was_fast:
+            body.append(f"t={tick.t:.2f}s ball kicked: {tick.ball_speed:.2f} m/s")
+        prev = tick
+    closest: dict[int, tuple[float, float]] = {}  # robot id -> (distance, t)
+    for tick in ticks:
+        if tick.ball is None:
+            continue
+        for rid, pos in tick.ours.items():
+            d = _dist(pos, tick.ball)
+            if rid not in closest or d < closest[rid][0]:
+                closest[rid] = (d, tick.t)
+    summary = [f"robot {rid} closest to the ball: {d:.2f} m at t={t:.2f}s" for rid, (d, t) in sorted(closest.items())]
+    room = MAX_EVENT_LINES - len(summary)
+    if len(body) > room:
+        body = body[: room - 1] + [f"... {len(body) - room + 1} more"]
+    return body + summary
+
+
+def factory_for(name: str) -> Callable:
+    """The strategy factory a name means: a catalog `build_*_kernel_strategy`, or `PATH.py:FACTORY`,
+    a factory in a scratch file imported as it is (so a tactic can be tried without a repo change)."""
+    from utama_core.strategy import kernel_strategy
+
+    if not _is_file_spec(name):
+        try:
+            return getattr(kernel_strategy, name)
+        except AttributeError:
+            raise MomentError(f"unknown strategy {short_name(name)!r}") from None
+    path, _, func = name.rpartition(":")
+    if not Path(path).is_file():
+        raise MomentError(f"{name}: no such file {path}")
+    spec = importlib.util.spec_from_file_location(f"scratch_{Path(path).stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    factory = getattr(module, func, None)
+    if not callable(factory):
+        raise MomentError(f"{name}: {path} has no factory {func!r}")
+    return factory
+
+
+def label(name: str) -> str:
+    """How a strategy name is shown: the short catalog name, or `file:FACTORY` for a scratch file."""
+    if _is_file_spec(name):
+        path, _, func = name.rpartition(":")
+        return f"{Path(path).stem}:{func}"
+    return short_name(name)
+
+
 def play(m: Moment, strategy: str) -> list[Tick]:
     """Play `m` with `strategy` on our side (yellow) for `m.seconds`."""
     from utama_core.custom_referee import CustomReferee
@@ -496,10 +604,9 @@ def play(m: Moment, strategy: str) -> list[Tick]:
     from utama_core.replay.scenario import apply_scenario
     from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
     from utama_core.run import StrategyRunner
-    from utama_core.strategy import kernel_strategy
 
     def side(name: str) -> AbstractStrategy:
-        return AbstractStrategy(build_kernel_strategy=getattr(kernel_strategy, name)(OUTFIELD_ROBOT_IDS))
+        return AbstractStrategy(build_kernel_strategy=factory_for(name)(OUTFIELD_ROBOT_IDS))
 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
@@ -551,6 +658,7 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     ours={rid: (r.p.x, r.p.y) for rid, r in game.friendly_robots.items()},
                     our_speeds={rid: r.v.mag() for rid, r in game.friendly_robots.items()},
                     our_foul=foul,
+                    ball_speed=game.ball.v.mag() if game.ball is not None else None,
                 )
             )
     finally:
@@ -642,6 +750,115 @@ def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
     return out
 
 
+def parse_seeds(spec: str) -> list[int]:
+    """`0-4` or `0,2,3` (or both, `0-1,3`): the seeds in order, each once."""
+    seeds = []
+    for part in spec.split(","):
+        if re.fullmatch(r"\d+-\d+", part):
+            lo, hi = (int(x) for x in part.split("-"))
+            if hi < lo:
+                raise ValueError(f"seed range {part} runs backwards")
+            seeds += range(lo, hi + 1)
+        elif re.fullmatch(r"\d+", part):
+            seeds.append(int(part))
+        else:
+            raise ValueError(f"bad seed {part!r}: use a range like 0-4 or a list like 0,2,3")
+    return list(dict.fromkeys(seeds))
+
+
+def run_cells(m: Moment, names: list[str], seeds: list[Optional[int]]) -> dict:
+    """{(strategy, seed): (failures, ticks)} for each strategy and seed; seed None is the moment's own."""
+    cells = {}
+    for name in names:
+        for seed in seeds:
+            played = m if seed is None else with_seed(m, seed)
+            ticks = play(played, name)
+            cells[(name, seed)] = (judge(played, ticks), ticks)
+    return cells
+
+
+def _git(*args: str, cwd: Path = REPO_ROOT) -> str:
+    proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    if proc.returncode:
+        raise SystemExit(f"git {' '.join(args)}: {proc.stderr.strip()}")
+    return proc.stdout.strip()
+
+
+def ref_worktree(ref: str) -> Path:
+    """A worktree of the tree at `ref` under `AGAINST_DIR` (reused if it is there at that commit),
+    with the main tree's `.pixi` and compiled extensions. Not removed afterwards."""
+    sha = _git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    path = AGAINST_DIR / sha[:8]
+    if path.exists():
+        if _git("rev-parse", "HEAD", cwd=path) != sha:
+            raise SystemExit(f"{path} exists at another commit: remove it (git worktree remove {path}) and retry")
+    else:
+        AGAINST_DIR.mkdir(parents=True, exist_ok=True)
+        _git("worktree", "add", "--detach", str(path), sha)
+    if not os.path.lexists(path / ".pixi"):
+        os.symlink(REPO_ROOT / ".pixi", path / ".pixi")
+    for pattern in BUILD_ARTIFACTS:
+        for src in REPO_ROOT.glob(pattern):
+            shutil.copy2(src, path / src.relative_to(REPO_ROOT))
+    return path
+
+
+def ref_cells(json_path: Path, name: str, seeds: list[int], tree: Path) -> dict[int, list[str]]:
+    """{seed: failures} for one strategy, played by `tree`'s own `tools/moments.py` (its env's python,
+    run directly so pixi cannot re-solve the shared env). Raises SystemExit if that tree is too old."""
+    fd, out = tempfile.mkstemp(dir=AGAINST_DIR, suffix=".json")
+    os.close(fd)
+    python = tree / ".pixi" / "envs" / "default" / "bin" / "python"
+    env = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
+    cmd = [
+        str(python),
+        "tools/moments.py",
+        "play",
+        str(json_path),
+        "--strategy",
+        name,
+        "--seeds",
+        ",".join(map(str, seeds)),
+        "--json",
+        out,
+    ]
+    proc = subprocess.run(cmd, cwd=tree, env=env, capture_output=True, text=True)
+    if proc.returncode:
+        Path(out).unlink(missing_ok=True)
+        if "unrecognized arguments" in proc.stderr:
+            raise SystemExit(
+                f"REF {tree.name} predates --seeds: its tools/moments.py cannot be compared this way "
+                f"(its worktree is left at {tree})"
+            )
+        raise SystemExit(f"REF {tree}: play failed for {label(name)}:\n{proc.stderr[-1500:]}")
+    result = json.loads(Path(out).read_text())
+    Path(out).unlink()
+    return {int(seed): failures for seed, failures in result.items()}
+
+
+def print_grid(seeds: list[Optional[int]], rows: list[tuple[str, str, list[list[str]]]]) -> None:
+    """One row per (strategy, version): ok/FAIL per seed, then each failing cell's first failure."""
+    print(f"{'strategy':<28} {'':<9}" + "".join(f"{s:>8}" for s in seeds))
+    for name, version, cells in rows:
+        print(f"{name:<28} {version:<9}" + "".join(f"{'FAIL' if f else 'ok':>8}" for f in cells))
+    for name, version, cells in rows:
+        for seed, failures in zip(seeds, cells):
+            if failures:
+                tag = f"seed {seed} {name}" + (f" [{version}]" if version else "")
+                print(f"  {tag}: {failures[0]}")
+
+
+def print_events(cells: dict) -> None:
+    """The events of the first failing play, else the first play."""
+    key = next((k for k, (failures, _) in cells.items() if failures), next(iter(cells)))
+    failures, ticks = cells[key]
+    name, seed = key
+    where = label(name) + ("" if seed is None else f" seed {seed}")
+    print(f"events ({where}, {'FAIL' if failures else 'ok'}):")
+    for line in events(ticks):
+        print(f"  {line}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -683,8 +900,20 @@ def main() -> None:
 
     p = sub.add_parser("play", help="play a moment and print what broke its checks")
     p.add_argument("moment", type=Path)
-    p.add_argument("--strategy", default=None, help="one strategy instead of the moment's own")
+    p.add_argument(
+        "--strategy",
+        default=None,
+        help="one strategy instead of the moment's own: a catalog name, or PATH.py:FACTORY from a scratch file",
+    )
     p.add_argument("--seed", type=int, default=None, help="the sim noise seed for this run (the JSON is not changed)")
+    p.add_argument("--seeds", help="play under each seed (0-4 or 0,2,3) and print one table of ok/FAIL")
+    p.add_argument(
+        "--against",
+        metavar="REF",
+        help="also play under the code at this git ref (its worktree is left in place), rows side by side",
+    )
+    p.add_argument("--events", action="store_true", help="after the verdict, the events of the first failing play")
+    p.add_argument("--json", type=Path, help=argparse.SUPPRESS)  # --against reads the other tree's results
 
     args = parser.parse_args()
     if args.cmd == "new":
@@ -733,16 +962,50 @@ def main() -> None:
             )
     else:
         m = load(args.moment)
-        if args.seed is not None:
-            try:
+        if args.seed is not None and args.seeds:
+            parser.error("--seed and --seeds: pick one")
+        try:
+            seeds = parse_seeds(args.seeds) if args.seeds else None
+            if args.seed is not None:
                 m = with_seed(m, args.seed)
-            except MomentError as e:
-                parser.error(str(e))
-        for name in [_full_name(args.strategy)] if args.strategy else strategies_for(m):
-            failures = judge(m, play(m, name))
-            print(f"{short_name(name):<28} {'FAIL' if failures else 'ok'}")
-            for f in failures:
-                print(f"    {f}")
+            if args.against and seeds is None:
+                if m.sim_noise is None:
+                    parser.error(f"{m.name} plays without noise: pass --seeds to say which runs to compare")
+                seeds = [m.sim_noise["seed"]]
+        except (MomentError, ValueError) as e:
+            parser.error(str(e))
+        names = [_full_name(args.strategy)] if args.strategy else strategies_for(m)
+        try:
+            cells = run_cells(m, names, [None] if seeds is None else seeds)
+        except MomentError as e:
+            parser.error(str(e))
+        if args.json:
+            args.json.write_text(json.dumps({str(seed): failures for (_, seed), (failures, _) in cells.items()}))
+        elif args.against:
+            tree = ref_worktree(args.against)
+            ref = {name: ref_cells(args.moment.resolve(), name, seeds, tree) for name in names}
+            now_rows = [(label(n), "now", [cells[(n, s)][0] for s in seeds]) for n in names]
+            ref_rows = [(label(n), tree.name, [ref[n][s] for s in seeds]) for n in names]
+            rows = [row for pair in zip(now_rows, ref_rows) for row in pair]
+            print_grid(seeds, rows)
+            n = len(names) * len(seeds)
+            now_ok = sum(not cells[(name, s)][0] for name in names for s in seeds)
+            ref_ok = sum(not ref[name][s] for name in names for s in seeds)
+            print(f"now: {now_ok}/{n} ok   {tree.name}: {ref_ok}/{n} ok")
+            print(f"REF worktree: {tree} (remove it with: git worktree remove {tree})")
+        elif seeds is not None:
+            rows = [(label(n), "", [cells[(n, s)][0] for s in seeds]) for n in names]
+            print_grid(seeds, rows)
+            ok = sum(not f for f, _ in cells.values())
+            print(f"{ok}/{len(cells)} ok")
+        else:
+            for name in names:
+                failures, _ = cells[(name, None)]
+                print(f"{label(name):<28} {'FAIL' if failures else 'ok'}")
+                for f in failures:
+                    print(f"    {f}")
+        if args.events:
+            print_events(cells)
 
 
 if __name__ == "__main__":
