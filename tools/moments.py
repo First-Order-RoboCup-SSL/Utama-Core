@@ -15,10 +15,9 @@ A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays 
      "known_failure": null, or why it still fails (the test is then a strict xfail),
      "designated_position": a ball placement's target [x, y], else null,
      "sim_noise": the match's seeded noise (`sim_noise.py`), or null for none,
-     "tactic": null, or {"class", "robots", "mem"} (see "Tactic moments"),
      "scenario": the field state: ball, robots and referee command (`replay/scenario.py`)}
 
-Robots start from rest and every tactic from its initial memory (`replay/scenario.py`, Known
+Robots start from rest (`replay/scenario.py`, Known
 limitations), so a moment pins what the field and the referee command alone cause, which is
 most referee failures. Start a moment where the failure is about to happen, not seconds before:
 from rest a robot often takes another path. A check is a function of the played ticks, stated
@@ -28,24 +27,14 @@ as the behaviour we want, so it does not wait on the referee's persistence befor
 referee override moves every outfield robot whatever the strategy, so then one strategy per
 distinct override (its `referee_overrides` and goalkeeper tactic) is enough.
 
-Requires vs checks: a check says what must not happen, or (`pass_received`, `placement_completes`)
+Requires vs checks: a check says what must not happen, or (`placement_completes`)
 what must happen. A requirement says the situation the moment is about arose: a restart lasted,
-a robot came near the ball, the ball was kicked. Without them a moment passes when the opponent
+a robot came near the ball. Without them a moment passes when the opponent
 does something else, the ball goes elsewhere, or our robot never gets there.
-
-Tactic moments: "tactic": {"class": "GiveAndGoTactic", "robots": [1, 2], "mem": {"carrier_id": 1}}
-plays our side as that one Tactic (`utama_core/tactics/`) on the listed outfield robots, the other
-outfield robots holding position, starting from `mem`: the tactic's own memory dataclass, its
-fields by name (a field left out keeps its initial value; null means the initial memory). A
-value is None, bool, int, float, str, a tuple/list of those, or a Vector2D as [x, y]. Tactic
-moments are for live play (NORMAL_START, FORCE_START): the referee override still moves everyone
-during a restart. Their one entry is the tactic, so "strategy" must be left out. A tactic moment
-fails when its tactic never ticks with one of its robots ("GiveAndGoTactic never ran on robots
-[1, 2]"): a tactic that is not applicable never runs, and its robots would silently hold.
 
 Hand-made moments: `new` writes a template (both teams in a fixed formation, ours on the right,
 the pool's noise with seed 1, source null) to edit by hand; `save` and `load` refuse an
-invalid one, naming each problem (ids, field lines, check and strategy names, tactic).
+invalid one, naming each problem (ids, field lines, check and strategy names).
 
 List our side's fouls in a round-robin run, as starting points, each with the referee command
 active then and whether that restart is ours or theirs (`--skip-own-restart` leaves out ours):
@@ -55,7 +44,7 @@ elsewhere than utama_core/tests/moments/):
     pixi run python tools/moments.py capture replays/tournament_<id>/<a>_vs_<b>.npz --t 254.65 \\
         --name free_kick_defender_drives_in --check keeps_clear --strategy <a> --opponent <b> \\
         --note "..." [--out PATH]
-Write a hand-made one, then edit its positions and tactic in the JSON:
+Write a hand-made one, then edit its positions in the JSON:
     pixi run python tools/moments.py new <name> --command NORMAL_START [--ball X Y] \\
         [--strategy NAME] [--seconds N] --check <checks> --note "..."
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):
@@ -65,16 +54,13 @@ Play one (`--seed N` replays its noise with another seed, the JSON untouched):
 from __future__ import annotations
 
 import argparse
-import copy
 import dataclasses
 import json
 import math
 import re
 import sys
-import types
-import typing
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -125,7 +111,6 @@ class Moment:
     designated_position: Optional[tuple[float, float]] = None
     source: Optional[dict] = None
     sim_noise: Optional[dict] = None
-    tactic: Optional[dict] = None  # {"class", "robots", "mem"}: our side plays this Tactic, not a strategy
 
 
 def short_name(name: str) -> str:
@@ -152,7 +137,6 @@ def to_dict(m: Moment) -> dict:
         "known_failure": m.known_failure,
         "designated_position": list(m.designated_position) if m.designated_position else None,
         "sim_noise": m.sim_noise,
-        "tactic": m.tactic,
         "scenario": {
             "referee_command": s.referee_command.name if s.referee_command is not None else None,
             "ball": [s.ball_x, s.ball_y, s.ball_vx, s.ball_vy],
@@ -191,7 +175,6 @@ def from_dict(d: dict) -> Moment:
         designated_position=tuple(dp) if dp else None,
         source=d.get("source"),
         sim_noise=d.get("sim_noise"),
-        tactic=d.get("tactic"),
     )
 
 
@@ -230,12 +213,9 @@ def _referee_behaviour(name: str) -> tuple:
 
 
 def strategies_for(m: Moment) -> list[str]:
-    """The strategies a moment is played against (see the module docstring). A tactic moment's
-    one entry is its Tactic's class name."""
+    """The strategies a moment is played against (see the module docstring)."""
     from utama_core.engine.referee_override import is_override_command
 
-    if m.tactic is not None:
-        return [m.tactic["class"]]
     if m.strategy != "all":
         return [m.strategy]
     names = catalog()
@@ -299,208 +279,8 @@ def validate(m: Moment) -> None:
         problems.append(f"unknown strategy {short_name(m.strategy)!r}")
     if m.opponent not in names:
         problems.append(f"unknown opponent {short_name(m.opponent)!r}")
-    if m.tactic is not None:
-        if m.strategy != "all":
-            problems.append('a tactic moment plays its tactic, so drop "strategy"')
-        problems += _tactic_problems(m.tactic)
     if problems:
         raise MomentError(f"{m.name}:\n  " + "\n  ".join(problems))
-
-
-def _tactic_problems(t: dict) -> list[str]:
-    problems = []
-    if not isinstance(t, dict):
-        return [f"tactic must be an object with class, robots and mem, got {t!r}"]
-    if set(t) - {"class", "robots", "mem"}:
-        problems.append(f"tactic has unknown keys {sorted(set(t) - {'class', 'robots', 'mem'})}")
-    classes = tactic_classes()
-    cls = classes.get(t.get("class"))
-    if cls is None:
-        problems.append(
-            f"tactic class {t.get('class')!r} is not a public Tactic in utama_core/tactics/: {sorted(classes)}"
-        )
-    robots = t.get("robots")
-    valid = isinstance(robots, list) and robots and all(type(r) is int for r in robots)
-    if not valid or not set(robots) <= set(OUTFIELD_ROBOT_IDS) or len(set(robots)) != len(robots):
-        problems.append(
-            f"tactic robots must be distinct outfield ids {list(OUTFIELD_ROBOT_IDS)} (0 is the goalkeeper), got {robots!r}"
-        )
-    if cls is not None:
-        try:
-            decode_mem(cls, t.get("mem"))
-        except MomentError as e:
-            problems.append(str(e))
-    return problems
-
-
-def tactic_classes() -> dict[str, type]:
-    """Every public Tactic class in `utama_core/tactics/`, by name."""
-    import importlib
-    import inspect
-    import pkgutil
-
-    import utama_core.tactics as pkg
-
-    found = {}
-    for info in pkgutil.iter_modules(pkg.__path__):
-        if info.name.startswith("_"):
-            continue
-        module = importlib.import_module(f"{pkg.__name__}.{info.name}")
-        for name, obj in vars(module).items():
-            if (
-                inspect.isclass(obj)
-                and obj.__module__ == module.__name__
-                and not name.startswith("_")
-                and hasattr(obj, "tick")
-                and hasattr(obj, "initial_mem")
-            ):
-                found[name] = obj
-    return found
-
-
-def decode_mem(cls: type, fields: Optional[dict]):
-    """`cls`'s memory with the JSON `fields` set on its initial memory (see the module docstring).
-    A field left out keeps its initial value, so a mem need not spell out ones JSON cannot hold."""
-    base = cls().initial_mem()
-    if fields is None:
-        return base
-    mem_name = type(base).__name__
-    if not isinstance(fields, dict) or not dataclasses.is_dataclass(base):
-        raise MomentError(f"{mem_name} mem must be an object of its fields, got {fields!r}")
-    hints = _field_types(type(base))
-    updates = {}
-    for key, value in fields.items():
-        if key not in hints:
-            raise MomentError(f"{mem_name} has no mem field {key!r} (fields: {sorted(hints)})")
-        updates[key] = _decode(value, hints[key], f"{mem_name}.{key}")
-    return dataclasses.replace(base, **updates)
-
-
-def _field_types(cls: type) -> dict[str, object]:
-    """Each field's annotation, evaluated in its own module (the tactics use string annotations)."""
-    import random
-
-    ns = {"random": random, **vars(sys.modules[cls.__module__])}
-    out = {}
-    for f in dataclasses.fields(cls):
-        hint = f.type
-        if isinstance(hint, str):
-            try:
-                hint = eval(hint, ns)
-            except Exception:
-                pass  # stays a string: `_decode` reports it as unsupported
-        out[f.name] = hint
-    return out
-
-
-def _decode(value, hint, where: str):
-    """A JSON value as a field of type `hint` (see `decode_mem`)."""
-    from utama_core.entities.data.vector import Vector2D
-
-    if value is None:
-        return None
-    origin, args = typing.get_origin(hint), typing.get_args(hint)
-    if origin is Union or origin is types.UnionType:
-        options = [a for a in args if a is not type(None)]
-        if len(options) == 1:
-            return _decode(value, options[0], where)
-    elif hint is Vector2D and isinstance(value, list) and len(value) == 2:
-        if all(type(v) in (int, float) for v in value):
-            return Vector2D(value[0], value[1])
-        raise MomentError(f"{where} is a Vector2D [x, y] of numbers, got {value!r}")
-    elif hint is bool and type(value) is bool:
-        return value
-    elif hint is int and type(value) is int:
-        return value
-    elif hint is float and type(value) in (int, float):
-        return float(value)
-    elif hint is str and type(value) is str:
-        return value
-    elif origin is tuple and isinstance(value, list):
-        if len(args) == 2 and args[1] is Ellipsis:
-            return tuple(_decode(v, args[0], where) for v in value)
-        if len(args) != len(value):
-            raise MomentError(f"{where} must have {len(args)} items, got {value!r}")
-        return tuple(_decode(v, a, where) for v, a in zip(value, args))
-    else:
-        if hint in (bool, int, float, str, Vector2D) or origin is tuple:
-            raise MomentError(f"{where} must be {_hint_name(hint)}, got {value!r}")
-    raise MomentError(
-        f"{where} has type {_hint_name(hint)}, which a moment cannot set: use None, bool, int, float, str, "
-        "a list of those (for a tuple), or a Vector2D as [x, y]"
-    )
-
-
-def _hint_name(hint) -> str:
-    return hint if isinstance(hint, str) else getattr(hint, "__name__", None) or str(hint)
-
-
-def _started(cls: type, mem, ticked: Optional[set] = None) -> type:
-    """`cls` whose `initial_mem()` is `mem` (a copy each time): a tactic that starts mid-play.
-    With `ticked`, each tick adds its robot ids to that set, so a moment can tell it ran."""
-    attrs = {
-        "initial_mem": lambda self: copy.deepcopy(mem),
-        "__module__": cls.__module__,
-        "__qualname__": cls.__qualname__,
-    }
-    if ticked is not None:
-
-        def tick(self, game, ctx, robot_ids, memory):
-            ticked.update(robot_ids)
-            return cls.tick(self, game, ctx, robot_ids, memory)
-
-        attrs["tick"] = tick
-    return type(cls.__name__, (cls,), attrs)
-
-
-HOLD_ID = "hold"
-
-
-def build_tactic_kernel_strategy(outfield_robot_ids: tuple[int, ...], tactic: dict, ticked: Optional[set] = None):
-    """`build_kernel_strategy` for a tactic moment, built like the `build_*_kernel_strategy`
-    factories (`strategy/clear_danger.py`): the moment's Tactic on its robots, the other outfield
-    robots holding position (no motion command), and a partition that never changes. A tactic
-    that is committed (pinned) or not applicable keeps its robots out of the partition. `ticked`
-    collects the robot ids the Tactic ticks with (see `_started`)."""
-    from utama_core.engine.context import TickContext
-    from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
-    from utama_core.engine.tactic import BaseTactic, TacticTag
-    from utama_core.skills.src.utils.move_utils import empty_command
-
-    class HoldPosition(BaseTactic[None]):
-        tag = TacticTag.MIXED
-
-        def initial_mem(self):
-            return None
-
-        def tick(self, game, ctx, robot_ids, mem):
-            return {rid: empty_command() for rid in robot_ids}, None
-
-    cls = tactic_classes()[tactic["class"]]
-    tactic_id = cls.__name__
-    robots = frozenset(tactic["robots"])
-    started = _started(cls, decode_mem(cls, tactic.get("mem")), ticked)
-
-    def partitioner(game, free_robots, prev_partition, available_tactic_ids):
-        mine = robots & free_robots
-        out, hold = {}, free_robots
-        if tactic_id in available_tactic_ids and mine:
-            out[tactic_id] = mine
-            hold = free_robots - mine
-        if hold:
-            out[HOLD_ID] = hold
-        return out
-
-    def _build(motion_controller):
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={tactic_id: started(), HOLD_ID: HoldPosition()},
-            partitioner=partitioner,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
 
 
 def template(
@@ -563,8 +343,6 @@ class Tick:
     ours: dict[int, tuple[float, float]]  # robot id -> position
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
-    tactic_robots: frozenset[int] = frozenset()  # robots the moment's tactic ticked with this tick
-    ball_speed: float = 0.0  # m/s
     designated: Optional[tuple[float, float]] = None  # the referee's designated position (placement, free kick)
 
 
@@ -646,40 +424,11 @@ def _first_per_robot(failures: list[str]) -> list[str]:
     return out
 
 
-# A kick: the ball at this speed or more (a moving ball at the start is below it).
-KICK_SPEED_MPS = 2.0
-# A receiver has the ball when it is this close to it: the dribbler takes it within ~0.08 m of the
-# centre, and a robot's edge is ~0.11 m, so 0.15 m with the ball slowed is a robot taking it.
-RECEIVE_M = 0.15
 # A restart's command holds this long from the start, so the restart happened (a free kick ends
 # only when it is taken; a ball placement needs the ball settled at the target for 2 s).
 RESTART_LASTS_S = 1.0
 # A robot of ours this close to the ball: the keep-out circle (0.5 m) was tested, not a robot far off.
 NEAR_BALL_M = 1.0
-
-
-def pass_received(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
-    """After the ball is kicked (`KICK_SPEED_MPS`), a robot of the moment's tactic other than the
-    carrier takes it: the ball slows below `KICK_SPEED_MPS` within `RECEIVE_M` of that robot before
-    the end. The carrier is our robot nearest the ball at the start; with no tactic ticking, any
-    other robot of ours counts."""
-    first = next((t for t in ticks if t.ball is not None and t.ours), None)
-    if first is None:
-        return ["pass_received: no ball or robots of ours to play"]
-    bx, by = first.ball
-    carrier = min(first.ours, key=lambda rid: math.hypot(first.ours[rid][0] - bx, first.ours[rid][1] - by))
-    tactic = frozenset().union(*(t.tactic_robots for t in ticks))
-    receivers = (tactic or frozenset(first.ours)) - {carrier}
-    kick = next((i for i, t in enumerate(ticks) if t.ball_speed >= KICK_SPEED_MPS), None)
-    if kick is None:
-        return [f"pass_received: the ball never reached kick speed ({KICK_SPEED_MPS} m/s), so no pass"]
-    for tick in ticks[kick:]:
-        if tick.ball is None or tick.ball_speed >= KICK_SPEED_MPS:
-            continue  # a ball still at pass speed past a robot is a miss, not a reception
-        for rid in receivers:
-            if rid in tick.ours and _dist(tick.ours[rid], tick.ball) <= RECEIVE_M:
-                return []
-    return [f"pass_received: no robot of {sorted(receivers)} got the ball from robot {carrier} by the end"]
 
 
 def placement_completes(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
@@ -734,20 +483,11 @@ def _robot_near_ball(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[
     return f"the closest robot of ours to the ball was {closest:.2f} m, need {NEAR_BALL_M} m"
 
 
-def _ball_kicked(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[str]:
-    """None when the ball reaches `KICK_SPEED_MPS`, else its top speed."""
-    fastest = max((t.ball_speed for t in ticks), default=0.0)
-    if fastest >= KICK_SPEED_MPS:
-        return None
-    return f"the ball's top speed was {fastest:.2f} m/s, need {KICK_SPEED_MPS} m/s"
-
-
 # Named checks a moment can ask for. Add one only for a failure no referee rule names, or for an
-# outcome that must happen (`pass_received`, `placement_completes`).
+# outcome that must happen (`placement_completes`).
 CHECKS = {
     "keeps_clear": keeps_clear,
     "stop_speed": stop_speed,
-    "pass_received": pass_received,
     "placement_completes": placement_completes,
 }
 
@@ -756,18 +496,12 @@ CHECKS = {
 REQUIRES = {
     "restart_lasts": _restart_lasts,
     "robot_near_ball": _robot_near_ball,
-    "ball_kicked": _ball_kicked,
 }
 
 
 def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
     """Every way `ticks` broke `m.checks`."""
     failures = []
-    if m.tactic is not None:
-        ran = frozenset().union(*(t.tactic_robots for t in ticks))
-        never = sorted(r for r in m.tactic["robots"] if r not in ran)
-        if never:
-            failures.append(f"{m.tactic['class']} never ran on robots {never}")
     for name in m.requires:
         why = REQUIRES[name](ticks, we_are_yellow)
         if why:
@@ -784,8 +518,7 @@ def judge(m: Moment, ticks: list[Tick], we_are_yellow: bool = True) -> list[str]
 
 
 def play(m: Moment, strategy: str) -> list[Tick]:
-    """Play `m` with `strategy` on our side (yellow) for `m.seconds`. A tactic moment's own
-    Tactic plays instead, and `strategy` is ignored."""
+    """Play `m` with `strategy` on our side (yellow) for `m.seconds`."""
     from utama_core.custom_referee import CustomReferee
     from utama_core.engine.abstract_strategy import AbstractStrategy
     from utama_core.replay.scenario import apply_scenario
@@ -796,20 +529,11 @@ def play(m: Moment, strategy: str) -> list[Tick]:
     def side(name: str) -> AbstractStrategy:
         return AbstractStrategy(build_kernel_strategy=getattr(kernel_strategy, name)(OUTFIELD_ROBOT_IDS))
 
-    ticked: set[int] = set()  # robots the tactic ticked with since the last played tick
-
-    def ours() -> AbstractStrategy:
-        if m.tactic is None:
-            return side(strategy)
-        return AbstractStrategy(
-            build_kernel_strategy=build_tactic_kernel_strategy(OUTFIELD_ROBOT_IDS, m.tactic, ticked)
-        )
-
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
     )
     runner = StrategyRunner(
-        strategy=ours(),
+        strategy=side(strategy),
         opp_strategy=side(m.opponent),
         my_team_is_yellow=True,
         my_team_is_right=True,
@@ -855,8 +579,6 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     ours={rid: (r.p.x, r.p.y) for rid, r in game.friendly_robots.items()},
                     our_speeds={rid: r.v.mag() for rid, r in game.friendly_robots.items()},
                     our_foul=foul,
-                    tactic_robots=frozenset(ticked),
-                    ball_speed=game.ball.v.mag() if game.ball is not None else 0.0,
                     designated=(
                         tuple(game.referee.designated_position)
                         if game.referee is not None and game.referee.designated_position is not None
@@ -864,7 +586,6 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     ),
                 )
             )
-            ticked.clear()
     finally:
         runner.close()
     return ticks
@@ -1015,7 +736,7 @@ def main() -> None:
                 strategy=args.strategy,
                 seconds=args.seconds,
             )
-            print(f'Wrote {save(m)}: edit its positions (and "tactic") by hand, then `play` it')
+            print(f"Wrote {save(m)}: edit its positions by hand, then `play` it")
         except MomentError as e:
             parser.error(str(e))
     elif args.cmd == "capture":
@@ -1045,8 +766,6 @@ def main() -> None:
             )
     else:
         m = load(args.moment)
-        if m.tactic is not None and args.strategy:
-            parser.error("a tactic moment plays its tactic: --strategy does not apply")
         if args.seed is not None:
             try:
                 m = with_seed(m, args.seed)

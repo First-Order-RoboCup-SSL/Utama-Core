@@ -47,7 +47,6 @@
     ],
     "seed": 1
   },
-  "tactic": null,
   "scenario": {
     "referee_command": "BALL_PLACEMENT_YELLOW",
     "ball": [
