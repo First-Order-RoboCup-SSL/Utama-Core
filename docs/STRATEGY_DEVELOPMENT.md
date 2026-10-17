@@ -524,6 +524,12 @@ flowchart TD
    draws what the planner decided on that tick: the obstacles and clearance rings, the keep-out circle,
    the target and the carrot it returned (`--side enemy` for the other strategy's robot; example:
    ![kick-off robot parked inside the keep-out circle](img/plan_snapshot/kickoff_keep_out.png)).
+   `tools/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` runs the same planner on every
+   tick of a window and draws the robot's path, each tick's carrot and the distances over time, so a
+   defect that unfolds over seconds shows as a trace (example: the kick-off robot of
+   ![a kick-off window](img/plan_trace/kickoff_keep_out.png)). The robot's positions are the replay's,
+   not re-simulated: this window was recorded before the push-out fix, so the robot stays 0.80 m from the
+   ball, while the current planner's carrot from those states is the push-out point 0.85 m from the ball.
 3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
    robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
    broken (real rules, `docs/custom_referee_design_decisions.md`) and whether the check reads it

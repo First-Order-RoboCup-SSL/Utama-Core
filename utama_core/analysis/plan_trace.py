@@ -126,6 +126,21 @@ def _xy(p) -> Tuple[float, float]:
     return float(p[0]), float(p[1])
 
 
+def short_carrot_label(row: TraceRow) -> str:
+    """Annotation for a tick whose carrot is short while the target is still far.
+
+    Inside the ball's keep-out, a short carrot farther from the ball than the robot is the planner
+    pushing the robot out, not a stall; any other short carrot is a parked robot."""
+    pushed_out = False
+    away = ""
+    if row.ball is not None and row.robot_to_ball is not None:
+        carrot_to_ball = float(np.hypot(row.carrot[0] - row.ball[0], row.carrot[1] - row.ball[1]))
+        pushed_out = row.robot_to_ball < BALL_KEEP_OUT_DISTANCE < carrot_to_ball
+        away = f", {carrot_to_ball:.2f} m from the ball"
+    what = "pushed out of the keep-out" if pushed_out else "parked"
+    return f"t={row.t:g} s: {what}\ncarrot {row.robot_to_carrot:.2f} m away{away}; target {row.robot_to_target:.2f} m"
+
+
 def plan_trace(
     game_at: GameAt,
     robot_id: int,
@@ -323,8 +338,7 @@ def _draw(
                 (
                     worst.t,
                     worst.robot_to_carrot,
-                    f"t={worst.t:g} s: parked\ncarrot {worst.robot_to_carrot:.2f} m away, "
-                    f"target {worst.robot_to_target:.2f} m",
+                    short_carrot_label(worst),
                 )
             )
     detour = max(rows, key=lambda r: r.carrot_offset)
@@ -409,8 +423,10 @@ def _draw(
         ax_carrot.annotate(
             text,
             xy=(at, val),
-            xytext=(at + 0.04 * (t1 - t0), 0.55),
-            textcoords="data",
+            # Text on whichever side of the point has more room, so it stays inside the panel.
+            xytext=(0.97 if at < (t0 + t1) / 2 else 0.03, 0.6),
+            textcoords="axes fraction",
+            ha="right" if at < (t0 + t1) / 2 else "left",
             fontsize=6.5,
             color=INK,
             arrowprops=dict(arrowstyle="-", linewidth=0.6, color=INK_2),

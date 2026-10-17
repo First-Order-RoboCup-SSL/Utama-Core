@@ -92,7 +92,10 @@ restarts occur.
 
 Each tick, `FastPathPlanner._path_to` turns the robot's target into a carrot point for the PID. The
 flowchart is that call's decision order. `tools/plan_snapshot.py` draws the carrot and the planner's
-inputs for one logged tick.
+inputs for one logged tick. `tools/plan_trace.py` runs the same `_path_to` on every tick of a window and
+draws how the carrot moved against the robot's path, which a single tick cannot show. Robot positions are the replay's, not re-simulated, so it shows what the current planner would
+do from each recorded state; the kick-off example is in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md),
+"Debugging a foul or failure".
 
 ```mermaid
 flowchart TD

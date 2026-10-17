@@ -4,7 +4,13 @@ import math
 
 import pytest
 
-from utama_core.analysis.plan_trace import _referee_spans, plan_trace, sample_times
+from utama_core.analysis.plan_trace import (
+    TraceRow,
+    _referee_spans,
+    plan_trace,
+    sample_times,
+    short_carrot_label,
+)
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
@@ -79,3 +85,27 @@ def test_referee_changes_show_as_separate_spans(tmp_path):
         ("STOP", 0.0, 0.2),
         ("NORMAL_START", 0.2, 0.3),
     ]
+
+
+def _row(carrot, robot=(0.762, -0.225), ball=(0.0, 0.0)):
+    return TraceRow(
+        t=258.0,
+        robot=robot,
+        target=(-1.0, -0.3),
+        carrot=carrot,
+        robot_to_carrot=math.dist(robot, carrot),
+        robot_to_target=math.dist(robot, (-1.0, -0.3)),
+        carrot_offset=0.0,
+        robot_to_ball=math.dist(robot, ball),
+        clearance=0.216,
+        speed=None,
+        ball=ball,
+        referee="PREPARE_KICKOFF_YELLOW",
+    )
+
+
+def test_a_short_carrot_out_past_the_keep_out_is_a_push_out_not_a_parked_robot():
+    """counter_flow_vs_tiki_taka_plus at 258 s: robot 0.795 m from the ball, carrot 0.85 m from it."""
+    assert "pushed out of the keep-out" in short_carrot_label(_row(carrot=(0.811, -0.236)))
+    # The same short carrot left inside the circle is a stall.
+    assert "parked" in short_carrot_label(_row(carrot=(0.75, -0.22)))
