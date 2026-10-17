@@ -98,10 +98,14 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         default=None,
-        help="override the friendly (config_a) strategy, e.g. build_split_shape_kernel_strategy",
+        help="override the friendly (config_a) strategy: the short name (e.g. clear_press_plus) or the factory "
+        "name (e.g. build_clear_press_plus_kernel_strategy); default: the replay's summary.json",
     )
     parser.add_argument(
-        "--opponent", default=None, help="override the enemy (config_b) strategy, e.g. build_high_press_kernel_strategy"
+        "--opponent",
+        default=None,
+        help="override the enemy (config_b) strategy, same two name forms (e.g. counter_flow); default: the "
+        "replay's summary.json",
     )
     parser.add_argument(
         "--trace-out", default="/tmp/repro_from_replay.intentions.jsonl", help="where to write the match_log JSONL"
