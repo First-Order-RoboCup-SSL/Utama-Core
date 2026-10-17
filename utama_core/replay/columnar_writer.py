@@ -134,6 +134,8 @@ class ColumnarReplayWriter:
         self.path = path if path is not None else self._resolve_path(replay_configs)
 
         self._my_team_is_right: Optional[bool] = None
+        # The match's `SimNoise` and its draw, as JSON (`StrategyRunner` sets it); None writes nothing.
+        self.sim_noise_json: Optional[str] = None
         self._ticks: list[_TickRecord] = []
         self._sparse_referee: list[tuple[int, RefereeData]] = []
         self._last_stored_ts = 0.0
@@ -272,7 +274,9 @@ class ColumnarReplayWriter:
             designated_position[tick_i] = t.designated_position
 
         f32 = np.float32  # see _FLOAT32_KEYS
+        extra = {"sim_noise": np.array(self.sim_noise_json)} if self.sim_noise_json is not None else {}
         return {
+            **extra,
             "my_team_is_yellow": np.array(self.metadata.my_team_is_yellow),
             # the side at the first tick; `side_is_right` has every tick's (teams change ends at half-time)
             "my_team_is_right": np.array(bool(self._my_team_is_right)),

@@ -524,7 +524,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/linux-64/zlib-1.3.2-h25fd6f3_2.conda
       - conda: https://prefix.dev/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/fa/66/f7177ab331876200ac7563a580140643d1179c8b4b6a6b0fc9838de2a9b8/numpy-2.0.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/d3/90/5c5960e30acd13eb43a780023761218612d26dd540d90b15edfef730b180/rc_robosim-1.2-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+      - pypi: ./vendor/rSim
       osx-arm64:
       - conda: https://prefix.dev/conda-forge/osx-arm64/bzip2-1.0.8-hd037594_9.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/c-ares-1.34.6-hc919400_0.conda
@@ -562,7 +562,7 @@ environments:
       - conda: https://prefix.dev/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_2.conda
       - conda: https://prefix.dev/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/05/33/26178c7d437a87082d11019292dce6d3fe6f0e9026b7b2309cbf3e489b1d/numpy-2.0.2-cp310-cp310-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/f0/af/fbd88656ad694164defc69d032faf606d938db05051c8f1f87449e42e70a/rc-robosim-1.2.tar.gz
+      - pypi: ./vendor/rSim
 packages:
 - conda: https://prefix.dev/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -5347,14 +5347,10 @@ packages:
   purls: []
   size: 886953
   timestamp: 1772541394570
-- pypi: https://files.pythonhosted.org/packages/d3/90/5c5960e30acd13eb43a780023761218612d26dd540d90b15edfef730b180/rc_robosim-1.2-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl
+- pypi: ./vendor/rSim
   name: rc-robosim
-  version: '1.2'
-  sha256: 2df3e53f92362ef88ad7d08b5c96b63b171a53a4deee54ce698d00dd54a6b5ed
-- pypi: https://files.pythonhosted.org/packages/f0/af/fbd88656ad694164defc69d032faf606d938db05051c8f1f87449e42e70a/rc-robosim-1.2.tar.gz
-  name: rc-robosim
-  version: '1.2'
-  sha256: 5080167ece949ad83b6e59fa96420ad0a1b5b8abd8c602776b70fa6c127961e7
+  version: 1.2.0+utama
+  sha256: 3ee70be6ae49588d10349b223ee29716b1694b243a04c7523b8a78f667820579
 - conda: https://prefix.dev/conda-forge/linux-64/readline-8.3-h853b02a_0.conda
   sha256: 12ffde5a6f958e285aa22c191ca01bbd3d6e710aa852e00618fa6ddc59149002
   md5: d7d95fc8287ea7bf33e0e7116d2b95ec

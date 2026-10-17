@@ -11,7 +11,7 @@ into the same JSON shape `dashboard.views.referee` produces, so the shared
 `FieldCanvas.draw()` on the frontend needs no replay-specific branch.
 
 If a sibling `<match_tag>.intentions.jsonl` sits next to the `.pkl` (written
-by `full_match_tournament.py` via `StrategyRunner(match_log_path=...)`), its
+by a round-robin run via `StrategyRunner(match_log_path=...)`), its
 sparse `IntentionEvent`/`RefereeEvent` rows are shipped to the browser
 as-is — `tactic_events`/`referee_events` — rather than forward-filled onto
 every frame here. Frame counts run into the tens of thousands while event

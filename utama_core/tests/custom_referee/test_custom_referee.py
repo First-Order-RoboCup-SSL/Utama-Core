@@ -1133,7 +1133,7 @@ class TestCustomReferee:
         assert data.next_command == RefereeCommand.NORMAL_START
 
     def test_simulation_stop_advances_after_timeout_even_if_a_robot_never_clears(self):
-        """Found live in a full_match_tournament.py replay
+        """Found live in a round-robin replay
         (counter_press_vs_tiki_taka_RK.pkl, 2026-09-01): an out-of-bounds STOP
         queued a DIRECT_FREE_BLUE restart, but one robot parked itself
         oscillating just inside _BALL_CLEAR_DIST of the stationary ball and

@@ -21,6 +21,11 @@ All the actual scenario-loading/coordinate-frame logic lives in
 build the runner the same way `tournament.run_match` does, apply the
 scenario, tick, print a summary.
 
+Sim noise: by default it plays with the replay's own `SimNoise` (its seed and settings, stored in
+the .npz), so latency, kick offsets and motion limits redraw the match's values; `--sim-noise PATH`
+uses another settings file, `--sim-noise none` plays noiseless. Vision and kick-speed noise are not
+replayed (their streams start afresh at `--t`).
+
 Known limitations (see `utama_core/replay/scenario.py`'s module docstring
 for the full rationale):
 - Tactic `mem` (each `Tactic`'s internal per-slot state — phase, committed
@@ -36,14 +41,47 @@ for the full rationale):
   starts with whatever the freshly-seeded `CustomReferee` defaults to.
 
 Usage:
-    pixi run python tools/repro_from_replay.py replays/tournament_.../match.pkl \\
+    pixi run python tools/repro_from_replay.py replays/tournament_.../match.npz \\
         --t 260 --duration 15 --control-scheme trajsample \\
         --trace-out /tmp/repro_trace.jsonl
+
+`--strategy` / `--opponent` take the short name of a `build_*_kernel_strategy` factory in
+`utama_core/strategy/` (e.g. `clear_press_plus`, `counter_flow`), the same names as the
+replay's `summary.json` config names. The trace shows the tactics those strategies use, not
+the strategy names (e.g. `decoy_and_overload.*` keys come from a strategy's DecoyOverloadTactic).
+
+`--trace-out` (default /tmp/repro_from_replay.intentions.jsonl; write under a scratch dir instead)
+is a JSON Lines file, one object per line, written when the run closes. Field `event` names the
+kind; every row has `tick` (the strategy's tick count) and `sim_time` (seconds, the replay's clock):
+  "intention": `tactic_id` (the kernel slot, e.g. "overload", "block", "attack"), `robot_ids` (the
+               robots the slot now holds; [] = released), `tag`, `note`: on an assignment the tactic
+               class name (e.g. "DecoyOverloadTactic"), on a release why, else null. Written when a
+               slot's robot set changes, not every tick. No `key`.
+  "trace":     `key` and `value`. Keys are `highlights.<tactic_id>` (value: {robot_id: label}),
+               `committed_robot_ids`, and tactic points such as `give_and_go.pass_target`
+               ({receiver_id, x, y}), `switch_of_play.runner_target` ({runner_id, x, y}),
+               `clear_ball.clear_target` ({from, to}), `dribble.segment_target` ({x, y}),
+               `go_to_ball[<id>].approach`. Written only when the value changes. No `tactic_id`.
+  "referee":  `command`, `stage`, scores, `designated`, `note`. Written on referee-state changes.
+               No `key` and no `robot_ids`.
+Read it by checking `event` first; `key` exists only on "trace" rows.
+
+`--summary ROBOT_IDS` (our side, e.g. `3` or `1,3`) prints, every 0.25 s of the run and at most
+40 lines, per listed robot: `t`, `robot`, `tactic` (the tactic class holding it, from the intention
+rows up to that time; the slot id if the class is unknown; `-` if none), `pos` (its position), `dist_ball` (to the ball), `ref` (the referee
+command at that tick) and `target`: the latest traced point (a "trace" row with a `*_id` field
+equal to the robot's id, e.g. give_and_go.pass_target's receiver_id), else `-`. Tactics that trace
+points without a robot id (clear_ball, dribble, decoy_and_overload) show `-`.
 """
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before any import: hides pygame's banner
+
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -58,7 +96,9 @@ from utama_core.custom_referee import CustomReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy import kernel_strategy
 
@@ -85,6 +125,118 @@ def _resolve_config_name(explicit: Optional[str], from_scenario: Optional[str], 
     return name
 
 
+def resolve_sim_noise(override: Optional[str], replay_noise: Optional[dict]) -> tuple[Optional[SimNoise], str]:
+    """The `SimNoise` a repro plays with, and the line that says so.
+
+    `override` is `--sim-noise`: "none" for noiseless, a path to a `SimNoise` JSON file, or None for
+    the replay's own. `replay_noise` is what `load_sim_noise` returned for the replay (`{"settings":
+    ..., "draw": ...}`), or None when it had none. The replay's settings carry its seed, so
+    `SimNoise.draw` gives the same per-robot values the match drew.
+    """
+    if override == "none":
+        return None, "sim noise: none (--sim-noise none)"
+    if override is not None:
+        noise = SimNoise.from_dict(json.loads(Path(override).read_text()))
+        return noise, f"sim noise: {override} (--sim-noise, seed {noise.seed})"
+    if replay_noise is None:
+        return None, "sim noise: none (the replay stores none)"
+    noise = SimNoise.from_dict(replay_noise["settings"])
+    return noise, f"sim noise: the replay's own (seed {noise.seed})"
+
+
+SUMMARY_EVERY_S = 0.25
+SUMMARY_MAX_LINES = 40
+
+
+def _parse_ids(spec: str) -> list[int]:
+    return [int(x) for x in spec.split(",") if x.strip()]
+
+
+def _snapshot(runner, robot_ids: list[int]) -> dict:
+    """Our robots in `robot_ids` and the ball at the runner's current frame."""
+    frame = runner.my.current_game_frame
+    ref_data = runner.my.game.referee
+    ball = (frame.ball.p.x, frame.ball.p.y) if frame.ball is not None else None
+    robots = {
+        rid: (frame.friendly_robots[rid].p.x, frame.friendly_robots[rid].p.y)
+        for rid in robot_ids
+        if rid in frame.friendly_robots
+    }
+    return {
+        "t": frame.ts,
+        "referee": ref_data.referee_command.name if ref_data is not None else None,
+        "ball": ball,
+        "robots": robots,
+    }
+
+
+def summary_rows(samples: list[dict], robot_ids: list[int], events: list, every: float = SUMMARY_EVERY_S) -> list[dict]:
+    """One row per listed robot every `every` seconds. `samples`: dicts with t, referee, ball (x, y) or
+    None, and robots {id: (x, y)}, in time order. `events`: IntentionEvent-like (sim_time, tactic_id,
+    robot_ids) and TraceEvent-like (sim_time, key, value) objects, any order; applied up to each row's t."""
+    intentions = sorted((e for e in events if hasattr(e, "tactic_id")), key=lambda e: e.sim_time)
+    traces = sorted((e for e in events if hasattr(e, "key")), key=lambda e: e.sim_time)
+    holder: dict[int, str] = {}  # robot -> slot id
+    classes: dict[str, str] = {}  # slot id -> tactic class, from assignment notes
+    target: dict[int, str] = {}
+    ii = ti = 0
+    last_t: Optional[float] = None
+    rows: list[dict] = []
+    for s in samples:
+        t = s["t"]
+        if last_t is not None and t - last_t < every - 1e-9:
+            continue
+        last_t = t
+        while ii < len(intentions) and intentions[ii].sim_time <= t:
+            e = intentions[ii]
+            ii += 1
+            if e.robot_ids and e.note and not e.note.startswith(("released", "deadline")):
+                classes[e.tactic_id] = e.note
+            # The event says which robots the tactic now holds: drop the ones it lost, add the new ones.
+            for rid in [r for r, tid in holder.items() if tid == e.tactic_id and r not in e.robot_ids]:
+                del holder[rid]
+            for rid in e.robot_ids:
+                holder[rid] = e.tactic_id
+        while ti < len(traces) and traces[ti].sim_time <= t:
+            e = traces[ti]
+            ti += 1
+            value = e.value
+            if e.key.endswith("target") and isinstance(value, dict) and "x" in value and "y" in value:
+                for field, rid in value.items():
+                    if field.endswith("_id"):
+                        target[rid] = f"{e.key} ({value['x']:.2f},{value['y']:.2f})"
+        for rid in robot_ids:
+            pos = s["robots"].get(rid)
+            ball = s["ball"]
+            rows.append(
+                {
+                    "t": t,
+                    "robot": rid,
+                    "tactic": classes.get(holder[rid], holder[rid]) if rid in holder else "-",
+                    "pos": pos,
+                    "dist_ball": math.hypot(pos[0] - ball[0], pos[1] - ball[1]) if pos and ball else None,
+                    "ref": s["referee"],
+                    "target": target.get(rid, "-"),
+                }
+            )
+    return rows
+
+
+def format_summary(rows: list[dict], max_lines: int = SUMMARY_MAX_LINES) -> list[str]:
+    """`summary_rows` as text lines, at most `max_lines` and then "... N more"."""
+    lines = []
+    for r in rows[:max_lines]:
+        pos = "(  -  ,  -  )" if r["pos"] is None else f"({r['pos'][0]:+.2f},{r['pos'][1]:+.2f})"
+        dist = "   -" if r["dist_ball"] is None else f"{r['dist_ball']:.2f}"
+        lines.append(
+            f"{r['t']:8.2f}s robot {r['robot']} {r['tactic']:<24} at {pos} ball {dist} m  "
+            f"ref {r['ref'] or '-':<22} target {r['target']}"
+        )
+    if len(rows) > max_lines:
+        lines.append(f"... {len(rows) - max_lines} more")
+    return lines
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("replay_path", type=Path, help="path to a .pkl or .npz replay")
@@ -98,18 +250,38 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         default=None,
-        help="override the friendly (config_a) strategy, e.g. build_split_shape_kernel_strategy",
+        help="override the friendly (config_a) strategy: the short name (e.g. clear_press_plus) or the factory "
+        "name (e.g. build_clear_press_plus_kernel_strategy); default: the replay's summary.json",
     )
     parser.add_argument(
-        "--opponent", default=None, help="override the enemy (config_b) strategy, e.g. build_high_press_kernel_strategy"
+        "--opponent",
+        default=None,
+        help="override the enemy (config_b) strategy, same two name forms (e.g. counter_flow); default: the "
+        "replay's summary.json",
     )
     parser.add_argument(
         "--trace-out", default="/tmp/repro_from_replay.intentions.jsonl", help="where to write the match_log JSONL"
     )
     parser.add_argument("--print-trace", action="store_true", help="print every TraceEvent as it's written back")
+    parser.add_argument(
+        "--sim-noise",
+        default=None,
+        metavar="PATH|none",
+        help="sim noise to play with: none (noiseless), or a SimNoise JSON file; default: the replay's own "
+        "(see the module docstring)",
+    )
+    parser.add_argument(
+        "--summary",
+        default=None,
+        metavar="ROBOT_IDS",
+        help="print tactic, position, distance to ball, referee command and traced target every 0.25 s for "
+        "these of our robots, e.g. 3 or 1,3 (see the module docstring)",
+    )
     args = parser.parse_args()
 
     scenario: Scenario = scenario_from_replay(args.replay_path, args.t)
+    replay_noise = load_sim_noise(args.replay_path) if args.replay_path.suffix == ".npz" else None
+    sim_noise, noise_line = resolve_sim_noise(args.sim_noise, replay_noise)
 
     strategy_a_name = _resolve_config_name(args.strategy, scenario.config_a_name, "friendly")
     strategy_b_name = _resolve_config_name(args.opponent, scenario.config_b_name, "enemy")
@@ -137,8 +309,14 @@ def main() -> None:
         referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
         control_scheme=args.control_scheme,
         match_log_path=args.trace_out,
+        sim_noise=sim_noise,
     )
 
+    print(noise_line)
+    if sim_noise is not None and replay_noise is not None and args.sim_noise is None:
+        drawn = runner.rsim_env.sim_draw.to_dict()
+        same = json.loads(json.dumps(drawn)) == replay_noise["draw"]
+        print(f"  per-robot draws {'match' if same else 'DO NOT match'} the replay's stored draw")
     print(f"Loaded scenario from {args.replay_path} at t={args.t}s (nearest frame ts={scenario.frame_ts:.3f}s)")
     print(f"  friendly={strategy_a_name}  enemy={strategy_b_name}")
     print(f"  referee_command at load: {scenario.referee_command}")
@@ -156,6 +334,10 @@ def main() -> None:
         }
         referee_commands_seen: list[str] = []
         last_command = None
+        summary_ids = _parse_ids(args.summary) if args.summary else []
+        samples: list[dict] = []
+        if summary_ids:
+            samples.append(_snapshot(runner, summary_ids))
 
         for _ in range(n_ticks):
             runner.step_once()
@@ -164,6 +346,8 @@ def main() -> None:
                 ball_positions.append((frame.ball.p.x, frame.ball.p.y))
             ref_data = runner.my.game.referee
             command = ref_data.referee_command.name if ref_data is not None else None
+            if summary_ids:
+                samples.append(_snapshot(runner, summary_ids))
             if command != last_command:
                 referee_commands_seen.append(command)
                 last_command = command
@@ -207,6 +391,11 @@ def main() -> None:
 
     finally:
         runner.close()
+
+    if summary_ids:
+        lines = format_summary(summary_rows(samples, summary_ids, load_jsonl(args.trace_out)))
+        print(f"\nSummary for robot(s) {summary_ids} (every {SUMMARY_EVERY_S}s, at most {SUMMARY_MAX_LINES} lines):")
+        print("\n".join(lines))
 
     if args.print_trace and runner.match_log is not None:
         last_value: dict[str, object] = {}

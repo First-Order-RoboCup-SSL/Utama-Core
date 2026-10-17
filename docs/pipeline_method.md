@@ -1,6 +1,9 @@
 # Pipeline method
 
-![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
+![One tick of StrategyRunner](img/pipeline/one_tick.png)
+
+Drawn by `docs/img/pipeline/make_one_tick.py`; rerun it when a box's name changes. The same tick as a
+Mermaid diagram with every module path: [architecture.md](architecture.md#one-tick).
 
 How vision, robot and referee data become one `Game` state, and how one tick turns that
 state into robot commands. Everything below runs inside `StrategyRunner`
@@ -32,6 +35,30 @@ Friendly and enemy robots expose the same fields, estimated from different sourc
 
 The uniform `GameTimeline`/`Predictions` interface (pluggable per-property predictors) from
 earlier drafts was never built; predictions are ad hoc per call site.
+
+### Inside PositionRefiner
+
+Camera combining and the Kalman filters (`data_processing/refiners/position.py`,
+`data_processing/refiners/filters/kalman.py`). Smoothing and vanished-robot imputation are
+separate switches; both run on the same per-robot filters.
+
+```mermaid
+flowchart TD
+    cams["Raw vision, one RawVisionData per camera"]
+    comb["CameraCombiner.combine_cameras<br/>_avg_robots per robot id, _combine_balls_by_proximity,<br/>_bounds_check against VisionBounds"]
+    vd["VisionData<br/>combined robots and balls"]
+    sw{"smooth_positions?"}
+    kf["KalmanFilter per robot, KalmanFilterBall<br/>filters/kalman.py"]
+    imp{"impute_vanished?"}
+    vanish["_include_vanished_robots<br/>Kalman predict for robots missing from vision"]
+    game["Game, GameFrame<br/>entities/game/game.py"]
+
+    cams --> comb --> vd --> sw
+    sw -->|yes| kf --> imp
+    sw -->|no| imp
+    imp -->|yes| vanish --> game
+    imp -->|no| game
+```
 
 ## One tick
 

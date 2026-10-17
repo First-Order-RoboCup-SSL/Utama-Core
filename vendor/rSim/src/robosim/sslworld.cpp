@@ -19,6 +19,7 @@ Copyright (C) 2011, Parsian Robotic Center (eew.aut.ac.ir/~parsian/grsim)
 #include "sslworld.h"
 #include "sslconfig.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <ctime>
 #include <math.h>
@@ -274,10 +275,13 @@ void SSLWorld::step(std::vector<std::vector<double>> actions)
         robots[k]->step();
     }
 
-    // Pq ele faz isso 5 vezes?
-    // - Talvez mais precisao (Ele sempre faz um step de dt*0.2 )
-    for (int kk = 0; kk < 5; kk++)
+    // Upstream always took 5 substeps of dt*0.2; `substeps` keeps that exact arithmetic at 5.
+    const dReal subDt = (this->substeps == 5) ? this->timeStep * 0.2 : this->timeStep / this->substeps;
+    for (int kk = 0; kk < this->substeps; kk++)
     {
+        if (this->ballRollDecel >= 0) {
+            applyBallFriction(subDt);
+        } else {
         const dReal *ballvel = dBodyGetLinearVel(this->ball->body);
         // Norma do vetor velocidade da bola
         dReal ballSpeed = ballvel[0] * ballvel[0] + ballvel[1] * ballvel[1] + ballvel[2] * ballvel[2];
@@ -296,10 +300,46 @@ void SSLWorld::step(std::vector<std::vector<double>> actions)
             dBodySetAngularVel(this->ball->body, 0, 0, 0);
             dBodySetLinearVel(this->ball->body, 0, 0, 0);
         }
+        }
 
-        this->physics->step(this->timeStep * 0.2, this->fullSpeed);
+        this->physics->step(subDt, this->fullSpeed);
     }
 
+}
+
+void SSLWorld::setPhysicsParams(int substeps, double ballSlideDecel, double ballRollDecel, double ballSlideFraction)
+{
+    this->substeps = substeps;
+    this->ballSlideDecel = ballSlideDecel;
+    this->ballRollDecel = ballRollDecel;
+    this->ballSlideFraction = ballSlideFraction;
+    this->ballSliding = false;
+}
+
+// Two-phase ball friction: the ball's ground speed drops by exactly decel * dt each substep.
+// Its spin is set to pure rolling every substep, so ODE's own ball-ground contact friction
+// (mu = 1) exerts no force and this is the only thing slowing the ball. A ball in the air
+// (a chip) is left alone until it lands.
+void SSLWorld::applyBallFriction(dReal dt)
+{
+    const dReal r = SSLConfig::World().getBallRadius();
+    const dReal *pos = dBodyGetPosition(this->ball->body);
+    const dReal *vel = dBodyGetLinearVel(this->ball->body);
+    if (pos[2] > r * 1.5) return;
+    dReal speed = sqrt(vel[0] * vel[0] + vel[1] * vel[1]);
+    if (speed <= 0.01) {
+        this->ballSliding = false;
+        dBodySetAngularVel(this->ball->body, 0, 0, 0);
+        dBodySetLinearVel(this->ball->body, 0, 0, 0);
+        return;
+    }
+    if (this->ballSliding && speed <= this->ballSlideEndSpeed) this->ballSliding = false;
+    const dReal decel = this->ballSliding ? this->ballSlideDecel : this->ballRollDecel;
+    const dReal scale = std::max<dReal>(0, speed - decel * dt) / speed;
+    const dReal vx = vel[0] * scale;
+    const dReal vy = vel[1] * scale;
+    dBodySetLinearVel(this->ball->body, vx, vy, vel[2]);
+    dBodySetAngularVel(this->ball->body, -vy / r, vx / r, 0);
 }
 
 void SSLWorld::setActions(std::vector<std::vector<double>> actions)
@@ -315,7 +355,13 @@ void SSLWorld::setActions(std::vector<std::vector<double>> actions)
         } 
         else this->robots[i]->setDesiredSpeedLocal(rbtAction[1], rbtAction[2], rbtAction[3]);
         if (rbtAction[5] > 0 || rbtAction[6] > 0) {
-            this->robots[i]->kicker->kick(rbtAction[5], rbtAction[6]);
+            // Optional 9th field: the kick's direction error in radians (0 = along the facing).
+            const double kickAngle = rbtAction.size() > 8 ? rbtAction[8] : 0.0;
+            if (this->robots[i]->kicker->kick(rbtAction[5], rbtAction[6], kickAngle) && this->ballRollDecel >= 0) {
+                const dReal *v = dBodyGetLinearVel(this->ball->body);
+                this->ballSliding = true;
+                this->ballSlideEndSpeed = this->ballSlideFraction * sqrt(v[0] * v[0] + v[1] * v[1]);
+            }
         }
         this->robots[i]->kicker->setDribbler(rbtAction[7] > 0);
     }
@@ -426,6 +472,7 @@ void SSLWorld::replace(std::vector<double> ballPos, std::vector<std::vector<doub
     this->ball->setBodyPosition(ballPos[0], ballPos[1], zz);
     dBodySetLinearVel(this->ball->body, ballPos[2], ballPos[3], 0);
     dBodySetAngularVel(this->ball->body, 0, 0, 0);
+    this->ballSliding = false;
 
     for (uint32_t i = 0; i < this->field.getRobotsBlueCount(); i++)
     {

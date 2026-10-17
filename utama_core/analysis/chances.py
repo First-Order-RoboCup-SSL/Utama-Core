@@ -172,6 +172,7 @@ class ChanceTracker:
             {
                 "side": side,
                 "t": round(ts, 2),
+                "xy": [round(xy[0], 2), round(xy[1], 2)],
                 "distance_m": round(math.hypot(along, xy[1]), 2),
                 "angle_deg": round(math.degrees(math.atan2(abs(xy[1]), along)), 1),
                 "open_goal": round(open_goal(xy, goal_x, blockers), 2),

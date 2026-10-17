@@ -4,10 +4,48 @@ Every signal we record about how a strategy plays, grouped by the question it an
 when designing or debugging a strategy: find the question, read the signal, compare with the
 reference range, and follow "if it's off". Add a signal here when you add one anywhere else.
 
-Signals are diagnostics, not objectives. Rank strategies by results (W-D-L, goals); use these to
-explain a result, to find what a strategy does badly, and to notice a shared primitive
-(reception, carrying, the planner, the referee) failing every strategy at once. A strategy that
-never passes or shoots loses the ball least, so no signal is "better" on its own.
+Signals are diagnostics, not objectives: use them to explain a result, to find what a strategy
+does badly, and to notice a shared primitive (reception, carrying, the planner, the referee)
+failing every strategy at once. A strategy that never passes or shoots loses the ball least, so
+no signal is "better" on its own. Ranking uses goals alone: see [Ranking](#ranking).
+
+The sections below group the signals by the question each one answers; this map shows the groups.
+
+```mermaid
+mindmap
+  root((Signals))
+    ["Is something broken?"]
+    ["Does it create chances?"]
+    ["Does it keep and move the ball?"]
+    ["Does it defend?"]
+    ["Restarts"]
+    ["Where do goals come from?"]
+    ["Ranking"]
+```
+
+## Ranking
+
+Strategies are ranked by goals only, through ratings fitted on match margins
+(`tools/evaluation/evaluate.py`; `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy").
+Signals explain a result; none of them ranks or is a search objective.
+
+Tested and rejected as rankers (2026-10-17, two noisy round-robins of the same 12 strategies with
+different seeds, `tournament_20261016_201213` and `tournament_20261017_002337`; scripts in
+`~/dev/ssl/eval-infra/` and `~/dev/ssl/xg-analysis/metrics_quick/`). Those scripts were one-off
+analysis scripts kept outside the repo; the data they used are the two round-robins above and the
+evaluation ledger (`replays/eval/ledger.jsonl`).
+
+- **Shots on target.** Within one run, strengths from shots predicted held-out matches about as
+  well as goals; across runs, goal strengths from run 1 predicted run 2's goal strengths better
+  (rank correlation 0.57) than shot strengths did (0.37), leaving out split_shape, whose margin
+  swung from +1.5 to +4.9 between seeds and dominates any correlation that includes it.
+- **xG** (real-data model, `analysis/realism/xg.py`): sim keepers save twice as often as real
+  ones, so it misjudges sim strategies by how they shoot.
+- **Possession, completed passes, possession under pressure**: consistent between runs but
+  predict *losing* in this pool. Territory and attacking-third entries predict nothing.
+- **Weighted combinations** of match stats: the weights depend on the strategy pool they are
+  fitted on, so a new strategy's score would depend on unrelated strategies.
+- **A value model** of the game state (`docs/sim_realism.md`): no more reliable than goals.
 
 ## Where they come from
 
@@ -19,6 +57,7 @@ Every saved `tools/evaluation/round_robin.py` run prints its sections and writes
 | Standings, STRATEGIES | `standings`, `strategies[*]` | `MatchStats` (live, every match) |
 | LOSS KINDS, BALL LOSSES, `passes:` line | `strategies[*].real_loss_kinds_as_a`, `ball_losses` (tables in `ball_losses.md`) | `analysis/turnover_breakdown.py` |
 | CHANCES | `strategies[*].chances`, `pass_progress_m`, `forward_pass_share` | `analysis/chances.py` |
+| None (in `summary.json` only) | `ratings` | `analysis/ratings.py` ([Ranking](#ranking)) |
 | FOULS | `fouls` | `MatchStats` |
 | STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `MatchStats` stall watchdog |
 | RESTARTS | `restarts` | `analysis/restart_outcomes.py` |
@@ -111,9 +150,35 @@ sum over situations of situations per match × P(goal), for goals scored and con
 result splits into which situations a strategy creates or allows, and how well it converts or
 defends them. It reads only the replay and its referee file, so it runs on converted official
 logs too. The rules are in the module's docstring. `--rates PATH` writes how often each
-situation happens per team per live minute, whoever owns it: the weights of the
-[situation bench](STRATEGY_DEVELOPMENT.md#the-situation-bench), whose P(goal) also counts a goal
-that comes after a later situation started, unlike the table below.
+situation happens per team per live minute, whoever owns it (the scenario bench, retired
+2026-10-17, used these as its weights).
+
+How a goal is credited (`analysis/goal_ledger.py`; `WINDOW_S` = 10 s):
+
+```mermaid
+flowchart TD
+    subgraph starts["A situation starts"]
+        rs["Restart goes live<br/>find_restarts: kickoff, free kick, penalty<br/>owned by the kicking side"]
+        fs["Force start<br/>owned by no one"]
+        bw["Side wins the ball in open play<br/>possession_spells: owned by that side"]
+    end
+
+    types["Situation type, from the owner's frame<br/>own / opponent: ball won or free kick, third;<br/>kickoff, penalty; force start"]
+    goal["Goal, at the tick play stops"]
+    near{"Latest start less than 10 s<br/>before the goal?"}
+    sus["sustained possession"]
+    cred["Credited to that situation<br/>p_scored / p_conceded"]
+    sum["goals per match = sum over situations of<br/>situations per match x P(goal)"]
+
+    rs --> types
+    fs --> types
+    bw --> types
+    goal --> near
+    near -->|yes| cred
+    near -->|no| sus
+    cred --> sum
+    sus --> sum
+```
 
 Reference: `split_shape` in `tournament_20261011_230119` (17 matches; 6.76 scored, 4.41
 conceded per match).

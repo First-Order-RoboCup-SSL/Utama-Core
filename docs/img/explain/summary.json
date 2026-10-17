@@ -1,0 +1,112 @@
+{
+  "run_dir": "/home/isaac/dev/ssl/Utama-Core/replays/tournament_20261017_151052",
+  "candidate": "split_shape",
+  "champion": "clear_press_plus",
+  "replays_read": 21,
+  "sides": {
+    "split_shape": {
+      "matches": 11,
+      "goals_for_per_match": 6.0,
+      "goals_against_per_match": 1.2727272727272727,
+      "shots_for_per_match": 21.90909090909091,
+      "shots_against_per_match": 9.0,
+      "in_possession_attacking_half": 0.3653179190751445,
+      "in_possession_mean_abs_y": 0.9595364315577324,
+      "out_possession_own_half": 0.683714969241285,
+      "shots_from_attacking_third": 0.7219917012448133,
+      "fouls_in_defensive_third": 0.3,
+      "fouls_per_match": {
+        "ball_speed": 0.455,
+        "crashing": 2.636,
+        "defense_area": 0.455,
+        "defense_area_stoppage": 4.636,
+        "double_touch": 0.455,
+        "excessive_dribbling": 1.273,
+        "invalid_goal": 0.091
+      }
+    },
+    "clear_press_plus": {
+      "matches": 11,
+      "goals_for_per_match": 1.2727272727272727,
+      "goals_against_per_match": 0.8181818181818182,
+      "shots_for_per_match": 6.2727272727272725,
+      "shots_against_per_match": 6.454545454545454,
+      "in_possession_attacking_half": 0.6478642596428924,
+      "in_possession_mean_abs_y": 1.4162411967222082,
+      "out_possession_own_half": 0.5518248175182482,
+      "shots_from_attacking_third": 0.7536231884057971,
+      "fouls_in_defensive_third": 0.11538461538461539,
+      "fouls_per_match": {
+        "crashing": 1.182,
+        "defense_area": 0.455,
+        "defense_area_stoppage": 1.091,
+        "double_touch": 0.455,
+        "excessive_dribbling": 1.545
+      }
+    }
+  },
+  "paired": {
+    "clear_danger": {
+      "candidate": 10,
+      "champion": -3,
+      "matches": 1
+    },
+    "counter_flow": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "decoy_and_overload": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "give_and_go_solo": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "high_press": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "overload_press": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "press_and_pass": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "press_trigger_flow": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "score_aware_counter_flow": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 0
+    },
+    "tiki_taka_plus": {
+      "candidate": 5,
+      "champion": 0,
+      "matches": 1
+    },
+    "head-to-head": {
+      "candidate": 0,
+      "champion": 0,
+      "matches": 1
+    }
+  },
+  "fouls_rules_shown": [
+    "defense_area_stoppage",
+    "crashing",
+    "excessive_dribbling",
+    "double_touch"
+  ],
+  "notes": "Matches are those in the run dir; fixtures reused from the ledger have no replay here. Positions and fouls exclude the goalkeeper and out-of-bounds (as pitch_maps.py)."
+}

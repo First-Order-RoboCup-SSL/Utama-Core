@@ -24,7 +24,6 @@ from utama_core.config.referee_constants import (
 )
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.vector import Vector2D
-from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     detour_around_circle,
     distance_point_to_segment,
@@ -237,12 +236,14 @@ def _in_planner_opp_defense_margin(game, point: Vector2D) -> bool:
 
 def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float) -> Vector2D:
     """`point` (on the circle round `center`), or the nearest point of that circle
-    the planner will drive to.
+    on the pitch that the planner will drive to.
 
     A free kick 1 m in front of the opponent box pushed a robot between the ball and
     the box straight toward the box; the planner stopped it 0.48 m from the ball, a
-    Defender Too Close foul every free kick."""
-    if not _in_planner_opp_defense_margin(game, point):
+    Defender Too Close foul every free kick. A placement near a corner pushed a robot
+    off the pitch; clamped back on, its target was still inside the circle and it never
+    left (moment placement_in_corner_traps_defender)."""
+    if not _in_planner_opp_defense_margin(game, point) and _clamp_to_field(point, game) == point:
         return point
     base = math.atan2(point.y - center.y, point.x - center.x)
     for step in range(1, 37):
@@ -567,6 +568,15 @@ class BallPlacementOursStep:
                         ball_pos_for_clamp.y - approach_dir.y * self._APPROACH_OFFSET,
                     )
                     target_for_move = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
+                    # Still on the designated side of the ball: go round it, not through it, to
+                    # the approach point (a hand-made moment: the straight run passed 0.03 m
+                    # from the ball, and the placer pushed it off the spot). Once behind the ball
+                    # the run to the approach point is the final approach and stays straight.
+                    robot_rel = robot.p - ball_pos_for_clamp
+                    if robot_rel.x * approach_dir.x + robot_rel.y * approach_dir.y > 0.0:
+                        target_for_move = detour_around_circle(
+                            robot.p, target_for_move, ball_pos_for_clamp, ROBOT_RADIUS + BALL_RADIUS
+                        )
                     self.blackboard.cmd_map[robot_id] = move(
                         game, motion_controller, robot_id, target_for_move, oren, dribbling=True
                     )
@@ -961,13 +971,3 @@ class DirectFreeTheirsStep:
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
         )
-
-
-# ---------------------------------------------------------------------------
-# Helper: resolve bilateral commands
-# ---------------------------------------------------------------------------
-
-
-def is_our_command(command: RefereeCommand, our_command: RefereeCommand, their_command: RefereeCommand) -> bool:
-    """Not used directly — bilateral resolution is done in tree.py via command sets."""
-    return command == our_command

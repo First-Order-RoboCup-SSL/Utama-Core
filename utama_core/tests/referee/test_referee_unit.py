@@ -451,6 +451,11 @@ class TestBallPlacementOursStep:
             ball_pos.y - offset * math.sin(oren),
         )
         expected = referee_actions._clamp_to_field_or_ball(approach, game, ball_pos)
+        # The placer starts on the designated side, so it routes round the ball to the
+        # (clamped) approach point rather than straight at it.
+        from utama_core.global_utils.math_utils import detour_around_circle
+
+        expected = detour_around_circle(Vector2D(4.0, 0.0), expected, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
         assert captured[0][1].x == pytest.approx(expected.x)
         assert captured[0][1].y == pytest.approx(expected.y)
         assert captured[0][2] is True
@@ -838,6 +843,78 @@ class TestBallPlacementOursStep:
         # pushed along it to (0.8, 0) where the placer carries the ball through.
         assert support_move[1] == Vector2D(0.8, 0.8)
         assert support_move[2] is False
+
+
+class TestBallPlacementOursApproachAroundBall:
+    """Our placer approaches the ball's behind-point round the ball, not through it.
+
+    A hand-made moment (since dropped): the placer starts on the designated side, and its straight run
+    to the approach point passed 0.03 m from the ball, so it drove into the ball and pushed it
+    off the spot.
+    """
+
+    CLEARANCE = ROBOT_RADIUS + BALL_RADIUS
+    BALL = (-2.0, -3.0)
+    DESIGNATED = (2.0, -3.0)
+    APPROACH = (-2.0 - 0.10, -3.0)  # 0.10 m behind the ball, on the carry axis
+
+    def _placer_target(self, monkeypatch, robot_xy):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = self.DESIGNATED
+        game = _make_game(
+            friendly_robots={4: _robot(4, *robot_xy)},
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(*self.BALL),
+        )
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+        return captured[4]
+
+    @staticmethod
+    def _min_distance_to_ball(start, end, ball):
+        seg = Vector2D(end.x - start.x, end.y - start.y)
+        rel = Vector2D(ball[0] - start.x, ball[1] - start.y)
+        t = max(0.0, min(1.0, (rel.x * seg.x + rel.y * seg.y) / (seg.x**2 + seg.y**2)))
+        closest = Vector2D(start.x + seg.x * t, start.y + seg.y * t)
+        return math.hypot(closest.x - ball[0], closest.y - ball[1])
+
+    def test_placer_on_designated_side_routes_round_the_ball(self, monkeypatch):
+        """Straight run from (1,-2) to the approach point passes 0.03 m from the ball: the
+        target handed to the planner must be a waypoint whose leg keeps a robot radius plus a
+        ball radius from the ball, on the placer's own side."""
+        start = Vector2D(1.0, -2.0)
+        target = self._placer_target(monkeypatch, (start.x, start.y))
+
+        assert (target.x, target.y) != pytest.approx(self.APPROACH)
+        assert self._min_distance_to_ball(start, target, self.BALL) >= self.CLEARANCE - 1e-9
+        assert target.y > self.BALL[1]  # round the side the placer is on
+
+    def test_placer_level_with_the_ball_goes_straight_to_the_approach_point(self, monkeypatch):
+        """Boundary of 'behind': a placer level with the ball (zero component along the carry
+        direction) is not on the designated side, so its run to the approach point is not
+        detoured."""
+        target = self._placer_target(monkeypatch, (-2.0, -1.0))
+
+        assert (target.x, target.y) == pytest.approx(self.APPROACH)
+
+    def test_placer_already_behind_the_ball_heads_straight_to_the_approach_point(self, monkeypatch):
+        """Behind the ball (on the far side from the designated position), the run to the approach
+        point is the final approach and goes straight there, not round the ball."""
+        target = self._placer_target(monkeypatch, (-2.5, -3.0))
+
+        assert (target.x, target.y) == pytest.approx(self.APPROACH)
 
 
 # ---------------------------------------------------------------------------
@@ -1900,6 +1977,29 @@ class TestDirectFreeTheirsStep:
         (target,) = captured
         assert (target - Vector2D(-2.5, 0.0)).mag() == pytest.approx(0.8)
         assert target.x >= -3.5 + 0.25 + 0.28  # outside the planner's margin round the box
+
+    def test_robot_by_a_ball_in_the_corner_clears_round_the_ball_onto_the_pitch(self, monkeypatch):
+        """Ball at (4.0, 2.5): straight out from it the robot's spot is off the pitch, and
+        clamped back on (x <= 4.4) it was 0.48 m from the ball, so the robot never left
+        (moment placement_in_corner_traps_defender)."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+        monkeypatch.setattr(
+            referee_actions, "move", lambda game, mc, rid, target, oren, dribbling=False: captured.append(target)
+        )
+
+        robots = {0: _robot(0, 4.28, 2.36)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_right=True, ball=_ball(4.0, 2.5))
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        (target,) = captured
+        assert (target - Vector2D(4.0, 2.5)).mag() == pytest.approx(0.8)
+        assert referee_actions._clamp_to_field(target, game) == target
 
     def test_all_robots_get_commands(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions

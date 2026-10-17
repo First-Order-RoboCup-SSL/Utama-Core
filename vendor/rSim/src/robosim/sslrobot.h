@@ -67,7 +67,8 @@ public:
         Kicker(SSLRobot* robot);
         ~Kicker();
         void step();
-        void kick(dReal kickSpeedX, dReal kickSpeedZ);
+        // Returns whether the kick fired; angle rotates its direction (radians, 0 = facing).
+        bool kick(dReal kickSpeedX, dReal kickSpeedZ, dReal angle = 0);
         void setDribbler(bool dribbler);
         bool getDribbler();
         void toggleDribbler();

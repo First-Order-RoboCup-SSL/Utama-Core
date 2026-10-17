@@ -49,7 +49,7 @@ resolved, replace it with a one-line pointer under "Done".
      `StallEvent`s across N seeded fuzzed matches. **Built:** stall watchdog + `--strict`,
      commitment deadline, restart fuzzer, pure `Game` builder. **Not built:** CI job running
      the strict seeded stall gate.
-   - *Outer loop, fast half (scenario bench, numbers vs a committed baseline, non-blocking):*
+   - *Outer loop, fast half (scenario bench, numbers vs a committed baseline, non-blocking; **retired 2026-10-17**, code and banks deleted, history kept):*
      seeded start state + 15-30s horizon, scored as paired differentials by calibrated proxy
      metrics. **Built (v1):** `start.py`, 4 hand-authored anchors,
      `scenario_harvester.py` (restart transitions, trust gate `stall_events == []`),
@@ -58,7 +58,7 @@ resolved, replace it with a one-line pointer under "Done".
      flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
      screen's default pool was the champion itself, so every live scenario came out
      DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
-     across commits. Banks in `utama_core/scenario_bench/banks/` are committed (v3 onward; v1/v2 predate
+     across commits. Banks in `utama_core/scenario_bench/banks/` were committed (v3 onward; v1/v2 predate
      the rulebook referee fixes and stay local). **Bank v4** (173 scenarios) = v3 (from
      RR `tournament_20260928_132051`) + RR `tournament_20260928_125725`, each harvested,
      screened (informative + noisy kept), then merged dropping near-duplicate starts (same
@@ -91,7 +91,8 @@ resolved, replace it with a one-line pointer under "Done".
      lost-play weakness subset, event-triggered open-play harvesting, bank versioning/lifecycle.
    - *Outer loop, slow half (ladder, acceptance gate):* candidate vs a frozen reference pool
      of 4-5 strategies, both colours, K fuzz seeds, Elo anchored to the pool; full 600s
-     matches only vs the top of the pool. **Not built.**
+     matches only vs the top of the pool. **Ladder built (2026-10-09) and retired 2026-10-17 in
+     favour of `tools/evaluation/evaluate.py`** (fixed pool `pool_v1`, paired sequential test).
    - *Metrics — derive, don't invent:* `MatchStats` has both-sided turnovers, completed
      passes, attacking-third entries, possession-under-pressure, restart-to-entry. The first
      correlation study (`tools/metric_correlation.py`, `git show 24ef2c3f:benchmark_results/
@@ -100,14 +101,15 @@ resolved, replace it with a one-line pointer under "Done".
      Caveat: raw `turnovers` is mostly nearest-robot flicker on contested balls (1990 raw vs
      1090 real losses over 231 matches, `git show 24ef2c3f:benchmark_results/turnover_breakdown_20260923_211717.md`);
      prefer `summary.json["ball_losses"]["real_losses"]`.
-     Goodhart guard: if the bench improves and the ladder doesn't, retire the proxy.
+     Goodhart guard: if a screen improves and evaluate.py doesn't, retire the proxy.
    - *Compute discipline:* paired comparison on common seeds, sequential stopping, short
      sampled horizons over long matches.
-   - **Not built:** one `evaluate <strategy> --budget` entry point (contracts + bench at low
-     budget, ladder at high) that also writes `docs/strategies.md`.
-   - Build order: calibration tournament → bench on harvested states → ladder.
+   - **Partly done (2026-10-17):** one entry point, `tools/evaluation/evaluate.py <strategy>`,
+     without `--budget` (it stops by itself). Not built: contracts, and writing
+     `docs/strategies.md`.
+   - Build order: calibration tournament → bench on harvested states (retired 2026-10-17) → ladder (since retired; see evaluate.py).
 
-2a. **Strategy evaluation v2 (direction agreed 2026-10-09; ladder built).** Builds the ladder
+2a. **Strategy evaluation v2 (direction agreed 2026-10-09; ladder built, then retired 2026-10-17 for `evaluate.py`).** Builds the ladder
     above and settles how matches vary.
     - *Ladder:* a candidate plays a fixed reference pool (the current top 4-5) in several
       sampled worlds, each world played twice with the teams swapped so luck cancels, both
@@ -115,7 +117,8 @@ resolved, replace it with a one-line pointer under "Done".
       full round-robin stays as the occasional full refresh after shared-code changes. Pure
       Elo matchmaking over the whole league is not the plan: strategies counter each other, and
       the round-robin's results table is what shows that.
-      **Built (2026-10-09):** `tools/evaluation/ladder.py`. Until worlds vary, a pairing has 8
+      **Built (2026-10-09), retired 2026-10-17:** `tools/evaluation/ladder.py` (replaced by
+      `tools/evaluation/evaluate.py`). Until worlds vary, a pairing has 8
       distinct matches (4 side/kickoff settings, each mirrored); it stops at 4 or more once wins
       minus losses reaches 3 either way or can no longer change sign. Not built: Elo anchoring
       (points per match against the pool is the read for now) and spot-checks of reused records.
@@ -130,8 +133,8 @@ resolved, replace it with a one-line pointer under "Done".
       stall-testing tool, not an evaluation input.
     - *Names:* one match runner with the schedule (round-robin, ladder) and match settings
       (sides, kickoffs, world seed) as options, replacing round-robin / full-match tournament /
-      Elo as separate tools. `full_match_tournament.py` (both kickoffs) and `tools/elo.py`,
-      `plot_elo.py` are retired only once the ladder covers them.
+      Elo as separate tools. `full_match_tournament.py`, `tools/elo.py` and `plot_elo.py` are
+      removed; the ladder, then evaluate.py, cover them.
     - *Match cache:* a match's key (`replay/fingerprint.py` `match_key`) hashes the exact bytes
       and paths of everything `tools/evaluation/match.py` imports, data files next to
       them (not `.md`), both strategies' modules, and the match settings. New tools that call
@@ -184,6 +187,12 @@ resolved, replace it with a one-line pointer under "Done".
 9. **Geometric intention overlays for the Replay tab** — e.g. `ShadowAndMarkTactic._assign_marks()`
    already computes `{marker: opponent}` each tick and discards it. Tactic side is small via
    `MatchLog.trace_if_changed()`; `field_canvas.js` has no line/arrow primitive yet.
+
+9b. **Match timeline in the dashboard.** `tools/match_timeline.py` draws one window as swimlanes
+   (referee band, each robot's tactic, possession, distance to the ball, events); as a dashboard
+   panel under the Replay tab's field view it would follow the replay cursor, and clicking a lane
+   would seek to that tick. Data is all in the replay and its `intentions.jsonl` already
+   (`load_window` computes it without drawing). Not started (user idea, 2026-10-17).
 
 10. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones.
@@ -272,7 +281,15 @@ resolved, replace it with a one-line pointer under "Done".
        and compare velocity jitter and lag against a constant-velocity filter, before
        changing anything.
 
-11. **Deferred, revisit only when forced** (minimalism):
+11. **Sim realism (plan, 2026-10-14):** [`sim_realism.md`](sim_realism.md). Real 2025–2026
+    Division B logs against the baseline round-robin: goals per live minute match, but sim
+    keepers save about twice as many good chances and sim shots almost never go wide. Plan: a
+    realism scorecard, parameter ranges from the official logs, seeded per-match physics draws
+    (latency, kick noise, ball deceleration, per-robot limits, vision noise), a sensitivity
+    sweep, then adoption in the round-robin. P0 ahead of a real-data value model (P1) and
+    structured strategy search scored by it (P2).
+
+12. **Deferred, revisit only when forced** (minimalism):
     - Shared `Sticky`/hysteresis helper beyond `shared/tolerance.py` — existing instances
       differ in shape.
     - `@pytest.mark.engine` marker for kernel tests — wait for real CI bottleneck data.

@@ -11,12 +11,24 @@ pixi run python tools/motion_planning_benchmark.py --scenarios direct static_sla
 pixi run python tools/motion_planning_benchmark.py --repeats 5          # expose instability
 pixi run python tools/motion_planning_benchmark.py --schemes fpp trajsample --scenarios mirror_swap --repeats 3
 pixi run python tools/motion_planning_benchmark.py --list-scenarios
+pixi run python tools/motion_planning_benchmark.py --scenarios direct --figures docs/img/motion_planning  # PNG figures too
 ```
 
 Runs are sequential (concurrent cells would contend for CPU and corrupt latency numbers).
 Geometry, colours/sides, rsim noise and the sampler seed are fixed; `--repeats` checks that the
 deterministic setup stays repeatable. Exits non-zero if any cell fails (after writing reports)
 unless `--allow-failures`; `--output-dir PATH` redirects output.
+
+## Control schemes
+
+Every scheme is a `MotionController`, and `move()` calls its `calculate` once per robot per tick. The
+scheme name picks the class through `CONTROL_SCHEME_MAP`; `StrategyRunner` resolves it per side from
+`strategy.control_scheme` (default `fpp`, and `pid` is also registered). Each `calculate` returns a
+global velocity and an angular velocity, which `move()` rotates into the robot frame.
+
+![Control schemes: move() calls get_control_scheme, which picks fpp, dwa or trajsample; each returns a velocity to RobotCommand](img/motion_planning/control_schemes.png)
+
+Drawn by `docs/img/motion_planning/make_control_schemes.py`; rerun it when a name in it changes.
 
 ## Scenarios
 
@@ -59,6 +71,54 @@ The four crowd scenarios (`ball_scrum` to `kickoff_reset`) and the six match-der
 (`box_clearing_scrum` to `trailing_intercept`) are built on where real match congestion and tactical
 restarts occur.
 
+### FastPathPlanner (`fpp`) decisions per tick
+
+Each tick, `FastPathPlanner._path_to` turns the robot's target into a carrot point for the PID. The
+flowchart is that call's decision order. `tools/plan_snapshot.py` draws the carrot and the planner's
+inputs for one logged tick. `tools/plan_trace.py` runs the same `_path_to` on every tick of a window and
+draws how the carrot moved against the robot's path, which a single tick cannot show. Robot positions are the replay's, not re-simulated, so it shows what the current planner would
+do from each recorded state; the kick-off example is in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md),
+"Debugging a foul or failure".
+
+```mermaid
+flowchart TD
+    start["_path_to(game, robot_id, target)<br/>fastpathplanning/planner.py"]
+    obs["Obstacles: moving robots within LOOK_AHEAD_RANGE as ghost segments, plus static walls<br/>_get_obstacles, _refresh_obstacle_cache"]
+    filt["Drop boundary walls if the target is off the field;<br/>drop defense-area walls if _enemy_defense_area_retrieval_exempt"]
+    tgt["Target: project out of enemy box unless exempt, then sanitize_target<br/>ball-adjacent walls exempt when the target is at the ball"]
+    lv["Routing obstacles: drop each robot the robot is inside the clearance of<br/>and moving away from (_leaving), so it can drive straight out"]
+    line{"Straight run to target collides?<br/>check_segment, collides"}
+    det["Detour via subgoal on either side, with side hysteresis (DETOUR_SWITCH_MARGIN)<br/>recompute-skip reuses the last detour if target and robot barely moved"]
+    carrot["Carrot: smooth_path, PROJECTION_DISTANCE along the first segment,<br/>clamped to clearance, averaged with the next segment"]
+    box{"Carrot inside enemy box and not exempt?"}
+    ball{"STOP, or the other team's restart?<br/>_keeps_off_ball"}
+    out{"Robot outside BALL_KEEP_OUT_DISTANCE?"}
+    circ["detour_around_circle round the ball (0.8 m)"]
+    app{"Robot inside keep-out and carrot closer to ball?<br/>_approaches"}
+    push["Push out along the ray from the ball to BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN"]
+    done["Carrot returned to FastPathPlanningController, then TwoDPID"]
+
+    start --> obs
+    obs --> filt
+    filt --> tgt
+    tgt --> lv
+    lv --> line
+    line -- "yes" --> det
+    line -- "no" --> carrot
+    det --> carrot
+    carrot --> box
+    box -- "yes, project out" --> ball
+    box -- "no" --> ball
+    ball -- "no" --> done
+    ball -- "yes" --> out
+    out -- "yes" --> circ
+    out -- "no" --> app
+    app -- "yes" --> push
+    app -- "no" --> done
+    circ --> done
+    push --> done
+```
+
 ### Trajectory Sampling (`trajsample`) Architecture & Optimizations
 
 Following TIGERs Mannheim's approach (Sumatra), `trajsample` plans directly in continuous trajectory space
@@ -98,6 +158,34 @@ clearance minus both radii (negative = overlap); collision count; largest final 
 fraction (robot-seconds below 0.05 m/s while unreached); mean/p95/max
 `MotionController.calculate()` latency (first 5 calls excluded for Numba warm-up,
 `--timing-warmup-calls`); max speed and acceleration.
+
+## Figures
+
+`--figures DIR` also writes `trajectories_<scenario>.png` (the pitch with each scheme's paths, then speed
+and clearance over time) and `summary.png` (one dot per scheme and scenario for each metric). It is off
+by default; turning it on records per-tick robot state during the runs and changes nothing else. Figures
+show the first repeat of each cell. Three scenarios from one run are committed in `docs/img/motion_planning/`:
+
+```bash
+pixi run python tools/motion_planning_benchmark.py --scenarios direct static_slalom crossing --allow-failures --figures docs/img/motion_planning
+```
+
+![Summary: one dot per scheme and scenario](img/motion_planning/summary.png)
+
+![static_slalom trajectories, speed and clearance](img/motion_planning/trajectories_static_slalom.png)
+
+![crossing trajectories, speed and clearance](img/motion_planning/trajectories_crossing.png)
+
+In this run (all three schemes, one repeat): in `static_slalom`, `dwa`'s path swerves round the first two
+obstacles and ends touching the lower one (clearance reaches 0 m: its failed cell), while `fpp` and
+`trajsample` keep a straight line with clearance of about 0.12 m. In `crossing`, `dwa` ends at 0 m clearance
+from the crossing opponent, `trajsample` keeps about 0.9 m or more but bends wide and finishes in about 5 s,
+and `fpp` passes at about 0.2 m and finishes in about 3.3 s. In `direct`, `fpp` and `trajsample` both reach the
+2 m/s speed limit, while `dwa` accelerates more slowly and never reaches it. Where two schemes' paths coincide
+(`direct`, and the straight part of `static_slalom`), the later scheme is drawn on top and hides the earlier one.
+
+The three-scenario command took about 8 s of wall time, including writing the figures. Its numbers are
+not the table in the results section above, which was made at an earlier revision.
 
 ## Reading it
 

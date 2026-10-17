@@ -14,7 +14,6 @@ import pytest
 
 from utama_core.replay import fingerprint as fp
 from utama_core.replay.fingerprint import (
-    BENCH_ENTRIES,
     KERNEL_STRATEGY,
     REPO_ROOT,
     ROUND_ROBIN_ENTRY,
@@ -166,7 +165,7 @@ def test_editing_the_shared_pickers_changes_the_configs_that_import_them(repo):
 
 
 def test_the_registry_is_not_part_of_any_strategy_fingerprint(repo):
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == set()
+    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == set()
 
 
 def test_pointing_a_factory_at_another_module_changes_that_config(repo):
@@ -230,12 +229,12 @@ def test_shared_code_importing_kernel_strategy_puts_every_strategy_module_in_the
     path = repo / rel
     path.write_text("from utama_core.strategy.kernel_strategy import _shared_helper\n\n\n" + path.read_text())
     assert _changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4") == {"base", "build_b_kernel_strategy"}
-    assert _changed_after(repo, PICKERS_PY, "# used by the shared helper", "# edited") == {
+    assert _changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06") == {
         "base",
         "build_a_kernel_strategy",
         "build_b_kernel_strategy",
     }
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories, edited."""') == {"base"}
+    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == {"base"}
 
 
 def test_the_rsim_subprocess_script_and_data_files_are_in_the_base(repo):
@@ -280,11 +279,15 @@ def test_match_key_covers_every_setting(repo):
         match_key(g, a, b, duration_seconds=65.0, control_scheme="dwa"),
         match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1),
         match_key(g, a, b, duration_seconds=65.0, recorded=False),
+        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 1}),
+        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 2}),
     ]
     assert len({ref, *variants}) == 1 + len(variants)
     # the fuzz interval only matters when fuzzing is on
     assert match_key(g, a, b, duration_seconds=65.0, fuzz_interval_s=(1.0, 2.0)) == ref
     assert match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
+    # matches without sim noise keep the keys they had before the setting existed
+    assert match_key(g, a, b, duration_seconds=65.0, sim_noise=None) == ref
 
 
 def test_numerics_env_vars_change_the_base(repo, monkeypatch):
@@ -361,7 +364,7 @@ def test_every_tactic_a_factory_builds_is_in_its_closure(graph):
 
 def test_the_tactics_kernel_strategy_imports_are_outside_the_base(graph):
     """Otherwise a tactic edit would rerun every match: the per-config split is the point."""
-    base = graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.base_modules(BENCH_ENTRIES)
+    base = graph.base_modules([ROUND_ROBIN_ENTRY])
     for name in ("give_and_go", "press_and_contain", "shadow_and_mark", "switch_of_play", "defense"):
         assert f"utama_core.tactics.{name}" not in base
 
@@ -377,13 +380,12 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 # it doesn't need to), then add it.
 #   environment: settings.py reads UTAMA_EXACT_MATH -> ENV_PREFIXES; robosim_wrapper copies
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
-#   opens files: profile_loader reads profiles/*.yaml -> data_files. start reads a
-#     bank, whose start is itself in the bench key. The rest write a match's outputs (match
-#     log, stats, replays) or read old ones for harvesting, never during play.
+#   opens files: profile_loader reads profiles/*.yaml -> data_files. The rest write a
+#     match's outputs (match log, stats, replays) or read old ones for analysis, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
-#   getattr on a module by computed name: tools.evaluation.match and scenario_scorer look a factory
-#     up by name -> the config names are the fingerprint's own inputs.
+#   getattr on a module by computed name: tools.evaluation.match looks a factory up by name ->
+#     the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
 #     possession/shield state: reset in StrategyRunner.__init__; the planner's _PERP_ROTATIONS: a memo of
@@ -393,10 +395,7 @@ AUDIT = {
         "utama_core.config.settings",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
     ],
-    "getattr on a module by computed name": [
-        "tools.evaluation.match",
-        "utama_core.scenario_bench.scenario_scorer",
-    ],
+    "getattr on a module by computed name": ["tools.evaluation.match"],
     "module-level state": [
         "utama_core.motion_planning.src.fastpathplanning.planner",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
@@ -404,23 +403,42 @@ AUDIT = {
         "utama_core.skills.src.shielding",
     ],
     "opens files": [
-        "utama_core.analysis.turnover_breakdown",
         "utama_core.custom_referee.profiles.profile_loader",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
         "utama_core.replay.columnar_reader",
         "utama_core.replay.columnar_writer",
-        "utama_core.replay.replay_player",
         "utama_core.replay.replay_writer",
-        "utama_core.replay.scenario",
-        "utama_core.scenario_bench.start",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
 }
 
 
 def test_every_reach_outside_the_import_graph_is_accounted_for(graph):
-    everything = (
-        graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.base_modules(BENCH_ENTRIES) | graph.closure([KERNEL_STRATEGY])
-    )
+    everything = graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.closure([KERNEL_STRATEGY])
     assert graph.audit(everything) == AUDIT
+
+
+_TACTIC = "utama_core/tactics/defend.py"
+_TACTIC_NAME = "utama_core.tactics.defend"
+_TACTIC_SRC = '"""Old module doc."""\n\nX = 1\n\n\ndef f(a, b):\n    """Old doc."""\n    return a + b\n'
+
+
+def _file_digest(root: Path, text: str) -> str:
+    (root / _TACTIC).write_text(text)
+    (row,) = CodeGraph(root).file_digests([_TACTIC_NAME])
+    return row
+
+
+def test_comments_docstrings_and_formatting_do_not_change_a_file_fingerprint(repo):
+    before = _file_digest(repo, _TACTIC_SRC)
+    edited = (
+        '"""New module doc, longer."""\n# a new comment\nX = 1  # trailing comment\n\n\n'
+        'def f(a,\n      b):\n    """New doc\n    spanning lines."""\n    return (a + b)\n'
+    )
+    assert _file_digest(repo, edited) == before
+
+
+def test_changing_a_constant_changes_the_file_fingerprint(repo):
+    before = _file_digest(repo, _TACTIC_SRC)
+    assert _file_digest(repo, _TACTIC_SRC.replace("X = 1", "X = 2")) != before

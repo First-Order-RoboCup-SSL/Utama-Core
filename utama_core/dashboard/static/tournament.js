@@ -1,11 +1,11 @@
 // Tournament view: standings + per-match results, sortable/expandable.
-// Successor concern to hand-reading full_match_tournament.py log output —
+// Successor concern to hand-reading round-robin log output —
 // reads replays/<run_id>/summary.json via the tournament view's Python side.
 // A round_robin.py summary also carries a per-strategy table, stall
 // incidents, restart outcomes and fouls (docs/STRATEGY_DEVELOPMENT.md
 // "Reading a tournament run"); those are shown when present. Each result's
 // `replay` is the path of its replay file, or null (added server-side).
-// `full_match_tournament.py` writes `winner` as the literal string "draw" on
+// `round_robin.py` writes `winner` as the literal string "draw" on
 // a tie (never null), and `standings` only carries wins/draws per config —
 // losses/GF/GA/win% are derived here from `results`, not shipped precomputed.
 

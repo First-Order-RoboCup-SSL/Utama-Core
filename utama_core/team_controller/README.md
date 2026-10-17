@@ -6,6 +6,16 @@ This is the data flow diagram of what will be received and sent by the Team Cont
 
 From the image above, the Vision and Referee use UDP multicast addresses. More information is available on the [SSL RoboCup official page](https://ssl.robocup.org/league-software/#:~:text=Simulation%20Protocol.-,Standard%20Network%20Parameters,-Protocol)
 
+## Real robot path
+
+The path of one real-match tick, as `StrategyRunner` wires it: the receivers fill one-slot buffers,
+the refiners build the `GameFrame`, and the real controller sends the commands over the serial radio.
+The robots' feedback comes back the same way and reaches `RobotInfoRefiner`.
+
+![One real-match tick: receivers, refiners, Strategy and the real robot controller](../../docs/img/team_controller/real_robot_path.png)
+
+Drawn by `docs/img/team_controller/make_real_robot_path.py`; rerun it when a name in it changes.
+
 ## Controllers
 
 This folder contains controller classes for communication with both simulated and real components, including:

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "note": "Chosen 2026-10-17 from the 12 strategies of tournament_20261016_201213 for spread of styles, not standings. Change it only on purpose, as pool_v2.json: ratings are comparable within one pool version.",
+  "champion": "split_shape",
+  "opponents": [
+    "clear_danger",
+    "decoy_and_overload",
+    "counter_flow",
+    "high_press",
+    "tiki_taka_plus",
+    "press_and_pass"
+  ],
+  "held_out": [
+    "overload_press",
+    "score_aware_counter_flow",
+    "give_and_go_solo"
+  ],
+  "sim_noise": {
+    "latency_s": [0.03, 0.15],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {"x_stddev": 0.0007, "y_stddev": 0.0007, "th_stddev_deg": 0.3},
+    "vanishing": 0.005,
+    "ball_roll_decel": [0.27, 0.33],
+    "ball_slide_decel": [2.5, 4.0],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [1.5, 3.5]
+  }
+}

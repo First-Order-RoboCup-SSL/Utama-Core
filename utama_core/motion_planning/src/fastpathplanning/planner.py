@@ -16,6 +16,7 @@ from utama_core.global_utils.math_utils import (
     closest_point_on_segment,
     detour_around_circle,
     distance,
+    distance_between_line_segments,
     distance_point_to_segment,
     find_intersection,
 )
@@ -104,6 +105,10 @@ _TEAM_RESTART_COMMANDS = {
 }
 
 
+# How far past the ball's keep-out edge a robot inside it is pushed out.
+_PUSH_OUT_MARGIN = 0.05
+
+
 def _keeps_off_ball(game: Game) -> bool:
     """True during STOP and the other team's restarts, when every robot of ours must
     stay out of the ball's keep-out circle."""
@@ -113,6 +118,20 @@ def _keeps_off_ball(game: Game) -> bool:
     if command not in _TEAM_RESTART_COMMANDS:
         return False
     return command.name.endswith("_YELLOW") != game.my_team_is_yellow
+
+
+def _leaving(our_pos: np.ndarray, target: np.ndarray, obstacle, clearance: float) -> bool:
+    """True if the robot at `our_pos` is inside `obstacle`'s clearance and the straight run
+    to `target` never takes it closer to the obstacle than it is now."""
+    here = distance_point_to_segment(our_pos, obstacle[0], obstacle[1])
+    if here >= clearance:
+        return False
+    return distance_between_line_segments(our_pos, target, obstacle[0], obstacle[1]) >= here - 1e-9
+
+
+def _approaches(our_pos: np.ndarray, target: np.ndarray, point: np.ndarray) -> bool:
+    """True if the straight run from `our_pos` to `target` gets closer to `point` than the robot is now."""
+    return distance_point_to_segment(point, our_pos, target) < np.linalg.norm(point - our_pos) - 1e-9
 
 
 class FastPathPlanner:
@@ -1567,6 +1586,21 @@ class FastPathPlanner:
             obstacles if not routing_exempt else [o for o in obstacles if _segment_key(o) not in routing_exempt]
         )
 
+        # 3b. A robot already inside another robot's clearance (pressed against it) can plan
+        # no segment out: each starts in collision, the straight one away too, and the detour
+        # round it can run back through it. Leave out of routing each robot obstacle the robot
+        # is inside whose distance only grows along the straight run to the target; it counts
+        # again once the robot is clear. Not static obstacles (box edges, field lines): there
+        # the clearance itself is the margin a robot must keep, and hugging it fails the
+        # defense-area and corner-route tests. Moments placement_in_corner_traps_defender and
+        # free_kick_defender_dodges_into_ball: defenders pressed against another robot were
+        # routed back through it and toward the ball.
+        routing_obstacles = [
+            o
+            for o in routing_obstacles
+            if _segment_key(o) in self._obstacle_cache_static_keys or not _leaving(our_pos, safe_target, o, clearance)
+        ]
+
         # 4. Plan geometric path. Recompute-skip: if this robot was asked for
         # essentially the same target last call and every segment of the
         # detour trajectory that call computed is still clear of every
@@ -1685,11 +1719,23 @@ class FastPathPlanner:
         # defender sidestepping teammates queued at them reached 0.38 m from
         # the ball and KeepOutRule voided the penalty. A robot already inside is
         # left to the referee step's own straight push-out: a detour waypoint
-        # swings it round the ball and can clip it.
+        # swings it round the ball and can clip it. It is not left free to
+        # close in, though: a carrot whose first run gets closer to the ball
+        # (round a robot it is pressed against) is replaced by the ray out from
+        # the ball through the robot, which only gets farther (moment
+        # placement_corner_robot_drives_onto_ball; test_fpp_inside_ball_keep_out).
+        # The ray runs past the edge: a point on the edge itself parked a robot
+        # 5 mm inside, never encroaching-free, the kick-off step's chord round the
+        # circle replaced by it every tick (a 15 s kick-off stall, tournament_20261017_151052).
         ball = Vector2D(game.ball.p.x, game.ball.p.y) if game.ball is not None else None
-        if ball is not None and _keeps_off_ball(game) and (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
-            waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
-            new_target = np.array([waypoint.x, waypoint.y])
+        if ball is not None and _keeps_off_ball(game):
+            ball_np = np.array([ball.x, ball.y])
+            if (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
+                waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
+                new_target = np.array([waypoint.x, waypoint.y])
+            elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
+                away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
+                new_target = ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN)
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")

@@ -2,7 +2,7 @@
 detour-recursion failsafe -- no rsim/StrategyRunner needed, since the bug and
 fix live entirely in this pure-geometry recursion.
 
-Found live in a full_match_tournament.py replay
+Found live in a round-robin replay
 (counter_press_vs_tiki_taka_RK.pkl, 2026-09-01): a robot standing right at
 the field's boundary wall, routing toward a target on the other side of the
 field, got a carrot that flip-flopped between the real route and a bogus

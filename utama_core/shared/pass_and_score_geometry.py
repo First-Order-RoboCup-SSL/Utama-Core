@@ -208,6 +208,12 @@ CARRY_LIMIT_M = 0.8
 # Measured, not `MAX_ACCELERATION` (4.0): a DecoyOverload carrier in rsim
 # braked 1.45 -> 0.6m/s in 0.3s (~2.9m/s^2) with the ball on the dribbler.
 _CARRY_BRAKE_DECEL_MPS2 = 2.5
+# Time between deciding to stop and the carrier starting to brake: command latency
+# (sim noise draws 0.03-0.15s per robot) plus the planner's ramp-down. Without it, in
+# tournament_20261017_002337 a ~1.2m/s lure kept accelerating for ~0.1s after the cap
+# fired, carried 0.5m more instead of the 0.3m predicted, and fouled: 93 of our 171
+# excessive-dribbling fouls, every one from DecoyOverload's lure.
+_CARRY_REACTION_S = 0.15
 
 
 def carry_origin(game: Game, robot_id: int, prev_origin: Optional[Vector2D]) -> Optional[Vector2D]:
@@ -226,15 +232,16 @@ def carry_exhausted(game: Game, origin: Optional[Vector2D], stops_after: bool = 
     carrying further risks an excessive-dribbling foul, so release the ball.
 
     `stops_after`: the carrier brakes to a halt with the ball still on the dribbler
-    once this fires (DecoyOverload's lure), so count the stopping distance too --
-    without it a ~1.4m/s lure braked another ~0.4m and fouled at 1.01m anyway. Leave
+    once this fires (DecoyOverload's lure), so count the stopping distance too, the
+    reaction time (`_CARRY_REACTION_S`) included -- without it a ~1.4m/s lure braked
+    another ~0.4m and fouled at 1.01m anyway. Leave
     False for a carrier that kicks while moving (GiveAndGo): counting it there ended
     carries ~0.5m early and cost give_and_go_solo half its goals in an A/B
     (tournament_20260924_092119 bisect)."""
     if origin is None or game.ball is None:
         return False
     speed = math.hypot(game.ball.v.x, game.ball.v.y) if stops_after else 0.0
-    stopping = speed**2 / (2 * _CARRY_BRAKE_DECEL_MPS2)
+    stopping = speed * _CARRY_REACTION_S + speed**2 / (2 * _CARRY_BRAKE_DECEL_MPS2)
     return game.ball.p.to_2d().distance_to(origin) + stopping >= CARRY_LIMIT_M
 
 
@@ -283,8 +290,9 @@ _PASS_ROLLING_MPS = 0.5
 
 def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
     """Where `receiver_id` meets a ball already rolling towards it: its own position
-    projected onto the ball's actual path. None while the ball is slower than
-    `_PASS_ROLLING_MPS` or moving away from the receiver."""
+    projected onto the ball's actual path, clamped to the field (a path past a goal line
+    near a corner would otherwise send the receiver out after the ball). None while the
+    ball is slower than `_PASS_ROLLING_MPS` or moving away from the receiver."""
     ball = game.ball
     velocity = Vector2D(ball.v.x, ball.v.y)
     speed = velocity.mag()
@@ -294,7 +302,7 @@ def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
     along = (game.friendly_robots[receiver_id].p - ball_pos).dot(velocity) / speed
     if along <= 0.0:
         return None
-    return ball_pos + velocity * (along / speed)
+    return clamp_to_field(ball_pos + velocity * (along / speed), game)
 
 
 def enemy_positions(game: Game) -> list[Vector2D]:

@@ -102,6 +102,7 @@ logger = logging.getLogger(__name__)
 _POSITION_TOLERANCE_M = 0.15  # mirrors teleport_position_accuracy_test.py's POSITION_TOLERANCE
 _VERIFY_MAX_TICKS = 10  # see apply_scenario's verify=True docstring for why more than 1 tick is needed
 _SHOWING_WINDOW_S = 0.5  # how far past `t_seconds` `scenario_from_replay(showing=...)` looks
+_CLOCK_EPS_S = 1e-6  # float slack when a frame time sits exactly on a window edge
 # Restarts the referee only awards from STOP (`apply_scenario`).
 _RESTART_COMMANDS = frozenset(
     {
@@ -173,8 +174,25 @@ def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:
     )
 
 
-def _nearest_frame(replay_path: Path, t_seconds: float) -> GameFrame:
-    """Load every frame and pick the one whose `ts` is closest to `t_seconds`.
+def _frame_origin(replay_path: Path) -> float:
+    """The `ts` of the replay's first frame. Times on the sidecar's and `replay_trace.py`'s
+    clock (and the `t_seconds` callers pass, from `fouls` or a StallEvent) count from it, not
+    from 0: a frame's `ts` starts at one tick (1/60 s in these replays)."""
+    if replay_path.suffix == ".npz":
+        from utama_core.replay.columnar_reader import load_columnar_replay
+
+        columnar = load_columnar_replay(replay_path)
+        if columnar.n_ticks == 0:
+            raise ValueError(f"Replay {replay_path} contains no frames.")
+        return float(columnar.ts[0])
+    for obj in _load_replay(replay_path):
+        if isinstance(obj, GameFrame):
+            return obj.ts
+    raise ValueError(f"Replay {replay_path} contains no frames.")
+
+
+def _nearest_frame(replay_path: Path, t_seconds: float, origin: float) -> GameFrame:
+    """Load every frame and pick the one whose time (`ts - origin`) is closest to `t_seconds`.
 
     Dispatches on extension like `replay_player.load_frames_in_range`: `.npz`
     uses the columnar reader (no full-match object reconstruction), `.pkl`
@@ -188,7 +206,7 @@ def _nearest_frame(replay_path: Path, t_seconds: float) -> GameFrame:
         columnar = load_columnar_replay(replay_path)
         if columnar.n_ticks == 0:
             raise ValueError(f"Replay {replay_path} contains no frames.")
-        diffs = abs(columnar.ts - t_seconds)
+        diffs = abs((columnar.ts - origin) - t_seconds)
         tick = int(diffs.argmin())
         return columnar.frame_at(tick)
 
@@ -197,7 +215,7 @@ def _nearest_frame(replay_path: Path, t_seconds: float) -> GameFrame:
     for obj in _load_replay(replay_path):
         if not isinstance(obj, GameFrame):
             continue
-        diff = abs(obj.ts - t_seconds)
+        diff = abs((obj.ts - origin) - t_seconds)
         if diff < best_diff:
             best_diff = diff
             best = obj
@@ -282,7 +300,7 @@ def _command_on(frame: GameFrame, replay_path: Path, t_seconds: float) -> Option
     return _referee_command_at(_sidecar_path(replay_path), t_seconds)
 
 
-def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCommand) -> GameFrame:
+def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCommand, origin: float) -> GameFrame:
     """The first frame from `t_seconds` on that shows `command`.
 
     A replay frame carries the referee's decision on the frame before it (`StrategyRunner`
@@ -290,29 +308,32 @@ def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCo
     for a command is one tick before the first frame showing it: the frame at that time, the
     nearest, still shows the command before.
     """
-    for frame in load_frames_in_range(replay_path, t_seconds, t_seconds + _SHOWING_WINDOW_S):
-        if _command_on(frame, replay_path, frame.ts) == command:
+    start = origin + t_seconds - _CLOCK_EPS_S
+    for frame in load_frames_in_range(replay_path, start, start + _SHOWING_WINDOW_S + _CLOCK_EPS_S):
+        if _command_on(frame, replay_path, frame.ts - origin) == command:
             return frame
     raise ValueError(f"No frame in {replay_path} shows {command.name} within {_SHOWING_WINDOW_S}s of t={t_seconds}.")
 
 
 def scenario_from_replay(replay_path, t_seconds: float, *, showing: Optional[RefereeCommand] = None) -> Scenario:
     """Read the frame nearest `t_seconds` from `replay_path` and build a
-    `Scenario` from it, merging in the referee command from the
-    `.intentions.jsonl` sidecar (frames themselves carry no referee data —
-    see module docstring) and the two strategy config names from the
-    tournament directory's `summary.json`, when available.
+    `Scenario` from it. `t_seconds` counts from the replay's first frame, the clock the sidecar,
+    `fouls` and `replay_trace.py` use (see `_frame_origin`). It merges in the referee command from
+    the `.intentions.jsonl` sidecar (frames themselves carry no referee data — see module
+    docstring) and the two strategy config names from the tournament directory's `summary.json`,
+    when available.
 
     `showing`: take instead the first frame from `t_seconds` on that shows this referee
     command (raising `ValueError` if none does within `_SHOWING_WINDOW_S`): for a restart
     at the time the match log gives it, see `_first_frame_showing`.
     """
     replay_path = Path(replay_path)
+    origin = _frame_origin(replay_path)
     if showing is None:
-        frame = _nearest_frame(replay_path, t_seconds)
+        frame = _nearest_frame(replay_path, t_seconds, origin)
         referee_command = _command_on(frame, replay_path, t_seconds)
     else:
-        frame = _first_frame_showing(replay_path, t_seconds, showing)
+        frame = _first_frame_showing(replay_path, t_seconds, showing, origin)
         referee_command = showing
 
     config_a_name, config_b_name = _config_names_from_summary(replay_path)
@@ -425,7 +446,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     restart, its preparation timed from now (a penalty goes live once its
     kicker has been at the mark for the referee's prepare time), and
     `NORMAL_START`/`FORCE_START` as live play. The runner's own starting
-    command (the bench seeds a yellow kickoff) is overwritten either way.
+    command (a fresh runner seeds a yellow kickoff) is overwritten either way.
 
     When `verify` is True (the default), steps the runner (up to
     `_VERIFY_MAX_TICKS` times, stopping early once every position is

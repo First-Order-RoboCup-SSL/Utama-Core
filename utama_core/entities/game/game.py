@@ -16,8 +16,6 @@ class Game:
         self._current_game_standard_frame = game_frame
         self.current = CurrentGameFrame(game_frame)
 
-    # def predict_/
-
     @property
     def ts(self) -> float:
         return self.current.ts
