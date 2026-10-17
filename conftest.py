@@ -8,6 +8,8 @@ import pytest
 # tests, so every machine runs the same code. Set before numba is imported; rsim worker
 # processes inherit it.
 os.environ.setdefault("NUMBA_CPU_NAME", "generic")
+# Hide pygame's "Hello from the pygame community" banner from test output (tools set it too).
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 
 def pytest_addoption(parser):

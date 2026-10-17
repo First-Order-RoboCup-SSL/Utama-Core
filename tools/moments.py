@@ -60,6 +60,9 @@ keep-out entries, kicks, closest approaches), or try a scratch strategy file's f
 
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before any import: hides pygame's banner
 import argparse
 import dataclasses
 import importlib.util
