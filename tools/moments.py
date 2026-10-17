@@ -50,7 +50,7 @@ Write a hand-made one, then edit its positions in the JSON:
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):
     pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
 Play it under several seeds as one table, compare with the code at a git ref (a worktree under
-`AGAINST_DIR`, to remove with `git worktree remove`), look at its events (referee changes, fouls,
+`AGAINST_DIR`, to remove with `git worktree remove --force`), look at its events (referee changes, fouls,
 keep-out entries, kicks, closest approaches), or try a scratch strategy file's factory:
     pixi run python tools/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
     pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:build_my_kernel_strategy
@@ -786,12 +786,16 @@ def _git(*args: str, cwd: Path = REPO_ROOT) -> str:
 
 def ref_worktree(ref: str) -> Path:
     """A worktree of the tree at `ref` under `AGAINST_DIR` (reused if it is there at that commit),
-    with the main tree's `.pixi` and compiled extensions. Not removed afterwards."""
+    with the main tree's `.pixi` and compiled extensions, and this `tools/moments.py` in place of
+    its own: the same judge plays the moment, only the code under test differs, so any commit can
+    be compared, including ones from before `--seeds`. Not removed afterwards."""
     sha = _git("rev-parse", "--verify", f"{ref}^{{commit}}")
     path = AGAINST_DIR / sha[:8]
     if path.exists():
         if _git("rev-parse", "HEAD", cwd=path) != sha:
-            raise SystemExit(f"{path} exists at another commit: remove it (git worktree remove {path}) and retry")
+            raise SystemExit(
+                f"{path} exists at another commit: remove it (git worktree remove --force {path}) and retry"
+            )
     else:
         AGAINST_DIR.mkdir(parents=True, exist_ok=True)
         _git("worktree", "add", "--detach", str(path), sha)
@@ -800,12 +804,13 @@ def ref_worktree(ref: str) -> Path:
     for pattern in BUILD_ARTIFACTS:
         for src in REPO_ROOT.glob(pattern):
             shutil.copy2(src, path / src.relative_to(REPO_ROOT))
+    shutil.copy2(Path(__file__).resolve(), path / "tools" / "moments.py")
     return path
 
 
 def ref_cells(json_path: Path, name: str, seeds: list[int], tree: Path) -> dict[int, list[str]]:
-    """{seed: failures} for one strategy, played by `tree`'s own `tools/moments.py` (its env's python,
-    run directly so pixi cannot re-solve the shared env). Raises SystemExit if that tree is too old."""
+    """{seed: failures} for one strategy, played in `tree` by this `tools/moments.py` (copied there by
+    `ref_worktree`; its env's python, run directly so pixi cannot re-solve the shared env)."""
     fd, out = tempfile.mkstemp(dir=AGAINST_DIR, suffix=".json")
     os.close(fd)
     python = tree / ".pixi" / "envs" / "default" / "bin" / "python"
@@ -825,11 +830,6 @@ def ref_cells(json_path: Path, name: str, seeds: list[int], tree: Path) -> dict[
     proc = subprocess.run(cmd, cwd=tree, env=env, capture_output=True, text=True)
     if proc.returncode:
         Path(out).unlink(missing_ok=True)
-        if "unrecognized arguments" in proc.stderr:
-            raise SystemExit(
-                f"REF {tree.name} predates --seeds: its tools/moments.py cannot be compared this way "
-                f"(its worktree is left at {tree})"
-            )
         raise SystemExit(f"REF {tree}: play failed for {label(name)}:\n{proc.stderr[-1500:]}")
     result = json.loads(Path(out).read_text())
     Path(out).unlink()
@@ -992,7 +992,7 @@ def main() -> None:
             now_ok = sum(not cells[(name, s)][0] for name in names for s in seeds)
             ref_ok = sum(not ref[name][s] for name in names for s in seeds)
             print(f"now: {now_ok}/{n} ok   {tree.name}: {ref_ok}/{n} ok")
-            print(f"REF worktree: {tree} (remove it with: git worktree remove {tree})")
+            print(f"REF worktree: {tree} (remove it with: git worktree remove --force {tree})")
         elif seeds is not None:
             rows = [(label(n), "", [cells[(n, s)][0] for s in seeds]) for n in names]
             print_grid(seeds, rows)
