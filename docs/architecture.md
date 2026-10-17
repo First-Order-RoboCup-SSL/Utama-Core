@@ -70,56 +70,9 @@ evaluation read them back. A match's file stem is `A_vs_B` (`round_robin.py`'s `
 below are from a real run directory. `--reuse` reads the match cache, and only matches whose
 fingerprint changed are played again.
 
-```mermaid
-flowchart TD
-    subgraph drivers["Drivers"]
-        rr["round_robin.py<br/>tools/evaluation/round_robin.py"]
-        ev["evaluate.py<br/>tools/evaluation/evaluate.py"]
-        conv["convert_ssl_log.py<br/>replay/ssl_log.py (official logs)"]
-    end
+![Match data flow: drivers, StrategyRunner, the per-match files, the stores and the readers](img/architecture/match_data_flow.png)
 
-    sr["StrategyRunner<br/>run/strategy_runner.py"]
-
-    subgraph files["Per match, replays/tournament_ID/ (converted logs: same types)"]
-        npz["A_vs_B.npz + .sparse_referee.pkl<br/>replay/columnar_writer.py"]
-        side["A_vs_B.intentions.jsonl + .stats.json<br/>engine/match_log.py, engine/match_stats.py"]
-    end
-
-    subgraph store["Shared stores"]
-        cache["match cache, replays/match_cache/<br/>replay/match_cache.py"]
-        fp["match_key fingerprint<br/>replay/fingerprint.py"]
-        ledger["ledger.jsonl, replays/eval/<br/>replay/eval_ledger.py"]
-        summary["summary.json, ball_losses.md<br/>per run"]
-    end
-
-    subgraph readers["Readers"]
-        an["analysis/ chances, turnover_breakdown,<br/>restart_outcomes, stuck_detector"]
-        gl["analysis/goal_ledger.py<br/>goal_ledger.json"]
-        rat["analysis/ratings.py"]
-        tools["signal_report.py, moments.py,<br/>replay_trace.py, repro_from_replay.py"]
-    end
-
-    rr --> sr
-    ev --> sr
-    sr --> npz
-    sr --> side
-    conv --> npz
-    fp -->|decides which matches play| rr
-    cache -->|stored results, --reuse| rr
-    rr -->|store played matches| cache
-    rr --> summary
-    rr -->|append| ledger
-    ev -->|append| ledger
-    ledger --> rat
-    rat -->|verdicts| ev
-    npz --> an
-    side --> an
-    an --> summary
-    npz --> gl
-    summary -->|labels| gl
-    npz --> tools
-    side --> tools
-```
+Drawn by `docs/img/architecture/make_match_data_flow.py`; rerun it when a name in it changes.
 
 `evaluate.py` removes its own scratch run directory when it finishes, so its matches survive only
 in the ledger.

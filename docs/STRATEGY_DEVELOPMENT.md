@@ -28,84 +28,9 @@ default, `Strategy.set_goalkeeper()`) is pinned outside the scheduler.
 
 The main classes and who holds or calls whom:
 
-```mermaid
-classDiagram
-    direction LR
-    class AbstractStrategy {
-        <<engine/abstract_strategy.py>>
-        +load_motion_controller(motion_controller)
-        +load_game(game)
-        +step()
-        +execute_default_action(game, role, robot_id)
-    }
-    class Strategy {
-        <<engine/strategy.py>>
-        +tick(game) commands
-        +set_goalkeeper(robot_id, tactic)
-        +single_tactic_picker(picker)$
-        +referee_overrides
-        +match_log
-    }
-    class _TacticSlot {
-        <<engine/strategy.py>>
-        +tactic
-        +mem
-        +assigned_robots
-        +committed_ticks
-    }
-    class Partitioner {
-        <<type alias, engine/strategy.py>>
-        +call(game, free_robots, prev_partition, available_tactic_ids) partition
-    }
-    class Tactic {
-        <<Protocol, engine/tactic.py>>
-        +tag
-        +initial_mem()
-        +tick(game, ctx, robot_ids, mem)
-        +applicable(game)
-        +is_committed(game, mem)
-    }
-    class BaseTactic {
-        <<engine/tactic.py>>
-        +applicable(game)
-        +is_committed(game, mem)
-        +suggest_next(game, mem)
-        +highlights(mem)
-    }
-    class RefereeOverride {
-        <<engine/referee_override.py>>
-        +tick(game, motion_controller, command)
-        +overrides
-    }
-    class RefereeActionOverride {
-        <<type alias, engine/referee_override.py>>
-        +call(game, motion_controller) commands
-    }
-    class TickContext {
-        <<engine/context.py>>
-        +motion_controller
-        +match_log
-    }
-    class MatchLog {
-        <<engine/match_log.py>>
-        +intention(...)
-        +trace(tick, sim_time, key, value)
-        +trace_if_changed(tick, sim_time, key, value)
-        +referee(...)
-        +to_jsonl(path)
-    }
-    AbstractStrategy "1" *-- "1" Strategy : _kernel_strategy, built by factory
-    Strategy "1" *-- "many" _TacticSlot : one per tactic id
-    Strategy *-- "1" RefereeOverride : _referee_override
-    Strategy *-- "1" TickContext : _ctx
-    Strategy o-- "0..1" MatchLog : match_log
-    Strategy ..> Partitioner : asks for the free-pool split
-    _TacticSlot --> Tactic : ticks
-    BaseTactic ..> Tactic : defaults for
-    Tactic ..> TickContext : tick() receives
-    TickContext o-- "0..1" MatchLog : ctx.match_log
-    RefereeOverride ..> RefereeActionOverride : strategy-supplied replacement
-```
+![Classes of the tactic-kernel model: Strategy, its slots, Partitioner, Tactic and skills](img/strategy/tactic_kernel.png)
+
+Drawn by `docs/img/strategy/make_tactic_kernel.py`; rerun it when a name in it changes.
 
 **Invariants:**
 - *Single writer:* the partition is decided once per tick, before any `Tactic` runs, so two

@@ -30,43 +30,9 @@ CustomReferee.step(game_frame, t)
 Each tick, the rule checks decide which violation (if any) reaches the state machine, and the
 state machine's output reaches the strategy through `RefereeRefiner` and `RefereeOverride`:
 
-```mermaid
-flowchart TD
-    gf["GameFrame, one tick<br/>entities/game/game_frame.py"]
-    subgraph checks["CustomReferee.step rule checks<br/>custom_referee/custom_referee.py"]
-        st["Stopping rules, first violation wins<br/>rules/goal_rule.py, out_of_bounds_rule.py, double_touch_rule.py,<br/>defense_area_rule.py, pushing_rule.py, keeper_held_ball_rule.py,<br/>excessive_dribbling_rule.py, penalty_time_limit_rule.py, no_progress_rule.py"]
-        ns["Non-stopping rules, first one kept<br/>rules/ball_speed_rule.py, keep_out_rule.py, crashing_rule.py,<br/>robot_stop_speed_rule.py, defense_area_stoppage_rule.py,<br/>ball_placement_interference_rule.py"]
-        inv["Goal check: _disallowed_goal turns a goal into invalid_goal<br/>if the scorer fouled in the last 2 s (_GOAL_AFTER_FOUL_SECONDS)"]
-    end
-    subgraph sm["GameStateMachine.step<br/>custom_referee/state_machine.py"]
-        cd{"0.3 s since last transition?<br/>_TRANSITION_COOLDOWN"}
-        ap["_apply_violation: stopping foul or goal changes command<br/>_handle_goal, _handle_foul; non-stopping only counts fouls"]
-        aa["Auto-advance 1 to 6<br/>STOP, PREPARE, DIRECT_FREE, BALL_PLACEMENT, NORMAL_START, half end"]
-    end
-    rd["RefereeData<br/>source_identifier custom_referee, command, stage, next_command, designated_position"]
-    buf["ref_buffer in StrategyRunner<br/>run/strategy_runner.py (real: RefereeMessageReceiver)"]
-    ref["RefereeRefiner sets GameFrame.referee<br/>data_processing/refiners/referee.py"]
-    strat{"Restart, STOP or TIMEOUT command?<br/>is_override_command, engine/referee_override.py"}
-    ovr["RefereeOverride.tick positions robots<br/>engine/referee_override.py, custom_referee/actions.py"]
-    tac["Tactics and partitioner, as usual<br/>engine/strategy.py, tactics/"]
-    sim["Sim: teleport ball to designated_position; MatchStats records last_violation<br/>run/strategy_runner.py, engine/match_stats.py"]
+![CustomReferee tick: rule checks, game state machine, and the path to the strategy and simulator](img/custom_referee/architecture.png)
 
-    gf --> st
-    gf --> ns
-    st --> inv
-    inv --> cd
-    ns --> cd
-    cd -- "yes" --> ap
-    cd -- "no, ignored" --> aa
-    ap --> aa
-    aa --> rd
-    rd --> buf
-    buf --> ref
-    ref --> strat
-    strat -- "yes" --> ovr
-    strat -- "no" --> tac
-    buf -.-> sim
-```
+Drawn by `docs/img/custom_referee/make_architecture.py`; rerun it when a name in it changes.
 
 ## Rules
 
@@ -103,38 +69,9 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 The same transitions as a state diagram, with the command each one leaves and enters (team-specific
 commands are shown as `*`; the restart team is the one named in the command):
 
-```mermaid
-stateDiagram-v2
-    state "PREPARE_KICKOFF_*" as PK
-    state "PREPARE_PENALTY_*" as PP
-    state "DIRECT_FREE_*" as DF
-    state "BALL_PLACEMENT_*" as BP
-    state "NORMAL_START" as NS
-    state "FORCE_START" as FS
+![Referee commands and the transitions between them, with the trigger or timer on each](img/custom_referee/state_machine.png)
 
-    [*] --> HALT
-    HALT --> STOP : resumed, queued restart kept
-    STOP --> PK : queued kick-off, robots clear or 15 s
-    STOP --> PP : queued penalty, robots clear or 15 s
-    STOP --> DF : queued free kick, robots clear or 15 s
-    STOP --> BP : queued placement, robots clear or 15 s
-    STOP --> FS : queued FORCE_START, robots clear or 15 s
-    STOP --> POST_GAME : second half time used up
-    NS --> STOP : stopping foul or goal, or playing time used up
-    FS --> STOP : stopping foul or goal, or playing time used up
-    NS --> FS : ball unmoved 10 s after NORMAL_START
-    PK --> NS : 3 s prepared, kicker in centre circle, all in own half or 10 s more, held 2 s
-    PP --> NS : 3 s prepared, kicker at penalty mark, held 2 s
-    DF --> NS : ball moved 0.05 m, or kicker within 0.3 m and defenders 0.5 m off, held 2 s
-    DF --> FS : no kick in 10 s
-    BP --> PK : ball within 0.15 m of target, held 2 s, queued kick-off
-    BP --> PP : ball within 0.15 m of target, held 2 s, queued penalty
-    BP --> DF : ball within 0.15 m of target, held 2 s, queued free kick
-    POST_GAME --> [*]
-    note right of HALT : Second Defense Area Stoppage foul, from any state
-    note right of BP : 10 s without a placement counts a failure and moves on
-    note right of NS : Non-stopping fouls change no state
-```
+Drawn by `docs/img/custom_referee/make_state_machine.py`; rerun it when a name in it changes.
 
 Nothing leaves `HALT` on its own: a person or the game controller resumes it. In the sim,
 `StrategyRunner` resumes after 5 s with `resume_from_halt`, which goes to `STOP` and keeps the

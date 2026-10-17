@@ -26,26 +26,9 @@ scheme name picks the class through `CONTROL_SCHEME_MAP`; `StrategyRunner` resol
 `strategy.control_scheme` (default `fpp`, and `pid` is also registered). Each `calculate` returns a
 global velocity and an angular velocity, which `move()` rotates into the robot frame.
 
-```mermaid
-flowchart LR
-    move["move(), skills/src/utils/move_utils.py<br/>calls calculate(game, robot_id, target, orientation)"]
-    reg["get_control_scheme(name), common/control_schemes.py<br/>chosen per side by StrategyRunner"]
-    fpp["fpp: FastPathPlanningController<br/>controllers/fastpathplanning.py<br/>carrot from _path_to, then TwoDPID toward carrot"]
-    dwa["dwa: DWAController<br/>controllers/dwa_controller.py<br/>DWATranslationController picks the velocity"]
-    ts["trajsample: TrajectorySamplingController<br/>controllers/trajsampling.py<br/>TrajectorySamplingPlanner.plan, braked if closing too fast"]
-    pid["pid: PIDController<br/>controllers/pid_controller.py<br/>TwoDPID straight at the target, no obstacle planning"]
-    ret["(global velocity, angular velocity)<br/>orientation always from get_pids"]
+![Control schemes: move() calls get_control_scheme, which picks fpp, dwa or trajsample; each returns a velocity to RobotCommand](img/motion_planning/control_schemes.png)
 
-    move --> reg
-    reg --> fpp
-    reg --> dwa
-    reg --> ts
-    reg --> pid
-    fpp --> ret
-    dwa --> ret
-    ts --> ret
-    pid --> ret
-```
+Drawn by `docs/img/motion_planning/make_control_schemes.py`; rerun it when a name in it changes.
 
 ## Scenarios
 

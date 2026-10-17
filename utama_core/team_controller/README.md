@@ -12,42 +12,9 @@ The path of one real-match tick, as `StrategyRunner` wires it: the receivers fil
 the refiners build the `GameFrame`, and the real controller sends the commands over the serial radio.
 The robots' feedback comes back the same way and reaches `RobotInfoRefiner`.
 
-```mermaid
-flowchart TD
-    subgraph net["Network, multicast"]
-        vis["SSL-Vision<br/>224.5.23.2:10006 (VISION_PORT)"]
-        gc["Referee, GameController<br/>224.5.23.1:10003 (REFEREE_PORT)"]
-    end
+![One real-match tick: receivers, refiners, Strategy and the real robot controller](../../docs/img/team_controller/real_robot_path.png)
 
-    subgraph recv["Receivers, data_processing/receivers/"]
-        vr["VisionReceiver<br/>vision_receiver.py"]
-        rmr["RefereeMessageReceiver<br/>referee_receiver.py"]
-    end
-
-    subgraph refine["Refiners, data_processing/refiners/"]
-        pos["CameraCombiner, PositionRefiner<br/>position.py, filters/kalman.py"]
-        vel["VelocityRefiner<br/>velocity.py"]
-        ri["RobotInfoRefiner<br/>robot_info.py"]
-        rr["RefereeRefiner<br/>referee.py"]
-        game["GameFrame<br/>entities/game/game.py"]
-    end
-
-    strat["Strategy and MotionController<br/>engine/strategy.py, motion_planning/"]
-
-    subgraph out["Output, team_controller/src/controllers/real/"]
-        rc["RealRobotController<br/>real_robot_controller.py"]
-        ser["Serial radio, settings.PORT<br/>115200 baud"]
-    end
-
-    robots["Robots"]
-
-    vis --> vr --> pos --> vel --> ri --> rr --> game
-    gc --> rmr --> rr
-    game --> strat --> rc --> ser --> robots
-    robots -->|feedback| ser
-    ser -->|get_robots_responses| rc
-    rc -->|RobotResponse, has ball| ri
-```
+Drawn by `docs/img/team_controller/make_real_robot_path.py`; rerun it when a name in it changes.
 
 ## Controllers
 

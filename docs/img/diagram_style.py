@@ -115,9 +115,9 @@ class Diagram:
         """Free text, 8.6 pt unless `fontsize` says otherwise."""
         self.ax.text(x, y, text, **{"fontsize": 8.6, "color": colour, **kw})
 
-    def key(self, x, y, entries):
-        """A key at (x, y) (its top left): one swatch per (kind, label)."""
-        self.ax.text(x, y, "Key", fontsize=9.5, weight="bold", color=INK, va="top")
+    def key(self, x, y, entries, title="Key"):
+        """A key at (x, y) (its top left): one swatch per (kind, label). A second column passes title=""."""
+        self.ax.text(x, y, title, fontsize=9.5, weight="bold", color=INK, va="top")
         for i, (kind, label) in enumerate(entries):
             fill, edge = KINDS[kind]
             yy = y - 3.2 - i * 2.8
