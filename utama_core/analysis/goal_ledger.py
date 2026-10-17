@@ -39,9 +39,8 @@ Thirds are `chances.py`'s (`THIRD_DEPTH_M` from either goal line).
 Strategy names come from `--labels`, else the run's `summary.json`/`ladder.json` (the retired ladder's runs; config_a is
 friendly), else the referee's team names (an official log's teams).
 
-`--rates PATH` also writes how often each situation happens in the corpus, owner-neutral and
-per live minute (`situation_rates`): the weights `tools/scenario_bench.py` turns its
-per-situation results into goals per match with.
+`--rates PATH` also writes how often each situation type happens in the corpus, owner-neutral and
+per live minute (`situation_rates`). Nothing is written unless a path is given.
 """
 
 from __future__ import annotations

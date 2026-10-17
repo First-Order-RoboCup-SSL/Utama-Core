@@ -1,7 +1,7 @@
 """`overload_flow` adds a 4th give-and-go attacker once its team has held the
 possession edge for `_POSSESSION_STREAK_TICKS` ticks. The streak was one
 module-level counter, so two `overload_flow` teams in one process (a mirror match,
-a bench A/B against itself) counted each other's possession.
+an A/B against itself) counted each other's possession.
 """
 
 from unittest.mock import MagicMock

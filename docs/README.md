@@ -4,7 +4,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 
 ## How to
 
-- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, the scenario bench, observability tools. Read before any strategy-layer change.
+- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, observability tools. Read before any strategy-layer change.
 - [custom_referee.md](custom_referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
 - [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
 - [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.

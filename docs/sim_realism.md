@@ -432,7 +432,7 @@ improves with k, but the best (k = 20 s, split-half 0.41) is only a little bette
 discounted goals with no V at all (0.39), and both are inside each other's noise.
 Most of the gain over goal difference needs no model: goal difference per live minute is
 already 0.30. So V does not yet save matches; it is for explaining results and for scoring
-paired bench starts cut off at T s. 12.7% of sim states have some feature outside the real
+paired starts cut off at T s (the scenario bench, retired 2026-10-17). 12.7% of sim states have some feature outside the real
 1st–99th percentile range (mostly ball speed toward goal).
 
 Pass 3 (2026-10-17, `report3.md`): converted real logs hold an unseen ball at its last

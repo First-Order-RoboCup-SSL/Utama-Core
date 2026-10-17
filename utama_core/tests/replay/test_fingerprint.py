@@ -14,7 +14,6 @@ import pytest
 
 from utama_core.replay import fingerprint as fp
 from utama_core.replay.fingerprint import (
-    BENCH_ENTRIES,
     KERNEL_STRATEGY,
     REPO_ROOT,
     ROUND_ROBIN_ENTRY,
@@ -365,7 +364,7 @@ def test_every_tactic_a_factory_builds_is_in_its_closure(graph):
 
 def test_the_tactics_kernel_strategy_imports_are_outside_the_base(graph):
     """Otherwise a tactic edit would rerun every match: the per-config split is the point."""
-    base = graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.base_modules(BENCH_ENTRIES)
+    base = graph.base_modules([ROUND_ROBIN_ENTRY])
     for name in ("give_and_go", "press_and_contain", "shadow_and_mark", "switch_of_play", "defense"):
         assert f"utama_core.tactics.{name}" not in base
 
@@ -381,13 +380,12 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 # it doesn't need to), then add it.
 #   environment: settings.py reads UTAMA_EXACT_MATH -> ENV_PREFIXES; robosim_wrapper copies
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
-#   opens files: profile_loader reads profiles/*.yaml -> data_files. start reads a
-#     bank, whose start is itself in the bench key. The rest write a match's outputs (match
-#     log, stats, replays) or read old ones for harvesting, never during play.
+#   opens files: profile_loader reads profiles/*.yaml -> data_files. The rest write a
+#     match's outputs (match log, stats, replays) or read old ones for analysis, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
-#   getattr on a module by computed name: tools.evaluation.match and scenario_scorer look a factory
-#     up by name -> the config names are the fingerprint's own inputs.
+#   getattr on a module by computed name: tools.evaluation.match looks a factory up by name ->
+#     the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
 #     possession/shield state: reset in StrategyRunner.__init__; the planner's _PERP_ROTATIONS: a memo of
@@ -397,10 +395,7 @@ AUDIT = {
         "utama_core.config.settings",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
     ],
-    "getattr on a module by computed name": [
-        "tools.evaluation.match",
-        "utama_core.scenario_bench.scenario_scorer",
-    ],
+    "getattr on a module by computed name": ["tools.evaluation.match"],
     "module-level state": [
         "utama_core.motion_planning.src.fastpathplanning.planner",
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
@@ -408,25 +403,19 @@ AUDIT = {
         "utama_core.skills.src.shielding",
     ],
     "opens files": [
-        "utama_core.analysis.turnover_breakdown",
         "utama_core.custom_referee.profiles.profile_loader",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
         "utama_core.replay.columnar_reader",
         "utama_core.replay.columnar_writer",
-        "utama_core.replay.replay_player",
         "utama_core.replay.replay_writer",
-        "utama_core.replay.scenario",
-        "utama_core.scenario_bench.start",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
 }
 
 
 def test_every_reach_outside_the_import_graph_is_accounted_for(graph):
-    everything = (
-        graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.base_modules(BENCH_ENTRIES) | graph.closure([KERNEL_STRATEGY])
-    )
+    everything = graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.closure([KERNEL_STRATEGY])
     assert graph.audit(everything) == AUDIT
 
 

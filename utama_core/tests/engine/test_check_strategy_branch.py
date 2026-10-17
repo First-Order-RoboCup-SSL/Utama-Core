@@ -43,7 +43,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
     "path",
     [
         "utama_core/engine/strategy.py",
-        "utama_core/scenario_bench/scenario_scorer.py",
+        "utama_core/analysis/goal_ledger.py",
         "tools/evaluation/match.py",
         "tools/check_strategy_branch.py",
         ".github/workflows/ci.yml",

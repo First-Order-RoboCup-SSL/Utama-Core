@@ -425,7 +425,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     restart, its preparation timed from now (a penalty goes live once its
     kicker has been at the mark for the referee's prepare time), and
     `NORMAL_START`/`FORCE_START` as live play. The runner's own starting
-    command (the bench seeds a yellow kickoff) is overwritten either way.
+    command (a fresh runner seeds a yellow kickoff) is overwritten either way.
 
     When `verify` is True (the default), steps the runner (up to
     `_VERIFY_MAX_TICKS` times, stopping early once every position is

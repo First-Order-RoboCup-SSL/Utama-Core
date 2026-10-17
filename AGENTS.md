@@ -17,7 +17,7 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/evaluation/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
@@ -34,23 +34,11 @@ One term per thing; reuse these instead of coining new ones.
 - **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
   or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
   verdict on a strategy; see Evaluation.
-- **Start** — one situation (see below) the scenario bench replays for 10 s, tagged with its
-  type from the candidate's view. In code: `BenchScenario` (`scenario_bench/start.py`), and
-  "scenario" in flags and enums.
-- **Bank** — a versioned list of starts (`utama_core/scenario_bench/banks/bank_vN.json`),
-  harvested from one round-robin's replays, up to 40 of each situation type.
-- **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
-  against a baseline on a bank, each start against the opponent it came from; it estimates the
-  change in goals per match as Σ situations per match (real or sim weights) × the change in
-  P(goal within 10 s). A diagnostic, not a ranking: it cannot see a candidate change how often
-  situations happen or score from build-up longer than 10 s, so rank with matches.
-- **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
-  how far the bench and cheap proxy metrics agree with round-robin results.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
-  fixed scenarios. Unrelated to the scenario bench or any strategy.
+  fixed scenarios. Unrelated to any strategy.
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
-- **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
+- **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 - **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a
@@ -67,8 +55,7 @@ One term per thing; reuse these instead of coining new ones.
   P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
   kickoff or penalty, force start. See `docs/signals.md`.
 - **Situation rates** — how often each situation type happens per team per live minute, from
-  real Division B matches or our round-robin (`banks/situation_rates_{real,sim}.json`,
-  `goal_ledger --rates`): the scenario bench's weights.
+  real Division B matches or our round-robin (`goal_ledger --rates PATH`).
 
 ## Repo map
 

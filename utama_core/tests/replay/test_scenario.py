@@ -142,8 +142,8 @@ def test_a_start_begins_at_its_own_speeds_not_the_jump_from_the_runner_s_formati
     # Velocity is a finite difference over the runner's frame history. Left holding the
     # formation the runner was built in, it read the teleport as a jump from there (the ball
     # at 30 m/s here, robots far faster): the filtered ball then overshot into goals and out
-    # of play, and the referee charged ball-speed and crashing fouls no robot made. A bench
-    # runner applies its start right after construction, as here (`scenario_scorer`).
+    # of play, and the referee charged ball-speed and crashing fouls no robot made. A runner
+    # built for a replay applies its start right after construction, as here.
     runner = _build_runner_and_scenario(_SCENARIO)
     try:
         apply_scenario(runner, _SCENARIO, verify=True)
@@ -318,7 +318,7 @@ def _assert_close_to_scenario(positions: dict, scenario, *, tol: float, context:
 
 # --- the referee state a start is played in ----------------------------------------------
 #
-# `scenario_scorer._build_runner` seeds every bench runner with PREPARE_KICKOFF_YELLOW. A start
+# `_build_runner` seeds every runner with PREPARE_KICKOFF_YELLOW. A start
 # must be played in its own restart (or live play), from the first tick, not in that kickoff.
 
 
@@ -366,8 +366,8 @@ def _referee_frame(scenario: Scenario):
     )
 
 
-def _bench_runner(frame):
-    """What `apply_scenario` touches of a bench runner, with the referee `_build_runner` gives it."""
+def _replay_runner(frame):
+    """What `apply_scenario` touches of a runner, with the referee `_build_runner` gives it."""
     from types import SimpleNamespace
 
     from utama_core.custom_referee import CustomReferee
@@ -413,11 +413,11 @@ def _penalty_start(command: RefereeCommand) -> Scenario:
     ],
 )
 def test_a_start_is_played_in_its_own_referee_command_from_the_first_tick(command):
-    """A restart start kept the bench runner's PREPARE_KICKOFF_YELLOW (NORMAL_START was skipped)
+    """A restart start kept the runner's PREPARE_KICKOFF_YELLOW (NORMAL_START was skipped)
     or got a STOP inserted before it, which held it while the kicker stood at the ball."""
     scenario = _penalty_start(command)
     frame = _referee_frame(scenario)
-    runner = _bench_runner(frame)
+    runner = _replay_runner(frame)
 
     apply_scenario(runner, scenario, verify=False)
 
@@ -429,7 +429,7 @@ def test_a_penalty_start_goes_live_as_a_penalty_after_the_referee_s_own_preparat
     referee's prepare time plus its readiness delay, both counted from the start."""
     scenario = _penalty_start(RefereeCommand.PREPARE_PENALTY_BLUE)
     frame = _referee_frame(scenario)
-    runner = _bench_runner(frame)
+    runner = _replay_runner(frame)
 
     apply_scenario(runner, scenario, verify=False)
     seen = []

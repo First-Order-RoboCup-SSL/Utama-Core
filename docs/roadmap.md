@@ -49,7 +49,7 @@ resolved, replace it with a one-line pointer under "Done".
      `StallEvent`s across N seeded fuzzed matches. **Built:** stall watchdog + `--strict`,
      commitment deadline, restart fuzzer, pure `Game` builder. **Not built:** CI job running
      the strict seeded stall gate.
-   - *Outer loop, fast half (scenario bench, numbers vs a committed baseline, non-blocking):*
+   - *Outer loop, fast half (scenario bench, numbers vs a committed baseline, non-blocking; **retired 2026-10-17**, code and banks deleted, history kept):*
      seeded start state + 15-30s horizon, scored as paired differentials by calibrated proxy
      metrics. **Built (v1):** `start.py`, 4 hand-authored anchors,
      `scenario_harvester.py` (restart transitions, trust gate `stall_events == []`),
@@ -58,7 +58,7 @@ resolved, replace it with a one-line pointer under "Done".
      flag; `--repeats K` jittered starts give the seed noise rsim's determinism hid (the
      screen's default pool was the champion itself, so every live scenario came out
      DETERMINED); `--against-results` compares against an earlier run's JSON, for A/B
-     across commits. Banks in `utama_core/scenario_bench/banks/` are committed (v3 onward; v1/v2 predate
+     across commits. Banks in `utama_core/scenario_bench/banks/` were committed (v3 onward; v1/v2 predate
      the rulebook referee fixes and stay local). **Bank v4** (173 scenarios) = v3 (from
      RR `tournament_20260928_132051`) + RR `tournament_20260928_125725`, each harvested,
      screened (informative + noisy kept), then merged dropping near-duplicate starts (same
@@ -101,13 +101,13 @@ resolved, replace it with a one-line pointer under "Done".
      Caveat: raw `turnovers` is mostly nearest-robot flicker on contested balls (1990 raw vs
      1090 real losses over 231 matches, `git show 24ef2c3f:benchmark_results/turnover_breakdown_20260923_211717.md`);
      prefer `summary.json["ball_losses"]["real_losses"]`.
-     Goodhart guard: if the bench improves and evaluate.py doesn't, retire the proxy.
+     Goodhart guard: if a screen improves and evaluate.py doesn't, retire the proxy.
    - *Compute discipline:* paired comparison on common seeds, sequential stopping, short
      sampled horizons over long matches.
    - **Partly done (2026-10-17):** one entry point, `tools/evaluation/evaluate.py <strategy>`,
      without `--budget` (it stops by itself). Not built: contracts, and writing
      `docs/strategies.md`.
-   - Build order: calibration tournament → bench on harvested states → ladder (since retired; see evaluate.py).
+   - Build order: calibration tournament → bench on harvested states (retired 2026-10-17) → ladder (since retired; see evaluate.py).
 
 2a. **Strategy evaluation v2 (direction agreed 2026-10-09; ladder built, then retired 2026-10-17 for `evaluate.py`).** Builds the ladder
     above and settles how matches vary.

@@ -74,7 +74,7 @@ each gets. Most new strategies need no new tactic. When one does, add it as a ne
 **Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
 the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` that module
-re-exports is discovered by name (`match`), so it joins round-robins and the bench as
+re-exports is discovered by name (`match`), so it joins round-robins and `evaluate.py` as
 `<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
 - `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
@@ -97,18 +97,12 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
    is it better than the pool's champion, worse, or not clearly either? Several candidates go in
    one call. A strict round-robin (`round_robin.py --strict --reuse`) is the check for stalls
    and the occasional health check of the whole catalog, no longer the way to judge one change.
-4. **Bench A/B**, only when the round-robin can't answer: the change is too small to move a
-   row of mostly draws, or you need to know which kind of start it changed. Run it against the
-   nearest existing strategy, the one it differs from in a single idea, so the A/B tests that
-   idea: `tools/scenario_bench.py --load-bank <newest bank> --candidate <name> --baseline
-   <nearest>` (see [The situation bench](#the-situation-bench)). Each start plays the opponent
-   it came from.
 
 A change to `tactics/`, `skills/` or `pickers.py` is the other way round: reuse saves little,
-because most strategies import the changed code and their matches all rerun. Screen it on the bench
-first, batch such changes, and run one round-robin over the batch.
+because most strategies import the changed code and their matches all rerun. Batch such
+changes and run one round-robin over the batch.
 
-**`--reuse`** (round-robin and bench) takes a match's or start's result from
+**`--reuse`** takes a match's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
 to one strategy only its matches play, one per other config (21 of 231 with 22 configs). What counts as
 "runs" is `utama_core/replay/fingerprint.py`'s: the factory's own module, every module that
@@ -117,18 +111,12 @@ environment (planner, referee, runner, simulator build, packages, CPU). Editing 
 reruns every config that imports it, which is most of them; changing shared code reruns
 everything, correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
 difference evicts the records, says the fingerprint missed a dependency, and fails the run.
-Use `--reuse` on every run: the bench's baseline side then costs
-nothing while its code is unchanged.
+Use `--reuse` on every run.
 
-**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference pool. A round-robin's W-D-L and the scenario bench's estimate of goals per match are diagnostics.
+**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference pool. A round-robin's W-D-L is a diagnostic.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until results move: a change needs a reason in game
-terms, and a bench gain that matches don't confirm means distrust the bench, not that the
-strategy got better. The situation bench on bank_v8 gets the size of a several-goal difference
-right but did not rank six candidates the way a round-robin does (Spearman -0.09; its standard
-error, about 2.3 goals a match, is wider than the spread between them: see
-[How far to trust it](#how-far-to-trust-it)). So it screens changes; it doesn't rank strategies,
-and a bench result alone never accepts a change. Two round-robins of near-identical code agree
+terms. Two round-robins of near-identical code agree
 at Spearman +0.97, but that is not a ceiling: rsim is deterministic, so they agree largely
 because the code is near-identical.
 
@@ -198,8 +186,7 @@ reaches `main` by pull request:
    than your own matches means the cache is stale (shared code changed since it was filled).
    Let it run anyway (a full round-robin of 600 s matches has taken from about 1 h 50 min, on 15 workers plugged in, to 4.7 h for `tournament_20261005_170958`; matches are now two halves of 300 s of playing time: about 710 s of sim time on average by the final run's stoppages, 785 s in two measured matches, so expect roughly 20-30% longer): the other
    strategies' matches run `main`'s code, so they refill the cache for everyone.
-5. Open a draft pull request into `main` with the round-robin result, and the bench result if you
-   ran one. An agent never merges: a person reviews and merges.
+4. Open a draft pull request into `main` with the round-robin result. An agent never merges: a person reviews and merges.
 
 Several branches can be worked on at once, each in its own worktree; they share
 `replays/match_cache/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
@@ -258,20 +245,20 @@ whoever runs it.
 
 **Frame convention trap:** rsim's own frame stores y negated relative to ours. Anything that
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
-teleported robot facing the mirrored heading, which had silently corrupted scenario benches.
+teleported robot facing the mirrored heading, which had silently corrupted teleported scenarios.
 
 **Determinism:** an rsim match is reproducible: `--pair A B` replays a round-robin match exactly (13 of
 13 sampled from `tournament_20260928_221404` at `1de1e18d`, every replay array and sidecar).
 One cause of "differs run to run" was state that outlived a match: `has_ball`'s and shielding's
 hysteresis were module dicts keyed by robot id, shared by both teams and carried from match to
-match in a round-robin or bench worker process (`c27bfad7`). Module-level state in a tactic or
+match in a round-robin worker process (`c27bfad7`). Module-level state in a tactic or
 skill must be keyed by team and cleared at match start (`StrategyRunner.__init__`). If a
 round-robin match and its `--pair` rerun still differ, suspect more of the same; compare the two
 replays' `ball_p` to find the first differing tick.
 
 **Fast and exact numerics:** the motion planner, refiners and Kalman filter use faster float code
 by default (about 19% less wall time per match under full load). `UTAMA_EXACT_MATH=1` restores the
-original numpy paths, byte-identical to before (`8c191eea`); the round-robin, bench pools and rsim
+original numpy paths, byte-identical to before (`8c191eea`); the round-robin pools and rsim
 all inherit it. The two modes agree to 1e-9 per call but matches diverge after the first differing
 tick, so a baseline recorded in one mode is only comparable with a candidate run in the same mode.
 
@@ -340,201 +327,4 @@ What a converted match holds, and where it differs from a sim replay (the detail
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
-## Play and watch one start
-
-A round-robin only tests a change in the situations its matches happen to reach, and some
-pairings rarely reach the one a change is about (a defensive change, say, against an opponent
-that seldom gets into our third). The bank's starts are real moments from a round-robin, so
-`--play` puts a strategy into one directly and shows what it did:
-
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \
-        --play counter_flow_vs_split_shape_t426.3_own_ball_won_attacking --candidate high_press --render png
-
-It plays the start against the opponent it came from (`--opponent` to choose another) and
-prints its outcome and signals and a timeline: the referee command, the ball, the robot of each
-side nearest it every 0.25 s, and each change in the candidate's tactic assignments. The replay,
-the candidate's match log, the timeline and the picture are kept in
-`replays/scenario_play/<start id>/` (`--render mp4` makes a clip instead). `--repeats N` plays it
-from N slightly jittered positions, to see whether what happened holds up. A start is robot and
-ball positions and the referee command only: both strategies begin it with no memory, and every
-robot begins at rest (the ball keeps its speed). rsim has no way to place a moving robot: its
-reset sends a robot's position and heading, and the physics fork stops every robot it places,
-so adding one means changing code every cached match depends on.
-
-A restart start is the moment the referee awarded it: a free kick at the first tick the replay
-shows `DIRECT_FREE_*`, a kickoff or penalty at its `PREPARE_*`. The referee then runs it as in
-the match (`apply_scenario` puts it in that command from the first tick): a free kick goes live
-once its kicker is at the ball and the defenders clear for 2 s, a penalty about 5 s in. A
-ball-won start is the frame nearest the start of a goal-ledger possession spell, in live play.
-
-To find starts, tag them by situation with `--where` (names from
-[pitch_zones.md](pitch_zones.md), all from the candidate's side):
-
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_v8.json \
-        --list-scenarios --where third=defensive ball=theirs
-
-| Tag | Values |
-|---|---|
-| `third` | `defensive`, `middle`, `attacking`: where the ball is |
-| `lane` | `left_wing`, `centre`, `right_wing` |
-| `restart` | `ours`, `theirs` (whose kickoff, free kick, penalty or ball placement), `stop`, `live` |
-| `ball` | `ours`, `theirs` (a robot within 0.2 m of it), `loose` |
-| `near` | robots of each side within 1.5 m of the ball, e.g. `2v3` |
-
-`TAG=a,b` matches either value. `--where` also narrows a bench run or `--save-bank`.
-`--list-scenarios` also prints each start's situation type.
-
-Bench results recorded before `b7ea54cf` are not comparable with later ones: until then every
-start was played from the bench runner's own yellow kickoff. Nor are results recorded before
-`82d6eb66`: until then every start began with phantom speeds (velocities were differenced
-against the formation the runner was built in: a ball at 130 m/s, fouls in almost every
-open-play start). `apply_scenario` now starts each side's history from the scenario.
-
-## The situation bench
-
-For a targeted A/B of one change to shared code (a tactic, the planner), which reruns most of a
-round-robin even with `--reuse`, or of a change too small to move match results, use
-`tools/scenario_bench.py` on the committed bank (`utama_core/scenario_bench/banks/`, newest
-version). It estimates how the change moves goals per match from short paired replays of the
-situations goals come from:
-
-    effect = Σ over situation types (how often it happens per match)
-                                     × (candidate's P(goal) from it − baseline's)
-
-- **Situations** are the goal ledger's ([signals.md](signals.md#where-do-goals-come-from)), from
-  the candidate's view: own or opponent ball won or free kick in each third, own or opponent
-  kickoff or penalty, force start. Each start of the bank carries its type.
-- **P(goal)** is the first goal within 10 s of the start (`--horizon`, the ledger's window): for,
-  against, or none. Both strategies play the same starts from config_a's side, so the change per
-  type is a mean of paired differences, with its standard error.
-- **Opponent:** each start is played against its source match's config_b, so the bank's
-  opponents are the round-robin's. A start whose opponent is not on the branch is skipped and
-  counted. `--opponent` plays every start against one config instead.
-- **How often** comes from a weights file of situation rates (`goal_ledger --rates`): per team
-  per live minute for each type, times live minutes per match. `--weights` picks it:
-  `banks/situation_rates_real.json` (default; the 118 published Division B matches 2022-2026, 7.4
-  live minutes a match) or `banks/situation_rates_sim.json` (`tournament_20261011_230119`, 153
-  matches, 9.0 live minutes). Real matches have fewer defensive-third regains and kickoffs, more
-  regains higher up, and far more free kicks and force starts per live minute than ours, so the
-  two weightings can disagree.
-
-    # once, at the baseline commit
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
-        --candidate split_shape --workers 15 --output-dir bench_base
-    # per candidate commit
-    pixi run python tools/scenario_bench.py --load-bank utama_core/scenario_bench/banks/bank_vN.json \
-        --candidate split_shape --workers 15 --output-dir bench_new \
-        --against-results bench_base/scenario_bench_<timestamp>.json
-
-(or `--baseline <config>` to compare two strategies at one commit). The report has a row per
-situation type: n, the candidate's and baseline's P(for) and P(against), the paired change with
-its standard error, how often the type happens per match, and its contribution to goals scored,
-conceded and goal difference per match. The last line printed is the total: change in goal
-difference per match, ± its standard error (types independent; within a type, the standard
-error of the mean paired difference). Under 2 standard errors is within chance.
-
-What the effect is and is not:
-
-- It sees only what a strategy does from each situation. The bank's starts are fixed, so a
-  strategy that changes how often situations happen (wins the ball higher up, concedes fewer
-  free kicks, or is forced into more of its own defensive-third regains) gets no credit or
-  blame for that. A round-robin does; it remains the confirmation.
-- It over-counts goals. A goal counts for every situation that started in the 10 s before it,
-  and situations overlap: summed over every situation, P(goal within 10 s) × count is 1.21× the
-  goals actually scored under sim rates and 1.58× under real ones (measured with the ledger on
-  both corpora). Read the effect as a scaled estimate. The factor need not be the same for
-  every strategy, so it can reorder close candidates.
-- It does not see goals from build-up. A goal more than 10 s after the latest situation began
-  ("sustained possession" in the ledger) is outside every start's horizon, and strategies
-  differ widely in how many they score: in `tournament_20261011_230119`, 3-7% of the split_*
-  family's goals, but 19-40% of overload_press's, high_press's and press_and_pass's, and 60-68%
-  of score_aware_counter_flow's and counter_flow's. The bench under-rates the slow scorers.
-  `--horizon 20` sees more of them, but the weights are for 10 s situations. The same horizon
-  hid passes aimed 10° off on bank_v5 (t = -7.6 at 20 s, +0.8 at 10 s; see the roadmap).
-
-rsim is deterministic, so the same code gives the same outcomes, and a baseline recorded once
-serves every later candidate. A bench worker keeps its rsim subprocess between starts
-(`enable_sim_reuse` in `robosim_wrapper.py`), asking it for a new native world each time instead
-of paying about 0.4 s wall and 0.5 s CPU to start one: outcomes and every sim state are
-bit-identical to a fresh process per start, in exact and fast numerics (checked on 106 starts in
-two shuffled orders). Only the sim is kept: a `StrategyRunner` is still built per start, which
-costs about 0.2 s.
-
-Each start's record also keeps the scorer's ordinal outcome (goal against -3 ... goal for +3,
-`scenario_scorer.py`), its signals, fouls and stalls; the per-start table and `--stop-at-t` are
-on that ordinal, not on the effect. `--stop-at-t 4` scores a shuffled sample 100 starts at a
-time and stops once |t| of the mean ordinal delta reaches 4, or as futile once |mean| + 2.5 ×
-stderr < 0.15 (`FUTILE_BELOW`, `FUTILE_Z`); it was calibrated on bank_v5's 846 starts at a 20 s
-horizon (passes aimed 10° off detected after about 300 starts; a null candidate stopped futile
-after a fifth to two thirds of a pass) and has not been re-calibrated for the situation bank.
-
-### The bank
-
-`bank_v8` (from `tournament_20261011_230119`, 147 trustworthy matches of 153) holds 640 starts:
-40 of each of the 15 other situation types and 20 of each kickoff type (every type had more). Each type
-is sampled spread over its source matches (seeded, near-duplicates dropped), from config_a's
-view, with its source match, time, configs and type in its provenance. Restarts are taken at
-the first tick showing their command; ball-won starts at the start of the ledger's possession
-spell. On this branch 293 of the 640 are playable: 347 come from matches against split_block,
-split_outlet, split_outlet_wall, split_press, split_sticky or split_wall, which live only on
-`strategy/search-20261011`. Per playable type that leaves 11-25 starts (kickoffs 6 and 9).
-
-A new bank from a new round-robin (keep its replays until this is done) takes a few minutes and
-no simulation:
-
-    pixi run python tools/scenario_bench.py --harvest-from replays/tournament_<id> --per-situation 40 \
-        --workers 15 --save-bank utama_core/scenario_bench/banks/bank_vN+1.json --list-scenarios
-
-Restarts and ball-won moments both come from the goal ledger, so the bank and the weights use
-one definition of a situation. Starts where a robot is past the field lines are dropped (the
-sim can't place it there), and a start whose run errored on either side has no delta. A
-harvest has no hand-authored starts: they have no type or opponent. There is no screen that
-plays starts forward to pick "informative" ones: the one tried varied the opponent, not the
-candidate, and threw away as many useful starts as it kept. A new bank needs a new baseline run.
-
-### How far to trust it
-
-Measured 2026-10-12 with `tools/bench_vs_standings.py`: split_shape as the baseline, six
-candidates spread over the standings of `tournament_20261011_230119`, bank_v8's 293 playable
-starts (those against the candidate or the baseline left out, so 222-247 each), one run each.
-Round-robin is the candidate's mean goal difference per match minus split_shape's, against the
-same opponents (10 each, one match per pair).
-
-| Candidate | Round-robin | Bench, sim weights | Bench, real weights |
-|---|---:|---:|---:|
-| overload_press | -2.22 | -6.21 ± 2.25 | -6.43 ± 2.54 |
-| press_and_pass | -2.78 | -6.28 ± 2.28 | -7.18 ± 2.26 |
-| counter_flow | -4.00 | -6.03 ± 2.26 | -6.42 ± 2.48 |
-| clear_press_plus | -5.78 | -5.98 ± 2.48 | -6.49 ± 2.32 |
-| high_press | -6.11 | -5.95 ± 2.29 | -7.03 ± 2.39 |
-| decoy_and_overload | -7.89 | -7.24 ± 2.71 | -5.80 ± 2.71 |
-
-Over the six, sim weights: Pearson +0.49, Spearman -0.09; real weights (which describe other
-matches, so are not expected to fit this round-robin): Pearson -0.49, Spearman -0.31. The bench
-gets the level right: every candidate is worse than split_shape, by 6.3 a match on average,
-which is 5.2 after the 1.21× over-count against 4.8 in the round-robin. It does not rank the
-candidates: each estimate's standard error (about 2.3) is larger than the spread of the
-round-robin differences (SD 2.2, of which about 1.3 is the round-robin's own noise at one
-match per pair). With six candidates even an unbiased bench at this precision would be expected
-to correlate at only about +0.5. So at this size the bench detects a large difference
-(several goals a match) and says which situations it comes from; it cannot tell apart
-candidates within 2-3 goals of each other. Use it for that, and rank with matches.
-
-Noise is not the only reason. The round-robin's gap between each candidate and split_shape,
-split by the ledger into its parts (each candidate's situation counts and conversion against
-split_shape's, over all its matches), is mostly conversion: -4.8 to -6.8 goals a match per
-candidate. That is the part the bench measures, which is why it gets the level right. Between
-the candidates, though, three parts differ by similar amounts: conversion (spread about 2
-goals), how often situations happen (decoy_and_overload -2.7, the others within 0.7) and goals
-from build-up (+0.35 to +1.3 against split_shape). The bench sees only the first. Per second of
-simulation it is no more precise than matches either: it used about a third of the play time
-of the round-robin's matches for these candidates, for a standard error about √3 larger.
-
-Where the noise comes from: the frequent situations with rare goals. Defensive-third regains
-happen about 16 times a match per side under sim rates, so one goal in 17 starts moves the
-effect by about 1 goal a match; the two defensive-third ball-won types make up about 70% of the
-variance. Kickoffs never led to a goal within 10 s in this run, for any strategy. Allocating
-starts in proportion to (situations per match × spread of the paired difference) instead of
-flat per type would give a standard error of about 1.45 with the same 293 starts, 1.0 with
-about 600, and 0.5 with about 2400 (estimated from this run). Making the split_* variants
-available here would more than double the playable starts of bank_v8.
+The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one moment use `tools/repro_from_replay.py <replay> --t <s>`, and `analysis/goal_ledger.py` lists a replay's situations and goals.

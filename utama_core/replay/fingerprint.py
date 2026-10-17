@@ -10,12 +10,11 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   the other configs' fingerprints alone; editing `pickers.py` moves every config that
   imports it.
 - `base_fingerprint(entry)`: everything both sides share, from the module that plays the
-  match (`tools.evaluation.match` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
-  bench): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
+  match (`tools.evaluation.match`): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
   next to that code (referee profiles), both pixi environments (every installed package's
   name, version and build), the installed robosim binary, the CPU model and the
   environment variables that change numerics.
-- `match_key(...)` / `bench_key(...)`: those fingerprints plus every run setting.
+- `match_key(...)`: those fingerprints plus every run setting.
 
 `kernel_strategy.py` imports every strategy module, and they run in every match whichever
 config is playing, so a module only one config uses still runs its import-time code in every
@@ -49,9 +48,6 @@ from typing import Iterable, Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
 ROUND_ROBIN_ENTRY = "tools.evaluation.match"
-BENCH_ENTRY = "utama_core.scenario_bench.scenario_scorer"
-# `scenario_bench._runs` plays a start through these two; the bench CLI itself only reports.
-BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.start")
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.
@@ -532,23 +528,6 @@ def match_key(
             config_b,
             graph.strategy_fingerprint(config_b),
             json.dumps(settings, sort_keys=True),
-        ]
-    )
-
-
-def bench_key(graph: CodeGraph, start: dict, candidate: str, opponent: str, *, horizon_s: float) -> str:
-    """Key of one bench start played by `score_scenario`: `start` is the jittered
-    `BenchScenario.to_dict()`, so the bank, the start and the jitter seed are all in it."""
-    return _digest(
-        [
-            "bench start",
-            graph.base_fingerprint(BENCH_ENTRIES),
-            json.dumps(start, sort_keys=True),
-            candidate,
-            graph.strategy_fingerprint(candidate),
-            opponent,
-            graph.strategy_fingerprint(opponent),
-            json.dumps({"horizon_s": horizon_s}),
         ]
     )
 

@@ -50,7 +50,6 @@ Everything lives under `utama_core/`:
 - `run/`: the main loop (`StrategyRunner`)
 - `replay/`: replay files, the match-result cache and code fingerprints
 - `analysis/`: offline analyses of tournament runs and replays (ball losses, chances, restarts, stalls)
-- `scenario_bench/`: the scenario bench's starts, banks, harvester and scorer
 - `rsoccer_simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
 - `team_controller/`, `data_processing/`: vision, robot radio and referee input
 - `dashboard/`: the browser dashboard

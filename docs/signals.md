@@ -136,9 +136,8 @@ sum over situations of situations per match × P(goal), for goals scored and con
 result splits into which situations a strategy creates or allows, and how well it converts or
 defends them. It reads only the replay and its referee file, so it runs on converted official
 logs too. The rules are in the module's docstring. `--rates PATH` writes how often each
-situation happens per team per live minute, whoever owns it: the weights of the
-[situation bench](STRATEGY_DEVELOPMENT.md#the-situation-bench), whose P(goal) also counts a goal
-that comes after a later situation started, unlike the table below.
+situation happens per team per live minute, whoever owns it (the scenario bench, retired
+2026-10-17, used these as its weights).
 
 Reference: `split_shape` in `tournament_20261011_230119` (17 matches; 6.76 scored, 4.41
 conceded per match).
