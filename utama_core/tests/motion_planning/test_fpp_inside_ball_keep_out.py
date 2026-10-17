@@ -14,6 +14,7 @@ carrot at the start brings the robot only 0.003 m closer, inside the tolerance.
 import numpy as np
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import distance_point_to_segment
 from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
@@ -56,3 +57,27 @@ def test_carrot_does_not_bring_a_robot_inside_the_ball_keep_out_closer_to_the_ba
     # Smoothing may graze the start gap by a centimetre; without the fix the carrot runs
     # about 0.02 m closer than that, and the robot reaches 0.11 m from the ball.
     assert distance_point_to_segment(ball, us, carrot) >= start_gap - 0.01
+
+
+def test_a_robot_just_inside_the_ball_keep_out_is_sent_out_of_it_not_onto_its_edge():
+    """counter_flow_vs_tiki_taka_plus (tournament_20261017_151052), 252-267 s: in the other
+    team's kick-off a robot 0.795 m from the ball, just inside the 0.8 m circle, was sent by
+    the kick-off step round the circle toward its spot in its own half. That run is a chord
+    that closes on the ball, so the planner replaced it with the push-out point on the circle,
+    0.005 m away: the robot parked there, still inside, and the kick-off waited the referee's
+    full 15 s cap. The push-out must take it clear of the circle."""
+    us = (0.762, -0.225)
+    round_the_circle = (0.8 * np.cos(np.radians(-76)), 0.8 * np.sin(np.radians(-76)))
+    game = build_game(
+        {4: make_robot(4, is_friendly=True, x=us[0], y=us[1])},
+        {0: make_robot(0, is_friendly=False, x=0.12, y=0.0)},
+        make_ball(0.0, 0.0),
+        my_team_is_right=False,
+        my_team_is_yellow=False,
+        referee_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    )
+    carrot = np.asarray(
+        FastPathPlanner(env=None)._path_to(game, 4, round_the_circle, STANDARD_FIELD_DIMS.full_field_bounds)
+    )
+    assert np.linalg.norm(carrot) > BALL_KEEP_OUT_DISTANCE + 0.02
+    assert distance_point_to_segment(np.zeros(2), np.array(us), carrot) >= np.linalg.norm(us) - 1e-6

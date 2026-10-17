@@ -105,6 +105,10 @@ _TEAM_RESTART_COMMANDS = {
 }
 
 
+# How far past the ball's keep-out edge a robot inside it is pushed out.
+_PUSH_OUT_MARGIN = 0.05
+
+
 def _keeps_off_ball(game: Game) -> bool:
     """True during STOP and the other team's restarts, when every robot of ours must
     stay out of the ball's keep-out circle."""
@@ -1720,6 +1724,9 @@ class FastPathPlanner:
         # (round a robot it is pressed against) is replaced by the ray out from
         # the ball through the robot, which only gets farther (moment
         # placement_corner_robot_drives_onto_ball; test_fpp_inside_ball_keep_out).
+        # The ray runs past the edge: a point on the edge itself parked a robot
+        # 5 mm inside, never encroaching-free, the kick-off step's chord round the
+        # circle replaced by it every tick (a 15 s kick-off stall, tournament_20261017_151052).
         ball = Vector2D(game.ball.p.x, game.ball.p.y) if game.ball is not None else None
         if ball is not None and _keeps_off_ball(game):
             ball_np = np.array([ball.x, ball.y])
@@ -1728,7 +1735,7 @@ class FastPathPlanner:
                 new_target = np.array([waypoint.x, waypoint.y])
             elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
                 away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
-                new_target = ball_np + away * BALL_KEEP_OUT_DISTANCE
+                new_target = ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN)
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")
