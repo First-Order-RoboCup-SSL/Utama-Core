@@ -428,6 +428,14 @@ whoever runs it.
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
   over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
+- **`tools/match_timeline.py`** — one match window as swimlanes on a shared time axis: the referee
+  command band, one lane per robot coloured by the tactic it was in (a thin tick at each switch, a
+  dark strip where it had the ball), each robot's distance to the ball, and goals, fouls and shots on
+  top. Use it for thrashing (a robot switching tactics every few ticks), a tactic stuck committed, or
+  everyone chasing the ball. Friendly side only has tactic lanes (the intentions log is config_a's).
+  Thrashing in `split_shape` against `tiki_taka_plus`: robots 2-4 flip between the attack and defence
+  slots about every 1.5 s, in pairs of rows at the same tick:
+  ![split_shape lanes thrashing between attack and defence slots](img/match_timeline/split_shape_100-160.png)
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
