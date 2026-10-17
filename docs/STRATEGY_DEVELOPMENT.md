@@ -269,9 +269,6 @@ this way (table below), two were the referee or the check, not the robot.
    test (e.g. "a computed target is off the field"), fix it with that test and skip the moment. If
    a capture does not reproduce, try: starting closer to the foul; checking the referee command the
    capture stored against `replay_trace.py` at that time; or accepting the unit test as the proof.
-   `play JSON --follow 2` steers the opponents along their recorded poses for the first 2 s (the
-   moment's `follow_s`), when the foul depends on where they were in the match; it does not steer
-   the ball, and the opponents do not kick.
 3. **Find the cause.** Per tick, print the override's target, the planner's next waypoint, the
    obstacles and the distance to the ball. Ask whether the rule was really broken (real rules,
    `docs/custom_referee_design_decisions.md`) and whether the check reads it right.

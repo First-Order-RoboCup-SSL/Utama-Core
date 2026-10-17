@@ -14,7 +14,6 @@ A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays 
      "requires": names from `REQUIRES` below: conditions that must hold during the play, so a
                moment whose situation never arose fails ("did not arise: ...") instead of passing,
      "known_failure": null, or why it still fails (the test is then a strict xfail),
-     "follow_s": seconds the opponents are steered along their recorded poses (default 0; see `follow`),
      "designated_position": a ball placement's target [x, y], else null,
      "sim_noise": the match's seeded noise (`sim_noise.py`), or null for none,
      "scenario": the field state: ball, robots and referee command (`replay/scenario.py`)}
@@ -57,24 +56,12 @@ Play it under several seeds as one table, compare with the code at a git ref (a 
 keep-out entries, kicks, closest approaches), or try a scratch strategy file's factory:
     pixi run python tools/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
     pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:build_my_kernel_strategy
-Steer the opponents along their recorded poses from the capture's frame for the first N s (the
-rest of the play, and every other play, lets them run their strategy):
-    pixi run python tools/moments.py play <json> --follow 2 [--seeds 0-4]
-
-`follow`: opponents' strategies start from fresh state, so the first seconds of a capture can
-diverge from the match at once. With `follow_s` (or `--follow`) each enemy robot is commanded to its
-recorded pose and heading, with the recorded velocity as feed-forward, by a proportional servo
-(`follow_command`); its strategy still runs but its commands are replaced. Enemies do not kick
-(the record's kicks are not replayed). The ball is not steered: teleporting it resets every robot's
-velocity in rsim, ours included (`replay/scenario.py`, Known limitations). The source replay must be
-an `.npz` (columnar) replay.
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
-import functools
 import importlib.util
 import json
 import math
@@ -88,8 +75,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable, Optional
 
-import numpy as np
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -99,9 +84,7 @@ from tools.evaluation.match import (  # noqa: E402
     OUTFIELD_ROBOT_IDS,
     TICKS_PER_SECOND,
 )
-from utama_core.entities.data.command import RobotCommand  # noqa: E402
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
-from utama_core.global_utils.math_utils import rotate_vector  # noqa: E402
 from utama_core.replay.scenario import (  # noqa: E402
     RobotState,
     Scenario,
@@ -124,12 +107,6 @@ APPROACH_WINDOW_S = 0.25
 LEAVE_WITHIN_S = 2.0
 # A ball faster than this has been kicked (`events`).
 KICK_SPEED_MPS = 2.0
-# `follow`: the servo that steers an enemy robot to its recorded pose. Gains are 1/s; the caps are
-# well above the recorded speeds, so the servo tracks the record rather than its own limits.
-FOLLOW_KP = 6.0
-FOLLOW_KTHETA = 6.0
-FOLLOW_MAX_SPEED_MPS = 3.0
-FOLLOW_MAX_TURN_RADPS = 8.0
 # `events` prints at most this many lines.
 MAX_EVENT_LINES = 30
 # `play --against`: worktrees live beside the repo (not in it), each with the compiled extensions
@@ -156,7 +133,6 @@ class Moment:
     designated_position: Optional[tuple[float, float]] = None
     source: Optional[dict] = None
     sim_noise: Optional[dict] = None
-    follow_s: float = 0.0
 
 
 def short_name(name: str) -> str:
@@ -188,7 +164,6 @@ def to_dict(m: Moment) -> dict:
         "known_failure": m.known_failure,
         "designated_position": list(m.designated_position) if m.designated_position else None,
         "sim_noise": m.sim_noise,
-        **({"follow_s": m.follow_s} if m.follow_s else {}),
         "scenario": {
             "referee_command": s.referee_command.name if s.referee_command is not None else None,
             "ball": [s.ball_x, s.ball_y, s.ball_vx, s.ball_vy],
@@ -227,7 +202,6 @@ def from_dict(d: dict) -> Moment:
         designated_position=tuple(dp) if dp else None,
         source=d.get("source"),
         sim_noise=d.get("sim_noise"),
-        follow_s=float(d.get("follow_s", 0.0)),
     )
 
 
@@ -327,10 +301,6 @@ def validate(m: Moment) -> None:
             problems.append(f"unknown requires {r!r}: use one of {sorted(REQUIRES)}")
     if m.seconds <= 0:
         problems.append(f"seconds must be positive, got {m.seconds}")
-    if m.follow_s < 0:
-        problems.append(f"follow_s must be zero or more, got {m.follow_s}")
-    elif m.follow_s > 0 and not (m.source and str(m.source.get("replay", "")).endswith(".npz")):
-        problems.append("follow_s needs a moment captured from an .npz replay (its source)")
     names = catalog()
     if m.strategy != "all" and m.strategy not in names:
         problems.append(f"unknown strategy {short_name(m.strategy)!r}")
@@ -630,72 +600,6 @@ def label(name: str) -> str:
     return short_name(name)
 
 
-def follow_active(tau: float, follow_s: float) -> bool:
-    """Whether a play `tau` seconds in is still steered (`follow`): the first `follow_s` seconds."""
-    return tau < follow_s
-
-
-def follow_command(
-    pose: tuple[float, float, float],
-    target: tuple[float, float, float],
-    target_velocity: tuple[float, float],
-) -> RobotCommand:
-    """The command that steers a robot at `pose` (x, y, heading) to `target` (x, y, heading), moving
-    at `target_velocity` (m/s, the recorded velocity as feed-forward): a proportional servo on
-    position and heading, capped at `FOLLOW_MAX_SPEED_MPS` and `FOLLOW_MAX_TURN_RADPS`. Local
-    velocities and turn follow `utama_core/skills/src/utils/move_utils.py`'s `move`."""
-    x, y, heading = pose
-    tx, ty, theta = target
-    gx = target_velocity[0] + FOLLOW_KP * (tx - x)
-    gy = target_velocity[1] + FOLLOW_KP * (ty - y)
-    speed = math.hypot(gx, gy)
-    if speed > FOLLOW_MAX_SPEED_MPS:
-        gx, gy = gx * FOLLOW_MAX_SPEED_MPS / speed, gy * FOLLOW_MAX_SPEED_MPS / speed
-    turn = FOLLOW_KTHETA * math.remainder(theta - heading, 2 * math.pi)
-    turn = max(-FOLLOW_MAX_TURN_RADPS, min(FOLLOW_MAX_TURN_RADPS, turn))
-    forward, left = rotate_vector(gx, gy, heading)
-    return RobotCommand(
-        local_forward_vel=float(forward),
-        local_left_vel=float(left),
-        angular_vel=float(turn),
-        kick=False,
-        chip=False,
-        dribble=False,
-    )
-
-
-@functools.lru_cache(maxsize=8)
-def _recorded_enemies(replay: str, t: float, seconds: float):
-    from utama_core.replay.scenario import recorded_enemy_path
-
-    return recorded_enemy_path(replay, t, seconds)
-
-
-def _follow_enemies(runner, m: Moment, start: float) -> None:
-    """Steer the opponents to their recorded poses for `m.follow_s` seconds from `start`. Their
-    strategy still runs, but every command it adds for an enemy robot is replaced by `follow_command`
-    while `follow_active`; a robot with no recorded pose at that time keeps its strategy's command."""
-    from utama_core.replay.scenario import recorded_index
-
-    path = _recorded_enemies(m.source["replay"], float(m.source["t"]), float(m.seconds))
-    side = runner.opp
-    controller = side.strategy.robot_controller
-    add = controller.add_robot_commands
-
-    def add_followed(robot_commands, robot_id=None):
-        tau = runner.my.current_game_frame.ts - start
-        if robot_id is not None and robot_id in path.ids and follow_active(tau, m.follow_s):
-            i, k = recorded_index(path.times, tau), path.ids.index(robot_id)
-            target, velocity = path.poses[i, k], path.velocities[i, k]
-            robot = side.game.friendly_robots.get(robot_id)
-            if robot is not None and not np.isnan(target).any():
-                pose = (robot.p.x, robot.p.y, robot.orientation)
-                robot_commands = follow_command(pose, tuple(target), tuple(velocity))
-        add(robot_commands, robot_id)
-
-    controller.add_robot_commands = add_followed
-
-
 def play(m: Moment, strategy: str) -> list[Tick]:
     """Play `m` with `strategy` on our side (yellow) for `m.seconds`."""
     from utama_core.custom_referee import CustomReferee
@@ -739,8 +643,6 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                 next_command=RefereeCommand[command.name.replace("BALL_PLACEMENT", "DIRECT_FREE")],
             )
         start = runner.my.current_game_frame.ts
-        if m.follow_s > 0:
-            _follow_enemies(runner, m, start)
         for _ in range(int(m.seconds * TICKS_PER_SECOND)):
             runner.step_once()
             game = runner.my.game
@@ -1060,14 +962,6 @@ def main() -> None:
         help="also play under the code at this git ref (its worktree is left in place), rows side by side",
     )
     p.add_argument("--events", action="store_true", help="after the verdict, the events of the first failing play")
-    p.add_argument(
-        "--follow",
-        type=float,
-        default=None,
-        metavar="S",
-        help="steer the opponents along their recorded poses for the first S s (overrides the moment's follow_s; "
-        "0 turns it off)",
-    )
     p.add_argument("--json", type=Path, help=argparse.SUPPRESS)  # --against reads the other tree's results
 
     args = parser.parse_args()
@@ -1126,12 +1020,6 @@ def main() -> None:
                 )
     else:
         m = load(args.moment)
-        if args.follow is not None:
-            m = dataclasses.replace(m, follow_s=args.follow)
-            try:
-                validate(m)
-            except MomentError as e:
-                parser.error(str(e))
         if args.seed is not None and args.seeds:
             parser.error("--seed and --seeds: pick one")
         try:
