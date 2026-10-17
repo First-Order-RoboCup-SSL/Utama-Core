@@ -569,7 +569,7 @@ class BallPlacementOursStep:
                     )
                     target_for_move = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
                     # Still on the designated side of the ball: go round it, not through it, to
-                    # the approach point (our_placement_completes: the straight run passed 0.03 m
+                    # the approach point (a hand-made moment: the straight run passed 0.03 m
                     # from the ball, and the placer pushed it off the spot). Once behind the ball
                     # the run to the approach point is the final approach and stays straight.
                     robot_rel = robot.p - ball_pos_for_clamp

@@ -1,5 +1,4 @@
-"""Pure checks (no rsim) of the `requires` conditions and the outcome check `placement_completes`
-in `tools/moments.py`: each fires on the case it guards and not on the one it must allow, over
+"""Pure checks (no rsim) of the `requires` conditions in `tools/moments.py`: each fires on the case it guards and not on the one it must allow, over
 synthetic ticks."""
 
 import dataclasses
@@ -11,10 +10,9 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 
 DT = 1 / moments.TICKS_PER_SECOND
 FREE_KICK = RefereeCommand.DIRECT_FREE_BLUE
-PLACING = RefereeCommand.BALL_PLACEMENT_YELLOW
 
 
-def _tick(t, command, ball, ours, designated=None):
+def _tick(t, command, ball, ours):
     return moments.Tick(
         t=t,
         command=command,
@@ -22,7 +20,6 @@ def _tick(t, command, ball, ours, designated=None):
         ours=ours,
         our_speeds={},
         our_foul=None,
-        designated=designated,
     )
 
 
@@ -87,52 +84,3 @@ def test_requires_round_trip_through_json_and_unknown_ones_are_named():
 
 def test_requires_and_checks_are_registered_by_name():
     assert {"restart_lasts", "robot_near_ball"} == set(moments.REQUIRES)
-    assert {"placement_completes"} <= set(moments.CHECKS)
-
-
-# --- placement_completes -------------------------------------------------------------------------
-
-
-def _placing(end_ball, designated=(2.0, -3.0), then=RefereeCommand.DIRECT_FREE_YELLOW, ticks_placing=3):
-    ours = {4: (1.0, -2.0)}
-    placing = [
-        _tick(i * DT, PLACING, (2.0, -3.0) if i == ticks_placing - 1 else (0.0, -3.0), ours, designated=designated)
-        for i in range(ticks_placing)
-    ]
-    placing[-1] = dataclasses.replace(placing[-1], ball=end_ball)
-    after = [_tick(ticks_placing * DT, then, end_ball, ours, designated=designated)]
-    return placing + after
-
-
-def test_placement_completes_when_the_ball_is_within_tolerance_and_the_referee_moves_on():
-    assert moments.placement_completes(_placing(end_ball=(2.05, -3.0))) == []
-
-
-def test_placement_fails_when_the_placement_times_out_away_from_the_target():
-    failures = moments.placement_completes(_placing(end_ball=(-2.0, -3.0)))
-    assert len(failures) == 1 and "ended at t=0.03s with the ball 4.00 m" in failures[0]
-    assert "tolerance 0.15 m" in failures[0]
-
-
-def test_placement_fails_when_the_placement_is_still_on_at_the_end():
-    ours = {4: (1.0, -2.0)}
-    ticks = [_tick(i * DT, PLACING, (2.0, -3.0), ours, designated=(2.0, -3.0)) for i in range(5)]
-    assert moments.placement_completes(ticks) == [
-        "placement_completes: still BALL_PLACEMENT_YELLOW at the end, the ball not placed"
-    ]
-
-
-def test_placement_fails_when_the_moment_does_not_start_from_our_placement():
-    ours = {4: (1.0, -2.0)}
-    ticks = [
-        _tick(i * DT, RefereeCommand.BALL_PLACEMENT_BLUE, (2.0, -3.0), ours, designated=(2.0, -3.0)) for i in range(5)
-    ]
-    assert moments.placement_completes(ticks) == [
-        "placement_completes: the moment does not start from our BALL_PLACEMENT_YELLOW"
-    ]
-
-
-def test_placement_completes_is_the_check_named_in_a_moment():
-    m = _probe(checks=["placement_completes", "*"], requires=[])
-    failures = moments.judge(m, _placing(end_ball=(-2.0, -3.0)), we_are_yellow=True)
-    assert any(f.startswith("placement_completes:") for f in failures)

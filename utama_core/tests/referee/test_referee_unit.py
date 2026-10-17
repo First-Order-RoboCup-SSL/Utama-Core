@@ -848,7 +848,7 @@ class TestBallPlacementOursStep:
 class TestBallPlacementOursApproachAroundBall:
     """Our placer approaches the ball's behind-point round the ball, not through it.
 
-    our_placement_completes: the placer starts on the designated side, and its straight run
+    A hand-made moment (since dropped): the placer starts on the designated side, and its straight run
     to the approach point passed 0.03 m from the ball, so it drove into the ball and pushed it
     off the spot.
     """

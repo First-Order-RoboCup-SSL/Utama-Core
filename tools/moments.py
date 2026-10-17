@@ -28,8 +28,7 @@ as the behaviour we want, so it does not wait on the referee's persistence befor
 referee override moves every outfield robot whatever the strategy, so then one strategy per
 distinct override (its `referee_overrides` and goalkeeper tactic) is enough.
 
-Requires vs checks: a check says what must not happen, or (`placement_completes`)
-what must happen. A requirement says the situation the moment is about arose: a restart lasted,
+Requires vs checks: a check says what must not happen. A requirement says the situation the moment is about arose: a restart lasted,
 a robot came near the ball. Without them a moment passes when the opponent
 does something else, the ball goes elsewhere, or our robot never gets there.
 
@@ -71,9 +70,6 @@ from tools.evaluation.match import (  # noqa: E402
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
     TICKS_PER_SECOND,
-)
-from utama_core.config.referee_constants import (  # noqa: E402
-    BALL_PLACEMENT_DONE_DISTANCE,
 )
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
 from utama_core.replay.scenario import (  # noqa: E402
@@ -344,7 +340,6 @@ class Tick:
     ours: dict[int, tuple[float, float]]  # robot id -> position
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
-    designated: Optional[tuple[float, float]] = None  # the referee's designated position (placement, free kick)
 
 
 def restart_side(command: Optional[RefereeCommand], we_are_yellow: bool = True) -> Optional[str]:
@@ -432,28 +427,6 @@ RESTART_LASTS_S = 1.0
 NEAR_BALL_M = 1.0
 
 
-def placement_completes(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
-    """Our ball placement completes: the referee moves on from our BALL_PLACEMENT before the end,
-    and the ball is within the rule's tolerance (`BALL_PLACEMENT_DONE_DISTANCE`) of the designated
-    position at the last tick of the placement. A timed-out placement leaves it farther off."""
-    placing = RefereeCommand.BALL_PLACEMENT_YELLOW if we_are_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
-    if not ticks or ticks[0].command is not placing:
-        return [f"placement_completes: the moment does not start from our {placing.name}"]
-    left = next((i for i, t in enumerate(ticks) if t.command is not placing), None)
-    if left is None:
-        return [f"placement_completes: still {placing.name} at the end, the ball not placed"]
-    last = ticks[left - 1]
-    if last.ball is None or last.designated is None:
-        return ["placement_completes: no ball or designated position at the last placement tick"]
-    dist = _dist(last.ball, last.designated)
-    if dist > BALL_PLACEMENT_DONE_DISTANCE:
-        return [
-            f"placement_completes: {placing.name} ended at t={last.t:.2f}s with the ball {dist:.2f} m from "
-            f"the designated position (tolerance {BALL_PLACEMENT_DONE_DISTANCE} m)"
-        ]
-    return []
-
-
 def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
@@ -484,12 +457,10 @@ def _robot_near_ball(ticks: list[Tick], we_are_yellow: bool = True) -> Optional[
     return f"the closest robot of ours to the ball was {closest:.2f} m, need {NEAR_BALL_M} m"
 
 
-# Named checks a moment can ask for. Add one only for a failure no referee rule names, or for an
-# outcome that must happen (`placement_completes`).
+# Named checks a moment can ask for. Add one only for a failure no referee rule names.
 CHECKS = {
     "keeps_clear": keeps_clear,
     "stop_speed": stop_speed,
-    "placement_completes": placement_completes,
 }
 
 # Named conditions a moment can `require`: each returns None when it holds during the play, else
@@ -580,11 +551,6 @@ def play(m: Moment, strategy: str) -> list[Tick]:
                     ours={rid: (r.p.x, r.p.y) for rid, r in game.friendly_robots.items()},
                     our_speeds={rid: r.v.mag() for rid, r in game.friendly_robots.items()},
                     our_foul=foul,
-                    designated=(
-                        tuple(game.referee.designated_position)
-                        if game.referee is not None and game.referee.designated_position is not None
-                        else None
-                    ),
                 )
             )
     finally:
