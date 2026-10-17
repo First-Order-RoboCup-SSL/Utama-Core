@@ -65,7 +65,7 @@ These check how far cheap metrics agree with round-robin results. They do not ju
 | Script | Purpose |
 |---|---|
 | `tools/replay_trace.py` | Text trace of a replay window: referee commands, ball, nearest robot per side. `--events` lists the window's kicks (with the nearest robot as kicker), possession changes, referee changes and fouls, one line each; `--json` writes rows or events as JSON. The first thing to run on a stall, a voided restart or a foul |
-| `tools/repro_from_replay.py` | Load a replay's field state at a timestamp into a fresh headless rsim match and tick forward with tracing on |
+| `tools/repro_from_replay.py` | Load a replay's field state at a timestamp into a fresh headless rsim match and tick forward with tracing on. `--summary ROBOT_IDS` prints each listed robot's tactic, position, distance to the ball, referee command and traced target every 0.25 s; `--trace-out` JSONL row kinds are in `--help` |
 | `tools/moments.py` | Regression moments (`utama_core/tests/moments/`): `fouls RUN_DIR` lists our side's fouls in a round-robin with the restart side (`--skip-own-restart`, `--by strategy,rule` for counts, `--include-stoppages` for out_of_bounds), `capture REPLAY --t S [--out PATH]` writes a moment from a replay, `new NAME --command CMD` writes a hand-made template, `play JSON [--seed N \| --seeds 0-4] [--against REF] [--events] [--strategy FILE.py:FACTORY]` plays one and prints what broke its checks (a seed table, the same moment at another commit, its events, a scratch strategy). See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Debugging a foul or failure" |
 | `tools/debug_match.py` | One ad hoc match between two strategies for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
 
