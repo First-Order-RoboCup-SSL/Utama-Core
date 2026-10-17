@@ -91,8 +91,8 @@ against its own opponent unless `--opponent` is given. The replay
 `--render png|mp4`, a picture of the whole window. Use it to test a change in a
 situation the round-robin rarely reaches, or to watch a start a bench run flagged.
 
-Still not built: lifecycle promotion (candidate -> validated -> active) or a
-ladder (slow half).
+Still not built: lifecycle promotion (candidate -> validated -> active). The slow half is
+`tools/evaluation/evaluate.py`; the ladder is retired.
 
 Run from the repository root, for example:
 

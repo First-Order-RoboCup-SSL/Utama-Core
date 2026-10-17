@@ -52,8 +52,8 @@ def _short(config: str) -> str:
 
 def _replay_path(run_dir: Path, result: dict) -> Optional[str]:
     """The result's replay, relative to `REPLAY_BASE_PATH`: `round_robin.py` writes
-    `<a>_vs_<b>.npz`, `ladder.py` `<a>_vs_<b>_<R|L><K|k>.npz` (the retired
-    `full_match_tournament.py` wrote the same tags as `.pkl`)."""
+    `<a>_vs_<b>.npz`. Older runs (the retired `ladder.py`, `full_match_tournament.py`) wrote
+    side and kickoff tags, `<a>_vs_<b>_<R|L><K|k>` (as `.pkl` for the latter)."""
     stem = f"{_short(result['config_a'])}_vs_{_short(result['config_b'])}"
     names = [f"{stem}.npz", f"{stem}.pkl"]
     if "a_is_right" in result:

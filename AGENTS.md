@@ -31,8 +31,9 @@ One term per thing; reuse these instead of coining new ones.
   (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the evaluation ledger.
   The check for stalls and the occasional health check of the whole catalog; a single
   strategy is judged with `evaluate.py` (below). With `--reuse` only matches whose code changed rerun.
-- **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
-  `metric_correlation.py` uses points per match (3 a win, 1 a draw) and goal difference.
+- **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
+  or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
+  verdict on a strategy; see Evaluation.
 - **Start** — one situation (see below) the scenario bench replays for 10 s, tagged with its
   type from the candidate's view. In code: `BenchScenario` (`scenario_bench/start.py`), and
   "scenario" in flags and enums.

@@ -36,7 +36,7 @@ skip the first `JUST_RESTARTED_S` after a restart): the ledger needs the moment 
 touches the ball, for every change of possession, so that its situations partition every goal.
 Thirds are `chances.py`'s (`THIRD_DEPTH_M` from either goal line).
 
-Strategy names come from `--labels`, else the run's `summary.json`/`ladder.json` (config_a is
+Strategy names come from `--labels`, else the run's `summary.json`/`ladder.json` (the retired ladder's runs; config_a is
 friendly), else the referee's team names (an official log's teams).
 
 `--rates PATH` also writes how often each situation happens in the corpus, owner-neutral and

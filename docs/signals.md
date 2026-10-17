@@ -17,7 +17,9 @@ Signals explain a result; none of them ranks or is a search objective.
 
 Tested and rejected as rankers (2026-10-17, two noisy round-robins of the same 12 strategies with
 different seeds, `tournament_20261016_201213` and `tournament_20261017_002337`; scripts in
-`~/dev/ssl/eval-infra/` and `~/dev/ssl/xg-analysis/metrics_quick/`):
+`~/dev/ssl/eval-infra/` and `~/dev/ssl/xg-analysis/metrics_quick/`). Those scripts were one-off
+analysis scripts kept outside the repo; the data they used are the two round-robins above and the
+evaluation ledger (`replays/eval/ledger.jsonl`).
 
 - **Shots on target.** Within one run, strengths from shots predicted held-out matches about as
   well as goals; across runs, goal strengths from run 1 predicted run 2's goal strengths better
@@ -41,7 +43,7 @@ Every saved `tools/evaluation/round_robin.py` run prints its sections and writes
 | Standings, STRATEGIES | `standings`, `strategies[*]` | `MatchStats` (live, every match) |
 | LOSS KINDS, BALL LOSSES, `passes:` line | `strategies[*].real_loss_kinds_as_a`, `ball_losses` (tables in `ball_losses.md`) | `analysis/turnover_breakdown.py` |
 | CHANCES | `strategies[*].chances`, `pass_progress_m`, `forward_pass_share` | `analysis/chances.py` |
-| RATINGS | `ratings` | `analysis/ratings.py` ([Ranking](#ranking)) |
+| None (in `summary.json` only) | `ratings` | `analysis/ratings.py` ([Ranking](#ranking)) |
 | FOULS | `fouls` | `MatchStats` |
 | STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `MatchStats` stall watchdog |
 | RESTARTS | `restarts` | `analysis/restart_outcomes.py` |

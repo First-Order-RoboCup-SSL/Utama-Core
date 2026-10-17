@@ -1,9 +1,10 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
 `build_*_kernel_strategy` config against every other, one full match per pair
-(two halves, see `MAX_MATCH_SECONDS` below; `ladder.py` also sweeps side and kickoff, for one candidate).
+(two halves, see `MAX_MATCH_SECONDS` below). This is the whole-catalog health and stall check;
+a single strategy is judged with `evaluate.py`.
 
 Match construction (build strategies, referee, StrategyRunner, kickoff
-ceremony, run_dir file layout) lives in `match.py`, shared with `ladder.py`.
+ceremony, run_dir file layout) lives in `match.py`.
 
 Run:
     pixi run python tools/evaluation/round_robin.py [config ...] [flags]
@@ -151,7 +152,7 @@ def run_match(
 ) -> MatchResult:
     """Play one full match (capped at `max_match_seconds`), config_a
     fixed to the right side and kickoff (this module's historical, un-swept
-    convention — `ladder.py` sweeps side and kickoff). Thin wrapper over `match.run_match`; see its
+    convention). Thin wrapper over `match.run_match`; see its
     docstring for what each parameter does.
     """
     return _lib_run_match(
@@ -647,7 +648,6 @@ def main() -> None:
     summary["strategies"] = strategy_table(summary["results"], real_losses_by_match, chances_by_match)
     _print_strategy_table(summary["strategies"])
     summary["ratings"] = _ratings(summary["results"])
-    _print_ratings(summary["ratings"])
     _print_loss_kinds(summary["strategies"])
     _print_chances(summary["strategies"])
     summary["fouls"] = foul_table(summary["results"])
@@ -874,12 +874,6 @@ def _ratings(results: list[dict]) -> dict[str, dict[str, float]]:
     """Each config's strength from goal margins, with its SD (`analysis.ratings`)."""
     fit = ratings.fit([(r["config_a"], r["config_b"], r["score_a"] - r["score_b"]) for r in results])
     return {n: dict(zip(("strength", "sd"), (round(v, 2) for v in fit.strength(n)))) for n in fit.names}
-
-
-def _print_ratings(table: dict[str, dict[str, float]]) -> None:
-    print("\nRATINGS (goals per match over an average opponent, ± SD; evaluate.py decides one candidate):")
-    for name, t in sorted(table.items(), key=lambda kv: -kv[1]["strength"]):
-        print(f"  {_short_name(name):<32} {t['strength']:>+6.2f} ± {t['sd']:.2f}")
 
 
 def _print_loss_kinds(table: dict[str, dict]) -> None:

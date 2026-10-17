@@ -7,16 +7,16 @@ Run:
 
 - `pixi run python tools/evaluation/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
   named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
-- `pixi run python tools/evaluation/ladder.py <name>` — one candidate against the top of the
-  newest round-robin, over both sides and both kickoffs.
+- `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
+  of the reference pool (`tools/evaluation/pools/pool_v1.json`). The way to judge a strategy.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
 only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
-**In the round-robin**, in order of the 2026-10-10 standings (below). A round-robin or a
-ladder with no strategies named plays these.
+**In the round-robin**, in order of the 2026-10-10 standings (below). A round-robin with no
+strategies named plays these.
 
 | Strategy | Description |
 |---|---|
@@ -34,9 +34,9 @@ ladder with no strategies named plays these.
 | `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
 
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
-or a ladder pool unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
-kept strategies and tests build on some of them. A retired strategy comes back by laddering
-against the round-robin's top.
+unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
+kept strategies and tests build on some of them. A retired strategy comes back by being judged
+with `evaluate.py` against the pool.
 
 | Strategy | Description |
 |---|---|
@@ -52,6 +52,10 @@ against the round-robin's top.
 | `shadow_switch` | `SwitchOfPlayTactic` relay attack + `ShadowAndMarkTactic` defense, 3/2. |
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
+
+Strategies are judged with `evaluate.py` against the reference pool `pool_v1`
+(`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). The round-robin results below are a
+snapshot of the catalog, not the verdict on any one strategy.
 
 ## Latest results
 

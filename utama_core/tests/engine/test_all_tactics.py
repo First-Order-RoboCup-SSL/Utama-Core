@@ -353,7 +353,7 @@ def test_press_and_contain_goes_straight_for_a_fully_loose_ball(runner_factory):
 
 
 def test_press_and_contain_picks_the_closest_robot_as_presser(runner_factory):
-    """Found live (competitive `full_match_tournament.py` stuck-window sweep,
+    """Found live (competitive round-robin stuck-window sweep,
     2026-09-01): the scheduler hands `tick()` a numerically-sorted
     `robot_ids` tuple (`Strategy._run_step`'s `tuple(sorted(robot_ids))`),
     but `presser_id = robot_ids[0]` treated that as "closest to the ball" —

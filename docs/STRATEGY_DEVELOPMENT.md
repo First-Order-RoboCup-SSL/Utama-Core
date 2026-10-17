@@ -120,7 +120,7 @@ difference evicts the records, says the fingerprint missed a dependency, and fai
 Use `--reuse` on every run: the bench's baseline side then costs
 nothing while its code is unchanged.
 
-**What counts as better.** Results: goals and W-D-L in matches, and the bench's effect on goals per match.
+**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference pool. A round-robin's W-D-L and the scenario bench's estimate of goals per match are diagnostics.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until results move: a change needs a reason in game
 terms, and a bench gain that matches don't confirm means distrust the bench, not that the

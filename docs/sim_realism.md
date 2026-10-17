@@ -84,7 +84,7 @@ friction). **Within** means kick-to-kick noise for the same robot.
 | Kick speed: between and within | How much time the keeper has; pass weight | Yes: peak ball speed after each kick, per team | Fixed |
 | Kick direction error | Wide rate (6% vs 22%) | Partly: shot miss distance, pass error relative to the receiver | None: exact |
 | Robot top speed, acceleration, braking, turn rate | Who reaches the ball first | Yes: from the tracker, per robot | One limit for all robots (2 m/s for evaluation) |
-| Vision noise and dropped frames (ball especially, also when blocked) | Every decision; keeper tracking | Yes from raw vision packets in the logs; the converter currently reads the filtered tracker | `rsim_noise`, `rsim_vanishing` in `StrategyRunner`, unused by the round-robin |
+| Vision noise and dropped frames (ball especially, also when blocked) | Every decision; keeper tracking | Yes from raw vision packets in the logs; the converter currently reads the filtered tracker | Yes: `SimNoise` (`--sim-noise`, the pool's `sim_noise`) in `run_match`, the round-robin and `evaluate.py`; `rsim_noise` and `rsim_vanishing` in `StrategyRunner` are its older form |
 | Dribbler: hold strength, ball loss when turning or touched, release speed | Possession, passing | Weak: only possession-loss rates as a proxy | Fixed, with the fork's dribbler fixes (`vendor/rSim/FORK_NOTES.md`) |
 | Ball bounce off robots and walls | Rebounds, deflections | Partly: speed before and after contact | Fixed |
 | Robots fielded per team | Defenders in the way of each shot (real 4.5 on average, sim always 6) | Yes: robots on the field in live play, per match | Always 6 |
@@ -332,7 +332,7 @@ Each knob is off by default, so current results are unchanged, and each comes wi
 pins its effect:
 
 - **Latency:** a delay buffer between the strategy's command and rsim (Python). This is the cheapest and probably biggest.
-- **Vision noise and dropped frames:** wire the existing `rsim_noise` and `rsim_vanishing` through `run_match` and the round-robin.
+- **Vision noise and dropped frames:** done. `SimNoise` (`--sim-noise`, the pool's `sim_noise`) goes through `run_match`, the round-robin and `evaluate.py`.
 - **Kick speed noise:** perturb the commanded kick speed (Python).
 - **Kick direction noise:** perturb the direction inside the C++ kicker (fork change, recorded in `FORK_NOTES.md`).
 - **Ball deceleration:** expose the ball's damping or friction in the C++ fork.
@@ -485,7 +485,7 @@ Search over what the repo already composes:
 
 Candidates are scored by `evaluate.py` (match results in the randomized sim, paired seeds; the
 value signal was dropped as a scorer). The 2026-10-11 search (PR #142) is the manual version of this loop: candidates
-written by hand, screened by round-robin, held out on a ladder. Its lesson carries over: a lead
+written by hand, screened by round-robin, held out on a ladder (retired 2026-10-17, replaced by `evaluate.py`). Its lesson carries over: a lead
 from one match per pairing is not evidence.
 
 ## Risks and rules

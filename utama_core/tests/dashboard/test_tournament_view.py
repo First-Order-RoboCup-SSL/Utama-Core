@@ -32,7 +32,7 @@ def test_each_match_carries_the_path_of_its_replay_when_the_file_exists(tmp_path
     assert [r["replay"] for r in loaded["results"]] == ["tournament_1/low_block_vs_three_slot.npz", None]
 
 
-def test_full_match_tournament_replays_are_found_by_their_side_and_kickoff_tag(tmp_path, monkeypatch):
+def test_replays_with_side_and_kickoff_tags_are_found(tmp_path, monkeypatch):
     run = _write_run(
         tmp_path,
         [

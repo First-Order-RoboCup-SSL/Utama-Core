@@ -1,5 +1,5 @@
 """match.py — shared match-construction/running mechanics for the
-evaluation drivers (`round_robin.py`, `ladder.py`).
+evaluation drivers (`round_robin.py`, `evaluate.py`).
 
 Why this exists: `round_robin.py`'s `run_match` and the since-retired
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
@@ -98,8 +98,7 @@ def _stats_to_dict(stats) -> dict:
 class MatchResult:
     """One match's outcome. `a_is_right`/`a_kicks_off` default to the
     `round_robin.py`'s fixed convention (config_a starts on the right and
-    kicks off the first half; with halves the teams change ends at half-time) — `ladder.py` passes
-    both explicitly per match.
+    kicks off the first half; with halves the teams change ends at half-time).
     """
 
     config_a: str

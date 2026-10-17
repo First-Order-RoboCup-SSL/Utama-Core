@@ -22,9 +22,8 @@ Every script in the repository, by what it is for. Run them from the repository 
 
 | Script | Purpose |
 |---|---|
-| `tools/evaluation/round_robin.py` | Every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`. `--pair A B` plays one match; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. `--sim-noise JSON` (inline or a file) plays every match with the same seeded latency, kick speed and direction noise, ball friction, motion limits and vision noise (`SimNoise`, `docs/STRATEGY_DEVELOPMENT.md`). The ground truth for which strategy is better |
+| `tools/evaluation/round_robin.py` | The whole-catalog health and stall check: every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`, and adds its matches to the evaluation ledger. `--pair A B` plays one match; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. `--sim-noise JSON` (inline or a file) plays every match with the same seeded latency, kick speed and direction noise, ball friction, motion limits and vision noise (`SimNoise`, `docs/STRATEGY_DEVELOPMENT.md`). A single strategy is judged with `evaluate.py`, not by its place here |
 | `tools/evaluation/evaluate.py` | One or more candidates against the champion of a fixed reference pool (`tools/evaluation/pools/pool_v1.json`), in rounds under seeded sim noise, until its paired results against the champion say better (P >= 0.99), worse (P <= 0.2) or undecided after 6 rounds; `--held-out` plays the pool's held-out opponents before promoting. Results go to the evaluation ledger `replays/eval/ledger.jsonl` (round-robins add theirs too), reports to `replays/eval/reports/`; no replays kept. The way to judge a strategy (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy") |
-| `tools/evaluation/ladder.py` | One candidate against a reference pool (default: the top 5 of the newest complete round-robin): mirrored pairs over side and kickoff, up to 8 matches per opponent, stopping once a pairing is clear (`decided`). Reuses and fills the round-robin's match cache; writes `replays/ladder_<id>/ladder.json`. A cheaper check of one strategy than a round-robin, not a ranking of all |
 | `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
 | `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |
 
@@ -39,9 +38,16 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
 | `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates the scenario bench weights by. See [signals.md](signals.md#where-do-goals-come-from) |
 | `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges for the sim-realism plan ([sim_realism.md](sim_realism.md)): ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
-| `tools/bench_vs_standings.py` | How well the scenario bench's effect on goal difference per match predicts a round-robin's, for several candidates against one baseline (Pearson, Spearman) |
-| `tools/metric_correlation.py` | Offline study of which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
+
+### Validation studies
+
+These check how far the bench and cheap metrics agree with round-robin results. They do not judge a strategy: use `evaluate.py`.
+
+| Script | Purpose |
+|---|---|
+| `tools/bench_vs_standings.py` | How well the scenario bench's effect on goal difference per match predicts a round-robin's, for several candidates against one baseline (Pearson, Spearman) |
+| `tools/metric_correlation.py` | Which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 
 ## Real matches
 
