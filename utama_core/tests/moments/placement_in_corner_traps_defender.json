@@ -12,7 +12,7 @@
     "keeps_clear",
     "ball_placement_interference"
   ],
-  "known_failure": "actions._reachable_on_circle only rotates a push-out target out of the opponent box margin, not back onto the pitch",
+  "known_failure": "fastpathplanning planner: robot 2 starts 0.18 m from the placer, inside its 0.216 m clearance, so every segment out of there collides, the straight one away from it too, and the detour runs back through the placer (the push-out target itself is fixed: actions._reachable_on_circle)",
   "designated_position": [
     4.0,
     2.5

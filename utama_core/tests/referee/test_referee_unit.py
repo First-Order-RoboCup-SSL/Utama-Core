@@ -1901,6 +1901,29 @@ class TestDirectFreeTheirsStep:
         assert (target - Vector2D(-2.5, 0.0)).mag() == pytest.approx(0.8)
         assert target.x >= -3.5 + 0.25 + 0.28  # outside the planner's margin round the box
 
+    def test_robot_by_a_ball_in_the_corner_clears_round_the_ball_onto_the_pitch(self, monkeypatch):
+        """Ball at (4.0, 2.5): straight out from it the robot's spot is off the pitch, and
+        clamped back on (x <= 4.4) it was 0.48 m from the ball, so the robot never left
+        (moment placement_in_corner_traps_defender)."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+        monkeypatch.setattr(
+            referee_actions, "move", lambda game, mc, rid, target, oren, dribbling=False: captured.append(target)
+        )
+
+        robots = {0: _robot(0, 4.28, 2.36)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_right=True, ball=_ball(4.0, 2.5))
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        (target,) = captured
+        assert (target - Vector2D(4.0, 2.5)).mag() == pytest.approx(0.8)
+        assert referee_actions._clamp_to_field(target, game) == target
+
     def test_all_robots_get_commands(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 

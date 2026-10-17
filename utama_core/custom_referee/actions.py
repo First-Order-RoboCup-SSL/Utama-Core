@@ -236,12 +236,14 @@ def _in_planner_opp_defense_margin(game, point: Vector2D) -> bool:
 
 def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float) -> Vector2D:
     """`point` (on the circle round `center`), or the nearest point of that circle
-    the planner will drive to.
+    on the pitch that the planner will drive to.
 
     A free kick 1 m in front of the opponent box pushed a robot between the ball and
     the box straight toward the box; the planner stopped it 0.48 m from the ball, a
-    Defender Too Close foul every free kick."""
-    if not _in_planner_opp_defense_margin(game, point):
+    Defender Too Close foul every free kick. A placement near a corner pushed a robot
+    off the pitch; clamped back on, its target was still inside the circle and it never
+    left (moment placement_in_corner_traps_defender)."""
+    if not _in_planner_opp_defense_margin(game, point) and _clamp_to_field(point, game) == point:
         return point
     base = math.atan2(point.y - center.y, point.x - center.x)
     for step in range(1, 37):
