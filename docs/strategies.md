@@ -59,29 +59,33 @@ snapshot of the catalog, not the verdict on any one strategy.
 
 ## Latest results
 
-**Round-robin** (2026-10-10, strategy-guard at a17e2791, the 12 strategies above, 66 matches,
-600 s, `replays/tournament_20261010_090819/summary.json`). Points are 3 a win, 1 a draw; 8 of 66
-matches were draws. No match stalled; 99% of 1802 restarts reached NORMAL_START.
+**Round-robin** (2026-10-17, sim-realism-20261016 at 423f63a0, the 12 strategies above, 66
+matches, two halves of 300 s of playing time, seeded sim noise `v3_seed2`,
+`replays/tournament_20261017_151052/summary.json`). Points are 3 a win, 1 a draw; 14 of 66
+matches were draws. 4 matches stalled (three committed robots frozen about 10 s, and one kick-off
+that waited the referee's 15 s cap, fixed after this run in 1731e904); 97% of 3232 restarts
+reached NORMAL_START.
 
-Against the 2026-10-05 run: the retired ten are gone from the pool, so every strategy's record is
-now against the top 12 only; the teams change ends at half-time; and an aimless clearance is a free
-kick at the kick point. `split_shape` won all 11; `clear_danger`, fourth before, is last.
+Against the 2026-10-10 run: rsim is our fork with the v3 sim noise (latency, motion limits, ball
+friction, kick direction), and restarts, ball placement and the carry limit were fixed, so goals
+fell from 7.1 a match to 4.0 and the results are not comparable with earlier runs.
+`split_shape` is still first, unbeaten; `counter_flow`, second before, is eleventh.
 What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 11-0-0 | 80-26 | 3.00 |
-| `counter_flow` | 7-2-2 | 35-24 | 2.09 |
-| `score_aware_counter_flow` | 6-2-3 | 32-24 | 1.82 |
-| `press_and_pass` | 5-2-4 | 40-35 | 1.55 |
-| `clear_press_plus` | 5-2-4 | 34-31 | 1.55 |
-| `high_press` | 5-1-5 | 36-47 | 1.45 |
-| `tiki_taka_plus` | 5-1-5 | 33-48 | 1.45 |
-| `give_and_go_solo` | 5-0-6 | 44-51 | 1.36 |
-| `overload_press` | 4-0-7 | 52-51 | 1.09 |
-| `press_trigger_flow` | 2-2-7 | 26-35 | 0.73 |
-| `decoy_and_overload` | 2-2-7 | 38-55 | 0.73 |
-| `clear_danger` | 1-2-8 | 21-44 | 0.45 |
+| `split_shape` | 10-1-0 | 66-14 | 2.82 |
+| `clear_press_plus` | 5-5-1 | 14-9 | 1.82 |
+| `overload_press` | 6-2-3 | 22-18 | 1.82 |
+| `clear_danger` | 5-2-4 | 20-24 | 1.55 |
+| `tiki_taka_plus` | 5-1-5 | 23-21 | 1.45 |
+| `high_press` | 4-3-4 | 24-27 | 1.36 |
+| `press_trigger_flow` | 4-1-6 | 13-19 | 1.18 |
+| `give_and_go_solo` | 3-3-5 | 20-30 | 1.09 |
+| `press_and_pass` | 3-3-5 | 14-28 | 1.09 |
+| `decoy_and_overload` | 3-2-6 | 16-27 | 1.00 |
+| `counter_flow` | 2-4-5 | 17-21 | 0.91 |
+| `score_aware_counter_flow` | 2-1-8 | 16-27 | 0.64 |
 
 ## Known open bugs
 
