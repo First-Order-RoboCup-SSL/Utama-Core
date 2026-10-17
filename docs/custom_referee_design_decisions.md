@@ -22,6 +22,36 @@ Decisions from the audit of `CustomReferee` against the SSL rulebook. Numbers ar
    (y = ±3.0m) behind the mark. Fully off-field placement is deferred until the simulator
    supports it. Penalties stay disabled in the built-in profiles.
 
+## Foul to restart
+
+Which violation gives which restart, and to whom, as the code does it (`_handle_goal` and
+`_handle_foul` in `state_machine.py`). A stopping violation always goes through STOP first; when it
+carries a spot, the team that gets the restart places the ball there before the restart.
+
+```mermaid
+flowchart LR
+    goal["Goal<br/>rules/goal_rule.py"]
+    ft["Free-kick fouls<br/>out_of_bounds_rule.py (incl. aimless kick), double_touch_rule.py,<br/>keeper_held_ball_rule.py, excessive_dribbling_rule.py,<br/>pushing_rule.py (one side at fault), penalty_time_limit_rule.py"]
+    pen["Extra defender touches ball in own box<br/>defense_area_rule.py"]
+    fs["Pushing with similar force, no progress<br/>pushing_rule.py, no_progress_rule.py"]
+    stop2["2nd Defense Area Stoppage foul<br/>defense_area_stoppage_rule.py"]
+    nons["Non-stopping: ball speed, crashing, keep-out, attacker in box,<br/>robot stop speed, placement interference, 1st stoppage foul"]
+    o1["Kick-off for the team that conceded<br/>BALL_PLACEMENT at centre, then PREPARE_KICKOFF"]
+    o2["Free kick for the other team<br/>BALL_PLACEMENT at spot, then DIRECT_FREE<br/>out of bounds with no known last touch: STOP only"]
+    o3["Penalty for the attacking team, no foul counter<br/>BALL_PLACEMENT at penalty mark, then PREPARE_PENALTY"]
+    o4["FORCE_START where the ball lies<br/>no placement, sim teleports the ball"]
+    o5["HALT; the interrupted restart is queued again on resume"]
+    o6["Foul counter and cards only<br/>command unchanged"]
+
+    goal -- "goal" --> o1
+    goal -- "scorer fouled in last 2 s: invalid_goal" --> o2
+    ft --> o2
+    pen --> o3
+    fs --> o4
+    stop2 --> o5
+    nons --> o6
+```
+
 ## Rulebook audit (2026-09-28, Division B)
 
 Checked against the [SSL rulebook](https://robocup-ssl.github.io/ssl-rules/sslrules.html).
