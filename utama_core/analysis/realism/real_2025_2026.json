@@ -1,7 +1,7 @@
 {
  "sources": [
-  "/home/isaac/dev/ssl/official-logs/2025",
-  "/home/isaac/dev/ssl/official-logs/2026"
+  "official-logs/2025",
+  "official-logs/2026"
  ],
  "matches": 53,
  "attempts": 959,

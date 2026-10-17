@@ -72,7 +72,7 @@ def main(argv=None) -> int:
 
     if a.real:
         records = _records(a.real, a.real_cache, a.workers, a.refresh)
-        ref = scorecard.reference(records, [str(x) for x in a.real])
+        ref = scorecard.reference(records, ["/".join(x.resolve().parts[-2:]) for x in a.real])
         a.reference.write_text(json.dumps(ref, indent=1) + "\n")
         c = ref["xg_check"]
         print(

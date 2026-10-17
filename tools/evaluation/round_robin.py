@@ -19,6 +19,8 @@ Configs are short names (`tiki_taka`); none means every config not in RETIRED. F
     --both-sides            play each pair twice, sides swapped
     --control-scheme NAME   planner (fpp, trajsample, ...)
     --fuzz-restarts SEED    inject random legal restarts; --fuzz-interval LO HI sets the gap
+    --sim-noise JSON        seeded sim noise for every match: a SimNoise as inline JSON or a file
+    --match-seconds S       match length in sim seconds (default 1200)
     --max-workers N, --sequential, --no-save, -v/--verbose, -h/--help
 
 What this does

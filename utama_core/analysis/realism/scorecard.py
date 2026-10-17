@@ -77,11 +77,6 @@ def usable(records: list[dict]) -> list[dict]:
     return out
 
 
-def fit_model(real: list[dict]) -> xg.Logit:
-    X, y, _ = xg.design(real)
-    return xg.Logit().fit(X, y)
-
-
 def _react(a, role, key):
     """Onsets (inf where none came in time) of `role` on shots leaving at least `REACT_WINDOW_S`
     to react; toward-line onsets only for a robot off the line."""
