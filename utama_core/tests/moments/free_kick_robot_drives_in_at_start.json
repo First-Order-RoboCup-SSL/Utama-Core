@@ -1,0 +1,154 @@
+{
+  "name": "free_kick_robot_drives_in_at_start",
+  "note": "Round-robin tournament_20261017_002337, decoy_and_overload vs overload_press, t=156.9 s (the source's keep_out foul by robot 3 at 157.72 s): their direct free kick at (2.59, 2.73), robot 3 of ours starts 0.7 m from the ball and drives in to 0.50 m within 0.3 s of the restart. The keep-out circle is 0.5 m: driving in is a keep_out foul. Fails in 6 of 6 plays (5 seeds plus the stored one twice); fails at 14038121 too.",
+  "source": {
+    "replay": "replays/tournament_20261017_002337/decoy_and_overload_vs_overload_press.npz",
+    "t": 156.9
+  },
+  "strategy": "all",
+  "opponent": "build_overload_press_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "keeps_clear"
+  ],
+  "known_failure": "robot 3 drives in from 0.70 m to 0.50 m of the ball in the first 0.3 s of their direct free kick; cause not diagnosed",
+  "designated_position": null,
+  "sim_noise": {
+    "seed": 2,
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ]
+  },
+  "scenario": {
+    "referee_command": "DIRECT_FREE_BLUE",
+    "ball": [
+      2.59074068069458,
+      2.7292206287384033,
+      1.0393798351287842,
+      -0.42919573187828064
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.395673751831055,
+        "y": 0.2610834240913391,
+        "orientation": 2.2118890285491943,
+        "vx": -0.012282343581318855,
+        "vy": 0.0036594367120414972
+      },
+      {
+        "id": 1,
+        "x": -2.9337546825408936,
+        "y": -1.1160341501235962,
+        "orientation": 0.7587144374847412,
+        "vx": -0.013336235657334328,
+        "vy": 0.009722684510052204
+      },
+      {
+        "id": 2,
+        "x": -1.6476600170135498,
+        "y": 0.7505244016647339,
+        "orientation": 0.4893975257873535,
+        "vx": 0.03140341490507126,
+        "vy": -0.012242604978382587
+      },
+      {
+        "id": 3,
+        "x": 3.317014455795288,
+        "y": 2.6057796478271484,
+        "orientation": -0.1893501579761505,
+        "vx": -0.030436228960752487,
+        "vy": -0.029171954840421677
+      },
+      {
+        "id": 4,
+        "x": 2.8358922004699707,
+        "y": 0.9418628811836243,
+        "orientation": 1.6681256294250488,
+        "vx": -0.004174763336777687,
+        "vy": 0.014310195110738277
+      },
+      {
+        "id": 5,
+        "x": 3.442814350128174,
+        "y": 1.0229880809783936,
+        "orientation": 2.0024969577789307,
+        "vx": 0.04609063267707825,
+        "vy": 0.004986954852938652
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.406381130218506,
+        "y": -0.23925647139549255,
+        "orientation": 0.40882471203804016,
+        "vx": -0.008572385646402836,
+        "vy": 0.015857616439461708
+      },
+      {
+        "id": 1,
+        "x": 2.013552188873291,
+        "y": 0.758510410785675,
+        "orientation": 1.304213285446167,
+        "vx": 0.014965553767979145,
+        "vy": 0.010513361543416977
+      },
+      {
+        "id": 2,
+        "x": 2.217482328414917,
+        "y": 0.017806075513362885,
+        "orientation": 1.4338668584823608,
+        "vx": -0.02771521918475628,
+        "vy": -0.04047519341111183
+      },
+      {
+        "id": 3,
+        "x": 1.7843154668807983,
+        "y": -0.7558035254478455,
+        "orientation": 1.3496800661087036,
+        "vx": 0.05328628048300743,
+        "vy": 0.0071044741198420525
+      },
+      {
+        "id": 4,
+        "x": 1.7519184350967407,
+        "y": 0.7385159730911255,
+        "orientation": 1.2080717086791992,
+        "vx": 0.005364614073187113,
+        "vy": 0.01009127777069807
+      },
+      {
+        "id": 5,
+        "x": 2.5028746128082275,
+        "y": 2.8015642166137695,
+        "orientation": -2.5497169494628906,
+        "vx": 1.0699447393417358,
+        "vy": -0.07357250154018402
+      }
+    ]
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "name": "placement_robot_drives_in_mid_pitch",
+  "note": "Round-robin tournament_20261017_002337, counter_flow vs score_aware_counter_flow, t=122.5 s: their ball placement to (2.5, 0.74) (the source's keep_out foul by robot 5 at 123.35 s came in their free kick that followed). Robot 4 of ours drives in from 0.65 m to 0.49 m of the ball during their placement, inside the keep-out circle. Our side must keep out of their placement and must not drive in. Passes now; FAILED at 14038121, the code before the planner fix c64fc6f9, so the planner fix covers it. Protected regression.",
+  "source": {
+    "replay": "replays/tournament_20261017_002337/counter_flow_vs_score_aware_counter_flow.npz",
+    "t": 122.5
+  },
+  "strategy": "all",
+  "opponent": "build_score_aware_counter_flow_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "keeps_clear"
+  ],
+  "known_failure": null,
+  "designated_position": [
+    2.5,
+    0.73833464762983
+  ],
+  "sim_noise": {
+    "seed": 2,
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ]
+  },
+  "scenario": {
+    "referee_command": "BALL_PLACEMENT_BLUE",
+    "ball": [
+      2.499613046646118,
+      0.739011287689209,
+      -0.017688587307929993,
+      0.003960727714002132
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.399986743927002,
+        "y": 0.38434505462646484,
+        "orientation": 3.068960666656494,
+        "vx": 0.007426020223647356,
+        "vy": 0.01688084565103054
+      },
+      {
+        "id": 1,
+        "x": 2.9468634128570557,
+        "y": -0.029310377314686775,
+        "orientation": -1.007601022720337,
+        "vx": -0.015627240762114525,
+        "vy": -0.01603234000504017
+      },
+      {
+        "id": 2,
+        "x": 2.8821847438812256,
+        "y": 1.8997732400894165,
+        "orientation": -3.010634660720825,
+        "vx": -0.011780944652855396,
+        "vy": -0.015498174354434013
+      },
+      {
+        "id": 3,
+        "x": 3.0620038509368896,
+        "y": 0.2510182559490204,
+        "orientation": -0.720249354839325,
+        "vx": 0.08946499228477478,
+        "vy": -0.0671628788113594
+      },
+      {
+        "id": 4,
+        "x": 2.5736711025238037,
+        "y": 0.009045029059052467,
+        "orientation": -1.5071358680725098,
+        "vx": 0.025471419095993042,
+        "vy": -0.2905663549900055
+      },
+      {
+        "id": 5,
+        "x": 2.416513442993164,
+        "y": 0.10382003337144852,
+        "orientation": -1.7725669145584106,
+        "vx": 0.24410876631736755,
+        "vy": 0.306346595287323
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.408724784851074,
+        "y": 0.40765130519866943,
+        "orientation": 0.7368849515914917,
+        "vx": 0.01618080772459507,
+        "vy": -0.02199448272585869
+      },
+      {
+        "id": 1,
+        "x": 0.9694547653198242,
+        "y": 2.583130121231079,
+        "orientation": -2.83927583694458,
+        "vx": 0.017511464655399323,
+        "vy": 0.01774093508720398
+      },
+      {
+        "id": 2,
+        "x": 1.0189850330352783,
+        "y": -0.05494910478591919,
+        "orientation": 2.9494831562042236,
+        "vx": 0.016077173873782158,
+        "vy": -0.01805715635418892
+      },
+      {
+        "id": 3,
+        "x": 0.9458892345428467,
+        "y": 0.9254980683326721,
+        "orientation": -2.9719526767730713,
+        "vx": 0.011257879436016083,
+        "vy": 0.00039845824358053505
+      },
+      {
+        "id": 4,
+        "x": -2.313833713531494,
+        "y": 0.6179143190383911,
+        "orientation": 2.8177902698516846,
+        "vx": 0.020992867648601532,
+        "vy": -0.00785255990922451
+      },
+      {
+        "id": 5,
+        "x": 0.6030757427215576,
+        "y": 1.1093614101409912,
+        "orientation": 3.1113860607147217,
+        "vx": -0.023117583245038986,
+        "vy": 0.015441475436091423
+      }
+    ]
+  }
+}
