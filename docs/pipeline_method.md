@@ -1,8 +1,6 @@
 # Pipeline method
 
-![Dataflow Diagram](../assets/images/pipeline_new.drawio.png)
-
-(The diagram above is the March 2025 picture and is out of date: the names in it no longer exist in the code. The current one-tick flow is the Mermaid diagram in the [README](../README.md#system-design).)
+The one-tick diagram: [architecture.md](architecture.md#one-tick).
 
 How vision, robot and referee data become one `Game` state, and how one tick turns that
 state into robot commands. Everything below runs inside `StrategyRunner`

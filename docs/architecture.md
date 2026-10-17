@@ -4,9 +4,64 @@ How the packages under `utama_core/` depend on each other, and how one tick flow
 
 ## One tick
 
-The flow of one tick, from vision to robot, is the Mermaid diagram in the
-[README](../README.md#system-design). [pipeline_method.md](pipeline_method.md) describes the same
-path in more detail.
+The flow of one tick of `StrategyRunner`, from vision to robot (module paths under `utama_core/`; the
+same steps in words: [README](../README.md#system-design)). [pipeline_method.md](pipeline_method.md)
+describes the same path in more detail.
+
+```mermaid
+flowchart TD
+    subgraph input["Input"]
+        vis["Vision frames<br/>data_processing/receivers/vision_receiver.py (real, grSim)<br/>or rsim observations"]
+        refsrc["Referee data<br/>custom_referee/custom_referee.py (rsim)<br/>or data_processing/receivers/referee_receiver.py"]
+    end
+
+    subgraph world["World model (data_processing/refiners/)"]
+        pos["PositionRefiner<br/>refiners/position.py"]
+        vel["VelocityRefiner<br/>refiners/velocity.py"]
+        rinfo["RobotInfoRefiner<br/>refiners/robot_info.py"]
+        rref["RefereeRefiner<br/>refiners/referee.py"]
+        game["Game / GameFrame<br/>entities/game/game.py"]
+    end
+
+    subgraph decision["Decision (engine/, strategy/)"]
+        strat["Strategy.tick<br/>engine/strategy.py"]
+        restart{"Restart, STOP or TIMEOUT?<br/>engine/referee_override.py"}
+        halt{"HALT?<br/>engine/referee_reset.py"}
+        ovr["RefereeOverride.tick<br/>engine/referee_override.py<br/>custom_referee/actions.py"]
+        part["Partitioner (robots per tactic)<br/>engine/strategy.py, strategy/*.py"]
+        tac["Tactic.tick<br/>tactics/*.py"]
+        skill["Skills<br/>skills/src/*.py"]
+    end
+
+    subgraph motion["Motion (motion_planning/)"]
+        mc["MotionController.calculate<br/>motion_planning/src/controllers/<br/>fpp, dwa, trajsample"]
+    end
+
+    subgraph output["Output (team_controller/)"]
+        ctrl["RobotController.send_robot_commands<br/>team_controller/src/controllers/"]
+        rsim["rsim<br/>rsoccer_simulator/ (sim/rsim_robot_controller.py)"]
+        grsim["grSim over UDP<br/>sim/grsim_robot_controller.py"]
+        real["Real robots over radio<br/>real/real_robot_controller.py"]
+    end
+
+    vis --> pos
+    pos --> vel --> rinfo --> rref
+    refsrc --> rref
+    rref --> game
+    game --> strat
+    game -. "previous frame" .-> refsrc
+    strat --> restart
+    restart -- "yes" --> ovr
+    restart -- "no" --> halt
+    halt -- "yes: no tactic commands" --> ctrl
+    halt -- "no" --> part
+    part --> tac --> skill --> mc
+    ovr --> mc
+    mc --> ctrl
+    ctrl --> rsim
+    ctrl --> grsim
+    ctrl --> real
+```
 
 ## Match data flow
 

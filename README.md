@@ -1,5 +1,6 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 # Utama Core
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 
 First Order Robotics' software stack for [RoboCup SSL](https://ssl.robocup.org/) (Small Size
 League), where teams of six autonomous robots play football. It covers vision and referee
@@ -8,19 +9,19 @@ strategy layer that decides what every robot does.
 
 ## What our strategies look like
 
-Every strategy in the latest round-robin on one page, attacking right, best first (the number is points
-per match). The **position map**: where the five outfield robots stand in live play while their team
-has the ball, darker for more time; dots are each robot's mean position.
+Every strategy from the latest round-robin, attacking right, best first (points per match after the
+name). **Position maps**: where the five outfield robots stand in live play while their team has the
+ball, darker for more time; dots are each robot's mean position.
 
 ![Position maps with the ball](docs/img/signals/positions_attack.png)
 
-The **shot map**: every shot at the spot it was struck from (filled: a goal), with the shots each
-strategy conceded faded at the other end.
+**Shot maps**: every shot from the spot it was struck (filled: a goal); conceded shots faded at the
+other end.
 
 ![Shot maps](docs/img/signals/shots.png)
 
-Drawn by `tools/pitch_maps.py` from a round-robin's replays. What they show, and the other pictures
-(one match over time, a restart, the motion planner): [docs/visual_guide.md](docs/visual_guide.md).
+Drawn by `tools/pitch_maps.py` from a round-robin's replays. What they show, and more pictures (one
+match over time, a restart, the motion planner): [docs/visual_guide.md](docs/visual_guide.md).
 
 ## Quick start
 
@@ -44,6 +45,7 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | Task | Start here |
 |---|---|
 | Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
+| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/triage.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
 | The referee | [docs/custom_referee.md](docs/custom_referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
@@ -86,65 +88,21 @@ Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; s
 
 ## System design
 
-One tick of `StrategyRunner`, from vision to robot (module paths under `utama_core/`):
+One tick of `StrategyRunner` (paths under `utama_core/`):
 
-```mermaid
-flowchart TD
-    subgraph input["Input"]
-        vis["Vision frames<br/>data_processing/receivers/vision_receiver.py (real, grSim)<br/>or rsim observations"]
-        refsrc["Referee data<br/>custom_referee/custom_referee.py (rsim)<br/>or data_processing/receivers/referee_receiver.py"]
-    end
+1. **Input**: vision frames (rsim observations, grSim or SSL Vision) and referee data (the in-process
+   `custom_referee/` or the official GameController).
+2. **World model**: `data_processing/refiners/` turn them into one `Game` state (positions,
+   velocities, robot info, referee).
+3. **Decision**: `engine/strategy.py`. During a restart, STOP or timeout the referee override
+   (`engine/referee_override.py`) places the robots; otherwise the strategy (`strategy/`) splits the
+   robots between tactics (`tactics/`), which drive per-robot skills (`skills/`).
+4. **Motion**: `motion_planning/` turns each target into velocities (`fpp` by default; `dwa`,
+   `trajsample`).
+5. **Output**: `team_controller/` sends the commands to rsim, grSim or the real robots.
 
-    subgraph world["World model (data_processing/refiners/)"]
-        pos["PositionRefiner<br/>refiners/position.py"]
-        vel["VelocityRefiner<br/>refiners/velocity.py"]
-        rinfo["RobotInfoRefiner<br/>refiners/robot_info.py"]
-        rref["RefereeRefiner<br/>refiners/referee.py"]
-        game["Game / GameFrame<br/>entities/game/game.py"]
-    end
-
-    subgraph decision["Decision (engine/, strategy/)"]
-        strat["Strategy.tick<br/>engine/strategy.py"]
-        restart{"Restart, STOP or TIMEOUT?<br/>engine/referee_override.py"}
-        halt{"HALT?<br/>engine/referee_reset.py"}
-        ovr["RefereeOverride.tick<br/>engine/referee_override.py<br/>custom_referee/actions.py"]
-        part["Partitioner (robots per tactic)<br/>engine/strategy.py, strategy/*.py"]
-        tac["Tactic.tick<br/>tactics/*.py"]
-        skill["Skills<br/>skills/src/*.py"]
-    end
-
-    subgraph motion["Motion (motion_planning/)"]
-        mc["MotionController.calculate<br/>motion_planning/src/controllers/<br/>fpp, dwa, trajsample"]
-    end
-
-    subgraph output["Output (team_controller/)"]
-        ctrl["RobotController.send_robot_commands<br/>team_controller/src/controllers/"]
-        rsim["rsim<br/>rsoccer_simulator/ (sim/rsim_robot_controller.py)"]
-        grsim["grSim over UDP<br/>sim/grsim_robot_controller.py"]
-        real["Real robots over radio<br/>real/real_robot_controller.py"]
-    end
-
-    vis --> pos
-    pos --> vel --> rinfo --> rref
-    refsrc --> rref
-    rref --> game
-    game --> strat
-    game -. "previous frame" .-> refsrc
-    strat --> restart
-    restart -- "yes" --> ovr
-    restart -- "no" --> halt
-    halt -- "yes: no tactic commands" --> ctrl
-    halt -- "no" --> part
-    part --> tac --> skill --> mc
-    ovr --> mc
-    mc --> ctrl
-    ctrl --> rsim
-    ctrl --> grsim
-    ctrl --> real
-```
-
-How vision, robot and referee data become one `Game` state, and the rest of the tick in more
-detail: [docs/pipeline_method.md](docs/pipeline_method.md).
+The same tick as a diagram, with every module: [docs/architecture.md](docs/architecture.md). How
+vision, robot and referee data become one `Game`: [docs/pipeline_method.md](docs/pipeline_method.md).
 
 ## Contributing
 
@@ -158,7 +116,3 @@ Work on a branch and open a pull request into `main`. A pull request needs:
 5. an approval from an assigned reviewer.
 
 Editor setup, pre-commit troubleshooting and the pixi environments: [docs/contributing.md](docs/contributing.md).
-
-## Milestones
-
-- 2024 November 20 - First goal in grSim (featuring ray casting)
