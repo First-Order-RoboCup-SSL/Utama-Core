@@ -3,12 +3,14 @@ import json
 import numpy as np
 
 from tools.match_timeline import (
+    FLIP_BACKS_PER_MIN,
+    FLIP_S,
     MIN_LIVE_S,
     OTHER,
     SLOTS,
-    THRASH_PER_MIN,
     Span,
     Window,
+    flip_backs,
     goalkeeper_ids,
     group_spans,
     lane_summary,
@@ -172,12 +174,13 @@ def test_render_writes_a_png_with_every_panel(tmp_path):
 # --- findings -------------------------------------------------------------------------------------
 
 
-def _window(n_switches: int, live_s: float, robot: int = 4) -> Window:
-    """One robot whose tactic alternates A, B, A, ... so that the lane has exactly `n_switches` switches."""
-    spans = [Span(float(i), float(i + 1), "A" if i % 2 == 0 else "B") for i in range(n_switches + 1)]
+def _window(n_flips: int, live_s: float, robot: int = 4, span_s: float = 0.5) -> Window:
+    """One robot whose tactic alternates A, B, A, ... in `span_s` spans, so the lane has exactly `n_flips`
+    flip-backs when `span_s` < FLIP_S."""
+    spans = [Span(i * span_s, (i + 1) * span_s, "A" if i % 2 == 0 else "B") for i in range(n_flips + 2)]
     return Window(
         t0=0.0,
-        t1=float(n_switches + 1),
+        t1=spans[-1].t1,
         robot_ids=[robot],
         lanes=[spans],
         possession=[[]],
@@ -191,28 +194,44 @@ def _window(n_switches: int, live_s: float, robot: int = 4) -> Window:
     )
 
 
+def test_a_flip_back_is_a_span_shorter_than_flip_s_between_two_of_one_other_tactic():
+    just_under = FLIP_S - 0.01
+    spans = [Span(0.0, 5.0, "A"), Span(5.0, 5.0 + just_under, "B"), Span(5.0 + just_under, 9.0, "A")]
+    assert flip_backs(spans) == [5.0]
+    held = [Span(0.0, 5.0, "A"), Span(5.0, 5.0 + FLIP_S, "B"), Span(5.0 + FLIP_S, 9.0, "A")]
+    assert flip_backs(held) == []  # held for FLIP_S: a real switch, not a flip-back
+    onward = [Span(0.0, 5.0, "A"), Span(5.0, 5.5, "B"), Span(5.5, 9.0, "C")]
+    assert flip_backs(onward) == []  # A -> B -> C moved on
+    gap = [Span(0.0, 5.0, "A"), Span(5.0, 5.2, None), Span(5.2, 5.5, "B"), Span(5.5, 9.0, "A")]
+    assert flip_backs(gap) == [5.2]  # an unassigned gap does not hide it
+
+
 def test_thrash_fires_exactly_at_the_threshold():
-    # 7 switches over 105 s of live play is exactly THRASH_PER_MIN (4.0) per minute.
-    w = _window(7, live_s=7 * 60.0 / THRASH_PER_MIN)
+    # 7 flip-backs over 210 s of live play is exactly FLIP_BACKS_PER_MIN (2.0) per minute.
+    w = _window(7, live_s=7 * 60.0 / FLIP_BACKS_PER_MIN)
     (finding,) = thrash_findings(w, replay="x.npz", side="friendly")
     assert finding.kind == "tactic_thrash" and finding.robots == (4,)
-    assert finding.value == THRASH_PER_MIN and finding.threshold == THRASH_PER_MIN
+    assert finding.value == FLIP_BACKS_PER_MIN and finding.threshold == FLIP_BACKS_PER_MIN
 
 
 def test_thrash_does_not_fire_just_under_the_threshold():
-    just_under = _window(7, live_s=7 * 60.0 / THRASH_PER_MIN + 0.1)  # 3.996 per min
+    just_under = _window(7, live_s=7 * 60.0 / FLIP_BACKS_PER_MIN + 0.1)
     assert thrash_findings(just_under, replay="x.npz", side="friendly") == []
-    one_fewer = _window(6, live_s=7 * 60.0 / THRASH_PER_MIN)  # 3.43 per min
+    one_fewer = _window(6, live_s=7 * 60.0 / FLIP_BACKS_PER_MIN)
     assert thrash_findings(one_fewer, replay="x.npz", side="friendly") == []
 
 
+def test_frequent_switches_held_past_flip_s_are_not_thrash():
+    # 50 switches a minute, each tactic held FLIP_S: switching on possession, not flipping back.
+    assert thrash_findings(_window(50, live_s=60.0, span_s=FLIP_S), replay="x.npz", side="friendly") == []
+
+
 def test_thrash_needs_enough_live_play_for_a_rate():
-    # 50 switches in 20 s of live play would read 150 per minute; too little play to judge.
     assert thrash_findings(_window(50, live_s=MIN_LIVE_S - 10.0), replay="x.npz", side="friendly") == []
     assert len(thrash_findings(_window(50, live_s=MIN_LIVE_S), replay="x.npz", side="friendly")) == 1
 
 
 def test_thrash_rate_divides_by_live_play_not_by_window_length():
-    # The window holds 3 switches and 60 s of live play (its own length, from the lanes, is 4 s): 3 per min.
+    # The window holds 3 flip-backs and 60 s of live play (its own length, from the lanes, is 2.5 s): 3 per min.
     w = _window(3, live_s=60.0)
     assert thrash_findings(w, replay="x.npz", side="friendly", threshold=3.0)[0].value == 3.0

@@ -453,7 +453,9 @@ whoever runs it.
   top. Use it for thrashing (a robot switching tactics every few ticks), a tactic stuck committed, or
   everyone chasing the ball. Friendly side only has tactic lanes (the intentions log is config_a's).
   Thrashing in `split_shape` against `tiki_taka_plus`: robots 2-4 flip between the attack and defence
-  slots about every 1.5 s, in pairs of rows at the same tick:
+  slots about every 1.5 s, in pairs of rows at the same tick. It is not split_shape's alone: most
+  strategies that split attack and defence on possession take a tactic for under 1 s and revert about
+  5 times a minute (the `tactic_thrash` finding, with the numbers per strategy in `match_timeline.py`):
   ![split_shape lanes thrashing between attack and defence slots](img/match_timeline/split_shape_100-160.png)
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind

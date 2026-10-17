@@ -51,12 +51,16 @@ from utama_core.analysis import turnover_breakdown  # noqa: E402
 from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
 
-# A robot whose tactic changes at least this many times per minute of live play gets a `tactic_thrash`
-# finding. Measured on tournament_20261017_151052 (66 matches, 396 friendly robots, rate over live play):
-# the steady strategies (give_and_go_solo, high_press, decoy_and_overload) have medians of 0.00-0.27 per min
-# and 151 robots under 1 per min; the thrashing ones have medians of 9.5-26 per min (split_shape 14.4). Only
-# 18 robots sit between 2 and 6 per min, so 4 (a switch every 15 s of live play) cuts the empty band between.
-THRASH_PER_MIN = 4.0
+# A flip-back is a tactic held for less than FLIP_S between two spans of the same other tactic (A, B, A):
+# the robot reverted before B could do anything. A robot with at least FLIP_BACKS_PER_MIN of them per minute
+# of live play gets a `tactic_thrash` finding. Raw switch rate is not the signal: most strategies switch
+# 10-25 times per live minute by design (attack/defence on possession). Measured on tournament_20261017_151052
+# (66 matches, friendly robots, median flip-backs under 1 s per live min): give_and_go_solo 0.0, decoy_and_overload
+# 0.1, high_press 0.3, overload_press 0.5; counter_flow, clear_danger, clear_press_plus, split_shape,
+# press_trigger_flow, score_aware_counter_flow 4.6-5.6; press_and_pass 13.4. 2 per min (one every 30 s of live
+# play) sits between the steady and the flipping strategies.
+FLIP_S = 1.0
+FLIP_BACKS_PER_MIN = 2.0
 # Under this much live play a rate is noise (one switch in 10 s reads as 6 per minute): no thrash finding.
 MIN_LIVE_S = 30.0
 
@@ -564,26 +568,38 @@ def load_window(npz_path: Path, t0: Optional[float], t1: Optional[float], side: 
     return Window(t0, t1, robot_ids, lanes, possession, ref_spans, tw, dist, keepers, live_s, notes, z)
 
 
+def flip_backs(spans: list[Span], max_s: float = FLIP_S) -> list[float]:
+    """Start times of the tactic spans shorter than `max_s` that sit between two spans of one other tactic
+    (A, B, A; unassigned gaps skipped)."""
+    assigned = [s for s in spans if s.label is not None]
+    return [
+        b.t0
+        for a, b, c in zip(assigned, assigned[1:], assigned[2:])
+        if a.label == c.label != b.label and b.t1 - b.t0 < max_s
+    ]
+
+
 def thrash_findings(
     w: Window,
     *,
     replay: Optional[str],
     side: str,
     image: Optional[str] = None,
-    threshold: float = THRASH_PER_MIN,
+    threshold: float = FLIP_BACKS_PER_MIN,
 ) -> list[Finding]:
-    """One `tactic_thrash` finding per robot whose tactic switches reach `threshold` per minute of live play.
+    """One `tactic_thrash` finding per robot whose flip-backs (`flip_backs`) reach `threshold` per minute of
+    live play.
 
-    Switches are counted over the whole window (as the summary prints them); the rate divides by the live
-    play in it, so a stoppage does not dilute a robot that thrashes in open play. No finding when the window
-    has less than `MIN_LIVE_S` of live play: a rate over a few seconds is noise."""
+    Flip-backs are counted over the whole window; the rate divides by the live play in it, so a stoppage does
+    not dilute a robot that thrashes in open play. No finding when the window has less than `MIN_LIVE_S` of
+    live play: a rate over a few seconds is noise."""
     if w.live_s < MIN_LIVE_S:
         return []
     minutes = w.live_s / 60.0
     out = []
     for rid, spans in zip(w.robot_ids, w.lanes):
-        n = len(switch_times(spans))
-        rate = n / minutes
+        flips = flip_backs(spans)
+        rate = len(flips) / minutes
         if rate >= threshold:
             out.append(
                 Finding(
@@ -596,10 +612,11 @@ def thrash_findings(
                     robots=(rid,),
                     value=rate,
                     threshold=threshold,
-                    unit="per live min",
+                    unit="flip-backs per live min",
                     message=(
-                        f"R{rid} changed tactic {n} times in {minutes:.1f} min of live play "
-                        f"({rate:.2f} per min, threshold {threshold:g})."
+                        f"R{rid} took a tactic for under {FLIP_S:g} s and reverted {len(flips)} times in "
+                        f"{minutes:.1f} min of live play ({rate:.2f} per min, threshold {threshold:g}); "
+                        f"first at t={flips[0]:.1f} s."
                     ),
                     image=image,
                 )
