@@ -107,6 +107,7 @@ def test_explain_writes_the_four_files(run_dir, tmp_path):
         data = (out / name).read_bytes()
         assert data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) < 250_000
     assert json.loads((out / "summary.json").read_text())["candidate"] == "cand"
+    assert (out / "triage" / "index.md").exists()  # the candidate's worst matches, as config_a
 
 
 def test_each_side_counts_its_own_matches_and_goals(run_dir, tmp_path):

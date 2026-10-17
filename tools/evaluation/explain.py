@@ -15,6 +15,7 @@ Writes to DIR:
 - `fouls.png`: each strategy's fouls by rule, one fixed colour per rule (`pitch_maps.plot_fouls`);
 - `summary.json`: the numbers behind the pictures per side, and the paired goal difference per
   opponent (same opponent, seed and colour, as `evaluate.py` pairs them), where the run has them.
+- `triage/`: `tools/triage.py` on the candidate's two worst matches as config_a (`index.md` first).
 
 Everything is in the attacking frame of `pitch_maps.py` (attacking right). Goals come from the
 replay's final referee state (the score), fouls from the match's `.stats.json`.
@@ -24,10 +25,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -43,59 +42,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from tools import pitch_maps as pm  # noqa: E402
 from tools import signal_report as sr  # noqa: E402
+from tools import triage  # noqa: E402
 from tools.evaluation.match import _short_name  # noqa: E402
-from utama_core.replay.columnar_reader import load_columnar_replay  # noqa: E402
+from utama_core.analysis.matches import Match, find_matches  # noqa: E402
 
-STEM = re.compile(r"^(?P<a>.+?)_vs_(?P<b>.+?)(?:_s(?P<seed>\d+))?$")
 ROLES = ("candidate", "champion")
-
-
-@dataclass
-class Match:
-    """One replay in the run dir. `a` is config_a (the friendly side), `b` config_b (enemy)."""
-
-    npz: Path
-    a: str  # short names
-    b: str
-    seed: Optional[int]
-    score_a: Optional[int]  # None when the replay has no referee state to read a score from
-    score_b: Optional[int]
-    fouls: list[dict]
-
-    def job(self) -> tuple[str, str, str, list[dict]]:
-        return (str(self.npz), self.a, self.b, self.fouls)
-
-    def goal_difference(self, name: str) -> Optional[int]:
-        if self.score_a is None:
-            return None
-        return self.score_a - self.score_b if name == self.a else self.score_b - self.score_a
-
-
-def _final_score(npz: Path) -> tuple[Optional[int], Optional[int]]:
-    """The score at the end of a replay: the last referee state the writer stored (scores only
-    change through stored referee messages). Yellow is config_a (friendly) in every run."""
-    replay = load_columnar_replay(npz)
-    if not replay.sparse_referee:
-        return None, None
-    ref = replay.sparse_referee[max(replay.sparse_referee)]
-    return int(ref.yellow_team.score), int(ref.blue_team.score)
-
-
-def find_matches(run_dir: Path, names: set[str]) -> list[Match]:
-    """Every replay in `run_dir` with `names` (short names) on either side, in file-name order."""
-    matches = []
-    for npz in sorted(run_dir.glob("*.npz")):
-        m = STEM.match(npz.name.removesuffix(".npz"))
-        if m is None or not ({m["a"], m["b"]} & names):
-            continue
-        stats = npz.with_name(npz.name.removesuffix(".npz") + ".stats.json")
-        fouls = []
-        if stats.exists():
-            fouls = json.loads(stats.read_text()).get("fouls") or []
-        score_a, score_b = _final_score(npz)
-        seed = int(m["seed"]) if m["seed"] is not None else None
-        matches.append(Match(npz, m["a"], m["b"], seed, score_a, score_b, fouls))
-    return matches
 
 
 def _mean(values: list[Optional[int]]) -> Optional[float]:
@@ -247,6 +198,9 @@ def explain(run_dir, candidate: str, champion: str, out_dir, workers: int = 2) -
         ),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    # The candidate's two worst matches as config_a (the friendly side the intentions log covers), for an agent to
+    # start from; evaluate.py's failure guard covers this call too.
+    triage.triage(run_dir, strategies={cand}, matches=2, out=out_dir / "triage", workers=workers)
     return summary
 
 
