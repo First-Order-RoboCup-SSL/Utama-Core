@@ -30,6 +30,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
+from utama_core.analysis.findings import Finding
 from utama_core.analysis.plan_snapshot import (
     AGAINST,
     CARROT,
@@ -78,6 +79,8 @@ DARK_REFEREE = {"FORCE_START", "DIRECT_FREE", "INDIRECT_FREE", "BALL_PLACEMENT"}
 PARKED_CARROT_M = 0.2
 PARKED_TARGET_M = 0.5
 DETOUR_M = 0.2  # carrot this far off the robot-to-target line is a detour, annotated when present
+# A run of short-carrot ticks shorter than this is a blip, not a `parked` or `pushed_out` finding.
+PARKED_MIN_S = 1.0
 
 
 @dataclass(frozen=True)
@@ -126,19 +129,90 @@ def _xy(p) -> Tuple[float, float]:
     return float(p[0]), float(p[1])
 
 
-def short_carrot_label(row: TraceRow) -> str:
-    """Annotation for a tick whose carrot is short while the target is still far.
+def is_short_carrot(row: TraceRow) -> bool:
+    """The carrot has collapsed onto the robot while the target is still far."""
+    return row.robot_to_carrot < PARKED_CARROT_M and row.robot_to_target > PARKED_TARGET_M
+
+
+def carrot_kind(row: TraceRow) -> str:
+    """ "pushed_out" or "parked" for a short-carrot tick.
 
     Inside the ball's keep-out, a short carrot farther from the ball than the robot is the planner
     pushing the robot out, not a stall; any other short carrot is a parked robot."""
-    pushed_out = False
+    if row.ball is not None and row.robot_to_ball is not None:
+        if row.robot_to_ball < BALL_KEEP_OUT_DISTANCE < _carrot_to_ball(row):
+            return "pushed_out"
+    return "parked"
+
+
+def _carrot_to_ball(row: TraceRow) -> float:
+    return float(np.hypot(row.carrot[0] - row.ball[0], row.carrot[1] - row.ball[1]))
+
+
+def short_carrot_label(row: TraceRow) -> str:
+    """Annotation for a tick whose carrot is short while the target is still far."""
     away = ""
     if row.ball is not None and row.robot_to_ball is not None:
-        carrot_to_ball = float(np.hypot(row.carrot[0] - row.ball[0], row.carrot[1] - row.ball[1]))
-        pushed_out = row.robot_to_ball < BALL_KEEP_OUT_DISTANCE < carrot_to_ball
-        away = f", {carrot_to_ball:.2f} m from the ball"
-    what = "pushed out of the keep-out" if pushed_out else "parked"
+        away = f", {_carrot_to_ball(row):.2f} m from the ball"
+    what = "pushed out of the keep-out" if carrot_kind(row) == "pushed_out" else "parked"
     return f"t={row.t:g} s: {what}\ncarrot {row.robot_to_carrot:.2f} m away{away}; target {row.robot_to_target:.2f} m"
+
+
+def _short_runs(rows: Sequence[TraceRow]) -> List[List[TraceRow]]:
+    """Contiguous runs of short-carrot ticks of one kind, in time order."""
+    runs: List[List[TraceRow]] = []
+    prev_kind: Optional[str] = None
+    for row in rows:
+        kind = carrot_kind(row) if is_short_carrot(row) else None
+        if kind is None:
+            prev_kind = None
+        elif kind == prev_kind:
+            runs[-1].append(row)
+        else:
+            runs.append([row])
+            prev_kind = kind
+    return runs
+
+
+def plan_findings(
+    rows: Sequence[TraceRow],
+    robot_id: int,
+    *,
+    replay: Optional[str],
+    side: str,
+    image: Optional[str] = None,
+) -> List[Finding]:
+    """One `parked` or `pushed_out` finding per contiguous run of short-carrot ticks that lasts at least
+    `PARKED_MIN_S`. `rows` are one robot's samples in time order (`plan_trace(...).rows`)."""
+    out: List[Finding] = []
+    for run in _short_runs(rows):
+        first, last = run[0], run[-1]
+        duration = last.t - first.t
+        if duration < PARKED_MIN_S - 1e-9:
+            continue
+        kind = carrot_kind(first)
+        closest = min(run, key=lambda r: r.robot_to_carrot)
+        out.append(
+            Finding(
+                tool="plan_trace",
+                kind=kind,
+                replay=replay,
+                side=side,
+                t0=first.t,
+                t1=last.t,
+                robots=(robot_id,),
+                value=duration,
+                threshold=PARKED_MIN_S,
+                unit="s",
+                message=(
+                    f"R{robot_id} {'pushed out of the keep-out' if kind == 'pushed_out' else 'parked'} for "
+                    f"{duration:.1f} s (t={first.t:g}-{last.t:g} s): carrot as close as {closest.robot_to_carrot:.2f} m, "
+                    f"target {closest.robot_to_target:.2f} m away."
+                ),
+                image=image,
+            )
+        )
+    return out
 
 
 def plan_trace(

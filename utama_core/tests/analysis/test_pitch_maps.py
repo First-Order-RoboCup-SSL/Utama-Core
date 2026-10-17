@@ -173,4 +173,28 @@ def test_each_figure_is_written(tmp_path, which):
 
 def test_rule_colours_take_fixed_slots_in_rank_order():
     assert pm.rule_colours(["crashing", "double_touch"]) == {"crashing": pm.sr.SLOTS[0], "double_touch": pm.sr.SLOTS[1]}
+
+
+def test_zone_findings_are_six_descriptive_shares_per_strategy_in_the_pitch_zone_names():
+    # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/pitch_zones.md).
+    view = pm.MatchView(
+        strategy="build_a_kernel_strategy",
+        pos_x=np.array([-2.0, 0.0, 2.0, 2.5]),
+        pos_y=np.zeros(4),
+        pos_in=np.array([True, True, True, False]),  # three in possession, one out
+        pos_robot=np.array([1, 2, 3, 1]),
+    )
+    findings = pm.zone_findings([view], ["build_a_kernel_strategy"], {"in possession": "a.png"})
+
+    assert len(findings) == 6
+    assert all(f.kind == "zone_share" and f.threshold is None and f.replay is None for f in findings)
+
+    def find(label: str, zone: str):
+        return next(f for f in findings if f"{label} samples in the {zone}" in f.message)
+
+    for zone in ("defensive third", "middle third", "attacking third"):
+        assert find("in possession", zone).value == pytest.approx(1 / 3)
+    assert find("in possession", "attacking third").image == "a.png"
+    assert find("out of possession", "attacking third").value == 1.0
+    assert find("out of possession", "defensive third").value == 0.0
     assert pm.top_rules(_views()[2], k=1) == ["crashing"]

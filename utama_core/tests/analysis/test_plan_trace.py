@@ -5,12 +5,13 @@ import math
 import pytest
 
 from utama_core.analysis.plan_trace import (
+    PARKED_MIN_S,
     TraceRow,
     _referee_spans,
-    plan_trace,
-    sample_times,
-    short_carrot_label,
+    carrot_kind,
 )
+from utama_core.analysis.plan_trace import plan_findings as plan_trace_findings
+from utama_core.analysis.plan_trace import plan_trace, sample_times, short_carrot_label
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
@@ -109,3 +110,75 @@ def test_a_short_carrot_out_past_the_keep_out_is_a_push_out_not_a_parked_robot()
     assert "pushed out of the keep-out" in short_carrot_label(_row(carrot=(0.811, -0.236)))
     # The same short carrot left inside the circle is a stall.
     assert "parked" in short_carrot_label(_row(carrot=(0.75, -0.22)))
+
+
+# --- findings -------------------------------------------------------------------------------------
+
+
+def _short_row(t: float, *, robot_to_ball: float, carrot_to_ball: float, robot_to_target: float = 2.0):
+    """A short-carrot tick: the carrot collapsed onto the robot (0.05 m) while the target is 2 m away.
+    The ball is at the origin, the robot on the x axis at `robot_to_ball`, the carrot at `carrot_to_ball`."""
+    return TraceRow(
+        t=t,
+        robot=(robot_to_ball, 0.0),
+        target=(3.0, 0.0),
+        carrot=(carrot_to_ball, 0.0),
+        robot_to_carrot=0.05,
+        robot_to_target=robot_to_target,
+        carrot_offset=0.0,
+        robot_to_ball=robot_to_ball,
+        clearance=1.0,
+        speed=0.0,
+        ball=(0.0, 0.0),
+        referee="NORMAL_START",
+    )
+
+
+def _far_row(t: float):
+    """A tick whose carrot is well clear of the robot: not a short carrot, so it breaks a run."""
+    return TraceRow(
+        t=t,
+        robot=(2.0, 0.0),
+        target=(3.0, 0.0),
+        carrot=(2.5, 0.0),
+        robot_to_carrot=0.5,
+        robot_to_target=1.0,
+        carrot_offset=0.0,
+        robot_to_ball=2.0,
+        clearance=1.0,
+        speed=0.5,
+        ball=(0.0, 0.0),
+        referee="NORMAL_START",
+    )
+
+
+def test_pushed_out_is_a_short_carrot_that_starts_inside_the_keep_out_and_ends_outside():
+    assert carrot_kind(_short_row(0.0, robot_to_ball=0.79, carrot_to_ball=0.9)) == "pushed_out"
+    assert carrot_kind(_short_row(0.0, robot_to_ball=0.5, carrot_to_ball=0.9)) == "pushed_out"
+
+
+def test_parked_is_a_short_carrot_that_is_not_pushed_across_the_keep_out_edge():
+    # Robot exactly on the 0.8 m edge is not inside it (strict inequality): parked.
+    assert carrot_kind(_short_row(0.0, robot_to_ball=0.8, carrot_to_ball=0.9)) == "parked"
+    # Robot already outside, carrot also outside: parked.
+    assert carrot_kind(_short_row(0.0, robot_to_ball=0.81, carrot_to_ball=0.9)) == "parked"
+    # Robot inside and carrot inside too: nothing was pushed out, so parked.
+    assert carrot_kind(_short_row(0.0, robot_to_ball=0.79, carrot_to_ball=0.7)) == "parked"
+
+
+def test_a_run_of_one_second_or_more_is_one_finding_per_span():
+    pushed = [_short_row(round(i * 0.1, 6), robot_to_ball=0.7, carrot_to_ball=0.9) for i in range(11)]  # 1.0 s
+    parked = [_short_row(round((11 + i) * 0.1, 6), robot_to_ball=1.5, carrot_to_ball=1.6) for i in range(11)]
+    findings = plan_trace_findings(pushed + parked, 4, replay="x.npz", side="friendly")
+
+    assert [f.kind for f in findings] == ["pushed_out", "parked"]
+    assert findings[0].robots == (4,) and findings[0].value == 1.0 and findings[0].threshold == PARKED_MIN_S
+    assert findings[0].t0 == 0.0 and findings[0].t1 == pytest.approx(1.0)
+    assert findings[1].t0 == pytest.approx(1.1)
+
+
+def test_a_run_under_a_second_and_a_gap_inside_a_run_give_no_finding():
+    short = [_short_row(round(i * 0.1, 6), robot_to_ball=1.5, carrot_to_ball=1.6) for i in range(9)]  # 0.8 s
+    gap = [_far_row(0.9)]
+    rows = short + gap + [_short_row(round(1.0 + i * 0.1, 6), robot_to_ball=1.5, carrot_to_ball=1.6) for i in range(9)]
+    assert plan_trace_findings(rows, 4, replay=None, side="friendly") == []

@@ -47,6 +47,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from tools import signal_report as sr  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
+from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.config.field_params import STANDARD_FIELD_DIMS as F  # noqa: E402
 from utama_core.engine.match_stats import (  # noqa: E402
     _PASS_RELEASE_MPS,
@@ -383,6 +384,47 @@ def plot_fouls(views, order, labels, path: Path) -> None:
     plt.close(fig)
 
 
+def zone_findings(views: list[MatchView], order: list[str], images: Optional[dict[str, str]] = None) -> list[Finding]:
+    """Six descriptive `zone_share` findings per strategy: the share of its in-possession and of its
+    out-of-possession outfield samples in each third (docs/pitch_zones.md). No threshold: they describe."""
+    third = L / 3  # the thirds' boundaries in the common frame, at x = +-1.5 m
+    out: list[Finding] = []
+    for name in order:
+        x = _cat(views, name, "pos_x")
+        inp = _cat(views, name, "pos_in").astype(bool)
+        for label, mask in (("in possession", inp), ("out of possession", ~inp)):
+            xs = x[mask]
+            if xs.size == 0:
+                continue
+            zones = (
+                ("defensive third", xs < -third),
+                ("middle third", np.abs(xs) <= third),
+                ("attacking third", xs > third),
+            )
+            for zone, inside in zones:
+                share = float(np.mean(inside))
+                out.append(
+                    Finding(
+                        tool="pitch_maps",
+                        kind="zone_share",
+                        replay=None,
+                        side=None,
+                        t0=None,
+                        t1=None,
+                        robots=(),
+                        value=share,
+                        threshold=None,
+                        unit="share of samples",
+                        message=(
+                            f"{sr.short(name)} had {share:.0%} of its {label} samples in the {zone} "
+                            f"({xs.size} samples)."
+                        ),
+                        image=(images or {}).get(label),
+                    )
+                )
+    return out
+
+
 def summary_rows(views: list[MatchView], order: list[str]) -> list[dict]:
     """The numbers the figures show, one row per strategy in `order`: the share of its in-possession
     samples in the attacking half, the share of its out-of-possession samples in its own half, the
@@ -440,19 +482,29 @@ def main() -> None:
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "docs" / "img" / "signals")
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument(
+        "--findings", metavar="PATH", help="also write the zone shares per strategy as JSON lines (- for stdout)"
+    )
     args = parser.parse_args()
     summary = json.loads((args.run_dir / "summary.json").read_text())
     order = sr._order(summary["strategies"])
     labels = {n: f"{sr.short(n)}  {sr.points(summary['strategies'][n]):.2f}" for n in order}
     views = run_views(args.run_dir, args.workers)
     args.out.mkdir(parents=True, exist_ok=True)
-    plot_positions(views, order, labels, args.out / "positions_attack.png", in_possession=True)
-    plot_positions(views, order, labels, args.out / "positions_defence.png", in_possession=False)
+    attack_png = args.out / "positions_attack.png"
+    defence_png = args.out / "positions_defence.png"
+    plot_positions(views, order, labels, attack_png, in_possession=True)
+    plot_positions(views, order, labels, defence_png, in_possession=False)
     plot_shots(views, order, labels, args.out / "shots.png")
     plot_fouls(views, order, labels, args.out / "fouls_map.png")
+    # With `--findings -` the JSON owns stdout, so the text goes to stderr.
+    human = sys.stderr if args.findings == "-" else sys.stdout
     for row in summary_rows(views, order):
-        print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in row.items()}))
-    print(f"{len(views)} strategy-match views; figures in {args.out}")
+        print(json.dumps({k: (round(v, 3) if isinstance(v, float) else v) for k, v in row.items()}), file=human)
+    print(f"{len(views)} strategy-match views; figures in {args.out}", file=human)
+    if args.findings is not None:
+        images = {"in possession": str(attack_png), "out of possession": str(defence_png)}
+        write_jsonl(zone_findings(views, order, images), args.findings)
 
 
 if __name__ == "__main__":

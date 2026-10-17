@@ -3,9 +3,12 @@ import json
 import numpy as np
 
 from tools.match_timeline import (
+    MIN_LIVE_S,
     OTHER,
     SLOTS,
+    THRASH_PER_MIN,
     Span,
+    Window,
     goalkeeper_ids,
     group_spans,
     lane_summary,
@@ -16,6 +19,7 @@ from tools.match_timeline import (
     switch_times,
     tactic_changes,
     tactic_colours,
+    thrash_findings,
 )
 
 
@@ -163,3 +167,52 @@ def test_render_writes_a_png_with_every_panel(tmp_path):
     assert path == out
     assert out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert out.stat().st_size > 5_000
+
+
+# --- findings -------------------------------------------------------------------------------------
+
+
+def _window(n_switches: int, live_s: float, robot: int = 4) -> Window:
+    """One robot whose tactic alternates A, B, A, ... so that the lane has exactly `n_switches` switches."""
+    spans = [Span(float(i), float(i + 1), "A" if i % 2 == 0 else "B") for i in range(n_switches + 1)]
+    return Window(
+        t0=0.0,
+        t1=float(n_switches + 1),
+        robot_ids=[robot],
+        lanes=[spans],
+        possession=[[]],
+        ref_spans=[],
+        tw=np.zeros(0),
+        dist=np.zeros((0, 1)),
+        keepers=set(),
+        live_s=live_s,
+        notes=[],
+        z={},
+    )
+
+
+def test_thrash_fires_exactly_at_the_threshold():
+    # 7 switches over 105 s of live play is exactly THRASH_PER_MIN (4.0) per minute.
+    w = _window(7, live_s=7 * 60.0 / THRASH_PER_MIN)
+    (finding,) = thrash_findings(w, replay="x.npz", side="friendly")
+    assert finding.kind == "tactic_thrash" and finding.robots == (4,)
+    assert finding.value == THRASH_PER_MIN and finding.threshold == THRASH_PER_MIN
+
+
+def test_thrash_does_not_fire_just_under_the_threshold():
+    just_under = _window(7, live_s=7 * 60.0 / THRASH_PER_MIN + 0.1)  # 3.996 per min
+    assert thrash_findings(just_under, replay="x.npz", side="friendly") == []
+    one_fewer = _window(6, live_s=7 * 60.0 / THRASH_PER_MIN)  # 3.43 per min
+    assert thrash_findings(one_fewer, replay="x.npz", side="friendly") == []
+
+
+def test_thrash_needs_enough_live_play_for_a_rate():
+    # 50 switches in 20 s of live play would read 150 per minute; too little play to judge.
+    assert thrash_findings(_window(50, live_s=MIN_LIVE_S - 10.0), replay="x.npz", side="friendly") == []
+    assert len(thrash_findings(_window(50, live_s=MIN_LIVE_S), replay="x.npz", side="friendly")) == 1
+
+
+def test_thrash_rate_divides_by_live_play_not_by_window_length():
+    # The window holds 3 switches and 60 s of live play (its own length, from the lanes, is 4 s): 3 per min.
+    w = _window(3, live_s=60.0)
+    assert thrash_findings(w, replay="x.npz", side="friendly", threshold=3.0)[0].value == 3.0

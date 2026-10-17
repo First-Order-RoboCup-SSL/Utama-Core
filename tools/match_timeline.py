@@ -48,7 +48,17 @@ if str(REPO_ROOT) not in sys.path:
 
 from tools import replay_trace  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
+from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
+
+# A robot whose tactic changes at least this many times per minute of live play gets a `tactic_thrash`
+# finding. Measured on tournament_20261017_151052 (66 matches, 396 friendly robots, rate over live play):
+# the steady strategies (give_and_go_solo, high_press, decoy_and_overload) have medians of 0.00-0.27 per min
+# and 151 robots under 1 per min; the thrashing ones have medians of 9.5-26 per min (split_shape 14.4). Only
+# 18 robots sit between 2 and 6 per min, so 4 (a switch every 15 s of live play) cuts the empty band between.
+THRASH_PER_MIN = 4.0
+# Under this much live play a rate is noise (one switch in 10 s reads as 6 per minute): no thrash finding.
+MIN_LIVE_S = 30.0
 
 # Styling copied from tools/signal_report.py so the figures read as one set.
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
@@ -499,8 +509,25 @@ def _summary_lines(
     return lines
 
 
-def build(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str, out: Optional[Path]):
-    """Compute the window's data, draw it, and return (png path, summary lines)."""
+class Window(NamedTuple):
+    """One window's computed data, before any drawing."""
+
+    t0: float
+    t1: float
+    robot_ids: list[int]
+    lanes: list[list[Span]]
+    possession: list[list[Span]]
+    ref_spans: list[Span]
+    tw: np.ndarray  # sample times in the window, on the replay's clock from its first frame
+    dist: np.ndarray  # (len(tw), robots) metres to the ball
+    keepers: set[int]
+    live_s: float  # seconds of live play (NORMAL_START / FORCE_START) in the window
+    notes: list[str]
+    z: dict  # the replay's arrays, as loaded
+
+
+def load_window(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str) -> Window:
+    """The window's lanes, possession, referee spans and distances; no drawing and no shot analysis."""
     z = dict(np.load(npz_path))
     ts = z["ts"]
     t = ts - ts[0]
@@ -512,12 +539,13 @@ def build(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str, o
     win = (t >= t0) & (t <= t1)
     tw = t[win]
 
+    notes: list[str] = []
     robot_ids = [int(r) for r in z[f"{side}_ids"]]
     rows = load_intentions(npz_path) if side == "friendly" else []
     if side == "enemy":
-        print("note: the intentions log is written for the friendly side only; enemy lanes are empty")
+        notes.append("note: the intentions log is written for the friendly side only; enemy lanes are empty")
     elif not rows:
-        print(f"note: no {npz_path.name[:-4]}.intentions.jsonl beside the replay; lanes are empty")
+        notes.append(f"note: no {npz_path.name[:-4]}.intentions.jsonl beside the replay; lanes are empty")
     changes = tactic_changes(rows, robot_ids)
     lanes = [spans_from_changes(changes[rid], t0, t1) for rid in robot_ids]
     keepers = goalkeeper_ids(npz_path) if side == "friendly" else set()
@@ -528,11 +556,68 @@ def build(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str, o
         RefereeCommand(int(c)).name if h else "-" for c, h in zip(z["referee_command"][win], z["has_referee"][win])
     ]
     ref_spans = group_spans([ref_group(c) for c in cmd_names], tw, t0, t1)
+    live_s = sum(s.t1 - s.t0 for s in ref_spans if s.label == "live play")
 
     pos = z[f"{side}_p"][win]
     ball = z["ball_p"][win]
     dist = np.hypot(pos[:, :, 0] - ball[:, None, 0], pos[:, :, 1] - ball[:, None, 1])
+    return Window(t0, t1, robot_ids, lanes, possession, ref_spans, tw, dist, keepers, live_s, notes, z)
 
+
+def thrash_findings(
+    w: Window,
+    *,
+    replay: Optional[str],
+    side: str,
+    image: Optional[str] = None,
+    threshold: float = THRASH_PER_MIN,
+) -> list[Finding]:
+    """One `tactic_thrash` finding per robot whose tactic switches reach `threshold` per minute of live play.
+
+    Switches are counted over the whole window (as the summary prints them); the rate divides by the live
+    play in it, so a stoppage does not dilute a robot that thrashes in open play. No finding when the window
+    has less than `MIN_LIVE_S` of live play: a rate over a few seconds is noise."""
+    if w.live_s < MIN_LIVE_S:
+        return []
+    minutes = w.live_s / 60.0
+    out = []
+    for rid, spans in zip(w.robot_ids, w.lanes):
+        n = len(switch_times(spans))
+        rate = n / minutes
+        if rate >= threshold:
+            out.append(
+                Finding(
+                    tool="match_timeline",
+                    kind="tactic_thrash",
+                    replay=replay,
+                    side=side,
+                    t0=w.t0,
+                    t1=w.t1,
+                    robots=(rid,),
+                    value=rate,
+                    threshold=threshold,
+                    unit="per live min",
+                    message=(
+                        f"R{rid} changed tactic {n} times in {minutes:.1f} min of live play "
+                        f"({rate:.2f} per min, threshold {threshold:g})."
+                    ),
+                    image=image,
+                )
+            )
+    return out
+
+
+def timeline_findings(replay_path: Path, t0: Optional[float], t1: Optional[float], side: str) -> list[Finding]:
+    """The match_timeline findings for one window, computed without drawing (`image` is None)."""
+    replay_path = Path(replay_path)
+    w = load_window(replay_path, t0, t1, side)
+    return thrash_findings(w, replay=str(replay_path), side=side)
+
+
+def build(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str, out: Optional[Path]):
+    """Compute the window's data, draw it, and return (png path, summary lines, findings with `image` set)."""
+    w = load_window(npz_path, t0, t1, side)
+    z, ts, t0, t1 = w.z, w.z["ts"], w.t0, w.t1
     statuses = replay_trace._statuses(npz_path, len(ts))
     fouls = replay_trace._fouls(npz_path)
     events = []
@@ -565,17 +650,18 @@ def build(npz_path: Path, t0: Optional[float], t1: Optional[float], side: str, o
         t0=t0,
         t1=t1,
         side=side,
-        robot_ids=robot_ids,
-        lanes=lanes,
-        possession=possession,
-        ref_spans=ref_spans,
-        t=tw,
-        dist=dist,
+        robot_ids=w.robot_ids,
+        lanes=w.lanes,
+        possession=w.possession,
+        ref_spans=w.ref_spans,
+        t=w.tw,
+        dist=w.dist,
         events=events,
-        keepers=keepers,
+        keepers=w.keepers,
         title=title,
     )
-    return png, _summary_lines(robot_ids, lanes, t0, t1, keepers)
+    findings = thrash_findings(w, replay=str(npz_path), side=side, image=str(png))
+    return png, w.notes + _summary_lines(w.robot_ids, w.lanes, t0, t1, w.keepers), findings
 
 
 def main() -> None:
@@ -587,12 +673,18 @@ def main() -> None:
     parser.add_argument("--t1", dest="t1_opt", type=float, default=None, help="same as the t1 argument")
     parser.add_argument("--side", choices=["friendly", "enemy"], default="friendly")
     parser.add_argument("--out", type=Path, default=None, help="PNG path (default: beside the replay)")
+    parser.add_argument(
+        "--findings", metavar="PATH", help="also write the flagged problems as JSON lines (- for stdout)"
+    )
     args = parser.parse_args()
     t0 = args.t0_opt if args.t0_opt is not None else args.t0
     t1 = args.t1_opt if args.t1_opt is not None else args.t1
-    png, summary = build(args.replay, t0, t1, args.side, args.out)
-    print(f"wrote {png}")
-    print("\n".join(summary))
+    png, summary, findings = build(args.replay, t0, t1, args.side, args.out)
+    human = sys.stderr if args.findings == "-" else sys.stdout  # keep stdout pure JSON for "-"
+    print(f"wrote {png}", file=human)
+    print("\n".join(summary), file=human)
+    if args.findings is not None:
+        write_jsonl(findings, args.findings)
 
 
 if __name__ == "__main__":

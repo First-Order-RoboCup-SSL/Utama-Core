@@ -20,15 +20,19 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keep pygame's banner off stdout (--findings -)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from utama_core.analysis.findings import write_jsonl  # noqa: E402
 from utama_core.analysis.plan_snapshot import game_from_scenario  # noqa: E402
-from utama_core.analysis.plan_trace import plan_trace  # noqa: E402
+from utama_core.analysis.plan_trace import plan_findings, plan_trace  # noqa: E402
 from utama_core.replay.scenario import scenario_from_replay  # noqa: E402
 
 
@@ -68,6 +72,9 @@ def main() -> None:
         "--out", type=Path, help="PNG path (default: replays/plan_trace/<replay>_<t0>-<t1>_<side><id>.png)"
     )
     parser.add_argument("--json", action="store_true", help="print the per-sample rows as JSON")
+    parser.add_argument(
+        "--findings", metavar="PATH", help="also write the parked / pushed-out spans as JSON lines (- for stdout)"
+    )
     args = parser.parse_args()
 
     if args.t1 < args.t0:
@@ -99,17 +106,24 @@ def main() -> None:
         title=title,
     )
 
+    if args.findings is not None:
+        findings = plan_findings(trace.rows, args.robot, replay=str(args.replay), side=args.side, image=str(trace.path))
+        write_jsonl(findings, args.findings)
+
+    # With `--findings -` the JSON owns stdout, so the text goes to stderr.
+    human = sys.stderr if args.findings == "-" else sys.stdout
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in trace.rows], indent=1))
+        print(json.dumps([dataclasses.asdict(r) for r in trace.rows], indent=1), file=human)
     else:
-        print(f"wrote {trace.path}")
-        print(f"{len(trace.rows)} samples, {trace.target_note}")
+        print(f"wrote {trace.path}", file=human)
+        print(f"{len(trace.rows)} samples, {trace.target_note}", file=human)
         max_offset = max(trace.rows, key=lambda r: r.carrot_offset)
         min_carrot = min(trace.rows, key=lambda r: r.robot_to_carrot)
         print(
-            f"max carrot offset from the robot-to-target line: {max_offset.carrot_offset:.3f} m at t={max_offset.t:g}"
+            f"max carrot offset from the robot-to-target line: {max_offset.carrot_offset:.3f} m at t={max_offset.t:g}",
+            file=human,
         )
-        print(f"min robot-to-carrot: {min_carrot.robot_to_carrot:.3f} m at t={min_carrot.t:g}")
+        print(f"min robot-to-carrot: {min_carrot.robot_to_carrot:.3f} m at t={min_carrot.t:g}", file=human)
 
 
 if __name__ == "__main__":
