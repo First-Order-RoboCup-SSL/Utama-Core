@@ -7,22 +7,6 @@ League), where teams of six autonomous robots play football. It covers vision an
 input, motion planning, robot control, an in-process referee, a fast simulator (rsim), and the
 strategy layer that decides what every robot does.
 
-## What our strategies look like
-
-Every strategy from the latest round-robin, attacking right, best first (points per match after the
-name). **Position maps**: where the five outfield robots stand in live play while their team has the
-ball, darker for more time; dots are each robot's mean position.
-
-![Position maps with the ball](docs/img/signals/positions_attack.png)
-
-**Shot maps**: every shot from the spot it was struck (filled: a goal); conceded shots faded at the
-other end.
-
-![Shot maps](docs/img/signals/shots.png)
-
-Drawn by `tools/pitch_maps.py` from a round-robin's replays. What they show, and more pictures (one
-match over time, a restart, the motion planner): [docs/visual_guide.md](docs/visual_guide.md).
-
 ## Quick start
 
 1. Install [pixi](https://pixi.sh/latest/#installation)
