@@ -251,7 +251,10 @@ this way (table below), two were the referee or the check, not the robot.
 
 1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> [--rule R]
    [--skip-own-restart]` lists our side's fouls with the referee command then active and whose
-   restart it was; `tools/replay_trace.py REPLAY T0 T1` shows the window.
+   restart it was; `tools/replay_trace.py REPLAY T0 T1` shows the window. `--by strategy,rule`
+   (any of strategy, rule, tactic, restart) prints counts instead of one line per foul, and
+   `out_of_bounds` (the ball leaving the field: a stoppage, not a rules foul) is left out unless
+   `--include-stoppages` is given.
 2. **Reproduce it.** `tools/moments.py capture REPLAY --t S --name ... --check ... --note "..."
    [--out PATH]` saves the field state shortly before the foul (robots start from rest and
    tactics from initial memory, so start close); `tools/moments.py play JSON --seed N` replays
@@ -261,6 +264,11 @@ this way (table below), two were the referee or the check, not the robot.
    approaches; `play JSON --strategy path/to/scratch.py:factory` tries a tactic in a scratch file
    without touching the repo. `tools/repro_from_replay.py` plays
    the same state with the tactics' `match_log` tracing on, to look rather than keep.
+   A reproducing moment is not required to fix a bug. If the capture does not reproduce (common:
+   robots start from rest and tactics from fresh memory) but the cause can be shown by a pure unit
+   test (e.g. "a computed target is off the field"), fix it with that test and skip the moment. If
+   a capture does not reproduce, try: starting closer to the foul; checking the referee command the
+   capture stored against `replay_trace.py` at that time; or accepting the unit test as the proof.
 3. **Find the cause.** Per tick, print the override's target, the planner's next waypoint, the
    obstacles and the distance to the ball. Ask whether the rule was really broken (real rules,
    `docs/custom_referee_design_decisions.md`) and whether the check reads it right.
