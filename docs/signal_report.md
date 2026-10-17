@@ -11,77 +11,94 @@ configs, 66 matches, sim noise `v3_seed2`). Regenerate the figures after a new f
 Signals explain results; none is a target. A red cell is a place to look, not a thing to tune
 away.
 
-## Every strategy at a glance
+## Why each strategy gets its results
 
-![Signals per strategy](img/signals/signal_heatmap.png)
+![Goals, shots and goals per shot, for and against](img/signals/results.png)
 
-Rows by points per match (the number after each name). Each column is coloured by rank among the
-12 strategies, green where the value usually helps; passes are blue because more is neither
-better nor worse. The printed number is the real value: per match, or a share.
+Goals per match are shots per match times goals per shot, so the three panels say whether a
+strategy wins on how many shots it gets or on how good they are. Blue is the strategy's own,
+orange the opponent's.
 
-- **`split_shape` is green across attack**: most shots (21.9) and entries (26.5), a shot after
-  23% of its regains (2.0 s on average) and after 55% of its free kicks, 1.28 m gained per pass
-  from the fewest passes (17), 49% forward. It also concedes least but one (1.3), saving 86% of
-  the shots it faces; it commits the most fouls (29.3).
-- **`clear_press_plus` is second by defending**: the fewest goals against (0.8), the shots it
-  faces the least open (48%) and 87% saved. It barely moves the ball: 114 passes of 0.13 m, 5%
-  forward, 6.3 shots.
-- **`overload_press` concedes the least danger (74 s) but the most open shots (67%)**, and passes
-  most (118) for 0.20 m each.
-- **The pressers leave the lane open**: `high_press`, `give_and_go_solo` and `press_and_pass`
-  face 60–65% open shots and save 72–74%; `give_and_go_solo` concedes the most (2.7).
-- **`score_aware_counter_flow` is last on defense**: the most danger conceded (102 s) and the
-  lowest save rate (70%).
+- **`split_shape` wins on both**: 21.9 shots to 9.0 faced, and 27% of its shots score against
+  14% of the shots it faces.
+- **`clear_press_plus` wins on quality alone**: as many shots as it faces (6.3 and 6.5), but
+  only 13% of the shots against it score, the fewest of all.
+- **`counter_flow` loses on quality**: it outshoots its opponents (8.9 to 7.4) but scores with
+  17% of its shots, the worst, and concedes with 26%.
+- **`decoy_and_overload` faces the most shots** (11.5 a match) and is outshot by 5.
+- **`high_press` plays the most open games**: 32% of its shots score and 29% of those it faces.
+- **`score_aware_counter_flow` is last on defense**: 30% of the shots it faces score.
 
-## Attack against defense
+## The signals behind it
 
-![Attack vs defense](img/signals/attack_defense.png)
+![Signals per strategy](img/signals/signals.png)
 
-Left: shots created against seconds the enemy holds the ball in the strategy's defensive third.
-Only `split_shape` creates far more than the rest (22 a match; the others 6–9). `overload_press`
-concedes the least danger, `score_aware_counter_flow` the most.
+Each panel is one signal on its own scale; every strategy is a dot, in the same order as above,
+and the dashed line is the median. Only the lowest and highest values are printed: all of them
+are in the table at the end.
 
-Right: how open the shots a strategy faces are, against its save rate. Every strategy fields the
-same keeper, so this is the defense in front of it. `clear_press_plus` and `split_shape` are top
-left: the lane is blocked (48–49%) and the keeper saves 86–87%. `high_press`, `give_and_go_solo`
-and `press_and_pass` are bottom right. `overload_press` faces the most open shots (67%) yet saves
-81%.
+- `split_shape` is far ahead in attack: 26.5 entries to the attacking third, a shot after 23% of
+  its regains and 55% of its free kicks, 1.28 m gained per pass from the fewest passes (17).
+- `clear_press_plus` and `split_shape` face the least open shots (48–49% of the goal mouth) and
+  save 86–87%: the defense in front of the keeper blocks the lane. `overload_press` concedes
+  the least danger (74 s) but faces the most open shots (67%).
+- `clear_press_plus`, `overload_press` and `tiki_taka_plus` pass the most (100–118 a match)
+  for the least ground (0.13–0.20 m a pass).
 
 ## What makes a shot score
 
 ![Goals per shot by distance and open goal](img/signals/shot_quality.png)
 
-All 1122 shots of the run. Inside 1.5 m with three quarters of the goal open, 90% score (20
-shots); with under a quarter open, at most 25% do at any distance and none past 3 m; past 3 m,
-even with the goal open, 13%. So shot distance and open goal mouth measure chance quality, and a
-strategy's conversion follows from where it shoots, not from luck. Every shot here is already on
-target (`MatchStats`' detector), which is why the rates are high.
+All 1122 shots of the run; cells under 15 shots are grey, with no rate. With three quarters of
+the goal open, 90% score inside 1.5 m and 13% past 3 m; with under a quarter open, at most 12%
+do. So shot distance and open goal mouth measure chance quality, and a strategy's conversion
+follows from where it shoots, not from luck. Every shot here is already on target
+(`MatchStats`' detector), which is why the rates are high.
 
 ## How each strategy loses the ball
 
 ![Ball losses by kind](img/signals/ball_losses.png)
 
-Real ball losses per match (not won back within 1 s), measured as config_a only: `n` is how many
-matches that is. In a round-robin config_a is the earlier name, so `split_shape` (1),
-`score_aware_counter_flow` (2) and `press_trigger_flow` (3) rest on very little, and
-`tiki_taka_plus` has none.
+Real ball losses per match (not won back within 1 s). They are measured for config_a only, so
+strategies with fewer than 5 matches as config_a are left out; in a round-robin config_a is the
+earlier name, which leaves out `split_shape`, `tiki_taka_plus`, `press_and_pass`,
+`press_trigger_flow` and `score_aware_counter_flow`.
 
-- **Being tackled and kicking the ball out are the largest losses**, about 15–20 and 10–13 a
-  match: carrying into pressure, and passes and clearances that leave the pitch.
-- `split_shape` (one match) loses the ball mostly to saved or blocked shots, a cost of shooting
-  most.
+- Being tackled (15–19 a match) and kicking the ball out (10–13) are the largest losses for
+  everyone shown.
+- `decoy_and_overload` loses the most to fouls (about 6 a match), the excessive dribbling and
+  double touches below.
 
 ## Fouls and stalls
 
 ![Fouls by rule](img/signals/fouls.png)
 
-Fouls per match by the offending strategy, colour scaled per column, and the stalled matches it
-played in (each stall counts for both teams). 4 matches stalled: see [`strategies.md`](strategies.md).
+Fouls per match by the offending strategy, by rule; the ball going out of play is not a foul and
+has its own panel. Each stall counts for both teams in the match.
 
-- Out of bounds is the most common foul everywhere (14.6–22.1); `clear_press_plus` (22.1) and
-  `clear_danger` (20.3), the two with a clearance valve, lead.
-- `decoy_and_overload` (3.7) dribbles too far most; it and `overload_press` run
-  `DecoyOverloadTactic`, and they also double-touch most (1.6 and 1.7): the lure lets the ball go
-  and touches it again.
-- `overload_press` (2.7) and `split_shape` (2.6) crash into robots most; `split_shape` also
-  stops play in the defense area most (4.6), and `counter_flow` enters it most (0.91).
+- `split_shape` commits the most (about 10 a match), half of them stopping play in the defense
+  area (4.6).
+- `decoy_and_overload` dribbles too far most (3.7); it and `overload_press` run
+  `DecoyOverloadTactic` and double-touch most (1.6 and 1.7): the lure lets the ball go and
+  touches it again.
+- The ball goes out 15–22 times a match for every strategy; most for `clear_press_plus` and
+  `clear_danger`, the two with a clearance valve.
+
+## The numbers
+
+Every value in the figures, one row per strategy, by points per match.
+
+| strategy | points / match | GF | GA | shots | shots faced | goals / shot | conceded / shot faced | attacking-third entries / match | regains followed by a shot | free kicks followed by a shot | shot distance (m) | goal mouth open, own shots | completed passes / match | metres gained per pass | danger conceded (s / match) | goal mouth open, shots faced | save rate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `split_shape` | 2.82 | 6.0 | 1.3 | 21.9 | 9.0 | 27% | 14% | 26.5 | 23% | 55% | 3.1 | 52% | 17 | 1.28 | 96 | 49% | 86% |
+| `clear_press_plus` | 1.82 | 1.3 | 0.8 | 6.3 | 6.5 | 20% | 13% | 15.5 | 11% | 14% | 3.1 | 56% | 114 | 0.13 | 84 | 48% | 87% |
+| `overload_press` | 1.82 | 2.0 | 1.6 | 7.8 | 8.6 | 26% | 19% | 19.8 | 14% | 19% | 2.7 | 57% | 118 | 0.20 | 74 | 67% | 81% |
+| `clear_danger` | 1.55 | 1.8 | 2.2 | 8.1 | 8.0 | 22% | 27% | 18.6 | 15% | 14% | 3.1 | 57% | 37 | 0.36 | 93 | 53% | 74% |
+| `tiki_taka_plus` | 1.45 | 2.1 | 1.9 | 7.3 | 7.4 | 29% | 26% | 13.5 | 12% | 15% | 3.2 | 58% | 103 | 0.15 | 79 | 53% | 74% |
+| `high_press` | 1.36 | 2.2 | 2.5 | 6.8 | 8.4 | 32% | 29% | 16.6 | 16% | 11% | 3.0 | 57% | 73 | 0.23 | 82 | 64% | 72% |
+| `press_trigger_flow` | 1.18 | 1.2 | 1.7 | 6.6 | 7.8 | 18% | 22% | 14.2 | 10% | 13% | 3.2 | 49% | 37 | 0.43 | 84 | 57% | 78% |
+| `give_and_go_solo` | 1.09 | 1.8 | 2.7 | 7.9 | 9.4 | 23% | 29% | 18.3 | 17% | 15% | 3.1 | 60% | 39 | 0.45 | 82 | 65% | 74% |
+| `press_and_pass` | 1.09 | 1.3 | 2.5 | 6.3 | 9.8 | 20% | 26% | 16.2 | 12% | 9% | 3.3 | 61% | 79 | 0.20 | 87 | 60% | 74% |
+| `decoy_and_overload` | 1.00 | 1.5 | 2.5 | 6.5 | 11.5 | 23% | 21% | 17.5 | 12% | 12% | 3.2 | 60% | 45 | 0.47 | 93 | 49% | 80% |
+| `counter_flow` | 0.91 | 1.5 | 1.9 | 8.9 | 7.4 | 17% | 26% | 15.8 | 14% | 19% | 3.1 | 58% | 40 | 0.40 | 80 | 51% | 74% |
+| `score_aware_counter_flow` | 0.64 | 1.5 | 2.5 | 7.6 | 8.3 | 19% | 30% | 13.2 | 13% | 14% | 2.9 | 58% | 38 | 0.52 | 102 | 56% | 70% |
