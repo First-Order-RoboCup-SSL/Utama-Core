@@ -125,6 +125,34 @@ because the code is near-identical.
 `tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...]` answers one question per candidate: is
 it stronger than the champion of a fixed reference pool, in goals, under the realistic sim noise?
 
+The flowchart contrasts it with the round-robin, which answers a different question.
+
+```mermaid
+flowchart TD
+    subgraph rr["round_robin.py: is the whole catalog healthy?"]
+        r1["Every build_*_kernel_strategy config plays<br/>every other once (one full match per pair)"]
+        r2["Stall and error check<br/>--strict fails on a stall"]
+        r3["Standings in summary.json<br/>not a verdict on any one strategy"]
+        r1 --> r2 --> r3
+    end
+
+    subgraph ev["evaluate.py: is this candidate stronger than the champion?"]
+        e1["Pool pool_v1.json: champion, six opponents,<br/>three held-out opponents, sim noise"]
+        e2["Round k, noise seed k<br/>candidate and champion each play every opponent"]
+        e7["Every match appended to the ledger<br/>replays/eval/ledger.jsonl"]
+        e3{"P(candidate stronger), paired<br/>with the champion's results"}
+        e4["better: P >= 0.99<br/>then --held-out before promoting"]
+        e5["worse: P <= 0.2<br/>drop it"]
+        e6["undecided after 6 rounds<br/>drop it"]
+        e1 --> e2 --> e3
+        e2 -.-> e7
+        e3 -- "P >= 0.99" --> e4
+        e3 -- "P <= 0.2" --> e5
+        e3 -- "neither, rounds left" --> e2
+        e3 -- "neither, no rounds left" --> e6
+    end
+```
+
 - **The pool** (`tools/evaluation/pools/pool_v1.json`): a champion, six opponents chosen for
   spread of styles, three held-out opponents and the sim noise. It changes only on purpose, as
   a new version, so a result means the same thing next month; it does not follow the latest
@@ -248,6 +276,24 @@ whoever runs it.
 A foul or failure seen in a match is a symptom: the cause may be the robot, the shared referee
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot.
+
+The same steps as a flowchart; the moment branch is the optional step 5.
+
+```mermaid
+flowchart TD
+    find["1. Find it<br/>moments.py fouls RUN_DIR --by strategy,rule<br/>(without --by: each foul, with its time and tactic)"]
+    look["2. Look at it<br/>replay_trace.py REPLAY T0 T1 --events<br/>repro_from_replay.py REPLAY --t S --summary IDS"]
+    q{"Restart or placement geometry?<br/>a field state alone decides it"}
+    moment["Capture a moment<br/>moments.py capture REPLAY --t S<br/>play --seeds 0-4 must fail on 4 of 5"]
+    cause["3. Find the cause in the code<br/>tactic or override, target, planner;<br/>was the rule really broken?"]
+    fix["4. Fix the cause<br/>with a unit test at the boundary"]
+    done["Done: the unit test is the protection<br/>(a captured moment stays as a check)"]
+
+    find --> look --> q
+    q -- "yes" --> moment --> cause
+    q -- "no: open play, rarely reproduces" --> cause
+    cause --> fix --> done
+```
 
 1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`
    counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
