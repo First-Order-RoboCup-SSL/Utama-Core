@@ -516,6 +516,8 @@ flowchart TD
     cause --> fix --> done
 ```
 
+The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `pitch_maps.py`) write their flags as JSON with `--findings`: filter on that, open the picture to understand a flag, and never conclude from a picture alone.
+
 1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`
    counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
