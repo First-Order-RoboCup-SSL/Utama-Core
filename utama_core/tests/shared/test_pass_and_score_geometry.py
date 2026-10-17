@@ -756,6 +756,17 @@ def test_ball_line_receive_point_none_just_below_rolling_speed():
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS, 0.0)), 2) is not None
 
 
+def test_ball_line_receive_point_stays_on_the_field_when_the_ball_rolls_past_the_goal_line():
+    # The ball's path runs out past the enemy goal line (x = half length) beside the corner, and
+    # the receiver projects onto it past the line. Clamped to the field, with clamp_to_field's margin.
+    half_length = STANDARD_FIELD_DIMS.full_field_half_length
+    half_width = STANDARD_FIELD_DIMS.full_field_half_width
+    spot = ball_line_receive_point(_rolling_game((4.4, 2.6), (3.0, 0.0), (1.0, 1.0)), 2)
+    assert spot is not None
+    assert abs(spot.x) <= half_length
+    assert abs(spot.y) <= half_width
+
+
 def test_ball_line_receive_point_none_once_the_ball_has_passed_the_receiver():
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (1.5, 0.1), (0.0, 3.0)), 2) is None
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (2.0, 0.0), (3.0, 0.0)), 2) is None

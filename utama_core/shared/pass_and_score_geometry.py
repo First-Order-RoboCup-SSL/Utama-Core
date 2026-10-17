@@ -283,8 +283,9 @@ _PASS_ROLLING_MPS = 0.5
 
 def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
     """Where `receiver_id` meets a ball already rolling towards it: its own position
-    projected onto the ball's actual path. None while the ball is slower than
-    `_PASS_ROLLING_MPS` or moving away from the receiver."""
+    projected onto the ball's actual path, clamped to the field (a path past a goal line
+    near a corner would otherwise send the receiver out after the ball). None while the
+    ball is slower than `_PASS_ROLLING_MPS` or moving away from the receiver."""
     ball = game.ball
     velocity = Vector2D(ball.v.x, ball.v.y)
     speed = velocity.mag()
@@ -294,7 +295,7 @@ def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
     along = (game.friendly_robots[receiver_id].p - ball_pos).dot(velocity) / speed
     if along <= 0.0:
         return None
-    return ball_pos + velocity * (along / speed)
+    return clamp_to_field(ball_pos + velocity * (along / speed), game)
 
 
 def enemy_positions(game: Game) -> list[Vector2D]:
