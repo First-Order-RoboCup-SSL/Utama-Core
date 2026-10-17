@@ -755,6 +755,16 @@ def count_fouls(fouls: list[dict], columns: list[str]) -> list[tuple[tuple[str, 
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
 
+def fouls_json(fouls: list[dict], columns: Optional[list[str]] = None) -> str:
+    """`fouls` as JSON: the foul dicts as they are, or with `columns` the `count_fouls` rows as
+    {column: value, ..., "count": n} objects, most common first."""
+    if columns is None:
+        data = fouls
+    else:
+        data = [{**dict(zip(columns, key)), "count": n} for key, n in count_fouls(fouls, columns)]
+    return json.dumps(data, indent=1, sort_keys=True)
+
+
 def print_fouls_by(fouls: list[dict], columns: list[str]) -> None:
     """`count_fouls` as a table: a count column, then one column per name, then the total."""
     rows = count_fouls(fouls, columns)
@@ -940,6 +950,12 @@ def main() -> None:
         help=f"print counts per combination of these columns, comma-separated, of {', '.join(FOUL_COLUMNS)} "
         "(e.g. strategy,rule), instead of one line per foul",
     )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help="write JSON to stdout instead of text: the foul dicts, or with --by a list of {column: value, ..., "
+        "count} rows",
+    )
 
     p = sub.add_parser("new", help="write a hand-made moment template to edit by hand")
     p.add_argument("name", help="lowercase letters, digits and underscores")
@@ -1013,7 +1029,12 @@ def main() -> None:
             unknown = [c for c in columns if c not in FOUL_COLUMNS]
             if unknown:
                 parser.error(f"--by: unknown column(s) {unknown}; choose from {', '.join(FOUL_COLUMNS)}")
-            print_fouls_by(fouls, columns)
+            if args.json:
+                print(fouls_json(fouls, columns))
+            else:
+                print_fouls_by(fouls, columns)
+        elif args.json:
+            print(fouls_json(fouls))
         else:
             for f in fouls:
                 print(

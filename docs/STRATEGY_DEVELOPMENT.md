@@ -253,7 +253,7 @@ this way (table below), two were the referee or the check, not the robot.
    counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
-   (`--skip-own-restart` drops fouls during our own restarts).
+   (`--skip-own-restart` drops fouls during our own restarts; `--json` writes either form as JSON).
 2. **Look at it.** `tools/replay_trace.py REPLAY T0 T1` is the text timeline of the window:
    referee command, ball, nearest robot per side; `--events` lists the kicks, possession and
    referee changes and fouls instead. `tools/repro_from_replay.py REPLAY --t S --summary 3`

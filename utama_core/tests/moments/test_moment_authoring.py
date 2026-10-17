@@ -237,3 +237,17 @@ def test_print_fouls_by_prints_header_counts_and_total(capsys):
     assert lines[0].split() == ["count", "strategy", "rule"]
     assert lines[1].split() == ["2", "a", "keep_out"]
     assert lines[2].split() == ["2", "total"]
+
+
+def test_fouls_json_is_the_foul_list_or_the_by_counts_as_rows():
+    import json
+
+    fouls = [_foul_row("a", "keep_out", restart=None), _foul_row("a", "keep_out"), _foul_row("b", "crashing")]
+    as_list = json.loads(moments.fouls_json(fouls))
+    assert as_list == fouls
+
+    rows = json.loads(moments.fouls_json(fouls, ["strategy", "rule"]))
+    assert rows == [
+        {"strategy": "a", "rule": "keep_out", "count": 2},
+        {"strategy": "b", "rule": "crashing", "count": 1},
+    ]
