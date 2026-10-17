@@ -41,6 +41,7 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 | Script | Purpose |
 |---|---|
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
+| `tools/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for [signal_report.md](signal_report.md#on-the-pitch) |
 | `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
 | `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges for the sim-realism plan ([sim_realism.md](sim_realism.md)): ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
