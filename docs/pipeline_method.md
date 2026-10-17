@@ -35,6 +35,30 @@ Friendly and enemy robots expose the same fields, estimated from different sourc
 The uniform `GameTimeline`/`Predictions` interface (pluggable per-property predictors) from
 earlier drafts was never built; predictions are ad hoc per call site.
 
+### Inside PositionRefiner
+
+Camera combining and the Kalman filters (`data_processing/refiners/position.py`,
+`data_processing/refiners/filters/kalman.py`). Smoothing and vanished-robot imputation are
+separate switches; both run on the same per-robot filters.
+
+```mermaid
+flowchart TD
+    cams["Raw vision, one RawVisionData per camera"]
+    comb["CameraCombiner.combine_cameras<br/>_avg_robots per robot id, _combine_balls_by_proximity,<br/>_bounds_check against VisionBounds"]
+    vd["VisionData<br/>combined robots and balls"]
+    sw{"smooth_positions?"}
+    kf["KalmanFilter per robot, KalmanFilterBall<br/>filters/kalman.py"]
+    imp{"impute_vanished?"}
+    vanish["_include_vanished_robots<br/>Kalman predict for robots missing from vision"]
+    game["Game, GameFrame<br/>entities/game/game.py"]
+
+    cams --> comb --> vd --> sw
+    sw -->|yes| kf --> imp
+    sw -->|no| imp
+    imp -->|yes| vanish --> game
+    imp -->|no| game
+```
+
 ## One tick
 
 `CustomReferee` steps first (when in-process), then each side refines its frame, the replay

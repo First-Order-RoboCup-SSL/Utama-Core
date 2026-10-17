@@ -9,6 +9,20 @@ does badly, and to notice a shared primitive (reception, carrying, the planner, 
 failing every strategy at once. A strategy that never passes or shoots loses the ball least, so
 no signal is "better" on its own. Ranking uses goals alone: see [Ranking](#ranking).
 
+The sections below group the signals by the question each one answers; this map shows the groups.
+
+```mermaid
+mindmap
+  root((Signals))
+    ["Is something broken?"]
+    ["Does it create chances?"]
+    ["Does it keep and move the ball?"]
+    ["Does it defend?"]
+    ["Restarts"]
+    ["Where do goals come from?"]
+    ["Ranking"]
+```
+
 ## Ranking
 
 Strategies are ranked by goals only, through ratings fitted on match margins
@@ -138,6 +152,33 @@ defends them. It reads only the replay and its referee file, so it runs on conve
 logs too. The rules are in the module's docstring. `--rates PATH` writes how often each
 situation happens per team per live minute, whoever owns it (the scenario bench, retired
 2026-10-17, used these as its weights).
+
+How a goal is credited (`analysis/goal_ledger.py`; `WINDOW_S` = 10 s):
+
+```mermaid
+flowchart TD
+    subgraph starts["A situation starts"]
+        rs["Restart goes live<br/>find_restarts: kickoff, free kick, penalty<br/>owned by the kicking side"]
+        fs["Force start<br/>owned by no one"]
+        bw["Side wins the ball in open play<br/>possession_spells: owned by that side"]
+    end
+
+    types["Situation type, from the owner's frame<br/>own / opponent: ball won or free kick, third;<br/>kickoff, penalty; force start"]
+    goal["Goal, at the tick play stops"]
+    near{"Latest start less than 10 s<br/>before the goal?"}
+    sus["sustained possession"]
+    cred["Credited to that situation<br/>p_scored / p_conceded"]
+    sum["goals per match = sum over situations of<br/>situations per match x P(goal)"]
+
+    rs --> types
+    fs --> types
+    bw --> types
+    goal --> near
+    near -->|yes| cred
+    near -->|no| sus
+    cred --> sum
+    sus --> sum
+```
 
 Reference: `split_shape` in `tournament_20261011_230119` (17 matches; 6.76 scored, 4.41
 conceded per match).
