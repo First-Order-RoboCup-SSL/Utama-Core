@@ -13,7 +13,7 @@
     "restart_lasts",
     "robot_near_ball"
   ],
-  "known_failure": "the placer reaches the ball from the designated side (east, robot 4 from (1, -2)) and then carries it west, away from (2.0, -3.0): the ball goes from (-2.0, -3.0) to (-4.2, -3.3), 6.2 m off, when the 10 s placement timeout hands over. Observed with the placer on the designated side of the ball, pushing it the wrong way; the carry in BallPlacementOursStep (custom_referee/actions.py) is the place to look, not diagnosed (referee code, not changed here).",
+  "known_failure": "cause (diagnosed, not fixed): the placer's approach point is 0.10 m behind the ball, on the side away from the robot. Robot 4 comes from (1, -2), and its straight run to that point passes 0.03 m from the ball. The planner does not treat the ball as an obstacle for our own placement (motion_planning/src/fastpathplanning/planner.py:1724: the ball keep-out applies only when _keeps_off_ball, planner.py:108, which is false for our restart), so robot 4 drives into the ball from the east, moving west, and pushes it west at about 0.4 m/s. That is above the 0.3 m/s settle speed in BallPlacementOursStep, so it never releases, and each tick it chases the approach point (custom_referee/actions.py:551-570), which moves with the ball. It reaches (-4.2, -3.3) when the 10 s placement timeout hands over. Fixing it means routing the placer around the ball (a staging point, or the ball as an obstacle for the placer): a design choice in the placement skill and the planner, so it is not changed here.",
   "designated_position": [
     2.0,
     -3.0
