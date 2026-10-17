@@ -10,17 +10,17 @@ intentions log covers) of its `--matches` worst matches by goal difference is an
 
 - `tactic_thrash` (`match_timeline.thrash_findings`): a robot reverting a tactic within a second, over the whole match;
 - `stall` (`stuck_detector.find_stuck_windows`): a window with the ball frozen while a friendly robot oscillates,
-  or a restart held far too long (`restart_stall`); for each oscillating robot, `plan_trace` over the window and
-  its `parked` / `pushed_out` findings. The planner's target there is the robot's final position in the window
-  (the replay does not record the strategy's target), so a robot standing at its target is never `parked`;
+  or a restart held far too long (`restart_stall`). No `plan_trace` here: it needs the robot's target, which
+  the replay does not record, and a guessed target draws carrots that mean nothing; trace a stalled robot by hand
+  with `tools/plan_trace.py --target X Y` once you know where it was going;
 - `target_in_keep_out`, `keep_out_short`, `target_in_defense_area` (`restart_picture.restart_findings`): only
   with `--restarts`, which is slow (about 45 s a match).
 
 Every finding is written to `OUT/findings.jsonl`. The `--max-pictures` (default 8) findings that have a picture
-source are ranked by kind (stall, target_in_keep_out, target_in_defense_area, parked, pushed_out, tactic_thrash,
-keep_out_short), then by value; those get a picture: a tactic_thrash gets `match_timeline` over 40 s from 5 s
-before the robot's first flip-back, a stall or parked finding gets its `plan_trace`, a restart finding gets
-`restart_picture` at its restart. `OUT/index.md` is the report to read first: per strategy, its matches with
+source are ranked by kind (stall, target_in_keep_out, target_in_defense_area, tactic_thrash, keep_out_short),
+then by value; those get a picture: a tactic_thrash gets `match_timeline` over 40 s from 5 s before the robot's
+first flip-back, a stall `match_timeline` from 10 s before to 10 s after it, a restart finding (or a
+restart_stall) `restart_picture` at its restart. `OUT/index.md` is the report to read first: per strategy, its matches with
 their scores, the finding counts by kind, then each pictured finding with its message and picture path.
 
 `OUT` defaults to `RUN_DIR/triage/`. Read-only: nothing is played or changed.
@@ -68,20 +68,20 @@ SIDE = "friendly"
 # The match_timeline picture for a tactic_thrash: this much before the robot's first flip-back, this long.
 THRASH_LEAD_S = 5.0
 THRASH_WINDOW_S = 40.0
-# Picture priority, most useful first. pushed_out is a parked sibling (the planner pushed out of a keep-out).
+# The match_timeline picture for a stall: this much either side of the stuck window.
+STALL_MARGIN_S = 10.0
+# Picture priority, most useful first.
 KIND_PRIORITY = (
     "stall",
     "target_in_keep_out",
     "target_in_defense_area",
-    "parked",
-    "pushed_out",
     "tactic_thrash",
     "keep_out_short",
 )
 
 
 @dataclass(frozen=True)
-class ThrashPicture:
+class TimelinePicture:
     """A match_timeline picture of one window."""
 
     npz: Path
@@ -100,21 +100,19 @@ class RestartPicture:
 
 @dataclass
 class Item:
-    """One finding and how to picture it: `png` is already drawn (plan_trace), or `request` is drawn later."""
+    """One finding and the picture it would get (`request`, drawn only for the top-ranked findings)."""
 
     finding: Finding
-    request: Optional[Union[ThrashPicture, RestartPicture]] = None
-    png: Optional[Path] = None
+    request: Optional[Union[TimelinePicture, RestartPicture]] = None
     window: Optional[tuple[float, float]] = (
         None  # the seconds the picture shows (the finding's own t0-t1 may be the match)
     )
-    robot: Optional[int] = None  # the robot a plan_trace picture follows
     image: Optional[Path] = None  # set by draw_pictures for the findings that were drawn
     note: Optional[str] = None  # why a picture was not drawn, when one was asked for
 
     @property
     def pictureable(self) -> bool:
-        return self.png is not None or self.request is not None
+        return self.request is not None
 
 
 @dataclass
@@ -154,8 +152,9 @@ def select_matches(run_dir: Path, strategies: Optional[set[str]], n: int) -> lis
 # --- per-match analysis (runs in a worker) ---------------------------------------------------------
 
 
-def _stall_items(npz: Path, window, game_at, work: Path, notes: list[str]) -> list[Item]:
-    """The stall finding for one stuck window, with its plan_trace picture and parked / pushed_out findings."""
+def _stall_items(npz: Path, window, end: float) -> list[Item]:
+    """The stall finding for one stuck window, with its picture: the restart for a restart_stall, else the
+    match timeline around it."""
     dur = window.t_end - window.t_start
     if window.kind == "restart_stall":
         commands = restart_occurrences(npz)
@@ -194,39 +193,13 @@ def _stall_items(npz: Path, window, game_at, work: Path, notes: list[str]) -> li
         message=f"friendly robots {list(robots)} oscillate with the ball frozen (ball std {window.ball_std:.3f} m) "
         f"for {dur:.1f} s ({window.t_start:.1f}-{window.t_end:.1f} s).",
     )
-    items: list[Item] = []
-    first_png: Optional[Path] = None
-    first_rid: Optional[int] = None
-    for rid in robots:
-        try:
-            final = game_at(window.t_end).friendly_robots[rid].p
-            png = work / f"{npz.stem}_plan_{window.t_start:g}-{window.t_end:g}_R{rid}.png"
-            trace = plan_trace(
-                game_at,
-                rid,
-                window.t_start,
-                window.t_end,
-                png,
-                target=(final.x, final.y),
-                title=f"{npz.stem}: R{rid}, {window.t_start:.1f}-{window.t_end:.1f} s (target: final position)",
-            )
-        except (ValueError, KeyError) as err:
-            notes.append(f"plan_trace for R{rid} over {window.t_start:.1f}-{window.t_end:.1f} s failed: {err}")
-            continue
-        if first_png is None:
-            first_png, first_rid = trace.path, rid
-        items.extend(
-            Item(f, png=trace.path, robot=rid) for f in plan_findings(trace.rows, rid, replay=str(npz), side=SIDE)
-        )
-    items.insert(0, Item(finding, png=first_png, robot=first_rid))
-    for item in items:
-        item.window = (window.t_start, window.t_end)
-    return items
+    t0 = max(0.0, window.t_start - STALL_MARGIN_S)
+    t1 = min(end, window.t_end + STALL_MARGIN_S)
+    return [Item(finding, request=TimelinePicture(npz, t0, t1), window=(t0, t1))]
 
 
-def analyse_match(match: Match, restarts: bool, work: Path) -> MatchReport:
-    """Every finding of one match's friendly side, each with the picture it would get. Draws the plan_trace
-    pictures into `work` (the caller keeps the ones that are shown); the others are drawn later."""
+def analyse_match(match: Match, restarts: bool) -> MatchReport:
+    """Every finding of one match's friendly side, each with the picture it would get (drawn later)."""
     npz = match.npz
     notes: list[str] = []
     items: list[Item] = []
@@ -238,13 +211,10 @@ def analyse_match(match: Match, restarts: bool, work: Path) -> MatchReport:
         flips = match_timeline.flip_backs(window.lanes[window.robot_ids.index(rid)])
         t0 = max(0.0, flips[0] - THRASH_LEAD_S)
         t1 = min(end, t0 + THRASH_WINDOW_S)
-        items.append(Item(finding, request=ThrashPicture(npz, t0, t1) if t1 > t0 else None, window=(t0, t1)))
+        items.append(Item(finding, request=TimelinePicture(npz, t0, t1) if t1 > t0 else None, window=(t0, t1)))
 
-    # One memoised game_at for every stall window and robot: each call rebuilds the state from the replay (0.3 s),
-    # and the robots of one window would otherwise rebuild the same ticks.
-    game_at = functools.lru_cache(maxsize=1024)(replay_game_at(npz, SIDE))
     for stuck in find_stuck_windows(npz):
-        items.extend(_stall_items(npz, stuck, game_at, work, notes))
+        items.extend(_stall_items(npz, stuck, end))
 
     if restarts:
         commands = dict(restart_occurrences(npz))
@@ -284,29 +254,24 @@ def _draw_restart(picture: RestartPicture, out: Path) -> Path:
 
 
 def draw_pictures(items: list[Item], pictures: Path, max_pictures: int) -> list[Item]:
-    """Give the top `max_pictures` pictureable items an `image` (copied or drawn into `pictures`), and return them.
+    """Give the top `max_pictures` pictureable items an `image` (drawn into `pictures`), and return them.
     Items that share a picture source share one file."""
     drawn: dict[tuple, Path] = {}
     shown = rank(items)[:max_pictures]
     for rank_no, item in enumerate(shown, start=1):
-        if item.png is not None:
-            key: tuple = ("png", str(item.png))
-        elif isinstance(item.request, ThrashPicture):
-            r = item.request
-            key = ("thrash", str(r.npz), r.t0, r.t1)
+        r = item.request
+        if isinstance(r, TimelinePicture):
+            key: tuple = ("timeline", str(r.npz), r.t0, r.t1)
         else:
-            r = item.request
             key = ("restart", str(r.npz), r.t)
         if key not in drawn:
             stem = Path(key[1]).stem
             dst = pictures / f"{rank_no:02d}_{item.finding.kind}_{stem}.png"
             try:
-                if item.png is not None:
-                    shutil.copyfile(item.png, dst)
-                elif key[0] == "thrash":
-                    match_timeline.build(item.request.npz, item.request.t0, item.request.t1, SIDE, dst)
+                if key[0] == "timeline":
+                    match_timeline.build(r.npz, r.t0, r.t1, SIDE, dst)
                 else:
-                    _draw_restart(item.request, dst)
+                    _draw_restart(r, dst)
                 drawn[key] = dst
             except Exception as exc:  # noqa: BLE001 - a picture is optional; the finding is not
                 item.note = f"picture failed: {type(exc).__name__}: {exc}"
@@ -373,8 +338,7 @@ def write_index(
             f = it.finding
             lines += [f"### {f.kind} at {_span(f)}", "", f.message]
             if it.image is not None:
-                who = f" (R{it.robot})" if it.robot is not None else ""
-                lines.append(f"Picture of {_span_of(it.window)}{who}: `{it.image.resolve()}`")
+                lines.append(f"Picture of {_span_of(it.window)}: `{it.image.resolve()}`")
             if it.note:
                 lines.append(f"Picture not drawn: {it.note}")
             lines.append("")
@@ -397,11 +361,10 @@ def triage(
     Returns the index path."""
     run_dir = Path(run_dir)
     out = Path(out) if out is not None else run_dir / "triage"
-    work, pictures = out / "_work", out / "pictures"
-    for d in (work, pictures):
-        d.mkdir(parents=True, exist_ok=True)
+    pictures = out / "pictures"
+    pictures.mkdir(parents=True, exist_ok=True)
     selected = select_matches(run_dir, strategies, matches)
-    jobs = [(m, restarts, work) for m in selected]
+    jobs = [(m, restarts) for m in selected]
     if workers > 1 and len(jobs) > 1:
         with multiprocessing.Pool(processes=workers) as pool:
             reports = pool.starmap(analyse_match, jobs)
@@ -409,7 +372,6 @@ def triage(
         reports = [analyse_match(*j) for j in jobs]
     items = [it for r in reports for it in r.items]
     draw_pictures(items, pictures, max_pictures)
-    shutil.rmtree(work, ignore_errors=True)
     write_jsonl(
         [dataclasses.replace(it.finding, image=str(it.image) if it.image else None) for it in items],
         out / "findings.jsonl",

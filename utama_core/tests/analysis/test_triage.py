@@ -69,12 +69,16 @@ def test_every_strategy_gets_its_own_worst_matches(run_dir):
     ]
 
 
+def _timeline(t0: float = 0.0) -> triage.TimelinePicture:
+    return triage.TimelinePicture(Path("m.npz"), t0, t0 + 40.0)
+
+
 def test_rank_puts_kind_priority_first_then_value():
     items = [
-        triage.Item(_finding("tactic_thrash", 50.0), png=Path("a.png")),
-        triage.Item(_finding("stall", 3.0), png=Path("b.png")),
-        triage.Item(_finding("tactic_thrash", 9.0), png=Path("c.png")),
-        triage.Item(_finding("parked", 1.0), png=Path("d.png")),
+        triage.Item(_finding("tactic_thrash", 50.0), request=_timeline(1.0)),
+        triage.Item(_finding("stall", 3.0), request=_timeline(2.0)),
+        triage.Item(_finding("tactic_thrash", 9.0), request=_timeline(3.0)),
+        triage.Item(_finding("keep_out_short", 1.0), request=triage.RestartPicture(Path("r.npz"), 2.0, None)),
         triage.Item(_finding("target_in_keep_out", 0.1), request=triage.RestartPicture(Path("r.npz"), 1.0, None)),
         triage.Item(_finding("stall", 9.0)),  # no picture source: never ranked
     ]
@@ -82,27 +86,31 @@ def test_rank_puts_kind_priority_first_then_value():
     assert [it.finding.kind for it in ranked] == [
         "stall",
         "target_in_keep_out",
-        "parked",
         "tactic_thrash",
         "tactic_thrash",
+        "keep_out_short",
     ]
     assert [it.finding.value for it in ranked if it.finding.kind == "tactic_thrash"] == [50.0, 9.0]
 
 
-def test_draw_pictures_caps_at_k_and_shares_one_file(tmp_path):
-    src = tmp_path / "plan.png"
-    src.write_bytes(b"\x89PNG stub")
-    items = [triage.Item(_finding("stall", 3.0), png=src)]
-    items += [triage.Item(_finding("parked", 2.0 + i), png=src) for i in range(3)]
-    items += [triage.Item(_finding("tactic_thrash", 5.0), png=src)]
+def test_draw_pictures_caps_at_k_and_shares_one_file(tmp_path, monkeypatch):
+    drawn = []
+
+    def fake_build(npz, t0, t1, side, out):
+        drawn.append((t0, t1))
+        Path(out).write_bytes(b"\x89PNG stub")
+
+    monkeypatch.setattr(triage.match_timeline, "build", fake_build)
+    items = [triage.Item(_finding("stall", 3.0), request=_timeline())]
+    items += [triage.Item(_finding("tactic_thrash", 2.0 + i), request=_timeline()) for i in range(3)]
+    items += [triage.Item(_finding("tactic_thrash", 1.0), request=_timeline(100.0))]
     pictures = tmp_path / "pictures"
     pictures.mkdir()
     shown = triage.draw_pictures(items, pictures, max_pictures=2)
     assert len(shown) == 2
     pictured = [it for it in items if it.image is not None]
-    assert [it.finding.kind for it in pictured] == ["stall", "parked"]
-    assert len({it.image for it in pictured}) == 1  # the same plan_trace file for both
-    assert pictured[0].image.read_bytes() == b"\x89PNG stub"
+    assert [it.finding.kind for it in pictured] == ["stall", "tactic_thrash"]
+    assert len({it.image for it in pictured}) == 1 and drawn == [(0.0, 40.0)]  # one window, drawn once
 
 
 def test_index_has_each_pictured_finding_message_and_path(run_dir, tmp_path):
@@ -112,9 +120,8 @@ def test_index_has_each_pictured_finding_message_and_path(run_dir, tmp_path):
     picture.write_bytes(b"x")
     stall = triage.Item(
         _finding("stall", 3.0, message="R1 oscillates with the ball frozen for 3.0 s."),
-        png=picture,
-        robot=1,
-        window=(783.0, 786.0),
+        request=_timeline(773.0),
+        window=(773.0, 796.0),
         image=picture,
     )
     quiet = triage.Item(
@@ -125,7 +132,7 @@ def test_index_has_each_pictured_finding_message_and_path(run_dir, tmp_path):
     index = triage.write_index(out, run_dir, [report], max_pictures=8, restarts=False).read_text()
     assert "R1 oscillates with the ball frozen for 3.0 s." in index
     assert str(picture.resolve()) in index
-    assert "Picture of 783.0-786.0 s (R1)" in index
+    assert "Picture of 773.0-796.0 s" in index
     assert "R2 thrashes, no picture." not in index  # only pictured findings are described
     assert "| stall | 1 |" in index and "| tactic_thrash | 1 |" in index  # every finding is counted
     assert "alpha_vs_beta: 0-3 (GD -3)" in index
