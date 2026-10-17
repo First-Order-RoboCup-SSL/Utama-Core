@@ -45,7 +45,23 @@ warns every 100 consecutive committed ticks.
 **§5. Single-writer partition.** One place (the `Partitioner`, via `Strategy`) decides the whole
 outfield assignment once per tick, before any Tactic runs. Two Tactics can never contend for a
 robot, so no locks are needed. The goalkeeper is pinned outside the scheduler
-(`Strategy.set_goalkeeper`).
+(`Strategy.set_goalkeeper`). The per-tick order that enforces this, from `Strategy._choose_partition`
+and `_validate_partition`:
+
+```mermaid
+flowchart TD
+    slot{"each tactic slot:<br/>is_committed() and not deadline-released?"}
+    pinned["robots stay with that slot<br/>(absolute veto, §3)"]
+    free["free pool = outfield robots not pinned"]
+    avail["available_tactic_ids =<br/>applicable() and not pinned"]
+    part["Partitioner splits the free pool<br/>(the only code that assigns free robots)"]
+    val["Strategy._validate_partition:<br/>no robot in two slots, none outside the outfield pool"]
+    run["each slot's Tactic.tick runs on its own robots"]
+
+    slot -- yes --> pinned --> free
+    slot -- no --> free
+    free --> avail --> part --> val --> run
+```
 
 **§6. No state-machine framework.** No Sumatra-style `IState`/`AState` base class; phase logic
 lives in `mem`. Add a concept only after a concrete case breaks the plain version.
