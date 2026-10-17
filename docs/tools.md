@@ -73,6 +73,12 @@ These check how far cheap metrics agree with round-robin results. They do not ju
 Library helpers for the same job (`render_window`, `render_clip`, `MatchLog.trace()`) are
 described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 
+## Architecture
+
+| Script | Purpose |
+|---|---|
+| `tools/package_graph.py` | The import graph between `utama_core/` packages, as a Mermaid flowchart with import counts, from `ast` (nothing is imported), plus any violation of the stated import rules (`replay/` never imports `analysis/`). Its output is kept in [architecture.md](architecture.md) |
+
 ## Benchmarks
 
 | Script | Purpose |
