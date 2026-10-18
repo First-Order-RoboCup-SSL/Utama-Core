@@ -63,6 +63,7 @@ SCHEMES = ("fpp", "dwa", "trajsample")
 COLLISION_DISTANCE = 2.0 * ROBOT_RADIUS
 STOPPED_SPEED = 0.05
 SPEED_LIMIT_TOLERANCE = 0.15
+NEAR_MISS_CLEARANCE_M = 0.15
 # Command-velocity jump between consecutive `calculate()` calls beyond which a
 # tick counts as a "discontinuity" in the reported diagnostic. Chosen well
 # above ordinary frame-to-frame acceleration-limited change (RSIM_PARAMS.
@@ -768,6 +769,8 @@ class BenchmarkManager(AbstractTestManager):
         self.reached: set[RobotKey] = set()
         self.final_errors: dict[RobotKey, float] = {}
         self.ticks = 0
+        self.moving_ticks = 0
+        self.near_miss_ticks = 0
         self.termination_reason = "not_started"
         self._sim_controller: AbstractSimController | None = None
         self._is_team_yellow: bool | None = None
@@ -902,6 +905,14 @@ class BenchmarkManager(AbstractTestManager):
                     tick_min_distance = distance
                 if distance < collision_distance:
                     new_colliding_pairs.add((key_a, key_b))
+        any_moving = any(math.hypot(robot.v.x, robot.v.y) > STOPPED_SPEED for robot in robots.values())
+        if any_moving:
+            self.moving_ticks += 1
+            if tick_min_distance is not None:
+                clearance = tick_min_distance - collision_distance
+                if clearance < NEAR_MISS_CLEARANCE_M:
+                    self.near_miss_ticks += 1
+
         if self.trace is not None:
             self._record_tick(elapsed, robots, tick_min_distance)
 
@@ -945,6 +956,8 @@ class BenchmarkManager(AbstractTestManager):
             0.0 if self.unreached_robot_seconds <= 0.0 else self.stopped_robot_seconds / self.unreached_robot_seconds
         )
         max_error = max(self.final_errors.values(), default=None)
+        excess_distance_m = max(0.0, self.path_length_m - direct_distance) if direct_distance > 0.0 else 0.0
+        near_miss_ratio = 0.0 if self.moving_ticks == 0 else self.near_miss_ticks / self.moving_ticks
         # A real physical limit (RSIM_PARAMS.MAX_VEL, plus measurement
         # tolerance) is a hard pass/fail gate, unlike acceleration: observed
         # acceleration is reconstructed from filtered simulator velocity and
@@ -963,8 +976,10 @@ class BenchmarkManager(AbstractTestManager):
             "final_error_max_m": max_error,
             "path_length_total_m": self.path_length_m,
             "path_length_ratio": self.path_length_m / direct_distance if direct_distance > 0.0 else None,
+            "excess_distance_m": excess_distance_m,
             "min_center_distance_m": self.min_center_distance_m,
             "min_clearance_m": min_clearance,
+            "near_miss_ratio": near_miss_ratio,
             "collision_events": self.collision_events,
             "max_speed_mps": self.max_speed_mps,
             "speed_limit_exceeded": speed_limit_exceeded,
@@ -1083,10 +1098,12 @@ def aggregate_results(results: list[dict]) -> list[dict]:
                 "termination_reasons": sorted({run["termination_reason"] for run in runs}),
                 "sim_time_mean_s": _mean(runs, "sim_time_s"),
                 "path_length_ratio_mean": _mean(runs, "path_length_ratio"),
+                "excess_distance_mean_m": _mean(runs, "excess_distance_m"),
                 "min_clearance_worst_m": min(
                     (run["min_clearance_m"] for run in runs if run["min_clearance_m"] is not None),
                     default=None,
                 ),
+                "near_miss_ratio_mean": _mean(runs, "near_miss_ratio"),
                 "collision_events_total": sum(run["collision_events"] for run in runs),
                 "final_error_max_worst_m": max(
                     (run["final_error_max_m"] for run in runs if run["final_error_max_m"] is not None),
@@ -1126,9 +1143,9 @@ def markdown_report(payload: dict) -> str:
         "measure -- none of them is a true replan count, since that is planner-internal state this tool "
         "cannot observe through the public controller interface.",
         "",
-        "| Scenario | Scheme | Result | Pass rate | Time (s) | Path/direct | Worst clearance (m) | "
-        "Stopped ratio | Mean / p95 controller (ms) | Cmd jumps / dir changes / brakes |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Scenario | Scheme | Result | Pass rate | Time (s) | Path/direct | Excess (m) | Worst clearance (m) | "
+        "Near miss ratio | Stopped ratio | Mean / p95 controller (ms) | Cmd jumps / dir changes / brakes |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     order = {
         (scenario, scheme): index
@@ -1147,7 +1164,9 @@ def markdown_report(payload: dict) -> str:
         lines.append(
             f"| {row['scenario']} | {row['scheme']} | {result} | {row['pass_rate']:.0%} | "
             f"{_format(row['sim_time_mean_s'])} | {_format(row['path_length_ratio_mean'])} | "
+            f"{_format(row.get('excess_distance_mean_m'))} | "
             f"{_format(row['min_clearance_worst_m'], 3)} | "
+            f"{_format(row.get('near_miss_ratio_mean'), 3)} | "
             f"{_format(row['stopped_while_unreached_ratio_mean'], 3)} | {controller} | {black_box_events} |"
         )
 
@@ -1510,9 +1529,16 @@ def main() -> int:
                 if trace is not None:
                     traces.setdefault((scenario_name, scheme), trace)
                 results.append(result)
+                path_ratio = result.get("path_length_ratio")
+                excess_d = result.get("excess_distance_m")
+                path_str = (
+                    f", path={path_ratio:.2f}x (+{excess_d:.2f}m)"
+                    if path_ratio is not None and excess_d is not None
+                    else ""
+                )
                 print(
                     f"  {'PASS' if result['passed'] else 'FAIL'} ({result['termination_reason']}), "
-                    f"sim={result['sim_time_s']:.2f}s, controller={_format(result['controller_mean_ms'])}ms",
+                    f"sim={result['sim_time_s']:.2f}s{path_str}, controller={_format(result['controller_mean_ms'])}ms",
                     flush=True,
                 )
 
