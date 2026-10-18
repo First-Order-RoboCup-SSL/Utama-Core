@@ -124,7 +124,7 @@ class CrashingRule(BaseRule):
             enemy_v = _braked_velocity(contact.enemy.v)
             ux, uy = contact.direction_enemy_to_friendly
             crash_speed = (enemy_v[0] - friendly_v[0]) * ux + (enemy_v[1] - friendly_v[1]) * uy
-            if abs(crash_speed) <= self._fault_speed_threshold:
+            if crash_speed <= self._fault_speed_threshold:
                 fault = None
             else:
                 speed_diff = math.hypot(*friendly_v) - math.hypot(*enemy_v)

@@ -243,10 +243,14 @@ def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float)
     Defender Too Close foul every free kick. A placement near a corner pushed a robot
     off the pitch; clamped back on, its target was still inside the circle and it never
     left (moment placement_in_corner_traps_defender)."""
-    if not _in_planner_opp_defense_margin(game, point) and _clamp_to_field(point, game) == point:
+    if (
+        abs((point - center).mag() - radius) <= 1e-3
+        and not _in_planner_opp_defense_margin(game, point)
+        and _clamp_to_field(point, game) == point
+    ):
         return point
     base = math.atan2(point.y - center.y, point.x - center.x)
-    for step in range(1, 37):
+    for step in range(0, 37):
         for sign in (1.0, -1.0):
             angle = base + sign * step * math.pi / 36
             candidate = Vector2D(center.x + radius * math.cos(angle), center.y + radius * math.sin(angle))
@@ -362,10 +366,10 @@ def _clear_to_legal_positions(
             target = detour_around_circle(target, spot, ball_center, ball_keep_dist)
 
         target = _clamp_to_field(target, game)
+        if ball_center is not None and (target - ball_center).mag() < ball_keep_dist:
+            target = _reachable_on_circle(game, target, ball_center, ball_keep_dist)
 
-        dx = target.x - robot.p.x
-        dy = target.y - robot.p.y
-        if dx * dx + dy * dy < 1e-4:
+        if math.isclose(target.x, robot.p.x) and math.isclose(target.y, robot.p.y):
             blackboard.cmd_map[robot_id] = empty_command(False)
             continue
 
@@ -507,9 +511,16 @@ class BallPlacementOursStep:
                 )
 
             hold_dribbler = game.ts - self._release_started_at < self._RELEASE_DELAY_SECONDS
-            for robot_id in game.friendly_robots:
-                self.blackboard.cmd_map[robot_id] = empty_command(hold_dribbler and robot_id == placer_id)
-            return
+            self.blackboard.cmd_map[placer_id] = empty_command(hold_dribbler)
+            return _clear_to_legal_positions(
+                self.blackboard,
+                ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+                designated_keep_dist=BALL_KEEP_OUT_DISTANCE,
+                clear_opp_defense_area=True,
+                clear_own_defense_area=True,
+                max_own_defenders=1,
+                exempt_robot_ids={placer_id},
+            )
 
         self._release_started_at = None
 
@@ -588,6 +599,9 @@ class BallPlacementOursStep:
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             designated_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
             exempt_robot_ids={placer_id},
         )
 
@@ -605,6 +619,9 @@ class BallPlacementTheirsStep:
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             designated_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
         )
 
 
@@ -694,6 +711,7 @@ class PrepareKickoffTheirsStep:
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             clear_own_defense_area=True,
+            clear_opp_defense_area=True,
             exempt_robot_ids={keeper_id},
             intended_targets=intended,
         )
@@ -724,6 +742,7 @@ class PreparePenaltyOursStep:
         keeper_id = our_team_info.goalkeeper
 
         # Opponent goal is on the right if we are on the right, else on the left
+        # Opponent goal is on the right if we defend left, else on the left
         field_half_length = _field_half_length(game)
         opp_goal_x = field_half_length if not game.my_team_is_right else -field_half_length
         sign = 1 if not game.my_team_is_right else -1
@@ -736,33 +755,44 @@ class PreparePenaltyOursStep:
         non_keeper_ids = [rid for rid in robot_ids if rid != keeper_id]
         kicker_id = non_keeper_ids[0] if non_keeper_ids else robot_ids[0]
 
-        behind_idx = 0
-        behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
-        intended = {}
         # The kicker waits just behind the ball, like DirectFreeOursStep's approach:
         # sent to the mark itself it drove onto the placed ball and shoved it off
         # the mark before NORMAL_START, and keep-out then voided the penalty.
         kicker_spot = Vector2D(penalty_mark.x - sign * RefereeGeometry._KICKER_APPROACH_M, 0.0)
-        for robot_id in robot_ids:
-            if robot_id == kicker_id:
-                kicker = game.friendly_robots[robot_id]
-                target = kicker_spot
-                if game.ball is not None:
-                    ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
-                    target = detour_around_circle(kicker.p, kicker_spot, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
-                self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, goal_oren)
-            else:
-                # Place behind the line, spread in y
-                offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                intended[robot_id] = Vector2D(behind_line_x, offset)
-                behind_idx += 1
+        kicker = game.friendly_robots[kicker_id]
+        target = kicker_spot
+        if game.ball is not None:
+            ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
+            target = detour_around_circle(kicker.p, kicker_spot, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+        self.blackboard.cmd_map[kicker_id] = move(game, motion_controller, kicker_id, target, goal_oren)
+
+        # Goalkeeper remains on own goal line (not pulled into enemy half)
+        exempt_ids = {kicker_id}
+        if keeper_id is not None and keeper_id in game.friendly_robots and keeper_id != kicker_id:
+            our_goal_x = field_half_length if game.my_team_is_right else -field_half_length
+            own_sign = 1 if game.my_team_is_right else -1
+            keeper_pos = Vector2D(our_goal_x - own_sign * ROBOT_RADIUS, 0.0)
+            keeper_oren = math.pi if game.my_team_is_right else 0.0
+            self.blackboard.cmd_map[keeper_id] = move(game, motion_controller, keeper_id, keeper_pos, keeper_oren)
+            exempt_ids.add(keeper_id)
+
+        line_robot_ids = [rid for rid in robot_ids if rid != kicker_id and rid != keeper_id]
+        n_line = len(line_robot_ids)
+        behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
+        intended = {}
+        for behind_idx, robot_id in enumerate(line_robot_ids):
+            offset = (behind_idx - (n_line - 1) / 2.0) * behind_y_step if n_line > 1 else 0.0
+            intended[robot_id] = Vector2D(behind_line_x, offset)
 
         # A teammate starting goal-side of the mark goes round the placed ball
         # rather than knocking it off the mark on the way to its line.
         _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
-            exempt_robot_ids={kicker_id},
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
+            exempt_robot_ids=exempt_ids,
             intended_targets=intended,
         )
 
@@ -775,7 +805,7 @@ class PreparePenaltyOursStep:
 class PreparePenaltyTheirsStep:
     """Positions our robots for the opponent's penalty kick.
 
-    Goalkeeper: moves to our goal line centre.
+    Goalkeeper: moves to our goal line centre (offset infield by robot radius).
     All others: stop on a line behind the penalty mark spread along y.
 
     Exact placement of non-keeper robots is a strategy decision
@@ -800,28 +830,33 @@ class PreparePenaltyTheirsStep:
         behind_line_x = opp_penalty_mark_x - sign * PENALTY_BEHIND_MARK_DISTANCE
 
         robot_ids = sorted(game.friendly_robots.keys())
-        behind_idx = 0
+        exempt_ids = set()
+        if keeper_id is not None and keeper_id in game.friendly_robots:
+            # Keeper on own goal line (infield by ROBOT_RADIUS so body stays on field),
+            # facing the incoming ball
+            keeper_pos = Vector2D(our_goal_x - sign * ROBOT_RADIUS, 0.0)
+            self.blackboard.cmd_map[keeper_id] = move(
+                game, motion_controller, keeper_id, keeper_pos, math.pi if game.my_team_is_right else 0.0
+            )
+            exempt_ids.add(keeper_id)
+
+        line_robot_ids = [rid for rid in robot_ids if rid != keeper_id]
+        n_line = len(line_robot_ids)
         behind_y_step = PENALTY_LINE_Y_STEP_RATIO * _field_half_width(game)
         intended = {}
-
-        for robot_id in robot_ids:
-            if robot_id == keeper_id:
-                # Keeper on own goal line, facing the incoming ball
-                keeper_pos = Vector2D(our_goal_x, 0.0)
-                self.blackboard.cmd_map[robot_id] = move(
-                    game, motion_controller, robot_id, keeper_pos, math.pi if game.my_team_is_right else 0.0
-                )
-            else:
-                offset = (behind_idx - (len(robot_ids) - 1) / 2.0) * behind_y_step
-                intended[robot_id] = Vector2D(behind_line_x, offset)
-                behind_idx += 1
+        for behind_idx, robot_id in enumerate(line_robot_ids):
+            offset = (behind_idx - (n_line - 1) / 2.0) * behind_y_step if n_line > 1 else 0.0
+            intended[robot_id] = Vector2D(behind_line_x, offset)
 
         # The line is on the far side of the ball from our goal, so a defender
         # starting goal-side must go round the ball, not through the keep-out circle.
         _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
-            exempt_robot_ids={keeper_id},
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
+            exempt_robot_ids=exempt_ids,
             intended_targets=intended,
         )
 
@@ -954,8 +989,15 @@ class DirectFreeOursStep:
                     self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
                 else:
                     self.blackboard.cmd_map[robot_id] = empty_command(False)
-            else:
-                self.blackboard.cmd_map[robot_id] = empty_command(False)
+
+        _clear_to_legal_positions(
+            self.blackboard,
+            ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
+            exempt_robot_ids={kicker_id},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -964,10 +1006,13 @@ class DirectFreeOursStep:
 
 
 class DirectFreeTheirsStep:
-    """Actively clear our robots out of the ball keep-out radius."""
+    """Actively clear our robots out of the ball keep-out radius and defense areas."""
 
     def update(self) -> None:
         return _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
+            clear_opp_defense_area=True,
+            clear_own_defense_area=True,
+            max_own_defenders=1,
         )
