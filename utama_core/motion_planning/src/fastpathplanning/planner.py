@@ -1106,10 +1106,13 @@ class FastPathPlanner:
         # This is the same "don't flip on a rounding error" pattern as
         # `_find_best_shot`'s switch_margin/`ClearBallTactic`'s
         # _SWITCH_MARGIN elsewhere in this codebase.
-        obstacle_key = (
-            round(float(closest_obstacle[0]), self._DETOUR_MEMORY_PRECISION),
-            round(float(closest_obstacle[1]), self._DETOUR_MEMORY_PRECISION),
-        )
+        if _segment_key(obstacle_segment) in self._obstacle_cache_static_keys:
+            obstacle_key = _segment_key(obstacle_segment)
+        else:
+            obstacle_key = (
+                round(float(closest_obstacle[0]), self._DETOUR_MEMORY_PRECISION),
+                round(float(closest_obstacle[1]), self._DETOUR_MEMORY_PRECISION),
+            )
         memory_key = (robot_id, recursion_length, obstacle_key) if robot_id is not None else None
         prev_side = self._last_detour_side.get(memory_key) if memory_key is not None else None
 
@@ -1493,18 +1496,20 @@ class FastPathPlanner:
         # Excluded by the same `field_bounds`-derived identity `sanitize_target`
         # uses, not a blanket "ignore all boundaries" — a target that's still
         # in-bounds keeps every wall as a real obstacle.
+        tl = np.array(field_bounds.top_left)
+        br = np.array(field_bounds.bottom_right)
+        tr = np.array([br[0], tl[1]])
+        bl = np.array([tl[0], br[1]])
+        boundary_list = [(tl, tr), (tr, br), (br, bl), (bl, tl)]
+        boundary_segments = {_segment_key(b) for b in boundary_list}
         if not self.is_point_in_field(raw_target, field_bounds):
-            tl = np.array(field_bounds.top_left)
-            br = np.array(field_bounds.bottom_right)
-            tr = np.array([br[0], tl[1]])
-            bl = np.array([tl[0], br[1]])
-            boundary_segments = {
-                _segment_key((tl, tr)),
-                _segment_key((tr, br)),
-                _segment_key((br, bl)),
-                _segment_key((bl, tl)),
-            }
             obstacles = [o for o in obstacles if _segment_key(o) not in boundary_segments]
+        else:
+            near_boundary = {
+                _segment_key(b) for b in boundary_list if distance_point_to_segment(raw_target, b[0], b[1]) < clearance
+            }
+            if near_boundary:
+                obstacles = [o for o in obstacles if _segment_key(o) not in near_boundary]
 
         # 2. A target inside the (enclosed) opponent defense area needs its own
         # check: `sanitize_target` below only reacts to a target close to an
