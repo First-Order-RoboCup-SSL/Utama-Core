@@ -429,6 +429,8 @@ class DecoyOverloadTactic(BaseTactic[DecoyOverloadMem]):
             carried_enough = carry_exhausted(game, mem.carry_origin, stops_after=True)
             if (dragged or carried_enough or mem.lure_ticks >= _LURE_MAX_TICKS) and has_ball(game, mem.decoy_id):
                 mem.phase = "finish"
+            elif mem.lure_ticks > _LURE_MAX_TICKS * 2 and not has_ball(game, mem.decoy_id):
+                return {}, DecoyOverloadMem()
 
             return commands, mem
 

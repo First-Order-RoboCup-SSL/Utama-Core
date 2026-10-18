@@ -68,6 +68,7 @@ from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServ
 from utama_core.run.vision_stream_status import VisionStreamStatusMixin
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
 from utama_core.skills.src.shielding import reset_shield_state
+from utama_core.strategy.pickers import reset_closer_to_ball_state
 from utama_core.team_controller.src.controllers import (
     AbstractSimController,
     GRSimController,
@@ -400,6 +401,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # a worker process plays many matches: no robot starts one holding or committed
         reset_possession_state()
         reset_shield_state()
+        reset_closer_to_ball_state()
         self.referee_initial_command = referee_initial_command
 
         self._load_robot_controllers()
