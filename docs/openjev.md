@@ -242,3 +242,29 @@ Reading it:
 - The `L` cells against `zone_fluid`, `score_aware_zone_flow` and `overload_flow` are byte-identical
   replays: the three share their tactics, and at 0-0 without a long possession streak their pickers
   agree, so they count as one match, not three.
+
+### Exact timers (current encoder), retrying coarse's non-wins: 1 W 5 D 6 L, 1-11 (12 matches)
+
+`replays/jev_retry_exact/`, the encoder as it is now (event times to 0.1 s). It replayed the cells the
+coarse version did not win, strongest opponents first, and was stopped by hand after 12. The directory
+also holds 18 coarse wins copied in, so `tools/jev_summary.py` on it mixes the two versions; the
+numbers here are the 12 matches without `coarse_timers` in their result.
+
+| Opponent | Cell | Exact | Coarse |
+|---|---|---|---|
+| clear_press_plus | Rk | 1-0 W | 0-1 L |
+| clear_press_plus | R | 0-0 D | 1-1 D |
+| overload_press | Rk | 0-0 D | 2-2 D |
+| overload_press | R | 0-1 L | 0-3 L |
+| overload_press | Lk | 0-0 D | 0-1 L |
+| overload_press | L | 0-1 L | 0-0 D |
+| score_aware_counter_flow | Rk | 0-0 D | 0-1 L |
+| split_shape | Rk | 0-1 L | 0-6 L |
+| split_shape | R | 0-4 L | 0-4 L |
+| split_shape | Lk | 0-3 L | 0-4 L |
+| split_shape | L | 0-1 L | 1-5 L |
+| tiki_taka_plus | Rk | 0-0 D | 0-0 D |
+
+On the same 12 cells exact goes 1 W 5 D 6 L (1-11) against coarse's 0 W 4 D 8 L (4-28): it concedes
+far less, mostly against `split_shape`, but still loses all four `split_shape` cells. The other 76
+cells have not been played with exact timers, so there is no full-round total for the current encoder.
