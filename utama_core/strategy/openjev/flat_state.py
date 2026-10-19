@@ -13,8 +13,9 @@ a fact about each option; what to do about it is left to the model.
 
 from __future__ import annotations
 
+import json
 import math
-from typing import Optional
+from typing import Any, Optional
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -42,6 +43,37 @@ ACTION_GLOSSARY: dict[str, str] = {
     "block_shot": "stand on the line between the ball and our goal, just outside our defense area",
     "hold": "stay where you are, facing the ball",
 }
+
+STATIC_STATE: dict[str, Any] = {
+    "role": "You are the coach of our team in a 6v6 RoboCup small-size-league robot soccer match, and you "
+    "control each of our 5 outfield robots directly. At each moment you choose one action for one robot at a "
+    "time; the question lists what you already chose for the other robots at this moment, so make the robots "
+    "work together as a team. Our goalkeeper (robot 0) plays by itself. Referee restarts (kick-offs, free "
+    "kicks, penalties) are taken automatically: you only decide during open play.",
+    "pitch": "Everything is from our point of view: we attack towards their goal. Thirds: defensive (nearest "
+    "our goal), middle, attacking (nearest their goal). Strips: left, centre, right as we face their goal. "
+    "A cell is a third and a strip, e.g. attacking_left.",
+    "rules": "Only our goalkeeper may enter our own defense area, and none of our robots may enter theirs. A "
+    "robot may carry the ball at most 1 m before it must pass, shoot or clear. A foul gives them a free kick. "
+    "Aimless kick: a ball we kick from our own half that crosses their goal line without touching anyone gives "
+    "them a free kick from where we kicked it.",
+    "actions": ACTION_GLOSSARY,
+    "coaching": [
+        "Shots win matches here: the ball carrier shoots whenever its shot is open or narrow, from any range. "
+        "It passes only when its shot is blocked, to a free teammate with an open lane, preferring one whose own "
+        "shot is open; otherwise it dribbles into space, or clears when pressed in our own half.",
+        "When they have the ball, two robots go for it (get_ball: the nearer blocks its shot, the other tackles), "
+        "two block_shot, and one moves into an attacking cell, ready for the counter-attack.",
+        "When we have the ball, two robots move into open attacking cells on different strips and two stay back "
+        "on block_shot.",
+        "A loose ball near our goal is always someone's to get.",
+    ],
+    "reading_the_state": "Distances are in words: touching (<0.3 m), very close (<0.7 m), close (<1.5 m), "
+    "medium (<3 m), far. 'free' means no opponent within 0.7 m. Shots: open, narrow or blocked, and close "
+    "(<2 m), medium (<4 m) or long range. `recent` lists the latest events, newest first.",
+}
+
+STATIC_TEXT = json.dumps({"static": STATIC_STATE}, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 FREE_RADIUS_M = 0.7
 _NARROW_SHOT_M = 0.25  # open gap along their goal line below which a shot is "narrow"
