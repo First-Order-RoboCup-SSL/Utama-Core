@@ -29,12 +29,15 @@ Every script in the repository, by what it is for. Run them from the repository 
 ## OpenJev
 
 The LLM decision model as our team ([openjev.md](openjev.md)); needs a FOR-Engine server, except
-`--engine flat-scripted`.
+`--engine flat-scripted` and the `flat_*` tools (the rule or a small policy network in its place).
 
 | Script | Purpose |
 |---|---|
 | `jev_tournament.py` | OpenJev (yellow) against named strategies, `all` or `pool`: `--engine split` (it picks a tactic split), `flat` (it picks every robot's action, each question carrying the coaching's call), `flat-nocall` (the same without the call) or `flat-scripted` (the flat menu on a fixed rule); `--cells`, `--cell-tags`; one `<tag>.result.json` per match, resumable |
 | `tools/jev_flat_round.sh` | The flat engine against the round-robin's pool, full matches, 4 cells, in tmux workers |
+| `tools/flat_round.py` | The flat engine without a server (the scripted rule, or the policy network with `--weights`) against strategies or another network (`net:<weights>`), in parallel on the CPU: full matches, 4 cells x 7 decision rates by default; `--record` saves every question as training data |
+| `tools/flat_net_train.py` | Train the policy network by imitating the rule on `--record` data, on the GPU (needs a CUDA torch, e.g. FOR-Engine's environment) |
+| `tools/flat_net_rl.py` | Self-play reinforcement learning (PPO) for the policy network: against itself, earlier versions and the pool, CPU matches with sampled actions, GPU updates, a greedy check every few iterations |
 | `tools/jev_full_round.sh` | The split engine against every catalog strategy, 600 s, 4 cells, in tmux workers |
 | `tools/jev_summary.py` | Aggregate a run directory's `*.result.json`, however many workers wrote it |
 | `tools/jev_replay_html.py` | Render a replay with its `.openjev.jsonl` decision log as HTML |
