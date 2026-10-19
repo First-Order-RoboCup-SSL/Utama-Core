@@ -22,7 +22,7 @@ Usage:
   pixi run python jev_tournament.py tiki_taka --duration 30 --decision-hz 10 --render
   # every catalog strategy, both sides, resumable
   pixi run python jev_tournament.py all --duration 65 --cells 2 --out-dir replays/jev_all
-  # flat engine, full matches against the round-robin's pool
+  # flat engine, full matches against the round-robin's pool (or tools/jev_flat_round.sh)
   pixi run python jev_tournament.py pool --engine flat --duration 1200 --cells 4 --out-dir replays/jevflat_pool
 """
 
