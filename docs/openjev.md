@@ -268,3 +268,24 @@ numbers here are the 12 matches without `coarse_timers` in their result.
 On the same 12 cells exact goes 1 W 5 D 6 L (1-11) against coarse's 0 W 4 D 8 L (4-28): it concedes
 far less, mostly against `split_shape`, but still loses all four `split_shape` cells. The other 76
 cells have not been played with exact timers, so there is no full-round total for the current encoder.
+
+### Experiments, all reverted
+
+All coarse timers, 600 s, 60 Hz; directories under `replays/`.
+
+| Run | Change | Opponents | Result |
+|---|---|---|---|
+| `exp_def_press` | force `press` in our third when they have or contest the ball | `split_shape` x 4 | 0 W 1 D 3 L, 0-6 |
+| `exp_def_press_block` | force `press_block` there | `split_shape` x 4 | 0 W 0 D 4 L, 0-6 |
+| `exp_def_mark_all` | force `mark_all` there | `split_shape` x 4 | 0 W 1 D 3 L, 0-16 |
+| `exp_def_low_block` | force `low_block` there | `split_shape` x 4 | 0 W 0 D 4 L, 0-14 |
+| `exp2_B1` | 3 s stall-break + own-third `press_block` (stopped early) | 6 opponents, 20 matches | 0 W 16 D 4 L, 0-12 |
+| `exp2_B2` | 3 s stall-break + own-third `press` (stopped early) | 6 opponents, 19 matches | 2 W 13 D 4 L, 4-23 |
+
+No forced own-third split fixed `split_shape`: all four still lost to it. The stall-break cut stuck
+time on the same cells from 2807 s to 258 s (B1) and 2355 s to 178 s (B2), but the stalls it removed
+became 0-0s rather than goals: B1 turned two coarse wins into draws, B2 one win into a draw and one
+draw into a win, and both still lost every `split_shape` cell.
+
+A per-match listing of every run above (shots, possession, stuck seconds, decision counts) is in
+`replays/jev_all_README.md` (local, not committed; `replays/` is ignored).
