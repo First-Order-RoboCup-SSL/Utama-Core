@@ -40,3 +40,17 @@ def cell_coords(game: Game, p: Vector2D) -> tuple[int, int]:
 def cell_of(game: Game, p: Vector2D) -> str:
     third, strip = cell_coords(game, p)
     return CELLS[third * 3 + strip]
+
+
+def cell_bounds(game: Game, cell: str) -> tuple[float, float, float, float]:
+    """World (x_lo, x_hi, y_lo, y_hi) of `cell`."""
+    k = CELLS.index(cell)
+    third, strip = divmod(k, 3)
+    a = attack_dir(game)
+    half, width = game.field.half_length, game.field.half_width
+    edge = width / 3.0
+    p_lo, p_hi = third * 2.0 * half / 3.0, (third + 1) * 2.0 * half / 3.0
+    l_lo, l_hi = [(edge, width), (-edge, edge), (-width, -edge)][strip]
+    xs = sorted(((p_lo - half) * a, (p_hi - half) * a))
+    ys = sorted((l_lo * a, l_hi * a))
+    return xs[0], xs[1], ys[0], ys[1]

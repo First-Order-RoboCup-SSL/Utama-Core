@@ -3,9 +3,19 @@ decision with a fake client (the real one needs a FOR-Engine server), and a shor
 
 from __future__ import annotations
 
+import pytest
+
 from utama_core.entities.data.vector import Vector2D
 from utama_core.strategy.openjev import flat_state as fs
 from utama_core.tests.fixtures.game_builder import build_game, make_robot
+
+
+@pytest.mark.parametrize("is_right", [True, False])
+@pytest.mark.parametrize("cell", fs.CELLS)
+def test_every_cell_centre_maps_back_to_its_cell(is_right, cell):
+    game = build_game({1: make_robot(1, is_friendly=True)}, {}, my_team_is_right=is_right)
+    x_lo, x_hi, y_lo, y_hi = fs.cell_bounds(game, cell)
+    assert fs.cell_of(game, Vector2D((x_lo + x_hi) / 2, (y_lo + y_hi) / 2)) == cell
 
 
 def test_cells_are_named_from_our_point_of_view():
