@@ -175,6 +175,81 @@ class RobotView:
     situation: str
 
 
+def live_state(
+    game: Game,
+    robot_ids: tuple[int, ...],
+    actions: dict[int, str],
+    marked_by: dict[int, list[int]],
+    recent: list[str],
+) -> dict[str, Any]:
+    ref = game.referee
+    score: dict[str, Any] = {}
+    clock: dict[str, Any] = {}
+    if ref is not None:
+        us, them = (ref.yellow_team, ref.blue_team) if game.my_team_is_yellow else (ref.blue_team, ref.yellow_team)
+        score = {"us": us.score, "them": them.score}
+        clock = {"stage": ref.stage.name.lower(), "time_left_s": int(ref.stage_time_left // 10 * 10)}
+
+    ball = game.ball.p.to_2d()
+    speed = math.hypot(game.ball.v.x, game.ball.v.y)
+    forward = game.ball.v.x * attack_dir(game)
+    moving = (
+        "still"
+        if speed < 0.2
+        else (
+            "towards their goal"
+            if forward > 0.5 * speed
+            else "towards our goal" if forward < -0.5 * speed else "sideways"
+        )
+        + (", fast" if speed >= 1.5 else ", slow")
+    )
+    side, _, _ = possession(game)
+    holder = carrier(game, robot_ids)
+    ours = []
+    for rid in sorted(robot_ids):
+        if rid not in game.friendly_robots:
+            continue
+        p = game.friendly_robots[rid].p
+        ours.append(
+            {
+                "id": rid,
+                "cell": cell_of(game, p),
+                "to_ball": dist_word(p.distance_to(ball)),
+                "free": nearest_enemy_dist(game, p) >= FREE_RADIUS_M,
+                "shot": shot_word(game, p),
+                "doing": actions.get(rid, "nothing yet"),
+            }
+        )
+    keeper = enemy_keeper_id(game)
+    theirs = []
+    for eid, r in sorted(game.enemy_robots.items()):
+        theirs.append(
+            {
+                "id": eid,
+                "cell": cell_of(game, r.p),
+                "to_ball": dist_word(r.p.distance_to(ball)),
+                **({"role": "goalkeeper"} if eid == keeper else {"marked_by": marked_by.get(eid, [])}),
+            }
+        )
+    return {
+        "score": score,
+        "clock": clock,
+        "ball": {
+            "cell": cell_of(game, ball),
+            "moving": moving,
+            "held_by": f"our robot {holder}" if holder is not None else "nobody of ours",
+        },
+        "possession": side,
+        "our_robots": ours,
+        "their_robots": theirs,
+        "recent": recent[:4],
+    }
+
+
+def render(live: dict[str, Any]) -> str:
+    return STATIC_TEXT + json.dumps({"live": live}, ensure_ascii=False, separators=(",", ":"))
+
+
 def robot_view(
     game: Game,
     robot_id: int,
