@@ -13,11 +13,17 @@ Per match, under the run directory:
   <tag>.stats.json         possession / shots / ball travel
   replays/<run>/<tag>.npz  columnar replay (render with `python -m tools.jev_replay_html`)
 
+`--engine split` (default): OpenJev picks a tactic split (`OpenJevPartitioner`). `--engine flat`:
+OpenJev picks every outfield robot's action (`strategy/openjev/flat.py`). Tags start `openjev_`,
+`jevflat_`.
+
 Usage:
   # one match, watch it live
   pixi run python jev_tournament.py tiki_taka --duration 30 --decision-hz 10 --render
   # every catalog strategy, both sides, resumable
   pixi run python jev_tournament.py all --duration 65 --cells 2 --out-dir replays/jev_all
+  # flat engine, full matches against the round-robin's pool
+  pixi run python jev_tournament.py pool --engine flat --duration 1200 --cells 4 --out-dir replays/jevflat_pool
 """
 
 from __future__ import annotations
@@ -31,11 +37,14 @@ from pathlib import Path
 
 from tools.evaluation.match import _CONFIG_NAMES, _short_name, run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.strategy.openjev import (
-    OpenJevClient,
-    OpenJevPartitioner,
-    build_openjev_kernel_strategy,
-)
+from utama_core.strategy.openjev import OpenJevClient, build_openjev_kernel_strategy
+from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
+
+# --engine -> (tag prefix, factory(**common) -> build_kernel_strategy factory)
+ENGINES = {
+    "split": ("openjev", build_openjev_kernel_strategy),
+    "flat": ("jevflat", build_openjev_flat_kernel_strategy),
+}
 
 # (tag suffix, openjev_is_right, openjev_kicks_off)
 CELLS = {
@@ -64,7 +73,7 @@ def resolve_opponents(names: list[str]) -> list[str]:
     return full
 
 
-def _live_note(built: list[OpenJevPartitioner]) -> str:
+def _live_note(built: list) -> str:
     if not built:
         return ""
     s = built[0].summary()
@@ -76,16 +85,18 @@ def play(
     cell: tuple[str, bool, bool],
     run_dir: Path,
     *,
+    engine: str,
     url: str,
     duration: float,
     decision_hz: float,
     render: bool,
 ) -> dict:
     suffix, is_right, kicks_off = cell
-    tag = f"openjev_vs_{_short_name(opponent)}{suffix}"
-    built: list[OpenJevPartitioner] = []
+    prefix, build = ENGINES[engine]
+    tag = f"{prefix}_vs_{_short_name(opponent)}{suffix}"
+    built: list = []
     factory = functools.partial(
-        build_openjev_kernel_strategy,
+        build,
         url=url,
         decision_hz=decision_hz,
         log_path=run_dir / f"{tag}.openjev.jsonl",
@@ -94,7 +105,7 @@ def play(
     t0 = time.time()
     try:
         result = run_match(
-            "openjev",
+            prefix,
             opponent,
             duration_seconds=duration,
             a_is_right=is_right,
@@ -111,6 +122,7 @@ def play(
             p.close()
     out = {
         "tag": tag,
+        "engine": engine,
         "opponent": _short_name(opponent),
         "openjev_is_right": is_right,
         "openjev_kicks_off": kicks_off,
@@ -137,6 +149,12 @@ def main() -> None:
         help="short strategy names (e.g. tiki_taka counter_flow), 'all', or 'pool' (the round-robin's)",
     )
     ap.add_argument(
+        "--engine",
+        choices=sorted(ENGINES),
+        default="split",
+        help="split: OpenJev picks a tactic split; flat: OpenJev picks every robot's action",
+    )
+    ap.add_argument(
         "--duration",
         type=float,
         default=65.0,
@@ -145,8 +163,9 @@ def main() -> None:
     ap.add_argument(
         "--decision-hz",
         type=float,
-        default=60.0,
-        help="OpenJev decisions per sim second (60 = every tick)",
+        default=None,
+        help="OpenJev decisions per sim second (60 = every tick; default 60 for split, 1 for flat, which also "
+        "decides at once when the situation changes: carrier, possession, ball cell, a kick)",
     )
     ap.add_argument(
         "--cells",
@@ -170,6 +189,9 @@ def main() -> None:
     args = ap.parse_args()
 
     opponents = resolve_opponents(args.opponents)
+    prefix, _ = ENGINES[args.engine]
+    if args.decision_hz is None:
+        args.decision_hz = 60.0 if args.engine == "split" else 1.0
     try:
         version = OpenJevClient(args.url).version()
     except Exception as e:
@@ -188,7 +210,7 @@ def main() -> None:
     n_total = len(opponents) * len(cells)
     for opponent in opponents:
         for cell in cells:
-            tag = f"openjev_vs_{_short_name(opponent)}{cell[0]}"
+            tag = f"{prefix}_vs_{_short_name(opponent)}{cell[0]}"
             print(f"[{len(results) + 1}/{n_total}] {tag}")
             done = run_dir / f"{tag}.result.json"
             if done.exists():
@@ -199,6 +221,7 @@ def main() -> None:
                     opponent,
                     cell,
                     run_dir,
+                    engine=args.engine,
                     url=args.url,
                     duration=args.duration,
                     decision_hz=args.decision_hz,
