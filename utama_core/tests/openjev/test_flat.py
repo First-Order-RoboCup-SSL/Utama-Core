@@ -8,6 +8,7 @@ import pytest
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.strategy.openjev import flat_state as fs
+from utama_core.strategy.openjev.flat import scripted_choice
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 OUTFIELD = (1, 2, 3, 4, 5)
@@ -63,6 +64,9 @@ def _view(game, rid, carry_left_m=None, marked_by=None, blockers=0):
     return fs.robot_view(game, rid, OUTFIELD, carry_left_m=carry_left_m, marked_by=marked_by or {}, blockers=blockers)
 
 
+WALL = {0: (4.4, 0.0), 1: (2.6, -0.15), 2: (2.6, 0.0), 3: (2.6, 0.15)}  # three robots across the carrier's shot
+
+
 def test_carrier_menu_has_ball_actions_and_no_dribble_once_its_carry_is_used():
     game = _game(carrier_xy=(2, 0.0, 0.0), mates={3: (1.0, 2.0), 4: (-1.0, 0.0)})
     view = _view(game, 2, carry_left_m=0.5)
@@ -82,6 +86,26 @@ def test_off_ball_menu_marks_every_opponent_but_their_goalkeeper():
     assert len([k for k in view.options if k.startswith("move:")]) == 9
     assert view.options["mark:3"].endswith("marked by 4")
     assert view.options["mark:5"].endswith("unmarked")
+
+
+def test_scripted_carrier_shoots_on_sight_else_passes_to_a_free_teammate():
+    open_shot = _game(carrier_xy=(2, 2.0, 0.0), mates={3: (2.0, 2.0)}, enemies={0: (4.4, 2.5)})
+    assert scripted_choice(open_shot, _view(open_shot, 2), {}, True) == "shoot"
+
+    walled = _game(carrier_xy=(2, 2.0, 0.0), mates={3: (2.0, 2.0)}, enemies=WALL)
+    view = _view(walled, 2)
+    assert view.options["shoot"].startswith("shot blocked")  # the precondition the rule reads
+    assert "lane open" in view.options["pass:3"] and ", free," in view.options["pass:3"]
+    assert scripted_choice(walled, view, {}, True) == "pass:3"
+
+
+def test_scripted_off_ball_two_chasers_two_blockers_then_an_outlet():
+    game = _game(mates={1: (0.0, 0.0)}, enemies={0: (4.4, 0.0), 3: (1.0, 1.0), 5: (-2.0, -1.0)}, ball_xy=(1.0, 0.0))
+    decided = {}
+    for expected in ("get_ball", "get_ball", "block_shot", "block_shot", "move:attacking_centre"):
+        view = _view(game, 1, blockers=sum(a == "block_shot" for a in decided.values()))
+        assert scripted_choice(game, view, decided, False) == expected
+        decided[len(decided) + 2] = expected
 
 
 def test_block_shot_is_not_offered_to_a_third_robot():

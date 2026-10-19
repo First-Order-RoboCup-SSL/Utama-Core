@@ -94,3 +94,35 @@ def open_point(game: Game, cell: str, robot_id: int, taken: list[Vector2D]) -> V
             if score > best_score:
                 best, best_score = c, score
     return best
+
+
+def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], ours_has_ball: bool) -> str:
+    """The best fixed rule found over this menu, model-free (see `docs/openjev.md`): the carrier shoots
+    whenever its shot isn't blocked, from any range, else passes to a free teammate with an open lane,
+    else carries towards their goal. Off the ball, when they have it: two robots on the ball, two
+    blocking the shot, one forward as the counter-attack outlet; when we have it: two forward into
+    attacking cells, two back blocking."""
+    opts = view.options
+    if view.has_ball:
+        if not opts["shoot"].startswith("shot blocked"):
+            return "shoot"
+        passes = [k for k, d in opts.items() if k.startswith("pass:") and "lane open" in d and ", free," in d]
+        if passes:
+            return max(passes, key=lambda k: "its shot open" in opts[k])
+        dribbles = [k for k in opts if k.startswith("dribble:")]
+        if dribbles:
+            return max(dribbles, key=lambda k: (fs.THIRDS.index(k.split(":")[1].split("_")[0]), "centre" in k))
+        return "shoot"
+    chosen = list(decided.values())
+    if not ours_has_ball:
+        if chosen.count("get_ball") < 2:
+            return "get_ball"
+        if "block_shot" in opts:
+            return "block_shot"
+        cells = ("attacking_centre", "attacking_left", "attacking_right")
+    else:
+        forward = [a for a in chosen if a.startswith("move:") and not a.startswith("move:defensive")]
+        if len(forward) >= 2 and "block_shot" in opts:
+            return "block_shot"
+        cells = ("attacking_left", "attacking_right", "attacking_centre", "middle_left", "middle_right")
+    return next((f"move:{c}" for c in cells if f"move:{c}" not in chosen), "hold")
