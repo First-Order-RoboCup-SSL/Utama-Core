@@ -38,6 +38,7 @@ from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
     ball_line_receive_point,
     carry_exhausted,
+    carry_origin,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -66,6 +67,7 @@ from utama_core.strategy.openjev.encoder import possession
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
+EVENT_MIN_GAP_S = 0.1  # an event-triggered decision never comes sooner than this after the last one
 PASS_KICK_NOW_S = 1.2  # a pass not kicked by then is kicked at the receiver as it stands
 PASS_AIM_TIMEOUT_S = 3.0
 PASS_ROLL_TIMEOUT_S = 2.5
@@ -208,6 +210,36 @@ class FlatJevTactic(BaseTactic[FlatMem]):
 
     def highlights(self, mem: FlatMem) -> dict[RobotId, str]:
         return {rid: p.action for rid, p in mem.plans.items()}
+
+    # --- tick ---------------------------------------------------------------------------------
+
+    def tick(
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: FlatMem
+    ) -> tuple[dict[RobotId, RobotCommand], FlatMem]:
+        robot_ids = tuple(rid for rid in robot_ids if rid in game.friendly_robots)
+        if game.ball is None:
+            return {rid: empty_command() for rid in robot_ids}, mem
+        t = game.ts
+        for rid in list(mem.plans):
+            if rid not in robot_ids:
+                del mem.plans[rid]
+        for rid in robot_ids:
+            mem.carry_origins[rid] = carry_origin(game, rid, mem.carry_origins.get(rid))
+        self._advance(game, t, mem)
+
+        holder = fs.carrier(game, robot_ids)
+        self._track_events(game, t, holder, mem)
+        key = (possession(game)[0], fs.cell_of(game, game.ball.p.to_2d()))
+        if holder != mem.last_carrier or key != mem.last_key:
+            mem.replan = True
+        mem.last_carrier, mem.last_key = holder, key
+
+        since = None if mem.last_decision_t is None else t - mem.last_decision_t
+        if since is None or since >= self.period - 1e-9 or (mem.replan and since >= EVENT_MIN_GAP_S - 1e-9):
+            self._decide(game, t, robot_ids, holder, mem)
+            mem.last_decision_t = t
+            mem.replan = False
+        return self._execute(game, ctx, t, robot_ids, mem), mem
 
     # --- plan progress ------------------------------------------------------------------------
 
