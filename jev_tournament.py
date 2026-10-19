@@ -14,8 +14,8 @@ Per match, under the run directory:
   replays/<run>/<tag>.npz  columnar replay (render with `python -m tools.jev_replay_html`)
 
 `--engine split` (default): OpenJev picks a tactic split (`OpenJevPartitioner`). `--engine flat`:
-OpenJev picks every outfield robot's action (`strategy/openjev/flat.py`). Tags start `openjev_`,
-`jevflat_`.
+OpenJev picks every outfield robot's action (`strategy/openjev/flat.py`); `flat-scripted`: the flat
+menu played by its fixed rule, no server. Tags start `openjev_`, `jevflat_`, `flatscripted_`.
 
 Usage:
   # one match, watch it live
@@ -40,10 +40,15 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.strategy.openjev import OpenJevClient, build_openjev_kernel_strategy
 from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
 
-# --engine -> (tag prefix, factory(**common) -> build_kernel_strategy factory)
+# --engine -> (tag prefix, needs a server, factory(**common) -> build_kernel_strategy factory)
 ENGINES = {
-    "split": ("openjev", build_openjev_kernel_strategy),
-    "flat": ("jevflat", build_openjev_flat_kernel_strategy),
+    "split": ("openjev", True, build_openjev_kernel_strategy),
+    "flat": ("jevflat", True, build_openjev_flat_kernel_strategy),
+    "flat-scripted": (
+        "flatscripted",
+        False,
+        functools.partial(build_openjev_flat_kernel_strategy, policy="scripted"),
+    ),
 }
 
 # (tag suffix, openjev_is_right, openjev_kicks_off)
@@ -92,7 +97,7 @@ def play(
     render: bool,
 ) -> dict:
     suffix, is_right, kicks_off = cell
-    prefix, build = ENGINES[engine]
+    prefix, _, build = ENGINES[engine]
     tag = f"{prefix}_vs_{_short_name(opponent)}{suffix}"
     built: list = []
     factory = functools.partial(
@@ -152,7 +157,8 @@ def main() -> None:
         "--engine",
         choices=sorted(ENGINES),
         default="split",
-        help="split: OpenJev picks a tactic split; flat: OpenJev picks every robot's action",
+        help="split: OpenJev picks a tactic split; flat: OpenJev picks every robot's action; flat-scripted: "
+        "flat's menu played by a fixed rule, no server",
     )
     ap.add_argument(
         "--duration",
@@ -189,13 +195,15 @@ def main() -> None:
     args = ap.parse_args()
 
     opponents = resolve_opponents(args.opponents)
-    prefix, _ = ENGINES[args.engine]
+    prefix, needs_server, _ = ENGINES[args.engine]
     if args.decision_hz is None:
         args.decision_hz = 60.0 if args.engine == "split" else 1.0
-    try:
-        version = OpenJevClient(args.url).version()
-    except Exception as e:
-        raise SystemExit(f"FOR-Engine not reachable at {args.url}: {e}")
+    version: dict = {}
+    if needs_server:
+        try:
+            version = OpenJevClient(args.url).version()
+        except Exception as e:
+            raise SystemExit(f"FOR-Engine not reachable at {args.url}: {e}")
 
     run_dir = Path(args.out_dir) if args.out_dir else REPLAY_BASE_PATH / f"jev_{datetime.now():%Y%m%d_%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
