@@ -155,6 +155,11 @@ def main() -> None:
         default=1,
         help="side x kickoff cells per opponent",
     )
+    ap.add_argument(
+        "--cell-tags",
+        default=None,
+        help="only these cells of --cells 4, e.g. Rk,L (for splitting one opponent across workers)",
+    )
     ap.add_argument("--url", default="http://127.0.0.1:3000", help="FOR-Engine server")
     ap.add_argument(
         "--out-dir",
@@ -175,10 +180,14 @@ def main() -> None:
     (run_dir / "run.json").write_text(json.dumps({"args": vars(args), "server": version}, indent=1))
     print(f"run dir: {run_dir}\nserver: {version.get('model_dir')} ({version.get('backend', {}).get('backend')})")
 
+    cells = CELLS[args.cells]
+    if args.cell_tags:
+        wanted = {f"_{t}" for t in args.cell_tags.split(",")}
+        cells = [c for c in CELLS[4] if c[0] in wanted]
     results = []
-    n_total = len(opponents) * len(CELLS[args.cells])
+    n_total = len(opponents) * len(cells)
     for opponent in opponents:
-        for cell in CELLS[args.cells]:
+        for cell in cells:
             tag = f"openjev_vs_{_short_name(opponent)}{cell[0]}"
             print(f"[{len(results) + 1}/{n_total}] {tag}")
             done = run_dir / f"{tag}.result.json"
