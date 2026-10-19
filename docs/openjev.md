@@ -59,3 +59,22 @@ free, shot open / narrow / blocked and range: geometry the model can't read from
 A pass, shot or clearance is locked once chosen until the kick happens, the ball is lost (0.3 s) or it
 times out; the receiver is not asked while a pass is on. Ball actions check the dribbler's contact
 sensor, not the visual box (which reaches a few cm past contact): from there a robot closes in first.
+
+**Free kicks** (`free_kick_overrides`). Theirs: two robots in a wall 0.65 m from the ball on its line to
+our goal (outside the 0.5 m keep-out), the rest marking the opponents nearest our goal; our goalkeeper
+is left to its own tactic. Ours: the built-in kicker approach lined up at the widest gap in their goal,
+two teammates to open attacking spots, two back. The built-in steps leave defenders frozen where play
+stopped and line our kicker up at one of their robots.
+
+**The prompt** (`flat_state.STATIC_STATE`, cached): the role, the pitch, the rules (defense areas, the
+1 m carry, aimless kicks), the menu, and four coaching principles. These are the rule that won the
+model-free probes below. Each question then gives the moment's coaching line, the roles still unfilled,
+and **the coaching's call** for that robot: the pick of that rule (`scripted_choice`), as advice
+(`"The coaching's call for robot 3: get_ball."`). Every answer is still the model's own; read alone,
+the principles were followed on only 62% of questions (`--engine flat-nocall`, results below). With no
+carrier of ours and the ball in our defensive third the moment's line is `deep`: three on the ball, two
+blocking, nobody forward; with the ball, three forward and one back, as the rule plays it.
+
+**Scripted control** (`--engine flat-scripted`, `scripted_choice`): the same menu played by a fixed
+rule. It is the fallback when the server errors, and a control: it measures the menu and its
+execution apart from the model's choices, in minutes instead of the model's half hour a match.
