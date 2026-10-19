@@ -190,3 +190,55 @@ one robot decides the match. Possession is now said from the carrier, as the rul
 (`flat_state.side_of`): calls followed 99.8%, the first chaser's 100%.
 
 **With the call, the final rule** (v5, `--engine flat`): (pending)
+
+## Split engine results (2026-09-26)
+
+Every match 600 s of game time, decisions at 60 Hz, OpenJev = yellow. Cells: R/L = OpenJev plays
+right/left, `k` = OpenJev kicks off. Scores are OpenJev first. Server: FOR-Engine 0.1.0, model
+`openjev-FP8`, sglang backend, T = 0.85. Fallback decisions: 0 in every match below.
+
+These were played before `jev-engine` merged v2.0.4 to v2.2.0 (planner and sim speed-ups, referee
+fixes, retirements), against the catalog as it was then. rsim is deterministic, but replaying them on
+current code will not give the same matches; rerun before comparing with a newer round-robin.
+
+### Full round, coarse timers: 18 W 58 D 12 L, 25-33 (88 matches)
+
+`replays/jev_full_600s_coarse/`, the encoder with event times in coarse buckets (`--coarse-timers`,
+since removed). 22 opponents x 4 cells, 7.5 h of match wall time; 94% of decisions were cache hits,
+uncached ones took 116 ms on average.
+
+| Opponent | W | D | L | GF-GA | Pts | Rk | R | Lk | L |
+|---|---|---|---|---|---|---|---|---|---|
+| shadow_switch | 3 | 1 | 0 | 4-0 | 10 | 2-0 | 0-0 | 1-0 | 1-0 |
+| clear_danger | 2 | 2 | 0 | 2-0 | 8 | 1-0 | 0-0 | 1-0 | 0-0 |
+| decoy_and_overload | 2 | 2 | 0 | 4-1 | 8 | 0-0 | 2-0 | 1-0 | 1-1 |
+| switch_of_play | 2 | 2 | 0 | 2-0 | 8 | 0-0 | 1-0 | 0-0 | 1-0 |
+| clear_press_plus | 2 | 1 | 1 | 3-2 | 7 | 0-1 | 1-1 | 1-0 | 1-0 |
+| high_line_zone | 1 | 3 | 0 | 1-0 | 6 | 0-0 | 0-0 | 1-0 | 0-0 |
+| low_block | 1 | 3 | 0 | 1-0 | 6 | 0-0 | 0-0 | 0-0 | 1-0 |
+| score_aware_zone_flow | 1 | 3 | 0 | 1-0 | 6 | 0-0 | 1-0 | 0-0 | 0-0 |
+| tiki_taka_plus | 1 | 3 | 0 | 1-0 | 6 | 0-0 | 1-0 | 0-0 | 0-0 |
+| zone_fluid | 1 | 3 | 0 | 1-0 | 6 | 0-0 | 1-0 | 0-0 | 0-0 |
+| counter_press | 1 | 2 | 1 | 1-1 | 5 | 0-0 | 0-0 | 1-0 | 0-1 |
+| give_and_go_solo | 1 | 2 | 1 | 1-1 | 5 | 0-0 | 0-0 | 0-1 | 1-0 |
+| counter_flow | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| high_press | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| overload_flow | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| press_trigger_flow | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| three_slot | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| tiki_taka | 0 | 4 | 0 | 0-0 | 4 | 0-0 | 0-0 | 0-0 | 0-0 |
+| press_and_pass | 0 | 3 | 1 | 0-1 | 3 | 0-0 | 0-0 | 0-0 | 0-1 |
+| overload_press | 0 | 2 | 2 | 2-6 | 2 | 2-2 | 0-3 | 0-1 | 0-0 |
+| score_aware_counter_flow | 0 | 2 | 2 | 0-2 | 2 | 0-1 | 0-1 | 0-0 | 0-0 |
+| split_shape | 0 | 0 | 4 | 1-19 | 0 | 0-6 | 0-4 | 0-4 | 1-5 |
+
+Reading it:
+
+- Mostly draws: 58 of 88, 55 of them 0-0. OpenJev beats or holds most of the catalog by small margins
+  and loses clearly only to `split_shape` (1-19 over 4 cells), then `overload_press` and
+  `score_aware_counter_flow`.
+- Many matches stall: 41 of 88 have ball-stuck time (ball under 0.05 m/s for 10 s or more while live),
+  10 of them over 300 s. Those 0-0s say little about either side.
+- The `L` cells against `zone_fluid`, `score_aware_zone_flow` and `overload_flow` are byte-identical
+  replays: the three share their tactics, and at 0-0 without a long possession streak their pickers
+  agree, so they count as one match, not three.
