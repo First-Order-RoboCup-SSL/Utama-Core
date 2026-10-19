@@ -22,6 +22,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
+    has_ball,
     segment_blocked,
 )
 
@@ -99,3 +100,12 @@ def shot_word(game: Game, p: Vector2D) -> str:
 
 def lane_open(game: Game, start: Vector2D, end: Vector2D) -> bool:
     return not segment_blocked(start, end, enemy_positions(game))
+
+
+def carrier(game: Game, robot_ids) -> Optional[int]:
+    """Our robot with the ball on (or visibly at) its dribbler, nearest the ball if several."""
+    holders = [rid for rid in robot_ids if rid in game.friendly_robots and has_ball(game, rid, visual=True)]
+    if not holders:
+        return None
+    ball = game.ball.p.to_2d()
+    return min(holders, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
