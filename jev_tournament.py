@@ -38,8 +38,9 @@ from pathlib import Path
 
 from tools.evaluation.match import _CONFIG_NAMES, _short_name, run_match
 from utama_core.config.settings import REPLAY_BASE_PATH
-from utama_core.strategy.openjev import OpenJevClient, build_openjev_kernel_strategy
+from utama_core.strategy.openjev.client import OpenJevClient
 from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
+from utama_core.strategy.openjev.partitioner import build_openjev_kernel_strategy
 
 # --engine -> (tag prefix, needs a server, factory(**common) -> build_kernel_strategy factory)
 ENGINES = {

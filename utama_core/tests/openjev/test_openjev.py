@@ -10,9 +10,9 @@ import json
 import pytest
 
 from tools.evaluation.match import run_match
-from utama_core.strategy.openjev import build_openjev_kernel_strategy
 from utama_core.strategy.openjev.client import Decision
 from utama_core.strategy.openjev.encoder import QUESTION_KEY, STATIC_TEXT
+from utama_core.strategy.openjev.partitioner import build_openjev_kernel_strategy
 from utama_core.strategy.openjev.splits import SPLIT_KEYS, SPLITS, allocate
 
 ALL_TACTICS = frozenset({"attack", "overload", "press", "mark", "block", "clear"})
