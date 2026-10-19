@@ -1,7 +1,7 @@
 """The flat engine's tactic: one `FlatJevTactic` owns all 5 outfield robots and gives each an action
 from its own menu (`flat_state.py`), no tactics in between; who answers is its `policy`: OpenJev
-(`strategy/openjev/flat.py`, through FOR-Engine), the scripted rule (`scripted_choice`) or the policy
-network (`flat_net.py`).
+(`strategy/openjev/flat.py`, through FOR-Engine), the scripted rule (`scripted_choice`, the catalog's
+`strategy/flat_rule.py`) or the policy network (`flat_net.py`).
 
 The goalkeeper stays on its pinned slot and referee restarts on `RefereeOverride`, with this engine's
 own free-kick formations. At each decision the tactic asks one question per robot, chained in the

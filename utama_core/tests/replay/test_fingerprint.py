@@ -414,6 +414,10 @@ AUDIT = {
         "utama_core.replay.replay_writer",
         "utama_core.replay.scenario",
         "utama_core.scenario_bench.start",
+        # The flat engine's decision log and recorded questions are outputs, and the network weights
+        # it reads play only with policy="net", never in a round-robin (`flat_rule` is the rule).
+        "utama_core.tactics.flat",
+        "utama_core.tactics.flat_net",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
 }

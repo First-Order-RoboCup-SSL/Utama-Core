@@ -32,6 +32,7 @@ ladder with no strategies named plays these.
 | `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
 | `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
 | `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
+| `flat_rule` | The OpenJev flat engine's scripted rule (`tactics/flat.py`, `docs/openjev.md`): one tactic gives each robot an action from its menu at 1 Hz and when play changes; the carrier shoots unless blocked, else passes or dribbles; without the ball two chase, two block, one outlet (three chase in our third); with it three forward, one back; own free-kick formations. |
 
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
 or a ladder pool unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:

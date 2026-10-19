@@ -32,6 +32,7 @@ from utama_core.strategy.decoy_and_overload import (
     build_decoy_and_overload_kernel_strategy,
 )
 from utama_core.strategy.default import build_default_kernel_strategy
+from utama_core.strategy.flat_rule import build_flat_rule_kernel_strategy
 from utama_core.strategy.give_and_go_solo import build_give_and_go_solo_kernel_strategy
 from utama_core.strategy.high_line_zone import build_high_line_zone_kernel_strategy
 from utama_core.strategy.high_press import build_high_press_kernel_strategy

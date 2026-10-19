@@ -3,7 +3,8 @@
 engine, around the shared `tactics/flat.py`).
 
 The model-driven engines are deliberately not in `kernel_strategy.py`, so tournament auto-discovery
-(`tools/evaluation/match.py`'s `_CONFIG_NAMES`) never picks them up without a running server. This
-package imports nothing, so one engine's code never brings in the other's (the split engine's
-fallback runs `tiki_taka`'s picker): import from the modules.
+(`tools/evaluation/match.py`'s `_CONFIG_NAMES`) never picks them up without a running server; the
+flat engine's scripted rule, which needs none, is the catalog's `flat_rule`. This package imports
+nothing, so one engine's code never brings in the other's (the split engine's fallback runs
+`tiki_taka`'s picker): import from the modules.
 """
