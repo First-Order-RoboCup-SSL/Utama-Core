@@ -27,11 +27,17 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import IO, Any, Optional
 
+from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.shared.pass_and_score_geometry import (
     CARRY_LIMIT_M,
+    ball_in_own_defense_area,
+    ball_line_receive_point,
+    carry_exhausted,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -39,13 +45,27 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    oriented_towards,
+    own_defense_area_exit_point,
     segment_blocked,
+)
+from utama_core.skills.src.defend_parameter import defend_parameter
+from utama_core.skills.src.go_to_ball import go_to_ball
+from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.man_mark import mark_target
+from utama_core.skills.src.utils.move_utils import (
+    empty_command,
+    kick,
+    move,
+    turn_on_spot,
 )
 from utama_core.strategy.openjev import flat_state as fs
 from utama_core.strategy.openjev.client import OpenJevClient
 from utama_core.strategy.openjev.encoder import possession
+from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
+PASS_KICK_NOW_S = 1.2  # a pass not kicked by then is kicked at the receiver as it stands
 PASS_AIM_TIMEOUT_S = 3.0
 PASS_ROLL_TIMEOUT_S = 2.5
 SHOT_TIMEOUT_S = 2.0
@@ -364,6 +384,120 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         if origin is None:
             return None
         return CARRY_LIMIT_M - game.ball.p.to_2d().distance_to(origin)
+
+    # --- execution ----------------------------------------------------------------------------
+
+    def _execute(
+        self, game: Game, ctx: TickContext, t: float, robot_ids: tuple[int, ...], mem: FlatMem
+    ) -> dict[RobotId, RobotCommand]:
+        mc = ctx.motion_controller
+        commands: dict[RobotId, RobotCommand] = {}
+        ball = game.ball.p.to_2d()
+        blockers = sorted(rid for rid, p in mem.plans.items() if p.action == "block_shot")
+
+        for rid, plan in list(mem.plans.items()):
+            if not plan.action.startswith("pass:") or rid in commands:
+                continue
+            receiver = plan.partner
+            if receiver not in robot_ids:
+                self._finish(mem, rid)
+                continue
+            cmds, _, _ = _pass_exec(game, ctx, rid, receiver, kick_now=t - plan.since > PASS_KICK_NOW_S)
+            commands.update(cmds)
+            if cmds[rid].kick:
+                self._finish(mem, rid)  # the passer is free again; the receiver's plan tracks the ball
+                if receiver in mem.plans:
+                    mem.plans[receiver].kicked_at = t
+
+        for rid in robot_ids:
+            if rid in commands:
+                continue
+            plan = mem.plans.get(rid)
+            action = plan.action if plan is not None else ""
+            # `at_ball` (the visual box) reaches a few cm past dribbler contact: from there a robot
+            # must still close in before it can carry or kick (`run_setup_phase`'s comment), so
+            # ball actions check `on_ball`, the contact sensor.
+            at_ball = has_ball(game, rid, visual=True)
+            on_ball = has_ball(game, rid)
+            if action == "receive":
+                if plan.kicked_at is None:
+                    commands[rid] = go_to_point(game, mc, rid, game.friendly_robots[rid].p)
+                    continue
+                spot = ball_line_receive_point(game, rid)
+                if spot is None:
+                    commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
+                else:
+                    spot = clamp_outside_enemy_defense_area(game, clamp_outside_own_defense_area(game, spot))
+                    commands[rid] = move(
+                        game, mc, rid, spot, game.friendly_robots[rid].p.angle_to(ball), dribbling=True
+                    )
+            elif action == "shoot":
+                commands[rid] = self._shoot(game, ctx, rid, mem)
+                if commands[rid].kick and not on_ball:
+                    # Aimed but only at the visual edge: a kick now would hit nothing. Close
+                    # the last few cm keeping the aim (`_pass_exec` does the same).
+                    commands[rid] = move(game, mc, rid, ball, game.friendly_robots[rid].orientation, dribbling=True)
+                elif commands[rid].kick:
+                    self._finish(mem, rid)
+            elif action == "clear":
+                if on_ball:
+                    commands[rid] = self._clear(game, mc, rid)
+                    if commands[rid].kick:
+                        self._finish(mem, rid)
+                else:
+                    commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
+            elif action.startswith("dribble:"):
+                if not on_ball:
+                    commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
+                elif carry_exhausted(game, mem.carry_origins.get(rid), stops_after=True):
+                    commands[rid] = empty_command(dribbler_on=True)
+                    mem.replan = True  # out of carry: the carrier must pass, shoot or clear
+                else:
+                    commands[rid] = move(
+                        game, mc, rid, plan.target, game.friendly_robots[rid].p.angle_to(ball), dribbling=True
+                    )
+            elif at_ball:
+                # Off-ball action but the ball came to this robot: take it and keep it until the
+                # next decision, which the carrier change has already brought forward.
+                if on_ball:
+                    commands[rid] = empty_command(dribbler_on=True)
+                else:
+                    commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
+            elif action == "get_ball":
+                if ball_in_own_defense_area(game):
+                    commands[rid] = go_to_point(game, mc, rid, own_defense_area_exit_point(game, ball.y))
+                else:
+                    commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
+            elif action.startswith("move:") or action == "hold":
+                commands[rid] = go_to_point(game, mc, rid, plan.target)
+            elif action.startswith("mark:") and int(action.split(":")[1]) in game.enemy_robots:
+                target = clamp_to_field(
+                    clamp_outside_own_defense_area(game, mark_target(game, int(action.split(":")[1]))), game
+                )
+                commands[rid] = go_to_point(game, mc, rid, target)
+            elif action == "block_shot":
+                commands[rid] = defend_parameter(game, mc, rid, defender_group=blockers) or empty_command()
+            else:
+                commands[rid] = empty_command()
+        return commands
+
+    @staticmethod
+    def _clear(game: Game, mc: MotionController, rid: int) -> RobotCommand:
+        """Kick long and wide: upfield, towards the nearer touch line. Straight upfield
+        (`kick_upfield`) from our own half rolls over their goal line too often: an aimless kick,
+        their free kick from where we kicked."""
+        me = game.friendly_robots[rid].p
+        side = 1.0 if game.ball.p.y >= 0 else -1.0
+        target = Vector2D(me.x + fs.attack_dir(game) * 3.0, side * (game.field.half_width + 1.0))
+        oren = me.angle_to(target)
+        if oriented_towards(game, rid, oren):
+            return kick()
+        return turn_on_spot(game=game, motion_controller=mc, robot_id=rid, target_oren=oren, dribbling=True)
+
+    def _shoot(self, game: Game, ctx: TickContext, rid: int, mem: FlatMem) -> RobotCommand:
+        cmd, _, best_y = _score_goal(game, ctx, rid, mem.shot_y.get(rid))
+        mem.shot_y[rid] = best_y
+        return cmd
 
     # --- logging ------------------------------------------------------------------------------
 
