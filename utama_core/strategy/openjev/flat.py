@@ -37,6 +37,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_goal_line,
     enemy_positions,
     find_best_shot,
+    has_ball,
     segment_blocked,
 )
 from utama_core.strategy.openjev import flat_state as fs
@@ -44,6 +45,10 @@ from utama_core.strategy.openjev.client import OpenJevClient
 from utama_core.strategy.openjev.encoder import possession
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
+PASS_AIM_TIMEOUT_S = 3.0
+PASS_ROLL_TIMEOUT_S = 2.5
+SHOT_TIMEOUT_S = 2.0
+BALL_LOST_GRACE_S = 0.3
 
 
 @dataclass
@@ -161,6 +166,52 @@ class FlatJevTactic(BaseTactic[FlatMem]):
 
     def highlights(self, mem: FlatMem) -> dict[RobotId, str]:
         return {rid: p.action for rid, p in mem.plans.items()}
+
+    # --- plan progress ------------------------------------------------------------------------
+
+    def _finish(self, mem: FlatMem, rid: int) -> None:
+        mem.plans.pop(rid, None)
+        mem.replan = True
+
+    def _advance(self, game: Game, t: float, mem: FlatMem) -> None:
+        """Drop plans that succeeded, failed or timed out."""
+        for rid, plan in list(mem.plans.items()):
+            if rid not in mem.plans:
+                continue
+            holding = has_ball(game, rid, visual=True)
+            if plan.action.startswith("pass:"):
+                lost = self._lost(plan, holding, t)
+                if lost or t - plan.since > PASS_AIM_TIMEOUT_S:
+                    self._note(t, f"robot {rid}'s pass to robot {plan.partner} failed")
+                    self._finish(mem, rid)
+                    if plan.partner in mem.plans and mem.plans[plan.partner].action == "receive":
+                        self._finish(mem, plan.partner)
+            elif plan.action == "receive":
+                if plan.kicked_at is None:
+                    if plan.partner not in mem.plans:  # the pass was called off before the kick
+                        self._finish(mem, rid)
+                elif holding:
+                    self._note(t, f"robot {rid} received the pass")
+                    self._finish(mem, rid)
+                else:
+                    ball_speed = math.hypot(game.ball.v.x, game.ball.v.y)
+                    rolling = t - plan.kicked_at
+                    taken = possession(game)[0] == "them" and rolling > BALL_LOST_GRACE_S
+                    if rolling > PASS_ROLL_TIMEOUT_S or (ball_speed < 0.3 and rolling > 0.5) or taken:
+                        self._note(t, f"pass to robot {rid} did not arrive")
+                        self._finish(mem, rid)
+            elif plan.action in ("shoot", "clear"):
+                if self._lost(plan, holding, t) or t - plan.since > SHOT_TIMEOUT_S:
+                    self._finish(mem, rid)
+
+    @staticmethod
+    def _lost(plan: Plan, holding: bool, t: float) -> bool:
+        if holding:
+            plan.lost_since = None
+            return False
+        if plan.lost_since is None:
+            plan.lost_since = t
+        return t - plan.lost_since > BALL_LOST_GRACE_S
 
     # --- events for the state's `recent` list -------------------------------------------------
 
