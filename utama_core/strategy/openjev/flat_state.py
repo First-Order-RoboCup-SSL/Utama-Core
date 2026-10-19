@@ -374,14 +374,19 @@ def robot_view(
     return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation, phase=phase)
 
 
-def question(view: RobotView, decided: list[str], roles_left: str = "") -> dict[str, Any]:
+def question(view: RobotView, decided: list[str], roles_left: str = "", call: Optional[str] = None) -> dict[str, Any]:
+    """`call`: the coaching's pick for this robot (`flat.scripted_choice`), stated as advice; the answer is
+    still the model's. Without it the model chose as the coaching would on 62% of questions, with it on
+    93% (`docs/openjev.md`)."""
     already = "; ".join(decided) if decided else "nothing yet"
     left = f" {roles_left}" if roles_left else ""
+    called = f" The coaching's call for robot {view.robot_id}: {call}." if call else ""
     return {
         QUESTION_KEY: {
             "type": "choice",
             "instructions": f"{view.situation} Already decided for this moment: {already}. "
-            f"Coaching for this moment: {PHASE_COACHING[view.phase]}.{left} What should robot {view.robot_id} do now?",
+            f"Coaching for this moment: {PHASE_COACHING[view.phase]}.{left}{called} "
+            f"What should robot {view.robot_id} do now?",
             "criteria": view.options,
         }
     }

@@ -192,6 +192,28 @@ def test_robots_in_a_pass_are_not_asked_again_until_it_ends():
     assert "robot 2 -> passing to robot 3" in client.requests[0][1][fs.QUESTION_KEY]["instructions"]
 
 
+def test_each_question_carries_the_coachings_call_unless_turned_off(tmp_path):
+    game = _carrier_game()
+    answers = {2: "pass:3", 4: "move:attacking_left", 5: "block_shot", 1: "hold"}
+    client = FakeClient(answers=answers)
+    tactic = FlatJevTactic(client, log_path=str(tmp_path / "log.jsonl"))
+    tactic._decide(game, 0.0, OUTFIELD, 2, FlatMem())
+    tactic.close()
+    chain = json.loads((tmp_path / "log.jsonl").read_text())["chain"]
+    assert len(chain) == len(client.requests) == 4
+    for (_, q), asked in zip(client.requests, chain):
+        rid, call = asked["robot"], asked["rule"]
+        assert q[fs.QUESTION_KEY]["instructions"].endswith(
+            f"The coaching's call for robot {rid}: {call}. What should robot {rid} do now?"
+        )
+    assert chain[0]["rule"] == scripted_choice(game, _view(game, 2), {}, True)
+
+    plain = FakeClient(answers=answers)
+    FlatJevTactic(plain, call=False)._decide(game, 0.0, OUTFIELD, 2, FlatMem())
+    assert plain.requests
+    assert not any("coaching's call" in q[fs.QUESTION_KEY]["instructions"] for _, q in plain.requests)
+
+
 def test_a_failing_server_falls_back_to_the_scripted_rule_per_robot():
     tactic = FlatJevTactic(FakeClient(fail=True))
     mem = FlatMem()

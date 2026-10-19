@@ -3,7 +3,8 @@
 One `FlatJevTactic` owns all 5 outfield robots (the goalkeeper stays on its pinned slot, referee
 restarts on `RefereeOverride`). At each decision it asks OpenJev one question per robot, chained in
 the same moment: the ball carrier first, then the others nearest the ball first, each question
-listing what was already chosen (see `flat_state.py`). A robot keeps its action until the next
+listing what was already chosen (see `flat_state.py`) and the coaching's call for that robot, the
+scripted rule's pick: advice, the answer is still the model's. A robot keeps its action until the next
 decision, which comes at once when the situation changes (our carrier, possession, the ball's cell,
 or a pass, shot or clearance ending), and at least every `1 / decision_hz` s of sim time (1 Hz:
 the scripted rule plays as well at 1 Hz with these triggers as at 5 Hz).
@@ -200,11 +201,13 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         decision_hz: float = 1.0,
         log_path: Optional[str] = None,
         policy: str = "openjev",
+        call: bool = True,
     ):
         if policy not in ("openjev", "scripted"):
             raise ValueError(f"unknown policy {policy!r}")
         self.client = client
         self.policy = policy
+        self.call = call
         self.period = 1.0 / decision_hz
         self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
         self._recent: deque[tuple[float, str]] = deque(maxlen=4)
@@ -394,20 +397,20 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         decided: dict[int, str],
         ours_has_ball: bool,
     ) -> tuple[str, dict[str, Any]]:
+        rule = scripted_choice(game, view, decided, ours_has_ball)
         if self.policy == "scripted" or self.client is None:
-            choice = scripted_choice(game, view, decided, ours_has_ball)
-            return (choice if choice in view.options else "hold"), {"choice": None, "scripted": True}
+            return (rule if rule in view.options else "hold"), {"choice": None, "scripted": True}
         self.n_questions += 1
         try:
-            d = self.client.decide(state, fs.question(view, lines, fs.still_to_fill(view.phase, decided)))
+            q = fs.question(view, lines, fs.still_to_fill(view.phase, decided), call=rule if self.call else None)
+            d = self.client.decide(state, q)
             ans = d.answers[fs.QUESTION_KEY]
             choice = ans["choice"]
             if choice not in view.options:
                 raise ValueError(f"answer {choice!r} is not one of the options")
         except Exception as e:  # server down or a bad answer: this robot plays the scripted rule
             self.n_fallback += 1
-            choice = scripted_choice(game, view, decided, ours_has_ball)
-            return choice, {"choice": choice, "fallback": f"{type(e).__name__}: {e}"[:200]}
+            return rule, {"choice": rule, "fallback": f"{type(e).__name__}: {e}"[:200]}
         self.n_cached += int(d.cached)
         self.latency_ms_total += d.latency_ms
         probs = ans.get("probabilities") or {}
@@ -418,7 +421,7 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             "p": top,
             "ms": round(d.latency_ms, 1),
             "cached": d.cached,
-            "rule": scripted_choice(game, view, decided, ours_has_ball),  # what the scripted rule would do
+            "rule": rule,  # what the scripted rule would do (the call, when the question carries it)
         }
 
     @staticmethod
@@ -734,10 +737,12 @@ def build_openjev_flat_kernel_strategy(
     log_path: Optional[str | Path] = None,
     client: Optional[OpenJevClient] = None,
     policy: str = "openjev",
+    call: bool = True,
     on_build: Optional[Callable[[FlatJevTactic], None]] = None,
 ):
     """OpenJev controls every outfield robot (see the module docstring). Same shape as the
-    `build_*_kernel_strategy` factories; `policy="scripted"` needs no server."""
+    `build_*_kernel_strategy` factories; `policy="scripted"` needs no server, `call=False` leaves the
+    coaching's call out of the questions."""
 
     def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
         jev_client = client or (OpenJevClient(url) if policy == "openjev" else None)
@@ -746,6 +751,7 @@ def build_openjev_flat_kernel_strategy(
             decision_hz=decision_hz,
             log_path=str(log_path) if log_path else None,
             policy=policy,
+            call=call,
         )
         if on_build is not None:
             on_build(tactic)
