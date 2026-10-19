@@ -67,8 +67,8 @@ STATIC_STATE: dict[str, Any] = {
         "When they have the ball, two robots go for it (get_ball: the nearer blocks its shot, the other tackles), "
         "two block_shot, and one moves into an attacking cell, ready for the counter-attack. In our defensive "
         "third three go for it and two block_shot: nobody stays forward.",
-        "When we have the ball, two robots move into open attacking cells on different strips and two stay back "
-        "on block_shot.",
+        "When we have the ball, three robots move into open attacking cells on different strips and one stays "
+        "back on block_shot.",
         "A loose ball near our goal is always someone's to get.",
     ],
     "reading_the_state": "Distances are in words: touching (<0.3 m), very close (<0.7 m), close (<1.5 m), "
@@ -180,7 +180,7 @@ PHASE_COACHING = {
     "cell, ready for the counter-attack",
     "deep": "the ball is loose or theirs in our defensive third: three robots go for it (the three nearest it) "
     "and two block_shot; nobody stays forward",
-    "us": "two robots move into open attacking cells on different strips and two stay back on block_shot",
+    "us": "three robots move into open attacking cells on different strips and one stays back on block_shot",
 }
 
 
@@ -191,7 +191,7 @@ PHASE_ROLES = {
     "them": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
     "contested": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
     "deep": (("get_ball", 3), ("block_shot", 2)),
-    "us": (("attacking move", 2), ("block_shot", 2)),
+    "us": (("attacking move", 3), ("block_shot", 1)),
 }
 
 

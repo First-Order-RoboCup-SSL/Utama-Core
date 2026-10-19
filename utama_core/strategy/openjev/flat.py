@@ -164,7 +164,7 @@ def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], our
     whenever its shot isn't blocked, from any range, else passes to a free teammate with an open lane,
     else carries towards their goal. Off the ball, when they have it: two robots on the ball, two
     blocking the shot, one forward as the counter-attack outlet (in our defensive third, three on the
-    ball and no outlet); when we have it: two forward into attacking cells, two back blocking."""
+    ball and no outlet); when we have it: three forward into attacking cells, one back blocking."""
     opts = view.options
     if view.has_ball:
         if not opts["shoot"].startswith("shot blocked"):
@@ -186,8 +186,9 @@ def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], our
             return "block_shot"
         cells = ("attacking_centre", "attacking_left", "attacking_right")
     else:
+        # Three forward, one back: against split_shape 11-1-0 (83-53) to two's 8-0-4 (78-53), 12 matches each.
         forward = [a for a in chosen if a.startswith("move:") and not a.startswith("move:defensive")]
-        if len(forward) >= 2 and "block_shot" in opts:
+        if len(forward) >= 3 and "block_shot" in opts:
             return "block_shot"
         cells = ("attacking_left", "attacking_right", "attacking_centre", "middle_left", "middle_right")
     return next((f"move:{c}" for c in cells if f"move:{c}" not in chosen), "hold")

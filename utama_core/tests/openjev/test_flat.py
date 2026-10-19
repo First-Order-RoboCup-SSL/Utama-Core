@@ -134,6 +134,16 @@ def test_scripted_off_ball_in_our_defensive_third_three_chasers_two_blockers_no_
     assert _view(middle, 1).phase != "deep"
 
 
+def test_scripted_with_the_ball_three_forward_one_back():
+    game = _carrier_game()
+    decided = {2: "pass:3"}
+    for rid, expected in ((4, "move:attacking_left"), (5, "move:attacking_right"), (1, "move:attacking_centre")):
+        view = _view(game, rid, blockers=0)
+        assert scripted_choice(game, view, decided, True) == expected
+        decided[rid] = expected
+    assert scripted_choice(game, _view(game, 3, blockers=0), decided, True) == "block_shot"
+
+
 def test_block_shot_is_not_offered_to_a_third_robot():
     game = _game(mates={1: (0.0, 0.0)}, ball_xy=(1.0, 0.0))
     assert "block_shot" in _view(game, 1, blockers=1).options
@@ -306,7 +316,7 @@ def test_questions_list_the_coached_roles_still_unfilled():
     decided = {2: "get_ball", 4: "block_shot", 5: "move:attacking_left"}
     assert fs.still_to_fill("them", decided) == "Still to fill for this moment: get_ball (1 more), block_shot (1 more)."
     assert fs.still_to_fill("us", {1: "move:attacking_left", 3: "move:middle_right"}) == (
-        "Still to fill for this moment: move into an attacking cell (1 more), block_shot (2 more)."
+        "Still to fill for this moment: move into an attacking cell (2 more), block_shot (1 more)."
     )
     assert fs.still_to_fill("carrier", {}) == ""
     full = {1: "get_ball", 2: "get_ball", 3: "block_shot", 4: "block_shot", 5: "move:attacking_centre"}
