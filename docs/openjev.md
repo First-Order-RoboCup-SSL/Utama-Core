@@ -108,3 +108,29 @@ crosses their goal line is an aimless kick, their free kick in front of our box;
 fast, round the keep-out circle on the tangent and from their ball placement on (17-5-6, 178-151: their
 free kicks scored no less within 3 s, and the formation cost elsewhere). Three forward with the ball lost
 0-1-11 before a third robot went for the ball in our third; after it, it is the last row.
+
+### The scripted control against the pool
+
+The final rule (`--engine flat-scripted`, 1 Hz plus triggers), full matches, 4 cells at 7 decision
+rates (0.94 to 1.06 Hz), 28 matches an opponent: **310-18-8, 1924-560**, 2.82 points a match, at least 22
+wins of 28 and at most 3 losses against every strategy. Over the first 3 rates (12 an opponent), one step
+back (two forward with the ball): 135-1-8, 832-227, split_shape 8-0-4; two steps back (also two on the
+ball in our third): 131-3-10, 759-218, split_shape 6-0-6, 62-61, while its 1 Hz cells alone read 46-0-2,
+split_shape 3-0-1: one rate is a lucky draw, not a measurement.
+
+| Opponent | W-D-L (28) | Goals (28) | Rk | R | Lk | L |
+|---|---|---|---|---|---|---|
+| split_shape | 22-3-3 | 181-127 | 4-3 | 6-3 | 7-5 | 6-5 |
+| counter_flow | 28-0-0 | 124-25 | 4-1 | 6-0 | 3-0 | 7-0 |
+| score_aware_counter_flow | 26-1-1 | 125-24 | 1-0 | 6-0 | 4-0 | 5-0 |
+| press_and_pass | 26-2-0 | 156-35 | 9-2 | 5-0 | 5-1 | 7-0 |
+| clear_press_plus | 24-3-1 | 126-39 | 1-0 | 7-1 | 7-1 | 4-3 |
+| high_press | 25-3-0 | 138-36 | 3-0 | 7-1 | 3-2 | 3-1 |
+| tiki_taka_plus | 27-0-1 | 205-33 | 9-1 | 3-4 | 6-0 | 8-2 |
+| give_and_go_solo | 27-0-1 | 214-49 | 7-4 | 7-1 | 10-0 | 6-1 |
+| overload_press | 25-3-0 | 178-62 | 6-3 | 6-4 | 5-2 | 6-2 |
+| press_trigger_flow | 28-0-0 | 140-33 | 6-1 | 1-0 | 3-2 | 5-1 |
+| decoy_and_overload | 27-1-0 | 194-47 | 8-1 | 4-1 | 8-3 | 6-1 |
+| clear_danger | 25-2-1 | 143-50 | 5-3 | 6-3 | 3-1 | 6-1 |
+
+Cells (at 1 Hz): R/L = we play right/left, `k` = we kick off; scores ours first.
