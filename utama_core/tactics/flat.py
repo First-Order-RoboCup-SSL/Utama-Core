@@ -1,6 +1,7 @@
 """The flat engine's tactic: one `FlatJevTactic` owns all 5 outfield robots and gives each an action
 from its own menu (`flat_state.py`), no tactics in between; who answers is its `policy`: OpenJev
-(`strategy/openjev/flat.py`, through FOR-Engine) or the scripted rule (`scripted_choice`).
+(`strategy/openjev/flat.py`, through FOR-Engine), the scripted rule (`scripted_choice`) or the policy
+network (`flat_net.py`).
 
 The goalkeeper stays on its pinned slot and referee restarts on `RefereeOverride`, with this engine's
 own free-kick formations. At each decision the tactic asks one question per robot, chained in the
@@ -16,7 +17,8 @@ the kick happens or the action fails or times out, so a new decision can't aband
 pass.
 
 `policy="scripted"` is also OpenJev's fallback when the server errors, and a model-free control that
-tells the action layer's strength apart from the model's choices.
+tells the action layer's strength apart from the model's choices; `record_path` saves every question
+the rule or the network answers, the network's training data.
 
 The sim is stepped synchronously, so inference costs wall time, never game time.
 """
@@ -25,10 +27,13 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import IO, Any, Callable, Optional
+
+import numpy as np
 
 from utama_core.custom_referee.actions import (
     DirectFreeOursStep,
@@ -70,6 +75,7 @@ from utama_core.skills.src.utils.move_utils import (
     move,
     turn_on_spot,
 )
+from utama_core.tactics import flat_net
 from utama_core.tactics import flat_state as fs
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 from utama_core.tactics.flat_state import possession
@@ -83,6 +89,25 @@ SHOT_TIMEOUT_S = 2.0
 BALL_LOST_GRACE_S = 0.3
 ENEMY_HOLD_M = 0.3
 BLOCK_HOLD_M = 0.3  # a blocker with a tackling teammate holds the shot line this far in front of the ball
+# One row a question with `record_path`: the network's inputs and the menu (`flat_net.question`,
+# `flat_net.menu_mask`), the rule's pick and the action taken (`flat_net` action indices), the log
+# probability of that action (0 for the rule), and when, whose and at what score.
+RECORD_FIELDS = (
+    "ours",
+    "theirs",
+    "ball",
+    "glob",
+    "ego",
+    "mask",
+    "rule",
+    "act",
+    "logp",
+    "t",
+    "robot",
+    "decision",
+    "score_us",
+    "score_them",
+)
 
 
 @dataclass
@@ -204,12 +229,20 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         log_path: Optional[str] = None,
         policy: str = "openjev",
         call: bool = True,
+        net: Optional[flat_net.FlatNet] = None,
+        record_path: Optional[str] = None,
     ):
-        if policy not in ("openjev", "scripted"):
+        if policy not in ("openjev", "scripted", "net"):
             raise ValueError(f"unknown policy {policy!r}")
+        if policy == "net" and net is None:
+            raise ValueError("policy='net' needs a network (weights)")
         self.client = client
         self.policy = policy
         self.call = call
+        self.net = net
+        self._record_path = record_path
+        self._rec: Optional[dict[str, list]] = {k: [] for k in RECORD_FIELDS} if record_path else None
+        self.n_agree = 0
         self.period = 1.0 / decision_hz
         self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
         self._recent: deque[tuple[float, str]] = deque(maxlen=4)
@@ -339,7 +372,22 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             return
         self.n_decisions += 1
         doing = {rid: self._describe(rid, p) for rid, p in mem.plans.items()}
-        state = fs.render(fs.live_state(game, robot_ids, doing, self._marked_by(mem.plans, {}), self._recent_text(t)))
+        state = ""  # the model's text; the rule and the network read the game itself
+        if self.policy == "openjev":
+            state = fs.render(
+                fs.live_state(game, robot_ids, doing, self._marked_by(mem.plans, {}), self._recent_text(t))
+            )
+        moment = None
+        if self.policy == "net" or self._rec is not None:
+            moment = flat_net.moment(
+                game,
+                robot_ids,
+                {rid: p.action for rid, p in mem.plans.items()},
+                {rid for rid in robot_ids if is_locked(mem.plans.get(rid))},
+                {rid: self._carry_left(game, mem, rid) for rid in robot_ids},
+                holder,
+                enemy_holder(game),
+            )
         if self.policy == "openjev" and self.client is not None and len(order) > 1:
             # One prefill of the shared state, so each question below computes only its own tail.
             # Needs SGLang's no_buffer mamba cache (FOR-Engine's sglang-server task): it keeps the
@@ -364,7 +412,7 @@ class FlatJevTactic(BaseTactic[FlatMem]):
                 blockers=sum(a == "block_shot" for a in decided.values()),
                 chasers=tuple(r for r, a in decided.items() if a == "get_ball"),
             )
-            choice, info = self._choose(game, state, view, lines, decided, ours_has_ball)
+            choice, info = self._choose(game, state, view, lines, decided, ours_has_ball, moment, len(row["chain"]))
             row["chain"].append({"robot": rid, **info})
             decided[rid] = choice
             plan = Plan(choice, t)
@@ -398,10 +446,28 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         lines: list[str],
         decided: dict[int, str],
         ours_has_ball: bool,
+        moment: Optional[flat_net.Moment] = None,
+        chain: int = 0,
     ) -> tuple[str, dict[str, Any]]:
         rule = scripted_choice(game, view, decided, ours_has_ball)
+        if moment is not None:
+            feats = flat_net.question(moment, view, decided, chain)
+            mask = flat_net.menu_mask(view.options, moment)
+        if self.policy == "net":
+            self.n_questions += 1
+            t0 = time.perf_counter()
+            act, p = self.net.choose(feats, mask)
+            self.latency_ms_total += 1000.0 * (time.perf_counter() - t0)
+            choice = flat_net.action_key(act, moment)
+            self.n_agree += choice == rule
+            self._record(game, moment, view.robot_id, feats, mask, rule, act, math.log(p[act]))
+            top = {flat_net.action_key(int(k), moment): round(float(p[k]), 3) for k in np.argsort(-p)[:3] if p[k] > 0}
+            return choice, {"choice": choice, "p": top, "rule": rule}
         if self.policy == "scripted" or self.client is None:
-            return (rule if rule in view.options else "hold"), {"choice": None, "scripted": True}
+            choice = rule if rule in view.options else "hold"
+            if moment is not None:
+                self._record(game, moment, view.robot_id, feats, mask, rule, flat_net.action_index(choice, moment), 0.0)
+            return choice, {"choice": None, "scripted": True}
         self.n_questions += 1
         try:
             q = fs.question(view, lines, fs.still_to_fill(view.phase, decided), call=rule if self.call else None)
@@ -425,6 +491,39 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             "cached": d.cached,
             "rule": rule,  # what the scripted rule would do (the call, when the question carries it)
         }
+
+    def _record(
+        self,
+        game: Game,
+        m: flat_net.Moment,
+        rid: int,
+        feats: tuple,
+        mask: np.ndarray,
+        rule: str,
+        act: int,
+        logp: float,
+    ) -> None:
+        if self._rec is None:
+            return
+        ours, theirs, ball, glob, ego = feats
+        row = {
+            "ours": ours,
+            "theirs": theirs,
+            "ball": ball,
+            "glob": glob,
+            "ego": ego,
+            "mask": mask,
+            "rule": flat_net.action_index(rule, m),
+            "act": act,
+            "logp": logp,
+            "t": game.ts,
+            "robot": rid,
+            "decision": self.n_decisions,
+            "score_us": m.score[0],
+            "score_them": m.score[1],
+        }
+        for k, v in row.items():
+            self._rec[k].append(v)
 
     @staticmethod
     def _describe(rid: int, plan: Plan) -> str:
@@ -607,13 +706,21 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             "questions": self.n_questions,
             "cached": self.n_cached,
             "fallback": self.n_fallback,
-            "mean_latency_ms": round(self.latency_ms_total / live, 1) if live else None,
+            "mean_latency_ms": round(self.latency_ms_total / live, 3) if live else None,
+            **({"agree_with_rule": self.n_agree} if self.policy == "net" else {}),
         }
 
     def close(self) -> None:
         if self._log is not None:
             self._log.close()
             self._log = None
+        if self._rec is not None:
+            if self._rec["act"]:
+                arrays = {k: np.asarray(v) for k, v in self._rec.items()}
+                for k in ("ours", "theirs", "ball", "glob"):
+                    arrays[k] = arrays[k].astype(np.float16)
+                np.savez_compressed(self._record_path, **arrays)
+            self._rec = None
 
 
 # --- free kicks ----------------------------------------------------------------------------------

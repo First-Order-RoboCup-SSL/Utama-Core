@@ -1,5 +1,5 @@
-"""Flat engine's policy network (`flat_net.py`) on the CPU: its view of the game, the menu as actions
-and the forward pass, with random weights."""
+"""Flat engine's policy network (`flat_net.py`) on the CPU: its view of the game, the menu as actions,
+the forward pass, and the network and the recorder inside `FlatJevTactic`, with random weights."""
 
 from __future__ import annotations
 
@@ -10,12 +10,15 @@ import math
 import numpy as np
 import pytest
 
+from tools.evaluation.match import run_match
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
+from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
 from utama_core.tactics import flat_net
 from utama_core.tactics import flat_state as fs
+from utama_core.tactics.flat import FlatJevTactic, FlatMem, scripted_choice
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
-from utama_core.tests.openjev.test_flat import OUTFIELD, _carrier_game, _view
+from utama_core.tests.openjev.test_flat import OUTFIELD, _carrier_game, _game, _view
 
 
 def random_weights(seed: int = 0, d: int = 16, layers: int = 1, heads: int = 2, ff: int = 32, dk: int = 8) -> dict:
@@ -123,3 +126,50 @@ def test_weights_whose_numpy_pass_differs_from_the_trainers_are_refused(tmp_path
     np.savez(tmp_path / "bad.npz", **w, **check)
     with pytest.raises(ValueError, match="differs from the trainer"):
         flat_net.FlatNet.load(tmp_path / "bad.npz")
+
+
+def test_the_net_plays_a_decision_and_each_question_is_recorded(tmp_path):
+    game = _carrier_game()
+    tactic = FlatJevTactic(
+        None, policy="net", net=flat_net.FlatNet(random_weights()), record_path=str(tmp_path / "r.npz")
+    )
+    mem = FlatMem()
+    tactic._decide(game, 0.0, OUTFIELD, 2, mem)
+    tactic.close()
+    rec = np.load(tmp_path / "r.npz")
+    assert len(rec["act"]) == tactic.n_questions > 0 and set(mem.plans) >= set(rec["robot"])
+    assert all(rec["mask"][k, rec["act"][k]] and rec["mask"][k, rec["rule"][k]] for k in range(len(rec["act"])))
+    assert rec["ours"].shape[1:] == (flat_net.SLOTS, flat_net.F_OURS) and rec["ours"].dtype == np.float16
+    m = _moment(game, holder=2)
+    assert rec["rule"][0] == flat_net.action_index(scripted_choice(game, _view(game, 2), {}, True), m)
+    assert (rec["logp"] <= 0).all() and tactic.summary()["agree_with_rule"] <= tactic.n_questions
+
+
+def test_the_scripted_rule_records_its_own_picks(tmp_path):
+    tactic = FlatJevTactic(None, policy="scripted", record_path=str(tmp_path / "r.npz"))
+    tactic._decide(_game(mates={1: (0.0, 0.0), 2: (1.0, 1.0)}, ball_xy=(2.0, 0.0)), 0.0, (1, 2), None, FlatMem())
+    tactic.close()
+    rec = np.load(tmp_path / "r.npz")
+    assert len(rec["act"]) == 2 and (rec["act"] == rec["rule"]).all() and (rec["logp"] == 0).all()
+
+
+def test_recording_leaves_the_rules_match_unchanged(tmp_path):
+    def play(record: bool):
+        built = []
+        factory = functools.partial(
+            build_openjev_flat_kernel_strategy,
+            policy="scripted",
+            log_path=tmp_path / f"log_{record}.jsonl",
+            record_path=tmp_path / "rec.npz" if record else None,
+            on_build=built.append,
+        )
+        result = run_match("flat", "build_tiki_taka_kernel_strategy", duration_seconds=10.0, factory_a=factory)
+        for t in built:
+            t.close()
+        rows = [json.loads(r) for r in (tmp_path / f"log_{record}.jsonl").open()]
+        chains = [(r["t"], [q["robot"] for q in r["chain"]]) for r in rows]
+        return (result.score_a, result.score_b), chains, built
+
+    plain, recorded = play(False), play(True)
+    assert plain[:2] == recorded[:2] and plain[1]
+    assert len(recorded[2]) == 1 and len(np.load(tmp_path / "rec.npz")["act"]) == sum(len(c) for _, c in recorded[1])
