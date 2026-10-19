@@ -21,10 +21,22 @@ The sim is stepped synchronously, so inference costs wall time, never game time.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.shared.pass_and_score_geometry import (
+    clamp_outside_enemy_defense_area,
+    clamp_outside_own_defense_area,
+    clamp_to_field,
+    enemy_goal_line,
+    enemy_positions,
+    find_best_shot,
+    segment_blocked,
+)
+from utama_core.strategy.openjev import flat_state as fs
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
 
@@ -52,3 +64,33 @@ class FlatMem:
 
 def is_locked(plan: Optional[Plan]) -> bool:
     return plan is not None and plan.action.startswith(LOCKED_ACTIONS)
+
+
+def open_point(game: Game, cell: str, robot_id: int, taken: list[Vector2D]) -> Vector2D:
+    """The best spot in `cell` to be available for a pass: an open lane from the ball, room from the
+    nearest opponent, a shot from there in the attacking third, away from teammates' spots."""
+    x_lo, x_hi, y_lo, y_hi = fs.cell_bounds(game, cell)
+    inset = 0.35
+    ball = game.ball.p.to_2d()
+    enemies = enemy_positions(game)
+    me = game.friendly_robots[robot_id].p
+    attacking = cell.startswith("attacking")
+    goal_x, y1, y2 = enemy_goal_line(game)
+    best, best_score = None, -math.inf
+    for i in range(3):
+        for j in range(3):
+            c = Vector2D(
+                x_lo + inset + (x_hi - x_lo - 2 * inset) * i / 2.0,
+                y_lo + inset + (y_hi - y_lo - 2 * inset) * j / 2.0,
+            )
+            c = clamp_to_field(clamp_outside_enemy_defense_area(game, clamp_outside_own_defense_area(game, c)), game)
+            score = 1.5 * (not segment_blocked(ball, c, enemies)) + min(fs.nearest_enemy_dist(game, c), 1.5)
+            if attacking:
+                best_y, gap = find_best_shot(c, list(game.enemy_robots.values()), goal_x, y1, y2)
+                score += 2.0 * ((gap[1] - gap[0]) if best_y is not None and gap is not None else 0.0)
+            score -= 0.15 * c.distance_to(me)
+            if any(c.distance_to(o) < 0.8 for o in taken):
+                score -= 10.0
+            if score > best_score:
+                best, best_score = c, score
+    return best
