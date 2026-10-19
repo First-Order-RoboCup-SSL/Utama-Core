@@ -26,6 +26,20 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
 | `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |
 
+## OpenJev
+
+The LLM decision model as our team ([openjev.md](openjev.md)); needs a FOR-Engine server, except
+`--engine flat-scripted`.
+
+| Script | Purpose |
+|---|---|
+| `jev_tournament.py` | OpenJev (yellow) against named strategies, `all` or `pool`: `--engine split` (it picks a tactic split), `flat` (it picks every robot's action, each question carrying the coaching's call), `flat-nocall` (the same without the call) or `flat-scripted` (the flat menu on a fixed rule); `--cells`, `--cell-tags`; one `<tag>.result.json` per match, resumable |
+| `tools/jev_flat_round.sh` | The flat engine against the round-robin's pool, full matches, 4 cells, in tmux workers |
+| `tools/jev_full_round.sh` | The split engine against every catalog strategy, 600 s, 4 cells, in tmux workers |
+| `tools/jev_summary.py` | Aggregate a run directory's `*.result.json`, however many workers wrote it |
+| `tools/jev_replay_html.py` | Render a replay with its `.openjev.jsonl` decision log as HTML |
+| `tools/openjev_bench.py` | FOR-Engine latency benchmark (prefix reuse, state size, questions per request) |
+
 ## Evaluating strategies
 
 What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md),
