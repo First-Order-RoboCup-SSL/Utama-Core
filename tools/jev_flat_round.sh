@@ -6,7 +6,8 @@
 #   bash tools/jev_flat_round.sh [workers=2] [out_dir=replays/jevflat_pool] [engine=flat]
 #
 # The GPU is the bottleneck: a question takes ~0.12 s alone and ~0.5 s with four workers, so more than
-# two workers barely adds throughput. engine=flat-scripted plays the model-free control (no server).
+# two workers barely adds throughput. engine=flat-scripted plays the model-free control (no server),
+# engine=flat-nocall the model without the coaching's call in its questions.
 #
 # Needs FOR-Engine on :3000 for engine=flat (FOR-Engine: `pixi run -e sglang serve-sglang-stack`).
 # Results: `pixi run python -m tools.jev_summary <out_dir>`.

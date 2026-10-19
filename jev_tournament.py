@@ -14,8 +14,9 @@ Per match, under the run directory:
   replays/<run>/<tag>.npz  columnar replay (render with `python -m tools.jev_replay_html`)
 
 `--engine split` (default): OpenJev picks a tactic split (`OpenJevPartitioner`). `--engine flat`:
-OpenJev picks every outfield robot's action (`strategy/openjev/flat.py`); `flat-scripted`: the flat
-menu played by its fixed rule, no server. Tags start `openjev_`, `jevflat_`, `flatscripted_`.
+OpenJev picks every outfield robot's action (`strategy/openjev/flat.py`), each question carrying the
+coaching's call; `flat-nocall`: the same without the call; `flat-scripted`: the flat menu played by its
+fixed rule, no server. Tags start `openjev_`, `jevflat_`, `jevnocall_`, `flatscripted_`.
 
 Usage:
   # one match, watch it live
@@ -44,6 +45,7 @@ from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
 ENGINES = {
     "split": ("openjev", True, build_openjev_kernel_strategy),
     "flat": ("jevflat", True, build_openjev_flat_kernel_strategy),
+    "flat-nocall": ("jevnocall", True, functools.partial(build_openjev_flat_kernel_strategy, call=False)),
     "flat-scripted": (
         "flatscripted",
         False,
@@ -157,8 +159,8 @@ def main() -> None:
         "--engine",
         choices=sorted(ENGINES),
         default="split",
-        help="split: OpenJev picks a tactic split; flat: OpenJev picks every robot's action; flat-scripted: "
-        "flat's menu played by a fixed rule, no server",
+        help="split: OpenJev picks a tactic split; flat: OpenJev picks every robot's action, advised by the "
+        "coaching's call; flat-nocall: without the call; flat-scripted: flat's menu played by a fixed rule, no server",
     )
     ap.add_argument(
         "--duration",
