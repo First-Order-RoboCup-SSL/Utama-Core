@@ -163,8 +163,8 @@ def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], our
     """The best fixed rule found over this menu, model-free (see `docs/openjev.md`): the carrier shoots
     whenever its shot isn't blocked, from any range, else passes to a free teammate with an open lane,
     else carries towards their goal. Off the ball, when they have it: two robots on the ball, two
-    blocking the shot, one forward as the counter-attack outlet; when we have it: two forward into
-    attacking cells, two back blocking."""
+    blocking the shot, one forward as the counter-attack outlet (in our defensive third, three on the
+    ball and no outlet); when we have it: two forward into attacking cells, two back blocking."""
     opts = view.options
     if view.has_ball:
         if not opts["shoot"].startswith("shot blocked"):
@@ -178,7 +178,9 @@ def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], our
         return "shoot"
     chosen = list(decided.values())
     if not ours_has_ball:
-        if chosen.count("get_ball") < 2:
+        # Three on the ball in our defensive third, no outlet: against split_shape 8-0-4 (78-53) to two's
+        # 6-0-6 (62-61), 12 matches each (4 cells x 3 decision rates).
+        if chosen.count("get_ball") < (3 if view.phase == "deep" else 2):
             return "get_ball"
         if "block_shot" in opts:
             return "block_shot"

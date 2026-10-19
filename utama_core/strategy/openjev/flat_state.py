@@ -65,7 +65,8 @@ STATIC_STATE: dict[str, Any] = {
         "It passes only when its shot is blocked, to a free teammate with an open lane, preferring one whose own "
         "shot is open; otherwise it dribbles into space, or clears when pressed in our own half.",
         "When they have the ball, two robots go for it (get_ball: the nearer blocks its shot, the other tackles), "
-        "two block_shot, and one moves into an attacking cell, ready for the counter-attack.",
+        "two block_shot, and one moves into an attacking cell, ready for the counter-attack. In our defensive "
+        "third three go for it and two block_shot: nobody stays forward.",
         "When we have the ball, two robots move into open attacking cells on different strips and two stay back "
         "on block_shot.",
         "A loose ball near our goal is always someone's to get.",
@@ -177,6 +178,8 @@ PHASE_COACHING = {
     "cell, ready for the counter-attack",
     "contested": "two robots go for the ball (the two nearest it), two block_shot, and one moves into an attacking "
     "cell, ready for the counter-attack",
+    "deep": "the ball is loose or theirs in our defensive third: three robots go for it (the three nearest it) "
+    "and two block_shot; nobody stays forward",
     "us": "two robots move into open attacking cells on different strips and two stay back on block_shot",
 }
 
@@ -187,6 +190,7 @@ PHASE_COACHING = {
 PHASE_ROLES = {
     "them": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
     "contested": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
+    "deep": (("get_ball", 3), ("block_shot", 2)),
     "us": (("attacking move", 2), ("block_shot", 2)),
 }
 
@@ -221,7 +225,7 @@ class RobotView:
     has_ball: bool
     options: dict[str, Optional[str]]
     situation: str
-    phase: str = "contested"  # PHASE_COACHING key
+    phase: str = "contested"  # PHASE_COACHING key; "deep": no carrier of ours and the ball in our defensive third
 
 
 def live_state(
@@ -346,11 +350,14 @@ def robot_view(
         near = f"the ball is {dist_word(me.distance_to(ball))}, you are number {rank} of ours to it"
         if not chasers:
             options["get_ball"] = f"nobody of ours is going for the ball yet; {near}"
-        else:
+        elif len(chasers) == 1:
             # A second robot on get_ball is executed differently (the nearer blocks, the other tackles),
             # so say what it does here instead of repeating the first chaser's description.
+            first = f"robot {chasers[0]}"
+            options["get_ball"] = f"help {first} win the ball: tackle while {first} blocks its shot; {near}"
+        else:
             mates = " and ".join(f"robot {c}" for c in chasers)
-            options["get_ball"] = f"help {mates} win the ball: tackle while {mates} blocks its shot; {near}"
+            options["get_ball"] = f"join {mates} on the ball: tackle with them; {near}"
         for cell in CELLS:
             options[f"move:{cell}"] = "you are here" if cell == here else None
         keeper = enemy_keeper_id(game)
@@ -370,7 +377,9 @@ def robot_view(
             side
         ]
         situation = f"Robot {robot_id} is in {here}, {dist_word(me.distance_to(ball))} to the ball; {who}."
-        phase = side
+        # Nobody of ours on the ball in our defensive third: `flat.scripted_choice`'s three-chaser case.
+        deep = cell_of(game, ball).startswith("defensive") and carrier(game, robot_ids) is None
+        phase = "deep" if deep else side
     return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation, phase=phase)
 
 

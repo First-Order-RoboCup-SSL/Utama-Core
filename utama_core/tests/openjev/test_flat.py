@@ -119,6 +119,21 @@ def test_scripted_off_ball_two_chasers_two_blockers_then_an_outlet():
         decided[len(decided) + 2] = expected
 
 
+def test_scripted_off_ball_in_our_defensive_third_three_chasers_two_blockers_no_outlet():
+    # Our goal at x = -4.5; the defensive third ends at x = -1.5. Ball loose at x = -2.5.
+    game = _game(mates={1: (-2.0, 0.5)}, enemies={0: (4.4, 0.0), 3: (-2.2, 0.3), 5: (-1.0, -1.0)}, ball_xy=(-2.5, 0.0))
+    decided = {}
+    for expected in ("get_ball", "get_ball", "get_ball", "block_shot", "block_shot"):
+        view = _view(game, 1, blockers=sum(a == "block_shot" for a in decided.values()))
+        assert view.phase == "deep"
+        assert scripted_choice(game, view, decided, False) == expected
+        decided[len(decided) + 2] = expected
+    assert fs.still_to_fill("deep", {}) == "Still to fill for this moment: get_ball (3 more), block_shot (2 more)."
+    # The same ball in the middle third: two on it and the outlet, as before.
+    middle = _game(mates={1: (0.5, 0.5)}, enemies={0: (4.4, 0.0), 3: (0.2, 0.3)}, ball_xy=(0.0, 0.0))
+    assert _view(middle, 1).phase != "deep"
+
+
 def test_block_shot_is_not_offered_to_a_third_robot():
     game = _game(mates={1: (0.0, 0.0)}, ball_xy=(1.0, 0.0))
     assert "block_shot" in _view(game, 1, blockers=1).options
