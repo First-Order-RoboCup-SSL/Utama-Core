@@ -15,24 +15,24 @@ Run:
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
 only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
-**In the round-robin**, in order of the 2026-10-10 standings (below). A round-robin or a
+**In the round-robin**, in order of the 2026-10-19 standings (below). A round-robin or a
 ladder with no strategies named plays these.
 
 | Strategy | Description |
 |---|---|
 | `split_shape` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
+| `flat_rule` | The OpenJev flat engine's scripted rule (`tactics/flat.py`, `docs/openjev.md`): one tactic gives each robot an action from its menu at 1 Hz and when play changes; the carrier shoots unless blocked, else passes or dribbles; without the ball two chase, two block, one outlet (three chase in our third); with it three forward, one back; own free-kick formations. |
+| `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
 | `counter_flow` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
 | `score_aware_counter_flow` | `counter_flow` plus a late-half scoreline shift (protect a lead / chase). |
-| `press_and_pass` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
-| `clear_press_plus` | `clear_danger` plus `tiki_taka_plus`'s final-third overload. |
-| `high_press` | Same pair as `press_and_pass`, fixed 80/20 attack-heavy split ignoring possession. |
-| `tiki_taka_plus` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
-| `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
 | `overload_press` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
-| `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
-| `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
+| `tiki_taka_plus` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
+| `high_press` | Same pair as `press_and_pass`, fixed 80/20 attack-heavy split ignoring possession. |
 | `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
-| `flat_rule` | The OpenJev flat engine's scripted rule (`tactics/flat.py`, `docs/openjev.md`): one tactic gives each robot an action from its menu at 1 Hz and when play changes; the carrier shoots unless blocked, else passes or dribbles; without the ball two chase, two block, one outlet (three chase in our third); with it three forward, one back; own free-kick formations. |
+| `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
+| `press_and_pass` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
+| `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
+| `clear_press_plus` | `clear_danger` plus `tiki_taka_plus`'s final-third overload. |
 
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
 or a ladder pool unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
@@ -56,29 +56,31 @@ against the round-robin's top.
 
 ## Latest results
 
-**Round-robin** (2026-10-10, strategy-guard at a17e2791, the 12 strategies above, 66 matches,
-600 s, `replays/tournament_20261010_090819/summary.json`). Points are 3 a win, 1 a draw; 8 of 66
-matches were draws. No match stalled; 99% of 1802 restarts reached NORMAL_START.
+**Round-robin** (2026-10-19, `jev-engine` at 64a0eed8 plus `flat_rule`, the 13 strategies above, 78
+matches, two halves of 300 s of playing time, `replays/tournament_20261019_121857/summary.json`). Points
+are 3 a win, 1 a draw; 14 of 78 matches were draws. 5 matches stalled, none of them `flat_rule`'s
+(`--strict` fails the run): three restarts with no taker for STOP and two frozen commitments, all
+between strategies that ran without a stall on 2026-10-10; 98% of 2241 restarts reached NORMAL_START.
 
-Against the 2026-10-05 run: the retired ten are gone from the pool, so every strategy's record is
-now against the top 12 only; the teams change ends at half-time; and an aimless clearance is a free
-kick at the kick point. `split_shape` won all 11; `clear_danger`, fourth before, is last.
-What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
+Against the 2026-10-10 run: `flat_rule` joins, and the code has since taken in v2.1.0-v2.2.0 (planner
+and sim speed-ups, referee fixes). `split_shape` and `flat_rule` both won 11 of 12: `flat_rule` beat
+`split_shape` 4-3, its only loss, and lost only to `counter_flow`, 2-3.
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 11-0-0 | 80-26 | 3.00 |
-| `counter_flow` | 7-2-2 | 35-24 | 2.09 |
-| `score_aware_counter_flow` | 6-2-3 | 32-24 | 1.82 |
-| `press_and_pass` | 5-2-4 | 40-35 | 1.55 |
-| `clear_press_plus` | 5-2-4 | 34-31 | 1.55 |
-| `high_press` | 5-1-5 | 36-47 | 1.45 |
-| `tiki_taka_plus` | 5-1-5 | 33-48 | 1.45 |
-| `give_and_go_solo` | 5-0-6 | 44-51 | 1.36 |
-| `overload_press` | 4-0-7 | 52-51 | 1.09 |
-| `press_trigger_flow` | 2-2-7 | 26-35 | 0.73 |
-| `decoy_and_overload` | 2-2-7 | 38-55 | 0.73 |
-| `clear_danger` | 1-2-8 | 21-44 | 0.45 |
+| `split_shape` | 11-0-1 | 79-18 | 2.75 |
+| `flat_rule` | 11-0-1 | 64-20 | 2.75 |
+| `give_and_go_solo` | 6-3-3 | 37-34 | 1.75 |
+| `counter_flow` | 5-4-3 | 22-21 | 1.58 |
+| `score_aware_counter_flow` | 5-3-4 | 18-20 | 1.50 |
+| `overload_press` | 6-0-6 | 31-34 | 1.50 |
+| `tiki_taka_plus` | 5-1-6 | 30-40 | 1.33 |
+| `high_press` | 3-3-6 | 16-28 | 1.00 |
+| `clear_danger` | 3-3-6 | 23-36 | 1.00 |
+| `decoy_and_overload` | 3-2-7 | 20-35 | 0.92 |
+| `press_and_pass` | 3-2-7 | 16-34 | 0.92 |
+| `press_trigger_flow` | 2-4-6 | 16-35 | 0.83 |
+| `clear_press_plus` | 1-3-8 | 13-30 | 0.50 |
 
 ## Known open bugs
 
