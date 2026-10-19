@@ -21,10 +21,12 @@ The sim is stepped synchronously, so inference costs wall time, never game time.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import IO, Any, Optional
 
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
@@ -37,6 +39,7 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_blocked,
 )
 from utama_core.strategy.openjev import flat_state as fs
+from utama_core.strategy.openjev.client import OpenJevClient
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
 
@@ -126,3 +129,52 @@ def scripted_choice(game: Game, view: fs.RobotView, decided: dict[int, str], our
             return "block_shot"
         cells = ("attacking_left", "attacking_right", "attacking_centre", "middle_left", "middle_right")
     return next((f"move:{c}" for c in cells if f"move:{c}" not in chosen), "hold")
+
+
+class FlatJevTactic(BaseTactic[FlatMem]):
+    tag = TacticTag.MIXED
+    keeps_mem_on_robot_change = True
+
+    def __init__(
+        self,
+        client: Optional[OpenJevClient],
+        decision_hz: float = 1.0,
+        log_path: Optional[str] = None,
+        policy: str = "openjev",
+    ):
+        if policy not in ("openjev", "scripted"):
+            raise ValueError(f"unknown policy {policy!r}")
+        self.client = client
+        self.policy = policy
+        self.period = 1.0 / decision_hz
+        self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
+        self.n_decisions = self.n_questions = self.n_cached = self.n_fallback = 0
+        self.latency_ms_total = 0.0
+
+    def initial_mem(self) -> FlatMem:
+        return FlatMem()
+
+    def highlights(self, mem: FlatMem) -> dict[RobotId, str]:
+        return {rid: p.action for rid, p in mem.plans.items()}
+
+    # --- logging ------------------------------------------------------------------------------
+
+    def _write(self, row: dict[str, Any]) -> None:
+        if self._log is not None:
+            self._log.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+
+    def summary(self) -> dict[str, Any]:
+        live = self.n_questions - self.n_cached - self.n_fallback
+        return {
+            "policy": self.policy,
+            "decisions": self.n_decisions,
+            "questions": self.n_questions,
+            "cached": self.n_cached,
+            "fallback": self.n_fallback,
+            "mean_latency_ms": round(self.latency_ms_total / live, 1) if live else None,
+        }
+
+    def close(self) -> None:
+        if self._log is not None:
+            self._log.close()
+            self._log = None
