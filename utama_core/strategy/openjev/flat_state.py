@@ -168,6 +168,19 @@ def enemy_keeper_id(game: Game) -> Optional[int]:
     return (ref.blue_team if game.my_team_is_yellow else ref.yellow_team).goalkeeper
 
 
+# The coaching line for each kind of moment, repeated in that moment's questions: the model weighs an
+# instruction next to the question far more than the same line in the long static block.
+PHASE_COACHING = {
+    "carrier": "shoot whenever your shot is open or narrow, from any range; pass only when it is blocked, to a "
+    "free teammate with an open lane; otherwise dribble into space",
+    "them": "two robots go for the ball (the two nearest it), two block_shot, and one moves into an attacking "
+    "cell, ready for the counter-attack",
+    "contested": "two robots go for the ball (the two nearest it), two block_shot, and one moves into an attacking "
+    "cell, ready for the counter-attack",
+    "us": "two robots move into open attacking cells on different strips and two stay back on block_shot",
+}
+
+
 @dataclass
 class RobotView:
     """What one robot's question needs: its own situation and its options with their facts."""
@@ -176,6 +189,7 @@ class RobotView:
     has_ball: bool
     options: dict[str, Optional[str]]
     situation: str
+    phase: str = "contested"  # PHASE_COACHING key
 
 
 def live_state(
@@ -293,6 +307,7 @@ def robot_view(
         )
         left = "" if carry_left_m is None else f", can carry about {round(max(0.0, carry_left_m) * 4) / 4:.2f} m more"
         situation = f"Robot {robot_id} has the ball in {here}{left}; its shot is {shot_word(game, me)}."
+        phase = "carrier"
     else:
         order = sorted(mates + [robot_id], key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
         rank = order.index(robot_id) + 1
@@ -323,7 +338,8 @@ def robot_view(
             side
         ]
         situation = f"Robot {robot_id} is in {here}, {dist_word(me.distance_to(ball))} to the ball; {who}."
-    return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation)
+        phase = side
+    return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation, phase=phase)
 
 
 def question(view: RobotView, decided: list[str]) -> dict[str, Any]:
@@ -332,7 +348,7 @@ def question(view: RobotView, decided: list[str]) -> dict[str, Any]:
         QUESTION_KEY: {
             "type": "choice",
             "instructions": f"{view.situation} Already decided for this moment: {already}. "
-            f"What should robot {view.robot_id} do now?",
+            f"Coaching for this moment: {PHASE_COACHING[view.phase]}. What should robot {view.robot_id} do now?",
             "criteria": view.options,
         }
     }
