@@ -7,10 +7,9 @@ from typing import Optional
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import RobotId
-from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.strategy.pickers import carrier_first
+from utama_core.strategy.pickers import carrier_first, friendly_closer_to_ball
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
@@ -44,9 +43,7 @@ def _possession_split_picker(
     if not ordered:
         return {}
 
-    _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
-    _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
-    friendly_has_ball_edge = friendly_dist < enemy_dist
+    friendly_has_ball_edge = friendly_closer_to_ball(game) is True
 
     if "attack" not in available_tactic_ids:
         return {"defense": frozenset(ordered)} if "defense" in available_tactic_ids else {}

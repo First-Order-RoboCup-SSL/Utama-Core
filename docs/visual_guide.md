@@ -124,7 +124,7 @@ when a target breaks a rule) or holds; the table lists each target and its dista
 Robot 3 starts inside the circle and is sent to exactly 0.80 m.
 
 Across more replays this picture found a real defect: the step that clears robots out of the circle
-stops 1 cm short and leaves them at 0.79 m (`keep_out_short` in the findings). Not fixed yet.
+stops 1 cm short and leaves them at 0.79 m (`keep_out_short` in the findings). Fixed.
 
 Draw: `pixi run python tools/restart_picture.py REPLAY.npz --t S`, or `--all-restarts` for one panel per
 restart command in the match.
@@ -145,8 +145,7 @@ middle obstacle at x = 0 and touches it.
 
 Two of our robots, both driven by the planner under test, cross at right angles (dashed is the
 second robot). With `fpp` one robot holds its line and the other swerves round it: closest pass 0.18 m,
-both arrive. With `dwa` they converge and collide, and neither arrives. `trajsample` gives a wide berth
-(0.9 m) but detours 55% further and takes 5.1 s instead of 3.3.
+both arrive. With `dwa` they converge and collide, and neither arrives. With speed modulation and angular penalties, `trajsample` yields cleanly with a tight bypass (path ratio 1.09x, 3.4s vs fpp's 3.3s).
 
 ![benchmark summary](img/motion_planning/summary.png)
 

@@ -401,15 +401,18 @@ void check_segment_recursive(
     Point subgoal_right_pt{px, py};
     bool left_valid = false;
     bool right_valid = false;
+    bool found_l = false;
+    bool found_r = false;
 
     if (dir_norm > 0.0) {
         // Left: subgoal_direction = 1 -> theta = 1.5 * pi -> cos = 0, sin = -1
         double ux_l = -dy / dir_norm;
         double uy_l = dx / dir_norm;
-        auto [found_l, sl_x, sl_y, last_hit_l, rect_last_l] = find_subgoal(
+        auto [fl, sl_x, sl_y, last_hit_l, rect_last_l] = find_subgoal(
             px, py, ux_l, uy_l, subgoal_distance, 1, clearance,
             ox0, oy0, ox1, oy1, n, has_rect, rmin_x, rmax_x, rmin_y, rmax_y
         );
+        found_l = fl;
         if (found_l) {
             subgoal_left_pt = {sl_x, sl_y};
             left_valid = true;
@@ -424,10 +427,11 @@ void check_segment_recursive(
         // Right: subgoal_direction = 0 -> theta = 0.5 * pi -> cos = 0, sin = 1
         double ux_r = dy / dir_norm;
         double uy_r = -dx / dir_norm;
-        auto [found_r, sr_x, sr_y, last_hit_r, rect_last_r] = find_subgoal(
+        auto [fr, sr_x, sr_y, last_hit_r, rect_last_r] = find_subgoal(
             px, py, ux_r, uy_r, subgoal_distance, 1, clearance,
             ox0, oy0, ox1, oy1, n, has_rect, rmin_x, rmax_x, rmin_y, rmax_y
         );
+        found_r = fr;
         if (found_r) {
             subgoal_right_pt = {sr_x, sr_y};
             right_valid = true;
@@ -455,9 +459,23 @@ void check_segment_recursive(
     py::object memory_key = py::none();
     std::optional<int> prev_side = std::nullopt;
     if (robot_id >= 0) {
-        double r_px = round_to(px, precision);
-        double r_py = round_to(py, precision);
-        memory_key = py::make_tuple(robot_id, recursion_length, py::make_tuple(r_px, r_py));
+        py::object obstacle_key;
+        if (is_static && is_static[closest_idx]) {
+            double ox0_val = ox0[closest_idx];
+            double oy0_val = oy0[closest_idx];
+            double ox1_val = ox1[closest_idx];
+            double oy1_val = oy1[closest_idx];
+            if (std::tie(ox1_val, oy1_val) < std::tie(ox0_val, oy0_val)) {
+                std::swap(ox0_val, ox1_val);
+                std::swap(oy0_val, oy1_val);
+            }
+            obstacle_key = py::make_tuple(ox0_val, oy0_val, ox1_val, oy1_val);
+        } else {
+            double r_px = round_to(px, precision);
+            double r_py = round_to(py, precision);
+            obstacle_key = py::make_tuple(r_px, r_py);
+        }
+        memory_key = py::make_tuple(robot_id, recursion_length, obstacle_key);
         if (last_detour_side.contains(memory_key)) {
             prev_side = last_detour_side[memory_key].cast<int>();
         }

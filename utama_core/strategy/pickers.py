@@ -73,6 +73,8 @@ def fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, 
 # ---------------------------------------------------------------------------
 
 
+from dataclasses import dataclass
+
 # Deadzone for `friendly_closer_to_ball`'s distance comparison. Root-caused
 # 2026-08-23: at a genuine tie (mirror-symmetric formations, ball equidistant
 # — the normal case at kickoff, and possible any time both teams race a loose
@@ -89,44 +91,133 @@ def fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, 
 # resolves by real distance, not by which one the deadzone happens to favour.
 CLOSER_TO_BALL_MARGIN = 0.05  # metres
 
+# Hysteresis parameters to prevent tactic thrashing / flip-backs during contested
+# scrambles or passes in flight.
+_POSSESSION_HYSTERESIS_TICKS = 15  # ticks (~0.25 s at 60 Hz) before transient distance flips drop possession
+_POSSESSION_BREAK_MARGIN = 0.8  # metres — large gap triggers immediate turnover
+
+
+@dataclass
+class _CloserToBallState:
+    state: Optional[bool] = None
+    pending_state: Optional[bool] = None
+    pending_ticks: int = 0
+
+
+_CLOSER_TO_BALL_STATE: dict[bool, _CloserToBallState] = {}
+
+
+def reset_closer_to_ball_state(team_is_yellow: Optional[bool] = None) -> None:
+    """Clear closer-to-ball hysteresis state across matches or tests."""
+    if team_is_yellow is None:
+        _CLOSER_TO_BALL_STATE.clear()
+    else:
+        _CLOSER_TO_BALL_STATE.pop(team_is_yellow, None)
+
 
 def friendly_closer_to_ball(game: Game) -> Optional[bool]:
     """True if a friendly robot is closer to the ball than every enemy by more
-    than `CLOSER_TO_BALL_MARGIN`; False if an enemy is closer by more than
-    that margin; None when the gap is inside the margin (undecided).
+    than `CLOSER_TO_BALL_MARGIN` (or held via hysteresis); False if an enemy is closer;
+    None when the gap is inside the margin without prior possession (undecided).
 
-    Inside the margin is a genuine near-tie, so the pickers that keep
-    hysteresis (`prev_partition`: "did we hold attack last tick") read None as
-    "keep what you had", while those without it read `is not True` as "not
-    clearly ours", the conservative default. Returning False for a near-tie
-    (as this once did) made the sticky pickers drop the ball on a noise-level
-    gap, which is exactly what their hysteresis exists to prevent.
-
-    None too when the proximity lookup cannot read the ball's side (ball
-    missing or no robots on one side) — callers should fall back to the
-    conservative posture in that case.
+    Includes temporal hysteresis: momentary distance flickers (under
+    `_POSSESSION_HYSTERESIS_TICKS` ticks = ~0.25 s) during passes or contested loose
+    balls preserve the current possession state unless physical contact occurs or
+    the ball is cleared past `_POSSESSION_BREAK_MARGIN`.
     """
-    # A ball on our dribbler is ours however close an enemy presses — the
-    # distance read alone flipped a held ball to "theirs" whenever an enemy
-    # brushed within the margin, handing the carrier to the press slot and
-    # resetting its attack tactic (counter_flow_vs_high_line_zone, 2026-09-27).
-    if any(r.has_ball for r in game.friendly_robots.values()) and not any(
-        r.has_ball for r in game.enemy_robots.values()
-    ):
+    team_key = getattr(game, "my_team_is_yellow", True)
+    slot = _CLOSER_TO_BALL_STATE.get(team_key)
+    if slot is None:
+        slot = _CloserToBallState()
+        _CLOSER_TO_BALL_STATE[team_key] = slot
+
+    friendly_robots = getattr(game, "friendly_robots", {})
+    enemy_robots = getattr(game, "enemy_robots", {})
+    friendly_has = any(r.has_ball for r in friendly_robots.values())
+    enemy_has = any(r.has_ball for r in enemy_robots.values())
+
+    # Dribbler contact overrides distance immediately.
+    if friendly_has and not enemy_has:
+        slot.state = True
+        slot.pending_state = None
+        slot.pending_ticks = 0
         return True
+    if enemy_has and not friendly_has:
+        slot.state = False
+        slot.pending_state = None
+        slot.pending_ticks = 0
+        return False
+    if friendly_has and enemy_has:
+        slot.state = None
+        slot.pending_state = None
+        slot.pending_ticks = 0
+        return None
+
     _friendly_closest, friendly_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
     _enemy_closest, enemy_dist = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
     if friendly_dist is None or enemy_dist is None:
         return None
-    # Return literal True/False, never the comparison itself: the proximity
-    # lookup returns numpy floats, so a raw comparison is np.bool_, whose
-    # `is True` is False — a caller checking `edge is True` would read it as
-    # "unknown/losing" forever.
+
     if friendly_dist < enemy_dist - CLOSER_TO_BALL_MARGIN:
+        raw_state = True
+    elif friendly_dist > enemy_dist + CLOSER_TO_BALL_MARGIN:
+        raw_state = False
+    else:
+        raw_state = None
+
+    diff = friendly_dist - enemy_dist
+
+    if slot.state is None:
+        slot.state = raw_state
+        slot.pending_state = None
+        slot.pending_ticks = 0
+        return slot.state
+
+    if slot.state is True:
+        if raw_state is True or raw_state is None:
+            slot.pending_state = None
+            slot.pending_ticks = 0
+            return True
+        # raw_state is False
+        if diff > _POSSESSION_BREAK_MARGIN:
+            slot.state = False
+            slot.pending_state = None
+            slot.pending_ticks = 0
+            return False
+        if slot.pending_state is False:
+            slot.pending_ticks += 1
+            if slot.pending_ticks >= _POSSESSION_HYSTERESIS_TICKS:
+                slot.state = False
+                slot.pending_state = None
+                slot.pending_ticks = 0
+                return False
+        else:
+            slot.pending_state = False
+            slot.pending_ticks = 1
         return True
-    if friendly_dist > enemy_dist + CLOSER_TO_BALL_MARGIN:
+
+    else:  # slot.state is False
+        if raw_state is False or raw_state is None:
+            slot.pending_state = None
+            slot.pending_ticks = 0
+            return False
+        # raw_state is True
+        if diff < -_POSSESSION_BREAK_MARGIN:
+            slot.state = True
+            slot.pending_state = None
+            slot.pending_ticks = 0
+            return True
+        if slot.pending_state is True:
+            slot.pending_ticks += 1
+            if slot.pending_ticks >= _POSSESSION_HYSTERESIS_TICKS:
+                slot.state = True
+                slot.pending_state = None
+                slot.pending_ticks = 0
+                return True
+        else:
+            slot.pending_state = True
+            slot.pending_ticks = 1
         return False
-    return None
 
 
 def ball_zone(game: Game) -> str:

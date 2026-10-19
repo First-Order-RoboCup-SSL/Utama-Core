@@ -179,7 +179,7 @@ pixi run python tools/motion_planning_benchmark.py --scenarios direct static_sla
 In this run (all three schemes, one repeat): in `static_slalom`, `dwa`'s path swerves round the first two
 obstacles and ends touching the lower one (clearance reaches 0 m: its failed cell), while `fpp` and
 `trajsample` keep a straight line with clearance of about 0.12 m. In `crossing`, `dwa` ends at 0 m clearance
-from the crossing opponent, `trajsample` keeps about 0.9 m or more but bends wide and finishes in about 5 s,
+from the crossing opponent, `trajsample` yields with a tight bypass finishing in 3.4 s (path ratio 1.09x),
 and `fpp` passes at about 0.2 m and finishes in about 3.3 s. In `direct`, `fpp` and `trajsample` both reach the
 2 m/s speed limit, while `dwa` accelerates more slowly and never reaches it. Where two schemes' paths coincide
 (`direct`, and the straight part of `static_slalom`), the later scheme is drawn on top and hides the earlier one.

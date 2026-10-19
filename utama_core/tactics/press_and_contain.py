@@ -36,13 +36,17 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     own_defense_area_exit_point,
 )
+from utama_core.shared.tolerance import Sticky
 from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.kick_upfield import kick_upfield
 from utama_core.skills.src.man_mark import man_mark
 
-_PRESS_RANGE = 1.5  # metres — ball must be within this of an enemy for pressing to be applicable
+_PRESS_ENTER_RANGE = 1.4  # metres — ball must be within this of an enemy to start pressing
+_PRESS_EXIT_RANGE = 1.7  # metres — enemy must clear past this to release pressing
+_PRESS_RANGE = 1.5  # metres — nominal midpoint kept for backward compatibility
+
 
 # Hysteresis for the loose-ball/contested classification in `tick()` — a
 # plain per-tick re-read of `game.robot_with_ball is None` flickers almost
@@ -110,12 +114,23 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
 
     tag = TacticTag.DEFENSE
 
+    def __init__(self) -> None:
+        self._was_applicable: bool = False
+
+    def reset_applicable(self) -> None:
+        self._was_applicable = False
+
     def initial_mem(self) -> PressAndContainMem:
         return PressAndContainMem()
 
-    def applicable(self, game: Game) -> bool:
+    def applicable(self, game: Game, current_applicable: Optional[bool] = None) -> bool:
+        was_applicable = self._was_applicable if current_applicable is None else current_applicable
+        threshold = _PRESS_EXIT_RANGE if was_applicable else _PRESS_ENTER_RANGE
         _enemy_id, distance = _enemy_nearest_ball(game)
-        return distance is not None and distance <= _PRESS_RANGE
+        is_app = distance is not None and distance <= threshold
+        if current_applicable is None:
+            self._was_applicable = is_app
+        return is_app
 
     def highlights(self, mem: PressAndContainMem) -> dict[RobotId, str]:
         highlights: dict[RobotId, str] = {rid: "marker" for rid in mem.marks}
@@ -154,11 +169,15 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
         # close, so nothing else took over — and the enemy took it straight back
         # (65 of 309 PressAndContain losses in the 2026-09-24 round-robin).
         ball_winner = next((rid for rid in robot_ids if has_ball(game, rid)), None)
-        presser_id = (
-            ball_winner
-            if ball_winner is not None
-            else min(robot_ids, key=lambda rid: game.friendly_robots[rid].p.distance_to(pressed_enemy.p))
-        )
+        if ball_winner is not None:
+            presser_id = ball_winner
+        else:
+            prev_presser = mem.presser_id if mem.presser_id in robot_ids else None
+            sticky = Sticky[int](margin=0.2, current=prev_presser)
+            presser_id = sticky.update(
+                list(robot_ids),
+                score_fn=lambda rid: -game.friendly_robots[rid].p.distance_to(pressed_enemy.p),
+            )
         marker_ids = tuple(rid for rid in robot_ids if rid != presser_id)
         mem.presser_id = presser_id
 

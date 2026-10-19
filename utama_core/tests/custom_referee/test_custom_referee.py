@@ -363,6 +363,36 @@ class TestDoubleTouchRule:
         assert violation is not None
         assert violation.rule_name == "double_touch"
         assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert violation.offending_teams == (True,)
+        assert violation.offending_robots == ((True, 0),)
+
+    def test_double_touch_charges_offending_teams_for_foul_counter(self):
+        # Double touch is a foul with foul counter increment (SSL §8.4);
+        # offending_teams must be populated with the offending color.
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_BLUE)
+
+        # Blue kicker (enemy when my_team_is_yellow=True)
+        enemy = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=enemy, my_team_is_yellow=True), GEO, RefereeCommand.NORMAL_START
+        )
+        released = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=False)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=released, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        retouched = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=True)}
+        violation = rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=retouched, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        assert violation is not None
+        assert violation.offending_teams == (False,)  # blue is yellow=False
+        assert violation.offending_robots == ((False, 1),)
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/

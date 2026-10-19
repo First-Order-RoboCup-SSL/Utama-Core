@@ -49,6 +49,7 @@ from utama_core.engine.tactic import RobotId, Tactic, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.strategy.pickers import reset_closer_to_ball_state
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ _TWO_STAGE_RESTARTS = frozenset(
         RefereeCommand.PREPARE_PENALTY_BLUE,
         RefereeCommand.DIRECT_FREE_YELLOW,
         RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.INDIRECT_FREE_YELLOW,
+        RefereeCommand.INDIRECT_FREE_BLUE,
     }
 )
 
@@ -720,8 +723,12 @@ class Strategy:
             raise ValueError(f"picker assigned robot(s) {sorted(extra)} outside the outfield pool")
 
     def _barrier_reset(self, game: Game) -> None:
+        team_is_yellow = getattr(game, "my_team_is_yellow", None)
+        reset_closer_to_ball_state(team_is_yellow)
         pre_reset = {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
         for slot in self._slots.values():
+            if hasattr(slot.tactic, "reset_applicable"):
+                slot.tactic.reset_applicable()
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0

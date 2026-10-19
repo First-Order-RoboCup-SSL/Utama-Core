@@ -91,6 +91,9 @@ def _no_vision_stream(monkeypatch):
     each step and about 0.4 s to shut its HTTP server down. No test watches it, and it was
     a third of the suite's time."""
     from utama_core.run.strategy_runner import StrategyRunner
+    from utama_core.strategy.pickers import reset_closer_to_ball_state
+
+    reset_closer_to_ball_state()
 
     def _skip(self, http_port):  # noqa: ARG001
         self.vision_stream = None

@@ -401,6 +401,7 @@ AUDIT = {
         "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
         "utama_core.shared.pass_and_score_geometry",
         "utama_core.skills.src.shielding",
+        "utama_core.strategy.pickers",
     ],
     "opens files": [
         "utama_core.custom_referee.profiles.profile_loader",

@@ -289,3 +289,14 @@ class TestCrashingRule:
         enemy = _robot(0, _CONTACT_X, 0.0, False, vx=0.0)
         frame = _frame(friendly, enemy)
         assert rule.check(frame, GEO, RefereeCommand.STOP) is None
+
+    def test_separating_robots_never_crash(self):
+        # A robot moving away from an opponent (fleeing or pulling away at high speed)
+        # has negative closing speed and must never be called for a crashing foul,
+        # even if the relative velocity projection has large magnitude.
+        rule = CrashingRule(fault_speed_threshold_mps=1.5, both_fault_threshold_mps=0.3)
+        # Friendly at 0.0 moving away at vx=-2.0; enemy at 0.18 stationary (vx=0.0)
+        friendly = _robot(0, 0.0, 0.0, True, vx=-2.0)
+        enemy = _robot(0, _CONTACT_X, 0.0, False, vx=0.0)
+        frame = _frame(friendly, enemy)
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
