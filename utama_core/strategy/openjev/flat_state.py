@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from utama_core.entities.data.vector import Vector2D
@@ -26,6 +27,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     segment_blocked,
 )
+from utama_core.strategy.openjev.encoder import possession
 
 THIRDS = ("defensive", "middle", "attacking")
 STRIPS = ("left", "centre", "right")
@@ -161,3 +163,85 @@ def enemy_keeper_id(game: Game) -> Optional[int]:
     if ref is None:
         return None
     return (ref.blue_team if game.my_team_is_yellow else ref.yellow_team).goalkeeper
+
+
+@dataclass
+class RobotView:
+    """What one robot's question needs: its own situation and its options with their facts."""
+
+    robot_id: int
+    has_ball: bool
+    options: dict[str, Optional[str]]
+    situation: str
+
+
+def robot_view(
+    game: Game,
+    robot_id: int,
+    robot_ids: tuple[int, ...],
+    *,
+    carry_left_m: Optional[float],
+    marked_by: dict[int, list[int]],
+    blockers: int,
+    chasers: tuple[int, ...] = (),
+) -> RobotView:
+    """`robot_id`'s options, each stated with the facts that bear on it, and a one-line situation.
+
+    The carrier gets ball actions (no `dribble` once its carry is used up); everyone else gets the
+    off-ball actions. Teammates that can't take part (the goalkeeper, robots not in `robot_ids`) are
+    not offered as pass targets.
+    """
+    me = game.friendly_robots[robot_id].p
+    ball = game.ball.p.to_2d()
+    here = cell_of(game, me)
+    holding = has_ball(game, robot_id, visual=True)
+    mates = [rid for rid in sorted(robot_ids) if rid != robot_id and rid in game.friendly_robots]
+    options: dict[str, Optional[str]] = {}
+    if holding:
+        options["shoot"] = f"shot {shot_word(game, me)}"
+        for rid in mates:
+            p = game.friendly_robots[rid].p
+            options[f"pass:{rid}"] = (
+                f"robot {rid} in {cell_of(game, p)} at {dist_word(p.distance_to(me))} distance, lane "
+                f"{'open' if lane_open(game, ball, p) else 'blocked'}, "
+                f"{'free' if nearest_enemy_dist(game, p) >= FREE_RADIUS_M else 'marked'}, its shot {shot_word(game, p)}"
+            )
+        if carry_left_m is None or carry_left_m > 0.2:
+            for cell in adjacent_cells(here):
+                options[f"dribble:{cell}"] = "stay in this cell, beat the nearest opponent" if cell == here else None
+        options["clear"] = (
+            "kick it long and wide, out towards the touch line: gives the ball away, so only when it is about to "
+            "be lost near our goal"
+        )
+        left = "" if carry_left_m is None else f", can carry about {round(max(0.0, carry_left_m) * 4) / 4:.2f} m more"
+        situation = f"Robot {robot_id} has the ball in {here}{left}; its shot is {shot_word(game, me)}."
+    else:
+        order = sorted(mates + [robot_id], key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
+        rank = order.index(robot_id) + 1
+        near = f"the ball is {dist_word(me.distance_to(ball))}, you are number {rank} of ours to it"
+        if not chasers:
+            options["get_ball"] = f"nobody of ours is going for the ball yet; {near}"
+        else:
+            # A second robot on get_ball is executed differently (the nearer blocks, the other tackles),
+            # so say what it does here instead of repeating the first chaser's description.
+            mates = " and ".join(f"robot {c}" for c in chasers)
+            options["get_ball"] = f"help {mates} win the ball: tackle while {mates} blocks its shot; {near}"
+        for cell in CELLS:
+            options[f"move:{cell}"] = "you are here" if cell == here else None
+        keeper = enemy_keeper_id(game)
+        for eid, r in sorted(game.enemy_robots.items()):
+            if eid == keeper:
+                continue
+            by = marked_by.get(eid, [])
+            options[f"mark:{eid}"] = (
+                f"their robot {eid} in {cell_of(game, r.p)}, {dist_word(r.p.distance_to(ball))} from the ball, "
+                f"{'marked by ' + ', '.join(map(str, by)) if by else 'unmarked'}"
+            )
+        options["block_shot"] = f"{blockers} teammate{'s' if blockers != 1 else ''} already blocking"
+        options["hold"] = None
+        side = possession(game)[0]
+        who = {"us": "we have the ball", "them": "they have the ball", "contested": "the ball is loose or contested"}[
+            side
+        ]
+        situation = f"Robot {robot_id} is in {here}, {dist_word(me.distance_to(ball))} to the ball; {who}."
+    return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation)
