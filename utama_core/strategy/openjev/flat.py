@@ -25,9 +25,11 @@ import json
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from typing import IO, Any, Optional
+from pathlib import Path
+from typing import IO, Any, Callable, Optional
 
 from utama_core.engine.context import TickContext
+from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
@@ -601,3 +603,36 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         if self._log is not None:
             self._log.close()
             self._log = None
+
+
+def build_openjev_flat_kernel_strategy(
+    outfield_robot_ids: tuple[int, ...],
+    *,
+    url: str = "http://127.0.0.1:3000",
+    decision_hz: float = 1.0,
+    log_path: Optional[str | Path] = None,
+    client: Optional[OpenJevClient] = None,
+    policy: str = "openjev",
+    on_build: Optional[Callable[[FlatJevTactic], None]] = None,
+):
+    """OpenJev controls every outfield robot (see the module docstring). Same shape as the
+    `build_*_kernel_strategy` factories; `policy="scripted"` needs no server."""
+
+    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
+        jev_client = client or (OpenJevClient(url) if policy == "openjev" else None)
+        tactic = FlatJevTactic(
+            jev_client,
+            decision_hz=decision_hz,
+            log_path=str(log_path) if log_path else None,
+            policy=policy,
+        )
+        if on_build is not None:
+            on_build(tactic)
+        return KernelSchedulerStrategy(
+            tactics={"flat": tactic},
+            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, prev: "flat"),
+            outfield_robot_ids=outfield_robot_ids,
+            ctx=TickContext(motion_controller=motion_controller),
+        )
+
+    return _build

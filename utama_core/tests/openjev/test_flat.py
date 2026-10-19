@@ -3,13 +3,23 @@ decision with a fake client (the real one needs a FOR-Engine server), and a shor
 
 from __future__ import annotations
 
+import functools
+import json
+
 import pytest
 
+from tools.evaluation.match import run_match
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.strategy.openjev import flat_state as fs
 from utama_core.strategy.openjev.client import Decision
-from utama_core.strategy.openjev.flat import FlatJevTactic, FlatMem, scripted_choice
+from utama_core.strategy.openjev.flat import (
+    EVENT_MIN_GAP_S,
+    FlatJevTactic,
+    FlatMem,
+    build_openjev_flat_kernel_strategy,
+    scripted_choice,
+)
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 OUTFIELD = (1, 2, 3, 4, 5)
@@ -188,6 +198,22 @@ def test_a_failing_server_falls_back_to_the_scripted_rule_per_robot():
     tactic._decide(_carrier_game(), 0.0, OUTFIELD, 2, mem)
     assert tactic.n_fallback == tactic.n_questions > 0
     assert set(mem.plans) == set(OUTFIELD)
+
+
+def test_match_runs_with_fake_client_and_decides_no_faster_than_the_event_gap(tmp_path):
+    built = []
+    log = tmp_path / "decisions.jsonl"
+    factory = functools.partial(
+        build_openjev_flat_kernel_strategy, client=FakeClient(), decision_hz=5.0, log_path=log, on_build=built.append
+    )
+    result = run_match("jevflat", "build_tiki_taka_kernel_strategy", duration_seconds=8.0, factory_a=factory)
+    for t in built:
+        t.close()
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert result.score_a >= 0 and rows
+    assert built[0].n_fallback == 0 and built[0].n_questions > 0
+    gaps = [b["t"] - a["t"] for a, b in zip(rows, rows[1:])]
+    assert min(gaps) >= EVENT_MIN_GAP_S - 1e-6
 
 
 def test_a_blocker_with_a_tackling_teammate_holds_the_line_in_front_of_the_ball():
