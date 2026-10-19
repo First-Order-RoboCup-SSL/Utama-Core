@@ -27,6 +27,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [pitch_zones.md](pitch_zones.md): names for the parts of the pitch (thirds, wings, centre, the box, danger), with a diagram.
 - [signals.md](signals.md): every signal recorded about how a strategy plays, grouped by question, with reference ranges and what an off value means.
 - [signal_report.md](signal_report.md): figures of the main signals for every strategy in the latest full round-robin.
+- [openjev.md](openjev.md): OpenJev, the LLM decision model, as a partitioner (split engine) or on every robot (flat engine): how to run it, and its results against the catalog.
 
 ## Open work
 
