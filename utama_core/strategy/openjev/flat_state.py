@@ -162,6 +162,17 @@ def carrier(game: Game, robot_ids) -> Optional[int]:
     return min(holders, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
 
 
+def side_of(game: Game, robot_ids) -> str:
+    """Who has the ball, as the state and the questions say it: 'us' only with a carrier of ours (`carrier`),
+    as `flat.scripted_choice` counts it; else `possession`'s 'them' or 'contested'. `possession` says 'us'
+    whenever one of ours is nearest, our keeper included: told "we have the ball" about a loose ball in our
+    third, the model sent the robot called to it forward instead, a quarter of the time."""
+    if carrier(game, robot_ids) is not None:
+        return "us"
+    side = possession(game)[0]
+    return "contested" if side == "us" else side
+
+
 def enemy_keeper_id(game: Game) -> Optional[int]:
     ref = game.referee
     if ref is None:
@@ -256,7 +267,7 @@ def live_state(
         )
         + (", fast" if speed >= 1.5 else ", slow")
     )
-    side, _, _ = possession(game)
+    side = side_of(game, robot_ids)
     holder = carrier(game, robot_ids)
     ours = []
     for rid in sorted(robot_ids):
@@ -372,7 +383,7 @@ def robot_view(
         if blockers < MAX_BLOCKERS:  # a third blocker crowds our defense area (`defend_parameter` places two)
             options["block_shot"] = f"{blockers} teammate{'s' if blockers != 1 else ''} already blocking"
         options["hold"] = None
-        side = possession(game)[0]
+        side = side_of(game, robot_ids)
         who = {"us": "we have the ball", "them": "they have the ball", "contested": "the ball is loose or contested"}[
             side
         ]

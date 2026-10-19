@@ -144,6 +144,22 @@ def test_scripted_with_the_ball_three_forward_one_back():
     assert scripted_choice(game, _view(game, 3, blockers=0), decided, True) == "block_shot"
 
 
+def test_a_loose_ball_nearest_one_of_ours_is_not_called_ours():
+    from utama_core.strategy.openjev.encoder import possession
+
+    # Robot 1 is nearest a loose ball in our defensive third, but not on it: `possession` says "us",
+    # the rule sends robots for it, and so must the state and the question.
+    game = _game(mates={1: (-2.5, 1.0), 2: (-1.0, -1.0)}, enemies={0: (4.4, 0.0), 3: (0.0, 0.0)}, ball_xy=(-2.8, 1.3))
+    assert possession(game)[0] == "us" and fs.carrier(game, OUTFIELD) is None
+    assert fs.side_of(game, OUTFIELD) == "contested"
+    view = _view(game, 2)
+    assert view.phase == "deep" and "the ball is loose or contested" in view.situation
+    assert fs.live_state(game, OUTFIELD, {}, {}, [])["possession"] == "contested"
+    # On the dribbler it is ours.
+    held = _carrier_game()
+    assert fs.side_of(held, OUTFIELD) == "us" and _view(held, 4).phase == "us"
+
+
 def test_block_shot_is_not_offered_to_a_third_robot():
     game = _game(mates={1: (0.0, 0.0)}, ball_xy=(1.0, 0.0))
     assert "block_shot" in _view(game, 1, blockers=1).options
