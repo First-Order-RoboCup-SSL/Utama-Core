@@ -53,6 +53,10 @@ CELLS = {
 def resolve_opponents(names: list[str]) -> list[str]:
     if names == ["all"]:
         return sorted(_CONFIG_NAMES)
+    if names == ["pool"]:  # the round-robin's pool: every config not retired
+        from tools.evaluation.round_robin import RETIRED
+
+        return sorted(n for n in _CONFIG_NAMES if n not in RETIRED)
     full = [n if n.startswith("build_") else f"build_{n}_kernel_strategy" for n in names]
     unknown = [n for n in full if n not in _CONFIG_NAMES]
     if unknown:
@@ -130,7 +134,7 @@ def main() -> None:
     ap.add_argument(
         "opponents",
         nargs="+",
-        help="short strategy names (e.g. tiki_taka counter_flow) or 'all'",
+        help="short strategy names (e.g. tiki_taka counter_flow), 'all', or 'pool' (the round-robin's)",
     )
     ap.add_argument(
         "--duration",
