@@ -30,16 +30,8 @@ def _r(a: np.ndarray, nd: int = 3) -> list:
     return np.round(np.nan_to_num(a, nan=0.0), nd).tolist()
 
 
-def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
-    rep = load_columnar_replay(npz)
-    idx = np.arange(0, rep.n_ticks, stride)
-    cmd_names = {c.value: c.name for c in RefereeCommand}
-
-    scores = []
-    for tick in sorted(rep.sparse_referee):
-        ref = rep.sparse_referee[tick]
-        scores.append([float(rep.ts[tick]), ref.yellow_team.score, ref.blue_team.score])
-
+def read_decisions(log: Path | None) -> list[dict]:
+    """The decision log as the page reads it."""
     decisions = []
     if log is not None and log.exists():
         for line in log.read_text().splitlines():
@@ -57,6 +49,20 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
                     "possession": (row.get("live") or {}).get("possession", {}).get("side"),
                 }
             )
+    return decisions
+
+
+def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
+    rep = load_columnar_replay(npz)
+    idx = np.arange(0, rep.n_ticks, stride)
+    cmd_names = {c.value: c.name for c in RefereeCommand}
+
+    scores = []
+    for tick in sorted(rep.sparse_referee):
+        ref = rep.sparse_referee[tick]
+        scores.append([float(rep.ts[tick]), ref.yellow_team.score, ref.blue_team.score])
+
+    decisions = read_decisions(log)
 
     result = None
     res_path = npz.with_name(npz.name.replace(".npz", ".result.json"))
