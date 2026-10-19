@@ -30,6 +30,19 @@ THIRDS = ("defensive", "middle", "attacking")
 STRIPS = ("left", "centre", "right")
 CELLS: tuple[str, ...] = tuple(f"{t}_{s}" for t in THIRDS for s in STRIPS)
 
+ACTION_GLOSSARY: dict[str, str] = {
+    "shoot": "(ball carrier) shoot at the widest open part of their goal; if no shot is open yet, edge sideways "
+    "with the ball until one opens",
+    "pass:<id>": "(ball carrier) pass to that teammate; the teammate moves to receive it",
+    "dribble:<cell>": "(ball carrier) carry the ball towards that cell (at most 1 m per touch)",
+    "clear": "(ball carrier) kick the ball long and wide, upfield towards the nearer touch line, away from our goal",
+    "get_ball": "go for the ball: collect a loose ball or challenge the opponent who has it",
+    "move:<cell>": "run to open space in that cell (the best spot there for receiving a pass)",
+    "mark:<id>": "stand between that opponent and our goal, so it can't receive or run at goal freely",
+    "block_shot": "stand on the line between the ball and our goal, just outside our defense area",
+    "hold": "stay where you are, facing the ball",
+}
+
 FREE_RADIUS_M = 0.7
 _NARROW_SHOT_M = 0.25  # open gap along their goal line below which a shot is "narrow"
 
