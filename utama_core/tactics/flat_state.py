@@ -139,12 +139,18 @@ def nearest_enemy_dist(game: Game, p: Vector2D) -> float:
     return min((r.p.distance_to(p) for r in game.enemy_robots.values()), default=math.inf)
 
 
-def shot_word(game: Game, p: Vector2D) -> str:
-    """'open, medium range' / 'narrow, close' / 'blocked, long range' for a shot from `p`."""
+def shot_quality(game: Game, p: Vector2D) -> tuple[str, float]:
+    """('open' | 'narrow' | 'blocked', width of the widest open gap in m) for a shot from `p`."""
     goal_x, y1, y2 = enemy_goal_line(game)
     best_y, gap = find_best_shot(p, list(game.enemy_robots.values()), goal_x, y1, y2)
     width = (gap[1] - gap[0]) if (best_y is not None and gap is not None) else 0.0
-    quality = "blocked" if best_y is None else "narrow" if width < _NARROW_SHOT_M else "open"
+    return ("blocked" if best_y is None else "narrow" if width < _NARROW_SHOT_M else "open"), width
+
+
+def shot_word(game: Game, p: Vector2D) -> str:
+    """'open, medium range' / 'narrow, close' / 'blocked, long range' for a shot from `p`."""
+    quality, _ = shot_quality(game, p)
+    goal_x, y1, y2 = enemy_goal_line(game)
     d = p.distance_to(Vector2D(goal_x, (y1 + y2) / 2.0))
     rng = "close" if d < 2.0 else "medium range" if d < 4.0 else "long range"
     return f"{quality}, {rng}"
