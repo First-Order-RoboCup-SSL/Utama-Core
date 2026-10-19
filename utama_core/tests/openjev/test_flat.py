@@ -260,3 +260,17 @@ def test_a_blocker_with_a_tackling_teammate_holds_the_line_in_front_of_the_ball(
         enemy_holder(_game(mates={1: (-1.2, 0.0)}, enemies={0: (4.4, 0.0), 3: (-1.0, 0.0)}, ball_xy=(-1.12, 0.0)))
         is None
     )
+
+
+def test_questions_list_the_coached_roles_still_unfilled():
+    assert fs.still_to_fill("them", {}) == (
+        "Still to fill for this moment: get_ball (2 more), block_shot (2 more), move into an attacking cell (1 more)."
+    )
+    decided = {2: "get_ball", 4: "block_shot", 5: "move:attacking_left"}
+    assert fs.still_to_fill("them", decided) == "Still to fill for this moment: get_ball (1 more), block_shot (1 more)."
+    assert fs.still_to_fill("us", {1: "move:attacking_left", 3: "move:middle_right"}) == (
+        "Still to fill for this moment: move into an attacking cell (1 more), block_shot (2 more)."
+    )
+    assert fs.still_to_fill("carrier", {}) == ""
+    full = {1: "get_ball", 2: "get_ball", 3: "block_shot", 4: "block_shot", 5: "move:attacking_centre"}
+    assert fs.still_to_fill("them", full) == "Every role the coaching asks for is taken."

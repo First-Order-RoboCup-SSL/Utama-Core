@@ -181,6 +181,38 @@ PHASE_COACHING = {
 }
 
 
+# The roles each moment's coaching asks for, so a question can say which are still unfilled: a single
+# readout does not count reliably, and asked "two robots go for the ball" it left the second one out
+# (half the time, in the first full match against split_shape).
+PHASE_ROLES = {
+    "them": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
+    "contested": (("get_ball", 2), ("block_shot", 2), ("attacking move", 1)),
+    "us": (("attacking move", 2), ("block_shot", 2)),
+}
+
+
+def still_to_fill(phase: str, decided: dict[int, str]) -> str:
+    """'get_ball 1, block_shot 2' for the roles of `phase` not yet taken this moment."""
+    if phase not in PHASE_ROLES:
+        return ""
+    taken = {
+        "get_ball": sum(a == "get_ball" for a in decided.values()),
+        "block_shot": sum(a == "block_shot" for a in decided.values()),
+        "attacking move": sum(a.startswith("move:attacking") for a in decided.values()),
+    }
+    left = [(role, n - taken[role]) for role, n in PHASE_ROLES[phase] if n - taken[role] > 0]
+    if not left:
+        return "Every role the coaching asks for is taken."
+    return (
+        "Still to fill for this moment: "
+        + ", ".join(
+            f"{role} ({n} more)" if role != "attacking move" else f"move into an attacking cell ({n} more)"
+            for role, n in left
+        )
+        + "."
+    )
+
+
 @dataclass
 class RobotView:
     """What one robot's question needs: its own situation and its options with their facts."""
@@ -342,13 +374,14 @@ def robot_view(
     return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation, phase=phase)
 
 
-def question(view: RobotView, decided: list[str]) -> dict[str, Any]:
+def question(view: RobotView, decided: list[str], roles_left: str = "") -> dict[str, Any]:
     already = "; ".join(decided) if decided else "nothing yet"
+    left = f" {roles_left}" if roles_left else ""
     return {
         QUESTION_KEY: {
             "type": "choice",
             "instructions": f"{view.situation} Already decided for this moment: {already}. "
-            f"Coaching for this moment: {PHASE_COACHING[view.phase]}. What should robot {view.robot_id} do now?",
+            f"Coaching for this moment: {PHASE_COACHING[view.phase]}.{left} What should robot {view.robot_id} do now?",
             "criteria": view.options,
         }
     }

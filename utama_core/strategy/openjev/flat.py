@@ -399,7 +399,7 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             return (choice if choice in view.options else "hold"), {"choice": None, "scripted": True}
         self.n_questions += 1
         try:
-            d = self.client.decide(state, fs.question(view, lines))
+            d = self.client.decide(state, fs.question(view, lines, fs.still_to_fill(view.phase, decided)))
             ans = d.answers[fs.QUESTION_KEY]
             choice = ans["choice"]
             if choice not in view.options:
