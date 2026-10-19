@@ -78,9 +78,11 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
     decisions, flat = read_decisions(log)
 
     result = None
-    res_path = npz.with_name(npz.name.replace(".npz", ".result.json"))
-    if res_path.exists():
-        result = json.loads(res_path.read_text())
+    res_name = npz.name.replace(".npz", ".result.json")
+    for res_path in (npz.with_name(res_name), *([log.with_name(res_name)] if log is not None else [])):
+        if res_path.exists():
+            result = json.loads(res_path.read_text())
+            break
 
     dims = STANDARD_FIELD_DIMS
     return {
