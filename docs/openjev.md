@@ -78,3 +78,33 @@ blocking, nobody forward; with the ball, three forward and one back, as the rule
 **Scripted control** (`--engine flat-scripted`, `scripted_choice`): the same menu played by a fixed
 rule. It is the fallback when the server errors, and a control: it measures the menu and its
 execution apart from the model's choices, in minutes instead of the model's half hour a match.
+
+### Building it: model-free probes (2026-10-18)
+
+Full matches (to full time, capped at 1200 s) of the scripted rule against split_shape, which beat
+every other strategy (counter_flow lost all 4 cells to it, 8-20). From the fourth row on, 12 matches:
+4 cells x 3 decision rates (+-2%), since one changed line reshuffles every match.
+
+| Step | vs split_shape | What it showed |
+|---|---|---|
+| first menu: shoot if not blocked, else pass, `get_ball` chases the ball | 0-0-4, 14-35 | |
+| `get_ball` challenges their carrier from the goal side (`block_attacker`) | 0-0-4, 10-28 | |
+| ball actions on the contact sensor, not the visual box | (with an own-half shooting ban) 0-0-4, 3-25 | robots sat beside loose balls and kicked into air |
+| shoot from any range again | 0-1-11, 32-74 | the ban had cut our goals from 10 to 3: long shots score here despite aimless kicks |
+| two robots on the ball when they have it | 2-2-8, 53-72 | split_shape never passes, so a second presser beats a marker |
+| one of five forward as an outlet instead of a marker | 3-4-5, 43-48 | counter-attacks |
+| free-kick formations: a wall for theirs, ours aimed at their goal | 4-0-8, 60-64 | their free kicks converted 25%, ours 7% (then 40%) |
+| a blocker with a tackling teammate holds the line | 6-2-4, 59-57 | `block_attacker` lunges inside 0.5 m and opens the line |
+| at most two `block_shot`; decisions at 1 Hz plus situation triggers | 6-0-6, 62-61 | as strong as 5 Hz, a third of the questions |
+| three on the ball in our defensive third, no outlet (2026-10-19) | 8-0-4, 78-53 | their carrier near our goal beat two; three in the middle third too 7-3-2, 67-58, everywhere 7-0-5, 78-68 |
+| three forward with the ball, one back (2026-10-19) | 11-1-0, 83-53 | one forward instead 6-1-5, 80-77; a carrier in our third that shoots only when wide open, else passes out of it or clears 4-2-6, 57-69 |
+
+Tried and dropped: shooting only when wide open (0-0-4, 6-31) or even when blocked (0-0-4, 9-33); passes
+kicked at once (0-4-8); one robot forward with the ball (0-2-10); a cautious back line (5-3-4, no better);
+2.5 Hz without triggers (4-0-8); the outlet marking instead, in our third (4-2-6, 58-64). On the final
+rule, 28 matches each (4 cells x 7 decision rates, 0.94-1.06 Hz) against its 22-3-3, 181-127: no shots
+from our own half (4-2-22, 85-139) or only open ones (11-4-13, 131-126), though a miss from there that
+crosses their goal line is an aimless kick, their free kick in front of our box; a free-kick wall formed
+fast, round the keep-out circle on the tangent and from their ball placement on (17-5-6, 178-151: their
+free kicks scored no less within 3 s, and the formation cost elsewhere). Three forward with the ball lost
+0-1-11 before a third robot went for the ball in our third; after it, it is the last row.
