@@ -82,3 +82,9 @@ def test_off_ball_menu_marks_every_opponent_but_their_goalkeeper():
     assert len([k for k in view.options if k.startswith("move:")]) == 9
     assert view.options["mark:3"].endswith("marked by 4")
     assert view.options["mark:5"].endswith("unmarked")
+
+
+def test_block_shot_is_not_offered_to_a_third_robot():
+    game = _game(mates={1: (0.0, 0.0)}, ball_xy=(1.0, 0.0))
+    assert "block_shot" in _view(game, 1, blockers=1).options
+    assert "block_shot" not in _view(game, 1, blockers=2).options

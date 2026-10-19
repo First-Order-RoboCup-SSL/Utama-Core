@@ -80,6 +80,7 @@ STATIC_TEXT = json.dumps({"static": STATIC_STATE}, ensure_ascii=False, separator
 QUESTION_KEY = "action"
 
 FREE_RADIUS_M = 0.7
+MAX_BLOCKERS = 2
 _NARROW_SHOT_M = 0.25  # open gap along their goal line below which a shot is "narrow"
 
 
@@ -314,7 +315,8 @@ def robot_view(
                 f"their robot {eid} in {cell_of(game, r.p)}, {dist_word(r.p.distance_to(ball))} from the ball, "
                 f"{'marked by ' + ', '.join(map(str, by)) if by else 'unmarked'}"
             )
-        options["block_shot"] = f"{blockers} teammate{'s' if blockers != 1 else ''} already blocking"
+        if blockers < MAX_BLOCKERS:  # a third blocker crowds our defense area (`defend_parameter` places two)
+            options["block_shot"] = f"{blockers} teammate{'s' if blockers != 1 else ''} already blocking"
         options["hold"] = None
         side = possession(game)[0]
         who = {"us": "we have the ball", "them": "they have the ball", "contested": "the ball is loose or contested"}[
