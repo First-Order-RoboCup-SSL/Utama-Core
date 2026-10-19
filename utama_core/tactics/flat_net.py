@@ -313,9 +313,14 @@ class FlatNet:
         marks = (x[1 + SLOTS : 1 + 2 * SLOTS] @ w["mark_k_w"]) @ (me @ w["mark_q_w"]) / math.sqrt(dk)
         return np.concatenate([fixed, passes, marks])
 
-    def choose(self, feats: tuple, mask: np.ndarray) -> tuple[int, np.ndarray]:
-        """The best action on the menu, and the probabilities over the menu."""
-        z = np.where(mask, self.logits(*feats), -np.inf)
+    def choose(
+        self, feats: tuple, mask: np.ndarray, temperature: float = 0.0, rng: Optional[np.random.Generator] = None
+    ) -> tuple[int, np.ndarray]:
+        """An action on the menu and the probabilities it was drawn from: the most likely one at
+        temperature 0, else a draw from the probabilities at that temperature (reinforcement learning)."""
+        z = np.where(mask, self.logits(*feats), -np.inf) / (temperature if temperature > 0 else 1.0)
         p = np.exp(z - z.max())
         p /= p.sum()
+        if temperature > 0:
+            return int((rng or np.random.default_rng()).choice(len(p), p=p)), p
         return int(np.argmax(p)), p

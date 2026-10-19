@@ -28,6 +28,8 @@ def build_openjev_flat_kernel_strategy(
     call: bool = True,
     weights: Optional[str | Path] = None,
     record_path: Optional[str | Path] = None,
+    temperature: float = 0.0,
+    seed: Optional[int] = None,
     on_build: Optional[Callable[[FlatJevTactic], None]] = None,
 ):
     """OpenJev controls every outfield robot (`tactics/flat.py`). Same shape as the
@@ -45,6 +47,8 @@ def build_openjev_flat_kernel_strategy(
             call=call,
             net=flat_net.FlatNet.load(weights) if weights else None,
             record_path=str(record_path) if record_path else None,
+            temperature=temperature,
+            seed=seed,
         )
         if on_build is not None:
             on_build(tactic)

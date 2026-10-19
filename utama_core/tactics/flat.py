@@ -231,6 +231,8 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         call: bool = True,
         net: Optional[flat_net.FlatNet] = None,
         record_path: Optional[str] = None,
+        temperature: float = 0.0,
+        seed: Optional[int] = None,
     ):
         if policy not in ("openjev", "scripted", "net"):
             raise ValueError(f"unknown policy {policy!r}")
@@ -243,6 +245,8 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         self._record_path = record_path
         self._rec: Optional[dict[str, list]] = {k: [] for k in RECORD_FIELDS} if record_path else None
         self.n_agree = 0
+        self.temperature = temperature  # the network's: 0 plays its best action, above 0 draws one
+        self._rng = np.random.default_rng(seed)
         self.period = 1.0 / decision_hz
         self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
         self._recent: deque[tuple[float, str]] = deque(maxlen=4)
@@ -456,7 +460,7 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         if self.policy == "net":
             self.n_questions += 1
             t0 = time.perf_counter()
-            act, p = self.net.choose(feats, mask)
+            act, p = self.net.choose(feats, mask, self.temperature, self._rng)
             self.latency_ms_total += 1000.0 * (time.perf_counter() - t0)
             choice = flat_net.action_key(act, moment)
             self.n_agree += choice == rule

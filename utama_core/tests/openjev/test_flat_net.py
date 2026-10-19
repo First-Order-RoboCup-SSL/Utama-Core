@@ -173,3 +173,20 @@ def test_recording_leaves_the_rules_match_unchanged(tmp_path):
     plain, recorded = play(False), play(True)
     assert plain[:2] == recorded[:2] and plain[1]
     assert len(recorded[2]) == 1 and len(np.load(tmp_path / "rec.npz")["act"]) == sum(len(c) for _, c in recorded[1])
+
+
+def test_with_a_temperature_the_net_draws_from_its_menu_probabilities():
+    net = flat_net.FlatNet(random_weights())
+    game = _carrier_game()
+    m = _moment(game, holder=2)
+    view = _view(game, 4)
+    feats = flat_net.question(m, view, {}, 0)
+    mask = flat_net.menu_mask(view.options, m)
+    _, p = net.choose(feats, mask, 1.0)
+    draws = [net.choose(feats, mask, 1.0, np.random.default_rng(seed))[0] for seed in range(400)]
+    assert set(draws) <= set(np.flatnonzero(mask)) and len(set(draws)) > 1
+    top = int(np.argmax(p))
+    assert abs(draws.count(top) / len(draws) - p[top]) < 0.1
+    again = [net.choose(feats, mask, 1.0, np.random.default_rng(seed))[0] for seed in range(400)]
+    assert again == draws  # a seed draws the same actions
+    assert net.choose(feats, mask)[0] == top  # no temperature: the most likely action
