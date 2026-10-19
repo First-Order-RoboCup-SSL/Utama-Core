@@ -49,6 +49,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     segment_blocked,
 )
+from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
@@ -70,6 +71,7 @@ PASS_AIM_TIMEOUT_S = 3.0
 PASS_ROLL_TIMEOUT_S = 2.5
 SHOT_TIMEOUT_S = 2.0
 BALL_LOST_GRACE_S = 0.3
+ENEMY_HOLD_M = 0.3
 
 
 @dataclass
@@ -95,6 +97,15 @@ class FlatMem:
 
 def is_locked(plan: Optional[Plan]) -> bool:
     return plan is not None and plan.action.startswith(LOCKED_ACTIONS)
+
+
+def enemy_holder(game: Game) -> Optional[int]:
+    """The opponent with the ball: nearest it, within `ENEMY_HOLD_M`, and clearly nearer than us."""
+    if possession(game)[0] != "them":
+        return None
+    ball = game.ball.p.to_2d()
+    eid, r = min(game.enemy_robots.items(), key=lambda kv: kv[1].p.distance_to(ball), default=(None, None))
+    return eid if r is not None and r.p.distance_to(ball) <= ENEMY_HOLD_M else None
 
 
 def open_point(game: Game, cell: str, robot_id: int, taken: list[Vector2D]) -> Vector2D:
@@ -394,6 +405,15 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         commands: dict[RobotId, RobotCommand] = {}
         ball = game.ball.p.to_2d()
         blockers = sorted(rid for rid, p in mem.plans.items() if p.action == "block_shot")
+        holder = enemy_holder(game)
+        # With several robots on get_ball against their carrier, the one nearest it blocks the shot
+        # line and the rest tackle the ball directly: two blockers on one line would collide.
+        chasers = [rid for rid, p in mem.plans.items() if p.action == "get_ball" and rid in robot_ids]
+        blocker_id = (
+            min(chasers, key=lambda rid: game.friendly_robots[rid].p.distance_to(game.enemy_robots[holder].p))
+            if holder is not None and chasers
+            else None
+        )
 
         for rid, plan in list(mem.plans.items()):
             if not plan.action.startswith("pass:") or rid in commands:
@@ -466,6 +486,10 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             elif action == "get_ball":
                 if ball_in_own_defense_area(game):
                     commands[rid] = go_to_point(game, mc, rid, own_defense_area_exit_point(game, ball.y))
+                elif rid == blocker_id:
+                    # Challenge from the goal side: on the carrier's shot line, lunging only once
+                    # in steal range. Chasing the ball from behind leaves the shot open.
+                    commands[rid] = block_attacker(game, mc, rid, holder, attacker_has_ball=True)
                 else:
                     commands[rid] = go_to_ball(game=game, motion_controller=mc, robot_id=rid, ctx=ctx)
             elif action.startswith("move:") or action == "hold":
