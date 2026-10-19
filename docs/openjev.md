@@ -134,3 +134,36 @@ split_shape 3-0-1: one rate is a lucky draw, not a measurement.
 | clear_danger | 25-2-1 | 143-50 | 5-3 | 6-3 | 3-1 | 6-1 |
 
 Cells (at 1 Hz): R/L = we play right/left, `k` = we kick off; scores ours first.
+
+### Flat results (2026-10-19)
+
+The model on every robot: full matches (to full time, capped at 1200 s), 4 cells against each of the
+round-robin's 12 strategies, openjev-FP8 on SGLang on one RTX 5090, 1 Hz plus the situation triggers.
+
+**Without the call** (`--engine flat-nocall`, and two on the ball everywhere): **30-8-10, 235-161**,
+2.04 points a match (that rule alone, at 1 Hz: 2.88). 242,679 questions, none fell back to the rule, 147 ms a question. More
+wins than losses against 9 strategies, level with 2 (decoy_and_overload 2-0-2 on goals 25-16,
+clear_danger 1-2-1 on 15-14), beaten by split_shape (1-0-3, 25-29).
+
+| Opponent | W-D-L | Goals | Rk | R | Lk | L |
+|---|---|---|---|---|---|---|
+| split_shape | 1-0-3 | 25-29 | 9-11 | 5-6 | 5-7 | 6-5 |
+| counter_flow | 3-0-1 | 16-12 | 6-3 | 5-2 | 3-6 | 2-1 |
+| score_aware_counter_flow | 2-2-0 | 14-9 | 3-3 | 3-2 | 6-2 | 2-2 |
+| press_and_pass | 2-1-1 | 13-11 | 4-3 | 3-3 | 4-2 | 2-3 |
+| clear_press_plus | 3-0-1 | 15-11 | 2-4 | 2-1 | 7-4 | 4-2 |
+| high_press | 4-0-0 | 21-3 | 5-1 | 3-1 | 8-0 | 5-1 |
+| tiki_taka_plus | 4-0-0 | 27-7 | 8-1 | 5-2 | 6-2 | 8-2 |
+| give_and_go_solo | 4-0-0 | 28-20 | 7-6 | 5-4 | 6-3 | 10-7 |
+| overload_press | 2-1-1 | 19-15 | 4-2 | 4-5 | 6-3 | 5-5 |
+| press_trigger_flow | 2-2-0 | 17-14 | 3-2 | 4-4 | 6-4 | 4-4 |
+| decoy_and_overload | 2-0-2 | 25-16 | 5-3 | 3-4 | 14-4 | 3-5 |
+| clear_danger | 1-2-1 | 15-14 | 6-3 | 3-3 | 3-3 | 3-5 |
+
+It chose as the coaching's rule would on only 62% of questions. A robot the rule sends for the ball went
+53% of the time (the second of the two, 47%) and otherwise went forward or onto the shot line, so their
+carrier was often unchallenged: it conceded 3.35 goals a match to that rule's 1.48, the gap mostly at the
+end of their long spells on the ball (1.44 a match with no restart or turnover in the 10 s before; the
+rule 0.44), after they won the ball in our defensive third (0.85; 0.44) and from their free kicks there
+(0.67; 0.38). Restating a principle next to the question did not change this, nor did spelling out the
+second chaser's job; stating the rule's pick for the robot did (93%, below).
