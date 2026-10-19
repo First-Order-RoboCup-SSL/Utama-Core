@@ -18,7 +18,12 @@ from typing import Optional
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import enemy_goal_line, find_best_shot
+from utama_core.shared.pass_and_score_geometry import (
+    enemy_goal_line,
+    enemy_positions,
+    find_best_shot,
+    segment_blocked,
+)
 
 THIRDS = ("defensive", "middle", "attacking")
 STRIPS = ("left", "centre", "right")
@@ -90,3 +95,7 @@ def shot_word(game: Game, p: Vector2D) -> str:
     d = p.distance_to(Vector2D(goal_x, (y1 + y2) / 2.0))
     rng = "close" if d < 2.0 else "medium range" if d < 4.0 else "long range"
     return f"{quality}, {rng}"
+
+
+def lane_open(game: Game, start: Vector2D, end: Vector2D) -> bool:
+    return not segment_blocked(start, end, enemy_positions(game))
