@@ -1,6 +1,6 @@
 """OpenJev decision engines: an LLM decision model (served by FOR-Engine) as the kernel Partitioner
 (`partitioner.py`, the split engine) or choosing every outfield robot's action (`flat.py`, the flat
-engine).
+engine, around the shared `tactics/flat.py`).
 
 The model-driven engines are deliberately not in `kernel_strategy.py`, so tournament auto-discovery
 (`tools/evaluation/match.py`'s `_CONFIG_NAMES`) never picks them up without a running server. This

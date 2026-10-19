@@ -19,11 +19,10 @@ import math
 from typing import Any, Optional
 
 from utama_core.engine.tactic import RobotId
-from utama_core.entities.data.object import TeamType
 from utama_core.entities.game import Game
 from utama_core.strategy.openjev.splits import TACTIC_GLOSSARY, split_glossary
-from utama_core.strategy.pickers import CLOSER_TO_BALL_MARGIN
 from utama_core.tactics.clear_ball import in_danger
+from utama_core.tactics.flat_state import possession
 
 STATIC_STATE: dict[str, Any] = {
     "role": "You are the coach of our team in a 6v6 RoboCup small-size-league robot soccer match. Each "
@@ -63,19 +62,6 @@ def _lane(game: Game, y: float) -> str:
 
 def _half_metre(d: Optional[float]) -> Optional[float]:
     return None if d is None else round(d * 2) / 2
-
-
-def possession(game: Game) -> tuple[str, Optional[float], Optional[float]]:
-    """('us' | 'them' | 'contested', our closest distance, their closest distance)."""
-    _, ours = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
-    _, theirs = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
-    if ours is None or theirs is None:
-        return "contested", ours, theirs
-    if ours < theirs - CLOSER_TO_BALL_MARGIN:
-        return "us", float(ours), float(theirs)
-    if theirs < ours - CLOSER_TO_BALL_MARGIN:
-        return "them", float(ours), float(theirs)
-    return "contested", float(ours), float(theirs)
 
 
 def live_state(

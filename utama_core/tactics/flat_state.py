@@ -1,4 +1,4 @@
-"""Flat OpenJev: the 9 cells, each robot's action menu, and the state text the model reads.
+"""The flat engine's menu: the 9 cells, each robot's actions, and the state text OpenJev reads.
 
 Flat means no tactics in between: at each decision the model picks one action per outfield robot,
 one robot at a time, and `flat.py` carries it out with existing skills. Questions in one decision are
@@ -18,6 +18,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
@@ -27,7 +28,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     segment_blocked,
 )
-from utama_core.strategy.openjev.encoder import possession
+from utama_core.strategy.pickers import CLOSER_TO_BALL_MARGIN
 
 THIRDS = ("defensive", "middle", "attacking")
 STRIPS = ("left", "centre", "right")
@@ -160,6 +161,19 @@ def carrier(game: Game, robot_ids) -> Optional[int]:
         return None
     ball = game.ball.p.to_2d()
     return min(holders, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
+
+
+def possession(game: Game) -> tuple[str, Optional[float], Optional[float]]:
+    """('us' | 'them' | 'contested', our closest distance, their closest distance)."""
+    _, ours = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.FRIENDLY)
+    _, theirs = game.proximity_lookup.closest_to_ball(team_type_filter=TeamType.ENEMY)
+    if ours is None or theirs is None:
+        return "contested", ours, theirs
+    if ours < theirs - CLOSER_TO_BALL_MARGIN:
+        return "us", float(ours), float(theirs)
+    if theirs < ours - CLOSER_TO_BALL_MARGIN:
+        return "them", float(ours), float(theirs)
+    return "contested", float(ours), float(theirs)
 
 
 def side_of(game: Game, robot_ids) -> str:

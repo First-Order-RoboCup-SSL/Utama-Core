@@ -11,13 +11,13 @@ import pytest
 from tools.evaluation.match import run_match
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.strategy.openjev import flat_state as fs
 from utama_core.strategy.openjev.client import Decision
-from utama_core.strategy.openjev.flat import (
+from utama_core.strategy.openjev.flat import build_openjev_flat_kernel_strategy
+from utama_core.tactics import flat_state as fs
+from utama_core.tactics.flat import (
     EVENT_MIN_GAP_S,
     FlatJevTactic,
     FlatMem,
-    build_openjev_flat_kernel_strategy,
     scripted_choice,
 )
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
@@ -145,7 +145,7 @@ def test_scripted_with_the_ball_three_forward_one_back():
 
 
 def test_a_loose_ball_nearest_one_of_ours_is_not_called_ours():
-    from utama_core.strategy.openjev.encoder import possession
+    from utama_core.tactics.flat_state import possession
 
     # Robot 1 is nearest a loose ball in our defensive third, but not on it: `possession` says "us",
     # the rule sends robots for it, and so must the state and the question.
@@ -280,7 +280,7 @@ def test_match_runs_with_fake_client_and_decides_no_faster_than_the_event_gap(tm
 
 
 def test_their_free_kick_wall_stands_on_the_ball_goal_line_outside_the_keep_out():
-    from utama_core.strategy.openjev.flat import WALL_DIST_M, their_free_kick_targets
+    from utama_core.tactics.flat import WALL_DIST_M, their_free_kick_targets
 
     # Our team on the left: our goal at x = -4.5. Their kicker (2) at the ball, 3 and 4 deeper.
     game = _game(
@@ -308,11 +308,7 @@ def test_their_free_kick_wall_stands_on_the_ball_goal_line_outside_the_keep_out(
 
 
 def test_a_blocker_with_a_tackling_teammate_holds_the_line_in_front_of_the_ball():
-    from utama_core.strategy.openjev.flat import (
-        BLOCK_HOLD_M,
-        enemy_holder,
-        shot_line_point,
-    )
+    from utama_core.tactics.flat import BLOCK_HOLD_M, enemy_holder, shot_line_point
 
     game = _game(mates={1: (0.0, 0.0)}, enemies={0: (4.4, 0.0), 3: (-1.0, 0.0)}, ball_xy=(-1.12, 0.0))
     assert enemy_holder(game) == 3
