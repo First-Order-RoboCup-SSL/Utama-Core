@@ -77,6 +77,8 @@ STATIC_STATE: dict[str, Any] = {
 
 STATIC_TEXT = json.dumps({"static": STATIC_STATE}, ensure_ascii=False, separators=(",", ":")) + "\n"
 
+QUESTION_KEY = "action"
+
 FREE_RADIUS_M = 0.7
 _NARROW_SHOT_M = 0.25  # open gap along their goal line below which a shot is "narrow"
 
@@ -320,3 +322,15 @@ def robot_view(
         ]
         situation = f"Robot {robot_id} is in {here}, {dist_word(me.distance_to(ball))} to the ball; {who}."
     return RobotView(robot_id=robot_id, has_ball=holding, options=options, situation=situation)
+
+
+def question(view: RobotView, decided: list[str]) -> dict[str, Any]:
+    already = "; ".join(decided) if decided else "nothing yet"
+    return {
+        QUESTION_KEY: {
+            "type": "choice",
+            "instructions": f"{view.situation} Already decided for this moment: {already}. "
+            f"What should robot {view.robot_id} do now?",
+            "criteria": view.options,
+        }
+    }
