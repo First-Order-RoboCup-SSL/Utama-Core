@@ -188,3 +188,21 @@ def test_a_failing_server_falls_back_to_the_scripted_rule_per_robot():
     tactic._decide(_carrier_game(), 0.0, OUTFIELD, 2, mem)
     assert tactic.n_fallback == tactic.n_questions > 0
     assert set(mem.plans) == set(OUTFIELD)
+
+
+def test_a_blocker_with_a_tackling_teammate_holds_the_line_in_front_of_the_ball():
+    from utama_core.strategy.openjev.flat import (
+        BLOCK_HOLD_M,
+        enemy_holder,
+        shot_line_point,
+    )
+
+    game = _game(mates={1: (0.0, 0.0)}, enemies={0: (4.4, 0.0), 3: (-1.0, 0.0)}, ball_xy=(-1.12, 0.0))
+    assert enemy_holder(game) == 3
+    p = shot_line_point(game, BLOCK_HOLD_M)
+    assert abs(p.distance_to(Vector2D(-1.12, 0.0)) - BLOCK_HOLD_M) < 1e-6
+    assert p.x < -1.12  # between the ball and our goal (x = -4.5)
+    assert (
+        enemy_holder(_game(mates={1: (-1.2, 0.0)}, enemies={0: (4.4, 0.0), 3: (-1.0, 0.0)}, ball_xy=(-1.12, 0.0)))
+        is None
+    )

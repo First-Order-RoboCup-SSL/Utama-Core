@@ -72,6 +72,7 @@ PASS_ROLL_TIMEOUT_S = 2.5
 SHOT_TIMEOUT_S = 2.0
 BALL_LOST_GRACE_S = 0.3
 ENEMY_HOLD_M = 0.3
+BLOCK_HOLD_M = 0.3  # a blocker with a tackling teammate holds the shot line this far in front of the ball
 
 
 @dataclass
@@ -97,6 +98,15 @@ class FlatMem:
 
 def is_locked(plan: Optional[Plan]) -> bool:
     return plan is not None and plan.action.startswith(LOCKED_ACTIONS)
+
+
+def shot_line_point(game: Game, dist_m: float) -> Vector2D:
+    """The point `dist_m` from the ball towards our goal's centre, kept out of our defense area."""
+    ball = game.ball.p.to_2d()
+    goal = Vector2D(game.field.my_goal_line[0][0], 0.0)
+    d = goal - ball
+    k = min(1.0, dist_m / max(d.mag(), 1e-6))
+    return clamp_outside_own_defense_area(game, Vector2D(ball.x + d.x * k, ball.y + d.y * k))
 
 
 def enemy_holder(game: Game) -> Optional[int]:
@@ -486,6 +496,10 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             elif action == "get_ball":
                 if ball_in_own_defense_area(game):
                     commands[rid] = go_to_point(game, mc, rid, own_defense_area_exit_point(game, ball.y))
+                elif rid == blocker_id and len(chasers) > 1:
+                    # A teammate tackles: hold the ball's line to our goal just in front of it.
+                    # `block_attacker` lunges at the ball inside its steal range and opens the line.
+                    commands[rid] = go_to_point(game, mc, rid, shot_line_point(game, BLOCK_HOLD_M))
                 elif rid == blocker_id:
                     # Challenge from the goal side: on the carrier's shot line, lunging only once
                     # in steal range. Chasing the ball from behind leaves the shot open.
