@@ -109,3 +109,10 @@ def carrier(game: Game, robot_ids) -> Optional[int]:
         return None
     ball = game.ball.p.to_2d()
     return min(holders, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
+
+
+def enemy_keeper_id(game: Game) -> Optional[int]:
+    ref = game.referee
+    if ref is None:
+        return None
+    return (ref.blue_team if game.my_team_is_yellow else ref.yellow_team).goalkeeper
