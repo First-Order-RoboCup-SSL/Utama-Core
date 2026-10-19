@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import deque
 from dataclasses import dataclass, field
 from typing import IO, Any, Optional
 
@@ -40,6 +41,7 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.strategy.openjev import flat_state as fs
 from utama_core.strategy.openjev.client import OpenJevClient
+from utama_core.strategy.openjev.encoder import possession
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
 
@@ -148,6 +150,9 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         self.policy = policy
         self.period = 1.0 / decision_hz
         self._log: Optional[IO[str]] = open(log_path, "w", buffering=1) if log_path else None
+        self._recent: deque[tuple[float, str]] = deque(maxlen=4)
+        self._last_side: Optional[str] = None
+        self._last_score: Optional[tuple[int, int]] = None
         self.n_decisions = self.n_questions = self.n_cached = self.n_fallback = 0
         self.latency_ms_total = 0.0
 
@@ -156,6 +161,35 @@ class FlatJevTactic(BaseTactic[FlatMem]):
 
     def highlights(self, mem: FlatMem) -> dict[RobotId, str]:
         return {rid: p.action for rid, p in mem.plans.items()}
+
+    # --- events for the state's `recent` list -------------------------------------------------
+
+    def _note(self, t: float, event: str) -> None:
+        self._recent.appendleft((t, event))
+
+    def _track_events(self, game: Game, t: float, holder: Optional[int], mem: FlatMem) -> None:
+        side = possession(game)[0]
+        if self._last_side is not None and side != self._last_side and side != "contested":
+            self._note(t, "we won the ball" if side == "us" else "they won the ball")
+        if side != "contested":
+            self._last_side = side
+        ref = game.referee
+        if ref is not None:
+            us, them = (ref.yellow_team, ref.blue_team) if game.my_team_is_yellow else (ref.blue_team, ref.yellow_team)
+            score = (us.score, them.score)
+            if self._last_score is not None and score != self._last_score:
+                self._note(t, "we scored" if score[0] > self._last_score[0] else "they scored")
+            self._last_score = score
+
+    def _recent_text(self, t: float) -> list[str]:
+        """Events of the last 10 s with coarse ages, so the state text repeats while nothing changes
+        and the client's cache answers repeated questions (exact ages made every state unique)."""
+        out = []
+        for et, e in self._recent:
+            age = t - et
+            if age < 10.0:
+                out.append(f"{'just now' if age < 1.0 else 'a moment ago' if age < 3.0 else 'a few seconds ago'}: {e}")
+        return out
 
     # --- logging ------------------------------------------------------------------------------
 
