@@ -26,14 +26,20 @@ import math
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import IO, Any, Callable, Optional
 
+from utama_core.custom_referee.actions import (
+    DirectFreeOursStep,
+    _clear_to_legal_positions,
+)
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.shared.pass_and_score_geometry import (
     CARRY_LIMIT_M,
@@ -614,6 +620,25 @@ class FlatJevTactic(BaseTactic[FlatMem]):
 WALL_DIST_M = 0.65  # wall centre from the ball: outside the 0.5 m keep-out (KeepOutRule, _free_kick_ready)
 
 
+@dataclass
+class _Shim:
+    """The three attributes `custom_referee/actions.py`'s steps and helpers read and write."""
+
+    game: Game
+    motion_controller: MotionController
+    cmd_map: dict[RobotId, RobotCommand] = field(default_factory=dict)
+
+
+class _AimedFreeKick(DirectFreeOursStep):
+    """The built-in kicker approach, lined up at the widest gap in their goal instead of at a robot,
+    so the kick can go the moment play restarts."""
+
+    def _kick_target_enemy(self, game: Game, ball_pos: Vector2D):
+        goal_x, y1, y2 = enemy_goal_line(game)
+        best_y, _ = find_best_shot(ball_pos, list(game.enemy_robots.values()), goal_x, y1, y2)
+        return None, SimpleNamespace(p=Vector2D(goal_x, best_y if best_y is not None else (y1 + y2) / 2.0))
+
+
 def their_free_kick_targets(game: Game, outfield: list[int]) -> dict[int, Vector2D]:
     """Two robots in a wall on the ball's line to our goal, the rest marking the opponents nearest our
     goal (not their kicker or goalkeeper)."""
@@ -651,6 +676,56 @@ def their_free_kick_targets(game: Game, outfield: list[int]) -> dict[int, Vector
     return targets
 
 
+def free_kick_overrides(outfield_robot_ids: tuple[int, ...]) -> dict[RefereeCommand, Callable]:
+    """`Strategy(referee_overrides=...)` for both teams' free kicks. Our goalkeeper is left out of
+    every returned command map, so its pinned tactic keeps covering the goal."""
+    kick = _AimedFreeKick()
+
+    def theirs(game: Game, mc: MotionController) -> dict[RobotId, RobotCommand]:
+        outfield = [rid for rid in sorted(game.friendly_robots) if rid in outfield_robot_ids]
+        shim = _Shim(game, mc)
+        others = {rid for rid in game.friendly_robots if rid not in outfield}
+        _clear_to_legal_positions(
+            shim,
+            ball_keep_dist=WALL_DIST_M - 0.05,
+            intended_targets=their_free_kick_targets(game, outfield),
+            exempt_robot_ids=others,
+        )
+        return shim.cmd_map
+
+    def ours(game: Game, mc: MotionController) -> dict[RobotId, RobotCommand]:
+        shim = _Shim(game, mc)
+        kick.blackboard = shim
+        kick.update()
+        kicker = kick._kicker_sticky.current
+        outfield = [rid for rid in sorted(game.friendly_robots) if rid in outfield_robot_ids and rid != kicker]
+        ball = game.ball.p.to_2d()
+        by_dist = sorted(outfield, key=lambda rid: game.friendly_robots[rid].p.distance_to(ball))
+        taken = [ball]
+        cmds = {kicker: shim.cmd_map[kicker]} if kicker in shim.cmd_map else {}
+        for rid, cell in zip(by_dist[:2], ("attacking_left", "attacking_right")):
+            target = open_point(game, cell, rid, taken)
+            taken.append(target)
+            cmds[rid] = go_to_point(game, mc, rid, target)
+        backs = by_dist[2:]
+        for rid in backs:
+            cmds[rid] = defend_parameter(game, mc, rid, defender_group=backs) or empty_command()
+        return cmds
+
+    out = {}
+    for yellow_cmds, blue_cmds in (
+        (
+            (RefereeCommand.DIRECT_FREE_YELLOW, RefereeCommand.INDIRECT_FREE_YELLOW),
+            (RefereeCommand.DIRECT_FREE_BLUE, RefereeCommand.INDIRECT_FREE_BLUE),
+        ),
+    ):
+        for c in yellow_cmds:
+            out[c] = lambda g, mc: ours(g, mc) if g.my_team_is_yellow else theirs(g, mc)
+        for c in blue_cmds:
+            out[c] = lambda g, mc: theirs(g, mc) if g.my_team_is_yellow else ours(g, mc)
+    return out
+
+
 def build_openjev_flat_kernel_strategy(
     outfield_robot_ids: tuple[int, ...],
     *,
@@ -679,6 +754,7 @@ def build_openjev_flat_kernel_strategy(
             partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, prev: "flat"),
             outfield_robot_ids=outfield_robot_ids,
             ctx=TickContext(motion_controller=motion_controller),
+            referee_overrides=free_kick_overrides(outfield_robot_ids),
         )
 
     return _build
