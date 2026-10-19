@@ -13,12 +13,17 @@ a fact about each option; what to do about it is left to the model.
 
 from __future__ import annotations
 
+import math
+from typing import Optional
+
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 
 THIRDS = ("defensive", "middle", "attacking")
 STRIPS = ("left", "centre", "right")
 CELLS: tuple[str, ...] = tuple(f"{t}_{s}" for t in THIRDS for s in STRIPS)
+
+FREE_RADIUS_M = 0.7
 
 
 def attack_dir(game: Game) -> float:
@@ -60,3 +65,15 @@ def adjacent_cells(cell: str) -> list[str]:
     """`cell` and its up-to-8 neighbours, in `CELLS` order."""
     third, strip = divmod(CELLS.index(cell), 3)
     return [c for i, c in enumerate(CELLS) if abs(i // 3 - third) <= 1 and abs(i % 3 - strip) <= 1]
+
+
+def dist_word(d: Optional[float]) -> str:
+    if d is None or not math.isfinite(d):
+        return "far"
+    return (
+        "touching" if d < 0.3 else "very close" if d < 0.7 else "close" if d < 1.5 else "medium" if d < 3.0 else "far"
+    )
+
+
+def nearest_enemy_dist(game: Game, p: Vector2D) -> float:
+    return min((r.p.distance_to(p) for r in game.enemy_robots.values()), default=math.inf)
