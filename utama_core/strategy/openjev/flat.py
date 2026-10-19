@@ -535,6 +535,17 @@ class FlatJevTactic(BaseTactic[FlatMem]):
     def _shoot(self, game: Game, ctx: TickContext, rid: int, mem: FlatMem) -> RobotCommand:
         cmd, _, best_y = _score_goal(game, ctx, rid, mem.shot_y.get(rid))
         mem.shot_y[rid] = best_y
+        if best_y is None and carry_exhausted(game, mem.carry_origins.get(rid), stops_after=True):
+            # No lane and no carry left: edging further would be an excessive-dribbling foul, so
+            # shoot at the middle of the goal now.
+            goal_x, y1, y2 = enemy_goal_line(game)
+            me = game.friendly_robots[rid].p
+            oren = me.angle_to(Vector2D(goal_x, (y1 + y2) / 2.0))
+            if oriented_towards(game, rid, oren) and has_ball(game, rid):
+                return kick()
+            return turn_on_spot(
+                game=game, motion_controller=ctx.motion_controller, robot_id=rid, target_oren=oren, dribbling=True
+            )
         return cmd
 
     # --- logging ------------------------------------------------------------------------------
