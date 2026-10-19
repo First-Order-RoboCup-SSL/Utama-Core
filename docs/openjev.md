@@ -2,14 +2,18 @@
 
 OpenJev is an LLM decision model (served by FOR-Engine) that answers multiple-choice questions about a
 text state: one forward pass per question, up to 52 lettered options, no generated text. Two engines
-put it in charge of our team; code in `utama_core/strategy/openjev/`, deliberately not in
-`kernel_strategy.py`, so a round-robin never picks them up without a running server.
+put it in charge of our team; their OpenJev side is in `utama_core/strategy/openjev/`, deliberately not
+in `kernel_strategy.py`, so a round-robin never picks them up without a running server. The flat
+engine's tactic, menu and policy network are shared code in `utama_core/tactics/` (`flat.py`,
+`flat_state.py`, `flat_net.py`); on its scripted rule it is the catalog's `flat_rule`
+(`strategy/flat_rule.py`), which a round-robin plays.
 
 - **split** (`partitioner.py`, `encoder.py`, `splits.py`): OpenJev is the kernel `Partitioner`. Every
   `1 / decision_hz` seconds of sim time it picks one of a fixed set of splits of the 5 outfield robots
   across six tactics (`attack`, `overload`, `press`, `mark`, `block`, `clear`), and the tactics play it.
-- **flat** (`flat.py`, `flat_state.py`): no tactics in between. OpenJev picks every outfield robot's
-  action itself, one robot at a time; see [The flat engine](#the-flat-engine).
+- **flat** (`strategy/openjev/flat.py`, the tactic in `tactics/flat.py`): no tactics in between.
+  OpenJev picks every outfield robot's action itself, one robot at a time; see
+  [The flat engine](#the-flat-engine).
 
 The sim is stepped synchronously, so inference latency costs no game time, only wall time. If the
 server errors, a decision falls back to a fixed rule (split: `tiki_taka`'s picker; flat: the scripted
@@ -27,14 +31,18 @@ Needs FOR-Engine on `:3000` (in FOR-Engine: `pixi run -e sglang serve-sglang-sta
 | `tools/jev_summary.py` | Aggregate a run directory's `*.result.json` (correct with several workers) |
 | `tools/jev_replay_html.py` | Render a replay plus its `.openjev.jsonl` decision log as HTML |
 | `tools/openjev_bench.py` | Server latency benchmark (prefix-cache reuse, state size, question count) |
+| `tools/flat_round.py` | No server: the flat engine on the rule or the policy network (`--weights`), in parallel on the CPU, 4 cells x 7 rates by default, against strategies or another network (`net:<weights>`); `--record` saves every question |
+| `tools/flat_net_train.py` | Train the policy network by imitating the rule (GPU, torch) |
+| `tools/flat_net_rl.py` | Improve it by self-play reinforcement learning (PPO): against itself, earlier versions and the pool, CPU matches, GPU updates |
 
-Tests: `pixi run pytest utama_core/tests/openjev/ --headless` (19 pass, 2026-10-18; no server needed).
+Tests: `pixi run pytest utama_core/tests/openjev/ --headless` (66 pass, 2026-10-19; no server needed).
 
 ## The flat engine
 
-`build_openjev_flat_kernel_strategy` (`flat.py`): one `FlatJevTactic` owns all 5 outfield robots; the
-goalkeeper stays on its pinned `GoalkeeperTactic`, and restarts on `RefereeOverride` (with this
-engine's own free-kick formations, below). The model decides only in open play.
+`build_openjev_flat_kernel_strategy` (`strategy/openjev/flat.py`): one `FlatJevTactic`
+(`tactics/flat.py`) owns all 5 outfield robots; the goalkeeper stays on its pinned `GoalkeeperTactic`,
+and restarts on `RefereeOverride` (with this engine's own free-kick formations, below). The model
+decides only in open play.
 
 **One decision, chained questions.** A decision asks one question per robot not busy with a pass, shot
 or clearance: the ball carrier first, then the others nearest the ball first. Each question lists what
@@ -190,6 +198,49 @@ one robot decides the match. Possession is now said from the carrier, as the rul
 (`flat_state.side_of`): calls followed 99.8%, the first chaser's 100%.
 
 **With the call, the final rule** (v5, `--engine flat`): (pending)
+
+## The policy network (`policy="net"`)
+
+A small network in the model's place (`tactics/flat_net.py`): the same flat engine, menu, chain and
+execution, no LLM and no server. It runs in numpy on the CPU, about 0.2 ms a question (1 ms a
+decision).
+
+**What it reads.** 14 tokens, all in our frame (we attack +x and our left is +y, from either side): one
+global token (score, time, possession, our carrier, this robot's phase, the roles already chosen in this
+decision), our 6 robots and their 6 in id order, and the ball. Each of our robots carries position,
+velocity, heading, distance and rank to the ball, the action it is carrying out and the one chosen for it
+in this decision, and the facts its menu states: free, lane open from the ball, shot open / narrow /
+blocked with the gap's width. A 3-layer transformer (d 128, 4 heads, 434k parameters) mixes them.
+
+**What it answers.** For the asked robot, 35 scores: 23 fixed actions (`shoot`, `clear`, `get_ball`,
+`block_shot`, `hold`, `dribble:<cell>` x 9, `move:<cell>` x 9) from that robot's token, and `pass:<k>` /
+`mark:<k>` from its token against each teammate's or opponent's. Options not on its menu are masked; in
+a match it plays the most likely option, and while learning it draws one (`--temperature`).
+
+**Training.** `tools/flat_round.py --record` saves every question (`flat.RECORD_FIELDS`);
+`tools/flat_net_train.py` imitates the rule on them on the GPU (torch, e.g. FOR-Engine's environment, so
+Utama-Core's needs none) and exports the weights; `FlatNet.load` checks that numpy reproduces the
+trainer's own outputs. `tools/flat_net_rl.py` then improves on it by self-play (below). Data and
+weights live under `replays/flatnet/` (ignored).
+
+**Imitation** (`bc1`, 2026-10-19). The rule against all 22 catalog strategies, 4 cells x 2 rates (0.95,
+1.05): 176 full matches, 166-7-3, 1039-225, 774k questions to train on and 84k held out (every 10th
+match). Twelve epochs with 5% label smoothing over the menu (exploration for later) took 30 s on the RTX
+5090: the network picks the rule's option on 99.995% of the held-out questions (the carrier's 99.95%,
+everyone else's 100%). Against the pool at 1 Hz, 4 cells, playing its best option: 45 of 48 matches
+identical to the rule's, the other three each parted from it after one different choice; 48-0-0,
+265-70, where the rule went 47-0-1, 260-71.
+
+**Reinforcement learning by self-play** (`rl2`, running since 2026-10-19 13:09), after AlphaGo's
+reinforcement-learning stage: PPO from `bc1`, the network drawing its actions. Each iteration plays 16
+full matches against itself (both teams' questions are training data), 12 against three earlier
+versions of itself (a league, so it does not only learn to beat its latest self), and the pool as an
+anchor, 2 random cells each (self-play alone can drift to beating itself and not the strategies we
+have to beat). Each robot's questions are a trajectory whose reward is its team's goal difference until its
+next question (discounted 0.99 a second, GAE 0.98), the baseline a critic of the same shape, and a KL
+penalty keeps the network near `bc1` until the goals say otherwise. No tree search as in AlphaGo: rsim
+cannot snapshot and restore a match, and one 10 s look-ahead costs seconds. Every 5 iterations the
+network plays at its best the pool (4 cells, 1 Hz) and `bc1`, the rule's copy (8 matches).
 
 ## Split engine results (2026-09-26)
 
