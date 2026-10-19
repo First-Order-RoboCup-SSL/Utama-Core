@@ -167,3 +167,26 @@ end of their long spells on the ball (1.44 a match with no restart or turnover i
 rule 0.44), after they won the ball in our defensive third (0.85; 0.44) and from their free kicks there
 (0.67; 0.38). Restating a principle next to the question did not change this, nor did spelling out the
 second chaser's job; stating the rule's pick for the robot did (93%, below).
+
+**With the call, two on the ball everywhere** (v2, stopped after 12 matches when the rule changed): 7-3-2;
+split_shape 2-1-1, 22-21 (Rk 4-7, R 8-7, Lk 5-2, L 5-5), clear_danger 2-2-0, 13-5, decoy_and_overload
+3-0-0, 31-5, counter_flow's Rk 0-1. The model chose as the rule would on 92-93% of questions: the nearest
+robot to the ball went for it on every call, the second nearest (as the second on the ball) on 91-96%; it
+turned down calls sent further back (the third nearest and on, after a nearer one declined) four times in
+five.
+
+**With the call, three on the ball in our defensive third** (v3, stopped after 2 matches when the rule
+changed again): split_shape Rk 4-2, Lk 5-5. The model chose as the rule would on 98% of questions; a third
+robot sent for the ball went on 96-99% of calls, where in v2 calls past the second were turned down: the
+moment's coaching line now asked for three.
+
+**With the call, three forward with the ball** (v4, stopped after 4 matches): split_shape 1-1-2, 22-25
+(Rk 6-9, R 8-8, Lk 6-4, L 2-4), where that rule alone went 22-3-3 over 28. The first robot sent for the
+ball went on only 92% of calls, the second on 90%: most refusals were a slow loose ball in our third,
+where the question said "we have the ball" (`possession` counts the nearest robot, our keeper included)
+and the coaching line for that now sent three forward. On CPU the rule with the first chaser turned
+down at random 4, 8 or 16% of the time went 5-3-4, 4-0-8 and 7-3-2 against split_shape (12 each): that
+one robot decides the match. Possession is now said from the carrier, as the rule counts it
+(`flat_state.side_of`): calls followed 99.8%, the first chaser's 100%.
+
+**With the call, the final rule** (v5, `--engine flat`): (pending)
