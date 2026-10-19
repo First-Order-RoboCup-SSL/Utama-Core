@@ -54,3 +54,9 @@ def cell_bounds(game: Game, cell: str) -> tuple[float, float, float, float]:
     xs = sorted(((p_lo - half) * a, (p_hi - half) * a))
     ys = sorted((l_lo * a, l_hi * a))
     return xs[0], xs[1], ys[0], ys[1]
+
+
+def adjacent_cells(cell: str) -> list[str]:
+    """`cell` and its up-to-8 neighbours, in `CELLS` order."""
+    third, strip = divmod(CELLS.index(cell), 3)
+    return [c for i, c in enumerate(CELLS) if abs(i // 3 - third) <= 1 and abs(i % 3 - strip) <= 1]

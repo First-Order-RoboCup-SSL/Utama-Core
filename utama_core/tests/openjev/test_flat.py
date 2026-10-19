@@ -26,3 +26,9 @@ def test_cells_are_named_from_our_point_of_view():
     assert fs.cell_of(right_team, Vector2D(-4.0, -2.0)) == "attacking_left"
     assert fs.cell_of(right_team, Vector2D(-4.0, 2.0)) == "attacking_right"
     assert fs.cell_of(right_team, Vector2D(4.0, 0.0)) == "defensive_centre"
+
+
+def test_adjacent_cells_include_the_cell_itself():
+    assert fs.adjacent_cells("defensive_left") == ["defensive_left", "defensive_centre", "middle_left", "middle_centre"]
+    assert len(fs.adjacent_cells("middle_centre")) == 9
+    assert len(fs.adjacent_cells("attacking_centre")) == 6
