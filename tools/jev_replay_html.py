@@ -3,9 +3,12 @@
 Reads a columnar replay (`.npz`) plus the match's OpenJev decision log
 (`<tag>.openjev.jsonl`, found next to the replay by default) and writes an
 HTML page with the pitch animation on the left and, synced to the playhead,
-OpenJev's current decision on the right: chosen split, confidence, the full
-probability bar chart and which tactic each of our robots is running. No
-external scripts or fonts — open it in any browser, or send it to someone.
+OpenJev's current decision on the right. Split engine: chosen split,
+confidence, the full probability bar chart and which tactic each of our robots
+is running. Flat engine (a log of per-robot `chain` rows): each robot's current
+action, the model's top-3 probabilities for it, the fact its option stated, and
+what the scripted rule would have chosen. No external scripts or fonts — open
+it in any browser, or send it to someone.
 
 Usage:
     pixi run python -m tools.jev_replay_html replays/jev_smoke/openjev_vs_tiki_taka_Rk.npz
@@ -121,7 +124,11 @@ PAGE = r"""<!doctype html>
 <style>
 :root{--bg:#f6f5f1;--panel:#ffffff;--ink:#1d1d1b;--muted:#6b6a64;--line:#dcdad2;--pitch:#2f7d4f;--pitchline:#e9f3ec;
 --yellow:#e3b505;--blue:#2d6cdf;--ball:#f06b1f;--bar:#2d6cdf;--barbg:#ecebe5;--pick:#e3b505;
---t-attack:#d9483b;--t-overload:#b04fc4;--t-press:#e98b1a;--t-mark:#2d6cdf;--t-block:#1f9e8f;--t-clear:#7a7a72;--t-goalkeeper:#444;--t-none:#999}
+--t-attack:#d9483b;--t-overload:#b04fc4;--t-press:#e98b1a;--t-mark:#2d6cdf;--t-block:#1f9e8f;--t-clear:#7a7a72;--t-goalkeeper:#444;--t-none:#999;
+--a-shoot:#d9483b;--a-pass:#b04fc4;--a-receive:#c77dd6;--a-dribble:#e05a8a;--a-clear:#7a7a72;--a-get_ball:#e98b1a;--a-move:#3f9e4f;
+--a-mark:#2d6cdf;--a-block_shot:#1f9e8f;--a-hold:#999;--a-none:#bbb}
+.robot{border-top:1px solid var(--line);padding:6px 0}.robot:first-child{border-top:0}.why{font-size:12px;color:var(--muted)}
+.row.small{grid-template-columns:150px 1fr 40px;font-size:12px;margin:1px 0}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--panel:#1f1f1d;--ink:#ecebe5;--muted:#a3a198;
 --line:#34332f;--pitch:#245f3c;--pitchline:#cfe3d6;--barbg:#2a2a27}}
 :root[data-theme="dark"]{--bg:#141413;--panel:#1f1f1d;--ink:#ecebe5;--muted:#a3a198;--line:#34332f;--pitch:#245f3c;--pitchline:#cfe3d6;--barbg:#2a2a27}
@@ -149,8 +156,8 @@ h2{font-size:13px;margin:10px 0 4px;color:var(--muted);text-transform:uppercase;
 <div class="controls"><button id="play">Play</button><input id="scrub" type="range" min="0" value="0">
 <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></div>
 <div class="legend" id="legend"></div></section>
-<section class="card"><h2>OpenJev decision</h2><div class="kv" id="dec"></div><h2>Split probabilities</h2><div id="bars"></div>
-<h2>Our robots</h2><div class="chips" id="chips"></div></section>
+<section class="card"><h2>OpenJev decision</h2><div class="kv" id="dec"></div><h2 id="barsh">Split probabilities</h2><div id="bars"></div>
+<h2 id="chipsh">Our robots</h2><div class="chips" id="chips"></div></section>
 </main>
 <script>
 const D = __PAYLOAD__;
@@ -160,7 +167,12 @@ const N = D.ts.length, F = D.field, cv = $('pitch'), cx = cv.getContext('2d');
 const oj = D.openjev_is_yellow ? 'yellow' : 'blue', opp = D.openjev_is_yellow ? 'blue' : 'yellow';
 $('title').textContent = D.title.replace(/_/g, ' ');
 $('scrub').max = N - 1;
-$('legend').innerHTML = D.tactics.map(t => `<span style="--c:var(--t-${t})">${t}</span>`).join('');
+const ACTIONS = ['shoot', 'pass', 'receive', 'dribble', 'clear', 'get_ball', 'move', 'mark', 'block_shot', 'hold'];
+const kind = a => (a || 'none').split(':')[0];
+$('legend').innerHTML = D.flat
+  ? ACTIONS.map(a => `<span style="--c:var(--a-${a})">${a}</span>`).join('')
+  : D.tactics.map(t => `<span style="--c:var(--t-${t})">${t}</span>`).join('');
+if (D.flat){ $('barsh').textContent = 'Each robot: its action, the model\'s top 3, the rule'; $('chipsh').style.display = 'none'; }
 const pad = 0.35, W = 2 * (F.hl + pad), H = 2 * (F.hw + pad);
 function fit(){ const s = cv.width / W; cv.height = Math.round(H * s); return s; }
 let S = fit();
@@ -169,7 +181,10 @@ function decisionAt(t){ let lo = 0, hi = D.decisions.length - 1, r = -1;
   while (lo <= hi){ const m = (lo + hi) >> 1; if (D.decisions[m].t <= t){ r = m; lo = m + 1; } else hi = m - 1; } return r; }
 // Robots held by a committed tactic are absent from that tick's partition, so carry the last known slot forward.
 const TAC = []; { let m = {}; for (const d of D.decisions){ m = {...m};
-  for (const [t, ids] of Object.entries(d.partition)) for (const id of ids) m[id] = t; TAC.push(m); } }
+  if (D.flat){ for (const q of d.chain){ const a = q.choice || q.rule || 'none'; m[q.robot] = {...q, choice: a, at: d.t};
+      if (kind(a) === 'pass') m[+a.split(':')[1]] = {robot: +a.split(':')[1], choice: 'receive', at: d.t, why: `from robot ${q.robot}`}; } }
+  else for (const [t, ids] of Object.entries(d.partition)) for (const id of ids) m[id] = t;
+  TAC.push(m); } }
 const tacticsAt = k => TAC[k];
 function scoreAt(t){ let s = [0, 0]; for (const [st, y, b] of D.scores) if (st <= t) s = [y, b]; return s; }
 function drawPitch(){
@@ -193,12 +208,14 @@ function render(i){
   const t = D.ts[i], k = decisionAt(t), tac = k >= 0 ? tacticsAt(k) : {};
   drawPitch();
   D.enemy_ids.forEach((id, j) => robot(D.ep[i][j], D.eo[i][j], css('--' + opp), id));
-  D.friendly_ids.forEach((id, j) => robot(D.fp[i][j], D.fo[i][j], css('--' + oj), id, id === 0 ? null : css('--t-' + (tac[id] || 'none'))));
+  D.friendly_ids.forEach((id, j) => robot(D.fp[i][j], D.fo[i][j], css('--' + oj), id, id === 0 ? null
+    : D.flat ? css('--a-' + kind(tac[id] && tac[id].choice)) : css('--t-' + (tac[id] || 'none'))));
   cx.fillStyle = css('--ball'); cx.beginPath(); cx.arc(X(D.bp[i][0]), Y(D.bp[i][1]), 0.05 * S, 0, 7); cx.fill();
   const sc = scoreAt(t), ojs = D.openjev_is_yellow ? sc[0] : sc[1], ops = D.openjev_is_yellow ? sc[1] : sc[0];
   $('score').textContent = `OpenJev (${oj}) ${ojs} – ${ops} opponent (${opp})`;
   $('clock').textContent = `t = ${t.toFixed(1)} s`; $('cmd').textContent = D.cmd[i].toLowerCase().replace(/_/g, ' ');
   const d = k >= 0 ? D.decisions[k] : null;
+  if (D.flat){ renderFlat(d, tac); $('scrub').value = i; return; }
   $('dec').innerHTML = d ? [
     ['split', d.fallback ? 'fallback (tiki_taka)' : d.choice], ['confidence', d.confidence ?? '–'],
     ['possession', d.possession ?? '–'], ['decided at', d.t.toFixed(2) + ' s'],
@@ -209,6 +226,24 @@ function render(i){
   $('chips').innerHTML = D.friendly_ids.filter(id => id !== 0).map(id => { const t2 = tac[id] || 'none';
     return `<span class="chip" style="background:var(--t-${t2})">#${id} ${t2}</span>`; }).join('');
   $('scrub').value = i;
+}
+function renderFlat(d, tac){
+  const asked = d ? d.chain.map(q => q.robot) : [];
+  const ms = d ? d.chain.filter(q => q.ms != null).map(q => q.ms) : [];
+  const fb = d ? d.chain.filter(q => q.fallback).length : 0;
+  $('dec').innerHTML = d ? [['decided at', d.t.toFixed(2) + ' s'], ['asked (in order)', asked.map(r => '#' + r).join(' → ') || '–'],
+    ['latency', ms.length ? ms.map(m => Math.round(m)).join(' + ') + ' ms' : '–'], ['fallbacks', fb]]
+    .map(([a, b]) => `<span class="muted">${a}</span><span>${b}</span>`).join('') : '<span class="muted">no decision yet</span><span></span>';
+  $('bars').innerHTML = D.friendly_ids.filter(id => id !== 0).map(id => {
+    const q = tac[id]; if (!q) return `<div class="robot"><b>#${id}</b> <span class="muted">no action yet</span></div>`;
+    const a = q.choice, p = q.p || {}, now = asked.includes(id);
+    const bars = Object.entries(p).map(([key, v]) => `<div class="row small ${key === a ? 'pick' : ''}"><span>${key}</span>`
+      + `<span class="bar"><i style="width:${(v * 100).toFixed(1)}%"></i></span><span>${v.toFixed(2)}</span></div>`).join('');
+    const rule = q.rule && q.rule !== a ? ` <span class="muted">· rule: ${q.rule}</span>` : '';
+    return `<div class="robot"><span class="chip" style="background:var(--a-${kind(a)})">#${id} ${a}</span>`
+      + ` <span class="muted">${now ? 'decided now' : 'since ' + q.at.toFixed(1) + ' s'}</span>${rule}`
+      + (q.why ? `<div class="why">${q.why}</div>` : '') + bars + '</div>';
+  }).join('');
 }
 // The playhead time must accumulate across display frames: a replay frame (33 ms at stride 2) outlasts a
 // 60/120 Hz refresh, so re-deriving it from ts[i] every tick never reaches the next frame and playback stalls.
