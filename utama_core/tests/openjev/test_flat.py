@@ -122,6 +122,11 @@ class FakeClient:
         self.answers = answers or {}
         self.fail = fail
         self.requests: list[tuple[str, dict]] = []
+        self.prewarmed: list[str] = []
+
+    def prewarm(self, state):
+        self.prewarmed.append(state)
+        return {"ok": True}
 
     def decide(self, state, questions):
         if self.fail:
@@ -155,6 +160,7 @@ def test_a_decision_asks_the_carrier_first_and_chains_every_earlier_choice():
     assert asked == [2, 4, 5, 1]  # carrier, then nearest the ball; 3 receives and is not asked
     states = {s for s, _ in client.requests}
     assert len(states) == 1 and next(iter(states)).startswith(fs.STATIC_TEXT)  # one cacheable state per moment
+    assert client.prewarmed == list(states)  # warmed once, so each question computes only its own tail
     second = client.requests[1][1][fs.QUESTION_KEY]["instructions"]
     assert "robot 2 -> pass to robot 3" in second and "robot 3 -> receive the pass from robot 2" in second
     last = client.requests[-1][1][fs.QUESTION_KEY]["instructions"]

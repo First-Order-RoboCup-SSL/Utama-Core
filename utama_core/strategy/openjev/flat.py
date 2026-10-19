@@ -254,6 +254,14 @@ class FlatJevTactic(BaseTactic[FlatMem]):
         self.n_decisions += 1
         doing = {rid: self._describe(rid, p) for rid, p in mem.plans.items()}
         state = fs.render(fs.live_state(game, robot_ids, doing, self._marked_by(mem.plans, {}), self._recent_text(t)))
+        if self.policy == "openjev" and self.client is not None and len(order) > 1:
+            # One prefill of the shared state, so each question below computes only its own tail.
+            # Needs SGLang's no_buffer mamba cache (FOR-Engine's sglang-server task): it keeps the
+            # hybrid model's state at the end of this request, exactly where the questions diverge.
+            try:
+                self.client.prewarm(state)
+            except Exception:  # a failed warm-up only costs speed; the questions still go out
+                pass
         decided: dict[int, str] = {}
         lines = [f"robot {rid} -> {doing[rid]}" for rid in robot_ids if is_locked(mem.plans.get(rid))]
         row: dict[str, Any] = {"t": round(t, 3), "chain": []}
