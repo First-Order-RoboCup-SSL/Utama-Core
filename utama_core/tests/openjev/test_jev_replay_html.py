@@ -27,3 +27,33 @@ for (let k = 0; k < {refresh_hz}; k++) [i, pt] = advance(ts, i, pt, 1 / {refresh
 console.log(i);"""
     out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True)
     assert 29 <= int(out.stdout) <= 30
+
+
+def test_flat_engine_logs_are_read_as_per_robot_chains(tmp_path):
+    from tools.jev_replay_html import read_decisions
+
+    log = tmp_path / "m.openjev.jsonl"
+    rows = [
+        {
+            "t": 5.0,
+            "chain": [{"robot": 2, "choice": "pass:3", "p": {"pass:3": 0.9}, "why": "lane open", "rule": "shoot"}],
+        },
+        {"t": 5.2, "chain": [{"robot": 4, "choice": "get_ball", "p": {"get_ball": 0.6}, "ms": 80.0, "cached": False}]},
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows))
+    decisions, flat = read_decisions(log)
+    assert flat and [d["t"] for d in decisions] == [5.0, 5.2]
+    assert decisions[0]["chain"][0] == {
+        "robot": 2,
+        "choice": "pass:3",
+        "p": {"pass:3": 0.9},
+        "why": "lane open",
+        "rule": "shoot",
+        "ms": None,
+        "cached": None,
+        "fallback": None,
+    }
+    split_log = tmp_path / "s.openjev.jsonl"
+    split_log.write_text(json.dumps({"t": 1.0, "choice": "press", "probabilities": {"press": 1.0}}))
+    split, flat2 = read_decisions(split_log)
+    assert not flat2 and split[0]["choice"] == "press"

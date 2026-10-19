@@ -30,12 +30,25 @@ def _r(a: np.ndarray, nd: int = 3) -> list:
     return np.round(np.nan_to_num(a, nan=0.0), nd).tolist()
 
 
-def read_decisions(log: Path | None) -> list[dict]:
-    """The decision log as the page reads it."""
+def read_decisions(log: Path | None) -> tuple[list[dict], bool]:
+    """The decision log as the page reads it, and whether it is the flat engine's (per-robot `chain` rows)."""
     decisions = []
+    flat = False
     if log is not None and log.exists():
         for line in log.read_text().splitlines():
             row = json.loads(line)
+            if "chain" in row:  # flat engine: one question per robot
+                flat = True
+                decisions.append(
+                    {
+                        "t": row["t"],
+                        "chain": [
+                            {k: q.get(k) for k in ("robot", "choice", "p", "why", "rule", "ms", "cached", "fallback")}
+                            for q in row["chain"]
+                        ],
+                    }
+                )
+                continue
             decisions.append(
                 {
                     "t": row["t"],
@@ -49,7 +62,7 @@ def read_decisions(log: Path | None) -> list[dict]:
                     "possession": (row.get("live") or {}).get("possession", {}).get("side"),
                 }
             )
-    return decisions
+    return decisions, flat
 
 
 def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
@@ -62,7 +75,7 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
         ref = rep.sparse_referee[tick]
         scores.append([float(rep.ts[tick]), ref.yellow_team.score, ref.blue_team.score])
 
-    decisions = read_decisions(log)
+    decisions, flat = read_decisions(log)
 
     result = None
     res_path = npz.with_name(npz.name.replace(".npz", ".result.json"))
@@ -93,6 +106,7 @@ def build_payload(npz: Path, log: Path | None, stride: int) -> dict:
         "cmd": [cmd_names.get(int(c), "") if c >= 0 else "" for c in rep.referee_command[idx]],
         "scores": scores,
         "decisions": decisions,
+        "flat": flat,
         "split_keys": SPLIT_KEYS,
         "tactics": list(TACTIC_GLOSSARY),
         "result": result,
