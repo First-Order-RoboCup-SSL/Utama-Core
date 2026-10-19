@@ -605,6 +605,52 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             self._log = None
 
 
+# --- free kicks ----------------------------------------------------------------------------------
+#
+# The built-in steps leave a free kick's defenders frozen wherever play stopped (`DirectFreeTheirsStep`
+# only clears the keep-out circle) and line our kicker up at one of their robots. These replace them for
+# this engine: the model plays open play, set pieces are formations.
+
+WALL_DIST_M = 0.65  # wall centre from the ball: outside the 0.5 m keep-out (KeepOutRule, _free_kick_ready)
+
+
+def their_free_kick_targets(game: Game, outfield: list[int]) -> dict[int, Vector2D]:
+    """Two robots in a wall on the ball's line to our goal, the rest marking the opponents nearest our
+    goal (not their kicker or goalkeeper)."""
+    ball = game.ball.p.to_2d()
+    goal = Vector2D(game.field.my_goal_line[0][0], 0.0)
+    d = goal - ball
+    length = max(d.mag(), 1e-6)
+    u = Vector2D(d.x / length, d.y / length)
+    n = Vector2D(-u.y, u.x)
+    centre = Vector2D(ball.x + u.x * WALL_DIST_M, ball.y + u.y * WALL_DIST_M)
+    spots = [Vector2D(centre.x + n.x * 0.1, centre.y + n.y * 0.1), Vector2D(centre.x - n.x * 0.1, centre.y - n.y * 0.1)]
+    spots = [clamp_outside_own_defense_area(game, s) for s in spots]
+    targets: dict[int, Vector2D] = {}
+    free = list(outfield)
+    for spot in spots:
+        if not free:
+            break
+        rid = min(free, key=lambda r: game.friendly_robots[r].p.distance_to(spot))
+        targets[rid] = spot
+        free.remove(rid)
+    keeper = fs.enemy_keeper_id(game)
+    kicker = min(game.enemy_robots, key=lambda e: game.enemy_robots[e].p.distance_to(ball), default=None)
+    threats = sorted(
+        (e for e in game.enemy_robots if e not in (keeper, kicker)),
+        key=lambda e: game.enemy_robots[e].p.distance_to(goal),
+    )
+    for eid in threats:
+        if not free:
+            break
+        rid = min(free, key=lambda r: game.friendly_robots[r].p.distance_to(game.enemy_robots[eid].p))
+        targets[rid] = clamp_to_field(clamp_outside_own_defense_area(game, mark_target(game, eid)), game)
+        free.remove(rid)
+    for rid in free:
+        targets[rid] = clamp_outside_own_defense_area(game, Vector2D((ball.x + goal.x) / 2.0, (ball.y + goal.y) / 2.0))
+    return targets
+
+
 def build_openjev_flat_kernel_strategy(
     outfield_robot_ids: tuple[int, ...],
     *,

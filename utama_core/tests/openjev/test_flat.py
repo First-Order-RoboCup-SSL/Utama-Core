@@ -216,6 +216,34 @@ def test_match_runs_with_fake_client_and_decides_no_faster_than_the_event_gap(tm
     assert min(gaps) >= EVENT_MIN_GAP_S - 1e-6
 
 
+def test_their_free_kick_wall_stands_on_the_ball_goal_line_outside_the_keep_out():
+    from utama_core.strategy.openjev.flat import WALL_DIST_M, their_free_kick_targets
+
+    # Our team on the left: our goal at x = -4.5. Their kicker (2) at the ball, 3 and 4 deeper.
+    game = _game(
+        mates={1: (-1.0, 0.0), 2: (-2.0, 1.0), 3: (-3.0, -1.0), 4: (0.0, 2.0), 5: (-2.5, -2.0)},
+        enemies={0: (4.4, 0.0), 2: (-1.6, 1.6), 3: (-3.2, 1.2), 4: (-2.0, -1.5), 5: (1.0, 0.0)},
+        ball_xy=(-1.5, 1.5),
+    )
+    targets = their_free_kick_targets(game, [1, 2, 3, 4, 5])
+    assert set(targets) == {1, 2, 3, 4, 5}
+    ball = Vector2D(-1.5, 1.5)
+    goal = Vector2D(-4.5, 0.0)
+    wall = sorted(targets.values(), key=lambda p: p.distance_to(ball))[:2]
+    for p in wall:
+        assert 0.5 < p.distance_to(ball) < WALL_DIST_M + 0.05  # outside keep-out, close enough to block
+        # on the line from the ball to our goal: the perpendicular offset is at most half the wall
+        d = goal - ball
+        cross = abs((p.x - ball.x) * d.y - (p.y - ball.y) * d.x) / d.mag()
+        assert cross <= 0.11
+    from utama_core.shared.pass_and_score_geometry import clamp_outside_own_defense_area
+    from utama_core.skills.src.man_mark import mark_target
+
+    marks = {e: clamp_outside_own_defense_area(game, mark_target(game, e)) for e in (2, 3, 4, 5)}
+    marked = {e for e, m in marks.items() if any(p.distance_to(m) < 1e-6 for p in targets.values())}
+    assert marked == {3, 4, 5}  # every opponent but their kicker (the wall's) and goalkeeper
+
+
 def test_a_blocker_with_a_tackling_teammate_holds_the_line_in_front_of_the_ball():
     from utama_core.strategy.openjev.flat import (
         BLOCK_HOLD_M,
