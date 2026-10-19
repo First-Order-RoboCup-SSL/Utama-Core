@@ -8,7 +8,8 @@ import pytest
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.strategy.openjev import flat_state as fs
-from utama_core.strategy.openjev.flat import scripted_choice
+from utama_core.strategy.openjev.client import Decision
+from utama_core.strategy.openjev.flat import FlatJevTactic, FlatMem, scripted_choice
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 OUTFIELD = (1, 2, 3, 4, 5)
@@ -112,3 +113,72 @@ def test_block_shot_is_not_offered_to_a_third_robot():
     game = _game(mates={1: (0.0, 0.0)}, ball_xy=(1.0, 0.0))
     assert "block_shot" in _view(game, 1, blockers=1).options
     assert "block_shot" not in _view(game, 1, blockers=2).options
+
+
+class FakeClient:
+    """Answers each robot from `answers[robot]` (else the first option); records every request."""
+
+    def __init__(self, answers=None, fail=False):
+        self.answers = answers or {}
+        self.fail = fail
+        self.requests: list[tuple[str, dict]] = []
+
+    def decide(self, state, questions):
+        if self.fail:
+            raise ConnectionError("no server")
+        self.requests.append((state, questions))
+        q = questions[fs.QUESTION_KEY]
+        robot = int(q["instructions"].rsplit("robot ", 1)[1].split()[0])
+        choice = self.answers.get(robot, next(iter(q["criteria"])))
+        return Decision(
+            answers={fs.QUESTION_KEY: {"choice": choice, "probabilities": {choice: 1.0}}}, latency_ms=1.0, cached=False
+        )
+
+
+def _carrier_game():
+    # Robot 2 has the ball; 4 is nearest the ball after it, then 5, then 1.
+    return _game(
+        carrier_xy=(2, 0.0, 0.0),
+        mates={1: (-3.0, 0.0), 3: (1.5, 2.0), 4: (0.5, -0.5), 5: (-1.0, 1.0)},
+        enemies={0: (4.4, 0.0), 1: (2.0, 0.0)},
+    )
+
+
+def test_a_decision_asks_the_carrier_first_and_chains_every_earlier_choice():
+    client = FakeClient(answers={2: "pass:3", 4: "move:attacking_left", 5: "block_shot", 1: "hold"})
+    tactic = FlatJevTactic(client)
+    mem = FlatMem()
+    game = _carrier_game()
+    tactic._decide(game, 0.0, OUTFIELD, 2, mem)
+
+    asked = [int(q[fs.QUESTION_KEY]["instructions"].rsplit("robot ", 1)[1].split()[0]) for _, q in client.requests]
+    assert asked == [2, 4, 5, 1]  # carrier, then nearest the ball; 3 receives and is not asked
+    states = {s for s, _ in client.requests}
+    assert len(states) == 1 and next(iter(states)).startswith(fs.STATIC_TEXT)  # one cacheable state per moment
+    second = client.requests[1][1][fs.QUESTION_KEY]["instructions"]
+    assert "robot 2 -> pass to robot 3" in second and "robot 3 -> receive the pass from robot 2" in second
+    last = client.requests[-1][1][fs.QUESTION_KEY]["instructions"]
+    assert "robot 4 -> move:attacking_left" in last and "robot 5 -> block_shot" in last
+    assert mem.plans[2].action == "pass:3" and mem.plans[3].action == "receive"
+    assert mem.plans[4].target is not None and fs.cell_of(game, mem.plans[4].target) == "attacking_left"
+
+
+def test_robots_in_a_pass_are_not_asked_again_until_it_ends():
+    client = FakeClient(answers={2: "pass:3"})
+    tactic = FlatJevTactic(client)
+    mem = FlatMem()
+    game = _carrier_game()
+    tactic._decide(game, 0.0, OUTFIELD, 2, mem)
+    client.requests.clear()
+    tactic._decide(game, 0.2, OUTFIELD, 2, mem)
+    asked = {int(q[fs.QUESTION_KEY]["instructions"].rsplit("robot ", 1)[1].split()[0]) for _, q in client.requests}
+    assert asked == {1, 4, 5}
+    assert "robot 2 -> passing to robot 3" in client.requests[0][1][fs.QUESTION_KEY]["instructions"]
+
+
+def test_a_failing_server_falls_back_to_the_scripted_rule_per_robot():
+    tactic = FlatJevTactic(FakeClient(fail=True))
+    mem = FlatMem()
+    tactic._decide(_carrier_game(), 0.0, OUTFIELD, 2, mem)
+    assert tactic.n_fallback == tactic.n_questions > 0
+    assert set(mem.plans) == set(OUTFIELD)

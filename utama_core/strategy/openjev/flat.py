@@ -31,6 +31,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
+    CARRY_LIMIT_M,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
     clamp_to_field,
@@ -241,6 +242,120 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             if age < 10.0:
                 out.append(f"{'just now' if age < 1.0 else 'a moment ago' if age < 3.0 else 'a few seconds ago'}: {e}")
         return out
+
+    # --- decisions ----------------------------------------------------------------------------
+
+    def _decide(self, game: Game, t: float, robot_ids: tuple[int, ...], holder: Optional[int], mem: FlatMem) -> None:
+        ball = game.ball.p.to_2d()
+        free = [rid for rid in robot_ids if not is_locked(mem.plans.get(rid))]
+        order = sorted(free, key=lambda rid: (rid != holder, game.friendly_robots[rid].p.distance_to(ball)))
+        if not order:
+            return
+        self.n_decisions += 1
+        doing = {rid: self._describe(rid, p) for rid, p in mem.plans.items()}
+        state = fs.render(fs.live_state(game, robot_ids, doing, self._marked_by(mem.plans, {}), self._recent_text(t)))
+        decided: dict[int, str] = {}
+        lines = [f"robot {rid} -> {doing[rid]}" for rid in robot_ids if is_locked(mem.plans.get(rid))]
+        row: dict[str, Any] = {"t": round(t, 3), "chain": []}
+        taken = [game.friendly_robots[rid].p for rid in robot_ids if rid not in order]
+        ours_has_ball = holder is not None
+        while order:
+            rid = order.pop(0)
+            view = fs.robot_view(
+                game,
+                rid,
+                robot_ids,
+                carry_left_m=self._carry_left(game, mem, rid),
+                marked_by=self._marked_by({}, decided),
+                blockers=sum(a == "block_shot" for a in decided.values()),
+                chasers=tuple(r for r, a in decided.items() if a == "get_ball"),
+            )
+            choice, info = self._choose(game, state, view, lines, decided, ours_has_ball)
+            row["chain"].append({"robot": rid, **info})
+            decided[rid] = choice
+            plan = Plan(choice, t)
+            if choice.startswith(("move:", "dribble:")):
+                plan.target = open_point(game, choice.split(":", 1)[1], rid, taken)
+                taken.append(plan.target)
+            elif choice == "hold":
+                plan.target = game.friendly_robots[rid].p
+            if choice.startswith("pass:"):
+                receiver = int(choice.split(":")[1])
+                plan.partner = receiver
+                mem.plans[receiver] = Plan("receive", t, partner=rid)
+                decided[receiver] = "receive"
+                lines.append(f"robot {rid} -> pass to robot {receiver}")
+                lines.append(f"robot {receiver} -> receive the pass from robot {rid}")
+                if receiver in order:
+                    order.remove(receiver)
+                self._note(t, f"robot {rid} passes to robot {receiver}")
+            else:
+                lines.append(f"robot {rid} -> {choice}")
+                if choice == "shoot":
+                    self._note(t, f"robot {rid} shoots")
+            mem.plans[rid] = plan
+        self._write(row)
+
+    def _choose(
+        self,
+        game: Game,
+        state: str,
+        view: fs.RobotView,
+        lines: list[str],
+        decided: dict[int, str],
+        ours_has_ball: bool,
+    ) -> tuple[str, dict[str, Any]]:
+        if self.policy == "scripted" or self.client is None:
+            choice = scripted_choice(game, view, decided, ours_has_ball)
+            return (choice if choice in view.options else "hold"), {"choice": None, "scripted": True}
+        self.n_questions += 1
+        try:
+            d = self.client.decide(state, fs.question(view, lines))
+            ans = d.answers[fs.QUESTION_KEY]
+            choice = ans["choice"]
+            if choice not in view.options:
+                raise ValueError(f"answer {choice!r} is not one of the options")
+        except Exception as e:  # server down or a bad answer: this robot plays the scripted rule
+            self.n_fallback += 1
+            choice = scripted_choice(game, view, decided, ours_has_ball)
+            return choice, {"choice": choice, "fallback": f"{type(e).__name__}: {e}"[:200]}
+        self.n_cached += int(d.cached)
+        self.latency_ms_total += d.latency_ms
+        probs = ans.get("probabilities") or {}
+        top = dict(sorted(probs.items(), key=lambda kv: -kv[1])[:3]) if isinstance(probs, dict) else probs
+        return choice, {
+            "choice": choice,
+            "why": view.options.get(choice),
+            "p": top,
+            "ms": round(d.latency_ms, 1),
+            "cached": d.cached,
+            "rule": scripted_choice(game, view, decided, ours_has_ball),  # what the scripted rule would do
+        }
+
+    @staticmethod
+    def _describe(rid: int, plan: Plan) -> str:
+        if plan.action.startswith("pass:"):
+            return f"passing to robot {plan.partner}"
+        if plan.action == "receive":
+            return f"receiving a pass from robot {plan.partner}"
+        return plan.action
+
+    @staticmethod
+    def _marked_by(plans: dict[int, Plan], decided: dict[int, str]) -> dict[int, list[int]]:
+        out: dict[int, list[int]] = {}
+        actions = {rid: p.action for rid, p in plans.items()}
+        actions.update(decided)
+        for rid, action in sorted(actions.items()):
+            if action.startswith("mark:"):
+                out.setdefault(int(action.split(":")[1]), []).append(rid)
+        return out
+
+    @staticmethod
+    def _carry_left(game: Game, mem: FlatMem, rid: int) -> Optional[float]:
+        origin = mem.carry_origins.get(rid)
+        if origin is None:
+            return None
+        return CARRY_LIMIT_M - game.ball.p.to_2d().distance_to(origin)
 
     # --- logging ------------------------------------------------------------------------------
 
