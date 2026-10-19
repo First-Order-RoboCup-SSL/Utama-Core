@@ -65,6 +65,10 @@ CELLS = {
     ],
 }
 
+# A match with more of its questions answered by the scripted fallback than this is not a model result:
+# the server went down mid-match, and every question after that played the rule.
+MAX_FALLBACK_SHARE = 0.01
+
 
 def resolve_opponents(names: list[str]) -> list[str]:
     if names == ["all"]:
@@ -144,6 +148,14 @@ def play(
         "openjev": built[0].summary() if built else None,
         "stats": result.stats,
     }
+    oj = out["openjev"] or {}
+    if oj.get("questions") and oj["fallback"] > MAX_FALLBACK_SHARE * oj["questions"]:
+        # Kept apart from the results, and the run stops: the matches after it would fall back too.
+        (run_dir / f"{tag}.invalid.json").write_text(json.dumps(out, indent=1, default=str))
+        raise SystemExit(
+            f"{tag}: {oj['fallback']} of {oj['questions']} questions fell back to the scripted rule "
+            "(is the server down?); not recorded, re-run the same command once it is back"
+        )
     (run_dir / f"{tag}.result.json").write_text(json.dumps(out, indent=1, default=str))
     return out
 
