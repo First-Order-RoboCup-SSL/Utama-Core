@@ -26,6 +26,20 @@ Measuring a robot (`--calibrate attacker|defender`): that robot plays fixed move
 along the field's long side, and a ball at rest in view; Force Start. Halting (to put it
 back) restarts the interrupted move. Then measure it from the recorded log:
     pixi run python tools/robot_calibration.py replays/field/<run>.log
+Calibrate near the middle of the camera's view: its noise grows towards the image edges.
+Run it twice per robot (early and late): how far the two runs disagree is how far to trust them.
+Gain and loop delay should agree closely; acceleration, turning above all, is only rough.
+
+The rest of a test day's measurements, any run (every real run records a log):
+  - Floor friction: roll the ball by hand across open floor 8-10 times at different speeds,
+    away from robots. Then convert the log and fit its free-rolling segments:
+        pixi run python tools/convert_ssl_log.py replays/field/<run>.log --out replays/field/converted
+        pixi run python -m utama_core.analysis.physics_ranges --real replays/field/converted
+    The result replaces BALL_ROLL_DECEL (`config/settings.py`, the league's 0.29 m/s^2).
+  - Kick speed: 5+ kicks per robot with the ball placed at its kicker (the attacker kicks in
+    play); `robot_calibration` reports each kick's ball speed.
+  - Occlusions, for the ball tracker: roll the ball behind a robot, let a robot dribble with it,
+    cover it by hand. Note the times; they become test cases.
 
 Before running on real robots:
   - ssl-vision's field geometry (length and width) must equal FIELD below, or the
