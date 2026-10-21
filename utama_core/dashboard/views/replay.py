@@ -180,6 +180,8 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
                 }
             )
 
+    ticks = columns["ts"] if columns else [f["ts"] for f in frames]
+    end_t = ticks[-1] if ticks else 0.0
     payload = {
         "my_team_is_right": bool(my_team_is_right),
         "my_team_is_yellow": my_team_is_yellow,
@@ -228,7 +230,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
         "trace_events": [{"sim_time": e.sim_time, "key": e.key, "value": e.value} for e in trace_events],
         "markers": _markers(replay_path, referee_events, my_team_is_yellow, analysis["losses"]),
         "shots": analysis["shots"],
-        "play": _play(replay_path, referee_events, analysis["losses"], frames[-1]["ts"] if frames else 0.0),
+        "play": _play(replay_path, referee_events, analysis["losses"], end_t),
         "has_tactic_data": len(intention_events) > 0,
         "has_referee_data": len(referee_events) > 0,
     }

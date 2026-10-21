@@ -156,9 +156,8 @@ def _frames_from_columns(c: dict) -> list[dict]:
     ]
 
 
-def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_path):
-    from utama_core.dashboard.views.referee import _serialise_ball, _serialise_robots
-    from utama_core.replay.columnar_reader import load_columnar_replay
+def _two_tick_npz(tmp_path):
+    """A columnar replay of two ticks, 0.0 and 0.1."""
     from utama_core.replay.columnar_writer import (
         ColumnarReplayWriter,
         ColumnarReplayWriterConfig,
@@ -185,7 +184,14 @@ def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_
     for frame in frames:
         writer.write_frame(frame)
     writer.close()
-    replay = load_columnar_replay(writer.path)
+    return writer.path
+
+
+def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_path):
+    from utama_core.dashboard.views.referee import _serialise_ball, _serialise_robots
+    from utama_core.replay.columnar_reader import load_columnar_replay
+
+    replay = load_columnar_replay(_two_tick_npz(tmp_path))
 
     columns = json.loads(json.dumps(replay_view.columnar_payload(replay)))  # as the page receives it
     for tick, row in enumerate(_frames_from_columns(columns)):
@@ -196,3 +202,12 @@ def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_
             "robots": _serialise_robots(frame),
             "ball": _serialise_ball(frame),
         }
+
+
+def test_the_last_play_row_of_a_columnar_replay_ends_at_its_last_tick(tmp_path, monkeypatch):
+    """It ended at 0 s (the end was read from `frames`, empty for a columnar replay): "-29 s"."""
+    _two_tick_npz(tmp_path)
+    monkeypatch.setattr(replay_view, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(replay_view, "_analysis", lambda path: {"losses": [], "shots": []})
+    monkeypatch.setattr(replay_view, "_play", lambda path, events, losses, end_t: end_t)
+    assert json.loads(replay_view._frames_bytes({"path": "m.npz"}))["play"] == 0.1
