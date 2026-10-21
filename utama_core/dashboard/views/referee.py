@@ -9,6 +9,7 @@ this module just says what "notify" means now.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import time
 from typing import TYPE_CHECKING, Optional
@@ -129,6 +130,9 @@ def _build_static_config(profile: "RefereeProfile") -> dict:
     gm = profile.game
     return {
         "profile_name": profile.profile_name,
+        # Whether any rule can stop play and set up a restart; the page hides the restart
+        # buttons when none can (goal detection alone only stops play).
+        "restarts": any(getattr(r, f.name).enabled for f in dataclasses.fields(r) if f.name != "goal_detection"),
         "rules": {
             "goal_detection": {
                 "enabled": r.goal_detection.enabled,

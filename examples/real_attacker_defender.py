@@ -10,11 +10,10 @@ What it does:
   - Two robots, one per team, both ours on one radio: the attacker attacks the goal in
     the camera's half, the defender defends it.
   - Everything to edit for a test day is in the "Test-day configuration" block: the
-    field, which part of it the camera sees, each robot's vision and firmware IDs, and
-    what each robot plays.
-  - The referee runs with every rule off and nothing advancing on its own, so play
-    only starts and stops from the dashboard. Real mode starts in HALT; Ctrl+C sends
-    stop commands to the robots before exiting.
+    field, which part of it the camera sees, each robot's IDs and working hardware, what
+    each robot plays, and whether the referee's rules are on.
+  - Nothing advances on its own: play only starts and stops from the dashboard. Real
+    mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting.
 
 On the dashboard's Live tab, the field check must be all green or amber before Force Start:
 a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
@@ -29,6 +28,7 @@ Before running on real robots:
 
 import argparse
 import dataclasses
+from typing import NamedTuple
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.custom_referee import CustomReferee
@@ -37,6 +37,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
     GameConfig,
     RefereeProfile,
     RulesConfig,
+    load_profile,
 )
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
@@ -49,6 +50,7 @@ from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
+from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
 
 # ---------------------------------------------------------------------------
 # Test-day configuration
@@ -73,19 +75,28 @@ CAMERA_HALF = "right"
 
 ATTACKER_COLOUR = "yellow"  # the defender is the other colour
 
-# Each robot's vision ID (its pattern on top) -> its firmware/radio ID. Swapping a
-# robot is a change here only. The two firmware IDs must differ: one radio sends both.
-ATTACKER_VISION_ID, ATTACKER_FIRMWARE_ID = 0, 0
-DEFENDER_VISION_ID, DEFENDER_FIRMWARE_ID = 1, 1
 
-# Robots whose ball sensor (IR) is trusted for `has_ball`, by vision ID. Put every
-# robot with a working IR here. An untrusted one counts as having the ball once its
-# centre is within 13 cm of the ball, whatever way it faces: the attacker can stop
-# ~2 cm short and kick at nothing (seen in grSim), so watch for it if IR is off.
-TRUSTED_IR_VISION_IDS: frozenset[int] = frozenset()
+class TestRobot(NamedTuple):
+    vision_id: int  # its pattern on top
+    firmware_id: int  # its radio ID; the two robots' must differ, one radio sends both
+    # What works on it. A robot without a kicker pushes the ball instead of kicking; one
+    # without a dribbler carries the ball slowly and never backs up; one without a ball
+    # sensor (ir) has the ball once its centre is within 13 cm of it, whatever way it faces,
+    # so it can stop ~2 cm short and kick at nothing (seen in grSim).
+    profile: RobotProfile = RobotProfile(kicker=True, dribbler=True, ir=True)
+
+
+# Swapping a robot is a change here only.
+ATTACKER = TestRobot(vision_id=0, firmware_id=0)
+DEFENDER = TestRobot(vision_id=1, firmware_id=1)
 
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
 DEFENDER_TACTIC = "goalkeeper"  # see DEFENDER_TACTICS
+
+# "off": only goals are detected. "on": the `human` referee profile's rules (fouls, out of
+# bounds, defense area ...) stop play and set up restarts; the operator still starts each
+# restart, nothing advances on its own.
+RULES = "off"
 
 DASHBOARD_PORT = 8080
 
@@ -134,8 +145,14 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     )
 
 
-def _operator_profile() -> RefereeProfile:
-    """Every rule off and every transition left to the operator, except goals."""
+def _referee_profile() -> RefereeProfile:
+    """`RULES`' profile; every transition is left to the operator either way."""
+    if RULES == "on":
+        human = load_profile("human")
+        game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=ATTACKER_COLOUR)
+        return dataclasses.replace(human, profile_name="attacker_defender_test (rules on)", game=game)
+    if RULES != "off":
+        raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
     defaults = RulesConfig()
     rules = RulesConfig(
         **{
@@ -165,8 +182,8 @@ def _operator_profile() -> RefereeProfile:
 def build_runner(mode: str) -> StrategyRunner:
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
-    attacker_id = ATTACKER_VISION_ID if real else 0
-    defender_id = DEFENDER_VISION_ID if real else 0
+    attacker_id = ATTACKER.vision_id if real else 0
+    defender_id = DEFENDER.vision_id if real else 0
     attacker_is_yellow = ATTACKER_COLOUR == "yellow"
     if ATTACKER_COLOUR not in ("yellow", "blue"):
         raise ValueError(f"ATTACKER_COLOUR must be 'yellow' or 'blue', got {ATTACKER_COLOUR!r}")
@@ -175,12 +192,13 @@ def build_runner(mode: str) -> StrategyRunner:
     # is on the other side. With the full field, the attacker attacks the right goal.
     attacker_is_right = CAMERA_HALF == "left"
 
-    attacker_map = {ATTACKER_VISION_ID: ATTACKER_FIRMWARE_ID}
-    defender_map = {DEFENDER_VISION_ID: DEFENDER_FIRMWARE_ID}
-    attacker_ir = TRUSTED_IR_VISION_IDS & {ATTACKER_VISION_ID}
-    defender_ir = TRUSTED_IR_VISION_IDS & {DEFENDER_VISION_ID}
+    attacker_map = {ATTACKER.vision_id: ATTACKER.firmware_id}
+    defender_map = {DEFENDER.vision_id: DEFENDER.firmware_id}
+    # The profiles apply in the simulators too, to rehearse a test with a broken robot.
+    attacker_profiles = {attacker_id: ATTACKER.profile}
+    defender_profiles = {defender_id: DEFENDER.profile}
 
-    profile = _operator_profile()
+    profile = _referee_profile()
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)
@@ -200,8 +218,8 @@ def build_runner(mode: str) -> StrategyRunner:
         show_live_status=not real,
         yellow_vision_to_cmd_mapping=(attacker_map if attacker_is_yellow else defender_map) if real else None,
         blue_vision_to_cmd_mapping=(defender_map if attacker_is_yellow else attacker_map) if real else None,
-        yellow_trusted_ir_robots=(attacker_ir if attacker_is_yellow else defender_ir) if real else None,
-        blue_trusted_ir_robots=(defender_ir if attacker_is_yellow else attacker_ir) if real else None,
+        yellow_robot_profiles=attacker_profiles if attacker_is_yellow else defender_profiles,
+        blue_robot_profiles=defender_profiles if attacker_is_yellow else attacker_profiles,
     )
 
 

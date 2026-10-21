@@ -33,11 +33,13 @@ With vision from a camera (real robots or grSim) the Live tab also shows the fie
 | `<colour> <id>` (any other) | | seen inside `field_bounds` but not configured: our planners cannot see it, often a wrong ID |
 | Ball | | not seen, or outside `field_bounds` |
 
-On real robots any red row forces `HALT`, whatever the command and whether or not the page is
+Only the red and amber rows are listed; the green ones fold into an "N ok" line that opens on
+click. On real robots any red row forces `HALT`, whatever the command and whether or not the page is
 open; the red banner says why. Pressing Force Start while a row is red halts again at once, so
 the check is also the pre-start gate. The field is drawn as ssl-vision sees it (+x to the right),
 with everything outside `field_bounds` dimmed, so a half-field test shows which half the runner
-expects. Space halts; nothing on the keyboard starts the robots.
+expects. Space halts; nothing on the keyboard starts the robots. The Kickoff and Free Kick
+buttons are hidden when the profile has no rule that sets up a restart (goal detection only).
 
 ## Commands and what robots do
 

@@ -47,14 +47,25 @@
     if (fieldView && layoutChanged) fieldView.setTeamLayout(drawRight, d.my_team_is_yellow);
 
     renderFieldCheck(d.field_check);
-    renderRobotStatusInto("ref-status-entries", d, { hideFeedback: !!d.field_check }); // the field check has the radio rows
+    // With a field check, its rows already give each robot's position and radio.
+    if (d.field_check) document.getElementById("ref-status-entries").innerHTML = "";
+    else renderRobotStatusInto("ref-status-entries", d);
     renderTacticStatusInto("ref-tactic-entries", d.tactic_status);
     d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (fieldView) fieldView.draw(d);
   }
 
-  // The runner's field checks (utama_core/run/field_check.py): the failures first, so a
-  // red row is never scrolled away; on real robots any failure has already forced HALT.
+  // The runner's field checks (utama_core/run/field_check.py): only the problems are listed,
+  // failures first; the passing rows fold into one "N ok" line that opens on click (kept open
+  // across updates). On real robots any failure has already forced HALT.
+  let okOpen = false;
+  function rowHtml(r) {
+    const mark = r.status === "ok" ? "●" : r.status === "warn" ? "▲" : "✖";
+    return (
+      '<div class="ref-row"><span class="check-' + r.status + '">' + mark + " " + r.name +
+      '</span><span class="muted">' + r.detail + "</span></div>"
+    );
+  }
   function renderFieldCheck(fc) {
     const box = document.getElementById("ref-field-check");
     const banner = document.getElementById("ref-auto-halt");
@@ -65,19 +76,19 @@
     }
     banner.style.display = fc.auto_halt ? "" : "none";
     banner.textContent = fc.auto_halt ? "Auto-HALT " + fc.auto_halt : "";
-    const order = { fail: 0, warn: 1, ok: 2 };
-    const rows = fc.rows.slice().sort((a, b) => order[a.status] - order[b.status]);
-    const fails = rows.filter((r) => r.status === "fail").length;
+    const fails = fc.rows.filter((r) => r.status === "fail");
+    const warns = fc.rows.filter((r) => r.status === "warn");
+    const oks = fc.rows.filter((r) => r.status === "ok");
     let html =
       '<div class="ref-section-title">Field check — ' +
-      (fails ? '<span class="check-fail">' + fails + " failing</span>" : '<span class="check-ok">ready</span>') +
+      (fails.length ? '<span class="check-fail">' + fails.length + " failing</span>" : '<span class="check-ok">ready</span>') +
       "</div>";
-    for (const r of rows) {
-      html +=
-        '<div class="ref-row"><span class="check-' + r.status + '">' + (r.status === "ok" ? "●" : r.status === "warn" ? "▲" : "✖") +
-        " " + r.name + '</span><span class="muted">' + r.detail + "</span></div>";
-    }
+    for (const r of [...fails, ...warns]) html += rowHtml(r);
+    html +=
+      '<details id="ref-check-ok"' + (okOpen ? " open" : "") + '><summary class="check-ok">' + oks.length +
+      " ok</summary>" + oks.map(rowHtml).join("") + "</details>";
     box.innerHTML = html;
+    box.querySelector("#ref-check-ok").addEventListener("toggle", (e) => (okOpen = e.target.open));
   }
 
   function mount() {
@@ -90,6 +101,9 @@
           return;
         }
         cfg = c;
+        for (const row of document.querySelectorAll("#view-live .restart-row")) {
+          row.style.display = c.restarts ? "" : "none";
+        }
         const canvas = document.getElementById("ref-field-canvas");
         fieldView = new FieldCanvas(canvas, c.geometry, {});
         document.getElementById("ref-profile-name").textContent = c.profile_name;
