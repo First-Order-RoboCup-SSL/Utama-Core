@@ -165,6 +165,10 @@ class DashboardServer(threading.Thread):
                 self.send_header("X-Accel-Buffering", "no")
                 self.end_headers()
                 self.wfile.flush()
+                # `notify` writes on the control loop: a client that stops reading (a locked
+                # phone, a sleeping laptop) must not block it. Once its buffers are full a write
+                # fails at once, the client is dropped and its browser reconnects.
+                self.connection.setblocking(False)
 
                 with server._sse_lock:
                     server._sse_clients.setdefault(channel, []).append(self.wfile)
