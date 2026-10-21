@@ -197,6 +197,10 @@ class PositionRefiner(BaseRefiner):
             elif new_ball is None:
                 # If none, take the ball from the last frame of the game
                 new_ball = game_frame.ball
+            elif self._uses_kalman and self.kalman_filter_ball.state is not None:
+                # Seen, unfiltered (smoothing off): forget the last loss, so the next one starts
+                # from this ball rather than carrying on the old roll.
+                self.kalman_filter_ball = self._ball_filter()
 
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(

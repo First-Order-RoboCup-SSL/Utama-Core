@@ -311,6 +311,29 @@ def test_an_unseen_ball_stays_where_vision_would_still_see_it():
     assert max(abs(b.p.x) for b in path) <= bounds.x_max
 
 
+def test_with_smoothing_off_a_second_loss_starts_where_the_ball_was_last_seen():
+    """Smoothing off, imputation on: the filter only runs while the ball is unseen, so it kept
+    the first loss and a second one carried on that roll from where the first started."""
+    p = PositionRefiner(full_field_dims, smooth_positions=False, impute_vanished=True)
+    p.start_filtering()
+    g = GameFrame(0, True, True, {}, {}, Ball(Vector3D(0, 0, 0), Vector3D(1, 0, 0), Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.1, [], [], [], 0)])  # lost, rolling on at 1 m/s
+    g = replace(g, ball=replace(g.ball, v=Vector3D(1, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.2, [], [], [RawBallData(-1.0, 0.5, 0, 1)], 0)])  # seen, still
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5))
+    g = replace(g, ball=replace(g.ball, v=Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.3, [], [], [], 0)])  # lost again
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5), abs=0.01)
+
+
+def test_with_no_filtering_a_seen_ball_passes_through():
+    p = PositionRefiner(full_field_dims, filtering=False)
+    p.start_filtering()
+    g = GameFrame(0, True, True, {}, {}, Ball(Vector3D(0, 0, 0), Vector3D(0, 0, 0), Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.1, [], [], [RawBallData(-1.0, 0.5, 0, 1)], 0)])
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5))
+
+
 if __name__ == "__main__":
     test_combining_single_team_combines_single_robot()
     test_combining_with_robot_not_in_game_adds()
