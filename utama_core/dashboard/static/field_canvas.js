@@ -37,6 +37,10 @@ const TACTIC_TAG_COLORS = {
 // canvas or field geometry changes size.
 const ROBOT_RADIUS_M = 0.09;
 
+// The run-off around the field lines (Division B's boundary width), drawn so a ball or robot
+// just over a line stays in view.
+const RUNOFF_M = 0.3;
+
 class FieldCanvas {
   constructor(canvas, geometry, { myTeamIsRight = false, myTeamIsYellow = true } = {}) {
     this.canvas = canvas;
@@ -57,15 +61,9 @@ class FieldCanvas {
   _view() {
     const g = this.geometry;
     const goalDepth = Math.max(0, Number(g.goal_depth) || 0);
-    return {
-      minX: -g.half_length - goalDepth,
-      maxX: g.half_length + goalDepth,
-      minY: -g.half_width,
-      maxY: g.half_width,
-      width: 2 * (g.half_length + goalDepth),
-      height: 2 * g.half_width,
-      goalDepth,
-    };
+    const halfX = g.half_length + Math.max(goalDepth, RUNOFF_M);
+    const halfY = g.half_width + RUNOFF_M;
+    return { minX: -halfX, maxX: halfX, minY: -halfY, maxY: halfY, width: 2 * halfX, height: 2 * halfY, goalDepth };
   }
 
   _transform() {
@@ -95,6 +93,11 @@ class FieldCanvas {
         return { x: fx, y: fy };
       },
     };
+  }
+
+  // Canvas pixels -> field metres ({x, y}), for clicks on the field.
+  toField(px, py) {
+    return this._transform().toField(px, py);
   }
 
   resize() {
@@ -253,11 +256,21 @@ class FieldCanvas {
     }
 
     if (state.ball) {
-      const bx = toX(state.ball.x), by = toY(state.ball.y);
-      ctx.fillStyle = FIELD_COLORS.ball;
+      // Out of view, the ball is drawn hollow at the nearest edge, so it never just disappears.
+      const R = 3.5;
+      const rawX = toX(state.ball.x), rawY = toY(state.ball.y);
+      const bx = Math.min(CW - R - 1, Math.max(R + 1, rawX));
+      const by = Math.min(CH - R - 1, Math.max(R + 1, rawY));
       ctx.beginPath();
-      ctx.arc(bx, by, 3.5, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.arc(bx, by, R, 0, 2 * Math.PI);
+      if (bx === rawX && by === rawY) {
+        ctx.fillStyle = FIELD_COLORS.ball;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = FIELD_COLORS.ball;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
 
     this._drawOverlays(ctx, state, robots, toX, toY);

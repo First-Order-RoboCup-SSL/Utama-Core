@@ -214,3 +214,20 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .marker-kind.marker-goal, .marker-kind.marker-foul, .marker-kind.marker-stall, .marker-kind.marker-loss {
   position: static; width: auto; height: auto; margin: 0 6px 0 0; padding: 0 4px; color: #17191d;
 }
+
+/* Live: right-click / long-press menu on the field (live.js, ball placement). */
+.place-menu { position: fixed; display: none; z-index: 10; padding: 6px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius); font-size: .7rem; }
+.place-menu .place-at { padding: 2px 4px 6px; }
+.place-menu button { display: block; width: 100%; margin-top: 4px; text-align: left; }
+
+/* A phone or a narrow laptop window beside the field: panels stack, the page scrolls, the field
+   keeps the pitch's shape, buttons are big enough to hit. */
+@media (max-width: 760px) {
+  body { height: auto; min-height: 100%; overflow: auto; }
+  .view.active { flex-direction: column; }
+  .view > .panel { flex: none !important; }
+  .field-wrap { flex: none !important; aspect-ratio: 3 / 2; }
+  button { padding: 10px 14px; font-size: .8rem; }
+  #replay-play-list { max-height: 50vh; }
+}
