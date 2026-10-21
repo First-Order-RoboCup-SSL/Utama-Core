@@ -628,3 +628,43 @@ def test_a_receiver_that_left_the_slot_is_dropped():
 
     assert mem.receiver_id != 5
     assert mem.carrier_id == 1 and mem.hop_count == 1  # the possession is still the same one
+
+
+class _OrenRecordingMotionController(MotionController):
+    def __init__(self):
+        super().__init__(mode="rsim")
+        self.last_target_oren: Optional[float] = None
+
+    def calculate(self, game, robot_id, target_pos, target_oren):
+        self.last_target_oren = target_oren
+        return Vector2D(0.0, 0.0), 0.0
+
+
+def _aimed_side(keeper_ys) -> list[bool]:
+    """A lone carrier 2 m from the enemy goal (x = -4.5), facing away from it, ticked
+    against a keeper on the goal line at each y in turn; per tick, whether the heading
+    it turns to aims below the goal's centre (y < 0: the aim is near ±pi, so its sign gives the side)."""
+    mc = _OrenRecordingMotionController()
+    ctx = TickContext(motion_controller=mc, match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+    sides = []
+    for keeper_y in keeper_ys:
+        game = _make_game(Vector2D(-2.5, 0.0), Vector2D(0.0, 2.0), Vector2D(-4.4, keeper_y))
+        _, mem = tactic.tick(game, ctx, (1,), mem)
+        sides.append(mc.last_target_oren < 0)
+    return sides
+
+
+def test_lone_carrier_keeps_its_aim_while_a_centred_keeper_jitters():
+    """Against a centred keeper both corners are near-equal; ±1 cm of keeper jitter
+    flipped the aim between them every tick, so a lone carrier turned back and forth
+    about 11 s instead of shooting (found in a 1v1 on a small field)."""
+    assert len(set(_aimed_side([0.01, -0.01, 0.01, -0.01]))) == 1
+
+
+def test_lone_carrier_switches_aim_when_the_keeper_clearly_opens_the_other_side():
+    aims_low = _aimed_side([0.01])[0]
+    # The keeper steps 0.3 m toward the aimed-at corner: the other side is now far wider.
+    first, after_step = _aimed_side([0.01, -0.3 if aims_low else 0.3])
+    assert first != after_step

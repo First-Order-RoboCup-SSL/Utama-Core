@@ -496,7 +496,15 @@ class Strategy:
         Never touches `_slots`/`_prev_partition`/`_pending_barrier_reset` —
         the pinned slot has no partition membership to reconcile, it simply
         runs every tick it's called.
+
+        Skipped while the pinned robot is not on the field: a team need not
+        field robot `goalkeeper_id` (real robots keep their vision IDs, so a
+        two-robot test rarely includes ID 0), and the goalkeeper skills index
+        `game.friendly_robots` by that ID.
         """
+        robots = getattr(game, "friendly_robots", None)
+        if robots is not None and self._pinned_robot_id not in robots:
+            return {}
         slot = self._pinned_slot
         commands, slot.mem = slot.tactic.tick(game, self._ctx, (self._pinned_robot_id,), slot.mem)
         if self.match_log is not None:

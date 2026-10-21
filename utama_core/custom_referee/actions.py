@@ -526,7 +526,7 @@ class BallPlacementOursStep:
 
         # Pick the placer: robot closest to the ball, sticky across ticks
         # (see _PLACER_REASSIGN_MARGIN_M) -- same bug shape as
-        # DirectFreeOursStep's kicker-identity thrashing (roadmap item 15):
+        # DirectFreeOursStep's kicker-identity thrashing (roadmap "trajsample liveness fixes"):
         # a bare min(..., key=distance) recomputed fresh every tick flips
         # identity on ordinary sim noise whenever two-plus robots are
         # near-tied, resetting whoever newly "wins" to a standing start.
@@ -909,7 +909,7 @@ class DirectFreeOursStep:
     # `empty_command()` immediately), so the role never holds long enough
     # for any robot to actually close the distance — this was the real
     # mechanism behind the DIRECT_FREE stall traced in
-    # clear_danger_vs_clear_press_plus (roadmap item 15), not the
+    # clear_danger_vs_clear_press_plus (roadmap "trajsample liveness fixes"), not the
     # multi-robot planner congestion first suspected from replay data alone.
     _KICKER_REASSIGN_MARGIN_M = 0.3
 

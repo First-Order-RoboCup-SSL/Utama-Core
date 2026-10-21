@@ -381,7 +381,8 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #   environment: settings.py reads UTAMA_EXACT_MATH -> ENV_PREFIXES; robosim_wrapper copies
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
 #   opens files: profile_loader reads profiles/*.yaml -> data_files. The rest write a
-#     match's outputs (match log, stats, replays) or read old ones for analysis, never during play.
+#     match's outputs (match log, stats, replays, a camera run's game log) or read old ones for
+#     analysis, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
 #   getattr on a module by computed name: tools.evaluation.match looks a factory up by name ->
@@ -409,6 +410,7 @@ AUDIT = {
         "utama_core.engine.match_stats",
         "utama_core.replay.columnar_reader",
         "utama_core.replay.columnar_writer",
+        "utama_core.replay.game_log_writer",
         "utama_core.replay.replay_writer",
     ],
     "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],

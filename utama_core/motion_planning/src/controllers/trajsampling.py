@@ -119,7 +119,7 @@ class TrajectorySamplingController(MotionController):
                 # steered off-plan by its own brake drifts far enough to keep
                 # re-triggering that same invalidation -- confirmed live on
                 # `clear_danger_vs_clear_press_plus`'s DIRECT_FREE stall
-                # (roadmap item 15): braking fired ~35% of ticks near a
+                # (roadmap "trajsample liveness fixes"): braking fired ~35% of ticks near a
                 # crowded obstacle, and every one of dozens of subsequent
                 # replans was triggered by a ~0.08-0.09m position deviation,
                 # right at the tolerance threshold -- the robot visibly

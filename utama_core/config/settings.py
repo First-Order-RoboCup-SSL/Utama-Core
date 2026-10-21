@@ -47,6 +47,9 @@ FPS_PRINT_INTERVAL = 1.0  # seconds
 ### Refiners ###
 BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
 VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
+# An unseen ball is assumed to roll on at this deceleration (m/s^2): official Div B logs, 1 s or
+# more after a kick (docs/sim_realism.md). A field's own value comes from its free-rolling balls.
+BALL_ROLL_DECEL = 0.29
 
 OFF_PITCH_OFFSET = VISION_BOUNDS_BUFFER * 5  # distance outside field bounds to consider as off-pitch (m)
 

@@ -1,6 +1,6 @@
 """Two small, pure primitives factoring out a hand-rolled pattern that had
 reached six independent instances across the tactic/skill layer (see
-`docs/roadmap.md`'s "Open" item 1 for the inventory that triggered this).
+`docs/roadmap.md`'s "Shared hysteresis helper").
 
 Both bugs below are boundary-condition bugs on otherwise-correct logic, not
 missing features — every instance already *knew* it needed a tolerance or a
@@ -28,7 +28,7 @@ slightly different bugs each time."
   margin) and are what `Sticky.update()`'s signature is designed to fit,
   not a hypothetical generalization of them.
 
-Deliberately NOT covered here (see roadmap item 1's classification):
+Deliberately NOT covered here (see the roadmap's "Shared hysteresis helper"):
 - Tick-count timeouts (`_PHASE_TIMEOUT_TICKS` and friends) — a different
   shape (a counter vs. a threshold), and a kernel-level commitment deadline
   is arriving separately; per-tactic timeouts are fine to leave hand-rolled.

@@ -25,7 +25,7 @@ ball, `ball_is_loose` flips False on the very next tick (a friendly robot
 now `has_ball`), so `retriever_id` resets to `None` and the ball-carrying
 robot falls straight back into `defend_parameter` — pure shot-shadow
 positioning with no ball awareness at all — and just drags the ball along
-with it for the rest of the match. Found live (roadmap item 15,
+with it for the rest of the match. Found live (roadmap "trajsample liveness fixes",
 2026-09-04): a `low_block` defender sliding along its own back line with
 the ball glued to its dribbler, a permanent `COMMITTED_FROZEN` liveness
 stall. Fixed by tracking `carrier_id` (the last tick's retriever, if it

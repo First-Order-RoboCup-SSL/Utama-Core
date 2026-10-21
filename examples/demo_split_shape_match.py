@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Visible grsim 6v6: both teams run the split-shape kernel Strategy against each other.
 
 Not a test — a manual/visual smoke run for reviewing LeadAndSupportTactic /
@@ -13,6 +14,12 @@ whether that slot is currently `committed()` (the "why won't this robot get
 reassigned" signal in this model, since there's no BT node to point at).
 Open http://localhost:8080 while this is running.
 """
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import time
 

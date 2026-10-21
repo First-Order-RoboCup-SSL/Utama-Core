@@ -49,11 +49,13 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
+from utama_core.replay.game_log_writer import GameLogWriter
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
+from utama_core.run.field_check import FieldCheck
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.side_runtime import SideRuntime, _mirrored, _turned
@@ -77,6 +79,10 @@ from utama_core.team_controller.src.controllers import (
     RSimController,
     RSimPVPManager,
     RSimRobotController,
+)
+from utama_core.team_controller.src.controllers.common.robot_profile import (
+    ProfiledRobotController,
+    RobotProfile,
 )
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -249,6 +255,16 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             is confirmed working.  Robots NOT in this set fall back to vision-proximity inference (~0.13 m).
             Pass ``None`` (default) to trust all IR sensors — remove this argument once sensors are stable.
         blue_trusted_ir_robots (FrozenSet[int], optional): Same as ``yellow_trusted_ir_robots`` for the blue team.
+        yellow_robot_profiles (dict[int, RobotProfile], optional): What each yellow robot has working (kicker,
+            dribbler, ball sensor), keyed by the ID the strategy commands (the vision ID on real robots). A robot
+            without a kicker pushes the ball instead of kicking it, see `ProfiledRobotController`; one without a
+            ball sensor has ``has_ball`` judged from vision (so not with ``yellow_trusted_ir_robots`` too).
+            Applies in every mode, so a test with broken hardware can be rehearsed in a simulator.
+            ``None``: everything works.
+        blue_robot_profiles (dict[int, RobotProfile], optional): Same as ``yellow_robot_profiles`` for the blue team.
+        game_log_path (str, optional): Record the run as an SSL game log (`.log`): every vision packet,
+            the referee's state and, on real robots, the radio's bytes both ways; see `GameLogWriter`.
+            grSim and real mode only (rsim has no packets).
     """
 
     def __init__(
@@ -284,6 +300,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         yellow_trusted_ir_robots: Optional[FrozenSet[int]] = None,
         blue_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        yellow_robot_profiles: Optional[dict[int, RobotProfile]] = None,
+        blue_robot_profiles: Optional[dict[int, RobotProfile]] = None,
+        game_log_path: Optional[str] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -331,6 +350,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
             self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims))
 
+        if game_log_path is not None and self.mode == Mode.RSIM:
+            raise ValueError("game_log_path needs vision packets: grsim or real mode, not rsim")
+        self.game_log = GameLogWriter(game_log_path) if game_log_path is not None else None
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(
@@ -339,9 +361,6 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.full_field_dims.full_field_half_width,
         )
         self.referee_refiner = RefereeRefiner()
-
-        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
-        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
 
         # Set self.opp to a sentinel before mapping validation so _validate_vision_to_cmd_mapping
         # can check whether an opponent strategy is present (full SideRuntime is set later).
@@ -357,6 +376,31 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
         self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
+
+        self.yellow_robot_profiles = yellow_robot_profiles or {}
+        self.blue_robot_profiles = blue_robot_profiles or {}
+        if self.game_log is not None:
+            self.game_log.run_info(
+                {
+                    "mode": self.mode.value,
+                    "my_team_is_yellow": my_team_is_yellow,
+                    "my_team_is_right": my_team_is_right,
+                    "vision_to_cmd": {
+                        "yellow": self.yellow_vision_to_cmd_mapping,
+                        "blue": self.blue_vision_to_cmd_mapping,
+                    },
+                    "profiles": {
+                        "yellow": {k: dataclasses.asdict(p) for k, p in self.yellow_robot_profiles.items()},
+                        "blue": {k: dataclasses.asdict(p) for k, p in self.blue_robot_profiles.items()},
+                    },
+                }
+            )
+        for is_yellow in (True, False):
+            self._check_profiles_are_driven(is_yellow)
+        yellow_trusted_ir_robots = self._trusted_ir(True, yellow_trusted_ir_robots)
+        blue_trusted_ir_robots = self._trusted_ir(False, blue_trusted_ir_robots)
+        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
+        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
 
         if self.opp and self.mode == Mode.REAL:
             self._check_no_cmd_duplicate_if_transmission_sharing(
@@ -384,6 +428,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         self.control_scheme = self.my.control_scheme
         self.opp_control_scheme = self.opp.control_scheme if self.opp is not None else None
+        self.field_check = self._make_field_check()
+        self._field_check_rows: list[dict] = []
+        self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
 
         ### functions below rely on self.my and self.opp ###
 
@@ -880,12 +927,59 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         ref_buffer = deque(maxlen=1)
         if self.mode != Mode.RSIM:
             on_geometry = self._make_geometry_validation_callback()
-            vision_receiver = VisionReceiver(vision_buffers, on_geometry=on_geometry)
+            vision_receiver = VisionReceiver(
+                vision_buffers,
+                on_geometry=on_geometry,
+                on_packet=self.game_log.vision if getattr(self, "game_log", None) is not None else None,
+            )
             if isinstance(self.referee, OfficialReferee):
                 self.start_threads(vision_receiver, RefereeMessageReceiver(ref_buffer))
             else:
                 self.start_threads(vision_receiver)
         return vision_buffers, ref_buffer
+
+    def _make_field_check(self) -> Optional[FieldCheck]:
+        """A `FieldCheck` of the robots we drive, for vision from a camera (grSim or real)."""
+        if self.mode == Mode.RSIM:
+            return None
+        if self.mode == Mode.REAL:
+            yellow, blue = self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+        else:
+            # The simulators number each team's robots from 0.
+            yellow, blue = (
+                range(n)
+                for n in map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+            )
+        driven = {"yellow": yellow, "blue": blue}
+        if self.opp is None:
+            driven["blue" if self.my_team_is_yellow else "yellow"] = ()
+        expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
+        return FieldCheck(expected, self.field_bounds, self.full_field_dims)
+
+    def _tick_field_check(self, vision_frames: List[Optional[RawVisionData]], now: float) -> None:
+        """Judge the field against the setup; on real robots, HALT while any check fails.
+
+        Real mode only for the HALT: the simulators resume a HALT on their own.
+        """
+        if self.field_check is None:
+            return
+        self.field_check.observe_vision(vision_frames, now)
+        rows = self.field_check.rows(now, self._robot_feedback_snapshot if self.mode == Mode.REAL else None)
+        self._field_check_rows = rows
+        reason = self.field_check.halt_reason(rows)
+        if self._prev_custom_ref_command != RefereeCommand.HALT:
+            self._auto_halt = None  # play resumed: the banner was for the HALT that ended
+        if (
+            reason is not None
+            and self.mode == Mode.REAL
+            and isinstance(self.referee, CustomReferee)
+            and self._prev_custom_ref_command != RefereeCommand.HALT
+        ):
+            self.referee.force_command(RefereeCommand.HALT, self.my.current_game_frame.ts)
+            self._auto_halt = f"{time.strftime('%H:%M:%S')} {reason}"
+            self.logger.warning("Auto-HALT: %s", reason)
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_field_check(self.field_check.payload(rows, self._auto_halt))
 
     def _make_geometry_validation_callback(self):
         """Return a one-shot callback that validates vision geometry matches full_field_dims.
@@ -895,6 +989,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         """
 
         def _on_geometry(field_size) -> None:
+            # Runs on the receiver thread, possibly before __init__ has made the check.
+            field_check = getattr(self, "field_check", None)
+            if field_check is not None:
+                field_check.observe_geometry(field_size.field_length, field_size.field_width)
             vision_half_length = field_size.field_length / 2000.0
             vision_half_width = field_size.field_width / 2000.0
             d = self.full_field_dims
@@ -1045,6 +1143,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
+        if self.mode == Mode.REAL:
+            my_robot_controller.game_log = getattr(self, "game_log", None)
+            if self.opp:
+                opp_robot_controller.game_log = my_robot_controller.game_log
+
+        my_profiles, opp_profiles = map_colors_to_friendly_enemy(
+            self.my_team_is_yellow, self.yellow_robot_profiles, self.blue_robot_profiles
+        )
+        my_robot_controller = self._with_profiles(my_robot_controller, my_profiles)
         self.my.strategy.load_robot_controller(my_robot_controller)
         self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
         if self.match_log is not None:
@@ -1058,8 +1165,46 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
         if self.opp:
+            opp_robot_controller = self._with_profiles(opp_robot_controller, opp_profiles)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
+
+    def _driven_ids(self, is_yellow: bool) -> set[int]:
+        """The IDs the strategy commands for one colour: the mapped vision IDs on real robots."""
+        if self.mode == Mode.REAL:
+            return set(self.yellow_vision_to_cmd_mapping if is_yellow else self.blue_vision_to_cmd_mapping)
+        n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+        return set(range(n_yellow if is_yellow else n_blue))
+
+    def _check_profiles_are_driven(self, is_yellow: bool) -> None:
+        """A typo in a profile's ID must stop the run, not leave a broken robot unhandled."""
+        profiles = self.yellow_robot_profiles if is_yellow else self.blue_robot_profiles
+        driven = self._driven_ids(is_yellow)
+        unknown = set(profiles) - driven
+        if unknown:
+            colour = "yellow" if is_yellow else "blue"
+            raise ValueError(
+                f"Robot profiles for {colour} robots that are not driven: {sorted(unknown)} (driven: {sorted(driven)})"
+            )
+
+    def _trusted_ir(self, is_yellow: bool, trusted_ir_robots: Optional[FrozenSet[int]]) -> Optional[FrozenSet[int]]:
+        """The robots whose ball sensor is trusted: from the profiles, or as passed (not both)."""
+        profiles = self.yellow_robot_profiles if is_yellow else self.blue_robot_profiles
+        broken = {rid for rid, p in profiles.items() if not p.ir}
+        if not broken:
+            return trusted_ir_robots
+        if trusted_ir_robots is not None:
+            colour = "yellow" if is_yellow else "blue"
+            raise ValueError(
+                f"Give the {colour} ball sensors in robot profiles or {colour}_trusted_ir_robots, not both"
+            )
+        return frozenset(self._driven_ids(is_yellow) - broken)
+
+    def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
+        """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""
+        if all(p.kicker and p.dribbler for p in profiles.values()):
+            return controller
+        return ProfiledRobotController(controller, profiles)
 
     def _init_refiners(
         self,
@@ -1149,6 +1294,13 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.my.strategy.load_game(self.my.game)
         if self.opp:
             self.opp.strategy.load_game(self.opp.game)
+
+    def _with_sides(self, referee_data: "RefereeData") -> "RefereeData":
+        """`referee_data` with the sides filled in from ours when the referee leaves them out (ours does)."""
+        if referee_data.blue_team_on_positive_half is not None:
+            return referee_data
+        blue_on_positive = self.my_team_is_right != self.my_team_is_yellow
+        return dataclasses.replace(referee_data, blue_team_on_positive_half=blue_on_positive)
 
     def _follow_referee_sides(self, referee_data: Optional["RefereeData"]) -> None:
         """Change ends when the referee says the teams have.
@@ -1259,6 +1411,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.match_stats.finalize().to_json(self.stats_path)
         if self.replay_writer:
             self.replay_writer.close()
+        if getattr(self, "game_log", None) is not None:
+            self.game_log.close()  # after the stop commands, so they are in the log
         if self.vision_stream:
             self.vision_stream.stop()
         if self.rsim_env:
@@ -1429,6 +1583,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             opp_own_res = self.opp.strategy.robot_controller.get_robots_responses() or []
             sim_response_pairs = (my_own_res, opp_own_res)
 
+        if self.mode != Mode.RSIM:
+            vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
+            # Before the referee steps: a HALT forced here is then this tick's command. Judged
+            # after it, one tick of the command it replaced (FORCE_START, say) reached the robots.
+            self._tick_field_check(vision_frames, frame_start)
+
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             if self.match_stats is not None:
@@ -1596,10 +1756,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             vision_frames = [obs[0]]
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
-            vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
             if self.ref_buffer:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
+            if getattr(self, "game_log", None) is not None and referee_data is not None:
+                self.game_log.referee(self._with_sides(referee_data))
 
         self._follow_referee_sides(referee_data)
 
