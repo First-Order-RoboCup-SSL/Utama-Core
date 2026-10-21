@@ -915,3 +915,39 @@ def test_barrier_reset_clears_closer_to_ball_hysteresis_state():
     strategy.tick(game2)
 
     assert True not in _CLOSER_TO_BALL_STATE
+
+
+# --- pinned goalkeeper slot ---
+
+
+class _GameWithRobots(_FakeGame):
+    def __init__(self, friendly_ids):
+        super().__init__()
+        self.friendly_robots = {rid: object() for rid in friendly_ids}
+
+
+def _strategy_with_pinned_keeper(keeper: RecordingTactic) -> Strategy:
+    strategy = Strategy(
+        tactics={"a": RecordingTactic()},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1,),
+        ctx=_ctx(),
+    )
+    strategy.set_goalkeeper(0, tactic=keeper)
+    return strategy
+
+
+def test_pinned_goalkeeper_is_skipped_when_its_robot_is_not_on_the_field():
+    # A real two-robot test fields vision IDs 1 and 3, say, with no robot 0: the
+    # goalkeeper skills index friendly_robots[0] and raised KeyError.
+    keeper = RecordingTactic()
+    strategy = _strategy_with_pinned_keeper(keeper)
+    assert strategy.tick(_GameWithRobots({1})) == {1: "cmd-1"}
+    assert keeper.last_robot_ids == ()
+
+
+def test_pinned_goalkeeper_ticks_when_its_robot_is_on_the_field():
+    keeper = RecordingTactic()
+    strategy = _strategy_with_pinned_keeper(keeper)
+    assert strategy.tick(_GameWithRobots({0, 1})) == {1: "cmd-1", 0: "cmd-0"}
+    assert keeper.last_robot_ids == (0,)
