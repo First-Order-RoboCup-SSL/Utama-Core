@@ -60,4 +60,4 @@ keep-out circle, and must keep passing.
     finish timeout (`ae6a6f3`), `ball_is_loose` ignoring a legally barred enemy near our
     defense area (`10fc89c`); and a same-team two-robot ball scrum
     (`_teammate_already_has_ball()`, `a59a8e5`). Cross-tactic convergence in general is
-    roadmap item 5.
+    the roadmap's "Cross-tactic ball convergence".

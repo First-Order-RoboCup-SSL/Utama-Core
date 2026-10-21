@@ -43,7 +43,7 @@ def _game_with_robot(p_xy, v_xy) -> Game:
 
 def test_brake_scales_planned_velocity_not_robot_raw_velocity():
     """Regression for the DIRECT_FREE congestion "retreat" bug traced live on
-    `clear_danger_vs_clear_press_plus` (roadmap item 15): the emergency-brake
+    `clear_danger_vs_clear_press_plus` (roadmap "trajsample liveness fixes"): the emergency-brake
     layer used to return `robot.v * brake_scale` -- the robot's own raw,
     already-current velocity, scaled down -- instead of the PLANNED
     trajectory's velocity, scaled down. Whenever the robot's actual momentum

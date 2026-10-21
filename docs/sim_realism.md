@@ -340,8 +340,8 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
 
 All of these are built (2026-10-17): `SimNoise` draws each knob per match from its range, seeded
 and recorded in the replay, and reaches `run_match`, the round-robin option, `evaluate.py` and
-`pool_v1` (`v3_seed2`). A knob at zero reproduces the old behaviour, so results played without
-`--sim-noise` are unchanged.
+`pool_v1` (the v3 ranges, played as `v3_seed2` in the 2026-10-17 round-robin). A knob at zero
+reproduces the old behaviour, so results played without `--sim-noise` are unchanged.
 
 Each knob is off by default, so current results are unchanged, and each comes with a test that
 pins its effect:

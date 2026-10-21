@@ -36,15 +36,15 @@ entry by its title, not its number.
 - **Directional-tube enemy obstacle** — trajsample's moving-obstacle obstacle is a capsule expanded along the obstacle's velocity instead of an inflated circle (`utama_core/motion_planning/src/trajsampling/obstacles.py:132-149`) — `a1b8bdd6`.
 - **FastPathPlanner `mirror_swap` stall** — the 0.52 m shortfall was the defense-area keep-out clamp, not a planner local minimum: back-row targets moved to |x| = 2.9 and the xfail went (`5f97199b`, in #141); #147 separately cleared the detour-side-flip corner case (`fastpathplanner_corner_test.py`) — `0ce4e2a2`. trajsample passes all 29 scenarios of the current table; fpp passed all 19 of the one before it.
 - **Geometric intention overlays in the Replay tab** — `MatchLog.trace_if_changed` overlays drawn by `dashboard/static/field_canvas.js` with its `_drawArrow` primitive: `shadow_and_mark.marks`, `give_and_go.shot_lane`/`pass_target`, `defense.shadow_post`, `block_shape.screen_line`, `press_and_contain.press`, `clear_ball.clear_target`, `dribble.segment_target`, `decoy_and_overload.lure`, `committed_robot_ids` — `c47f7549`, `b6e69b44`.
-- **Shared hysteresis helper** — `Sticky` in `shared/tolerance.py` (`fd87c7f6`), now used by `pickers.friendly_closer_to_ball` and `PressAndContainTactic` instead of per-site margins — `0ce4e2a2`.
+- **Shared hysteresis helper** — `Sticky` in `shared/tolerance.py` (`fd87c7f6`), now used by `PassAndShootTactic`'s passer choice, `ClearBallTactic`'s target choice and `PressAndContainTactic`'s presser choice instead of per-site margins — `0ce4e2a2`. (`pickers.friendly_closer_to_ball` keeps its own tick-count hysteresis.)
 
 ## Open
 
 1. **Stalls — latest full strict round-robin (2026-10-17, `replays/tournament_20261017_151052/`):**
-   4 of 66 matches stalled (three committed robots frozen about 10 s, and one kick-off that
-   waited the referee's 15 s cap; both fixed after the run in `1731e904`), and 97% of 3232
-   restarts reached NORMAL_START. Confirm any stall fix against the full round-robin:
-   small-subset re-runs have repeatedly overstated fixes. **Not built:** a CI job running the
+   4 of 66 matches stalled, and 97% of 3232 restarts reached NORMAL_START. The kick-off that
+   waited the referee's 15 s cap is fixed (`1731e904`); the three committed robots frozen about
+   10 s (`COMMITTED_FROZEN` in `stall_incidents`) are not yet diagnosed. Confirm any stall fix
+   against the full round-robin: small-subset re-runs have repeatedly overstated fixes. **Not built:** a CI job running the
    strict seeded stall gate — `.github/workflows/ci.yml` runs the test suite only.
 
 2. **`BangBang1D` defects** — required-overshoot and `v0 > v_max` cases produce discontinuous
@@ -84,8 +84,7 @@ entry by its title, not its number.
 
 6. **grsim as a CI/tournament environment.** Unverified whether grsim installs on a GitHub
    runner or can run faster than real time headless. CI hardcodes `--ignore-glob "**/*grsim*"`
-   (`ci.yml:41,43`). `vendor/rSim/FORK_NOTES.md:16` still points at a roadmap section that no
-   longer exists (it meant this entry).
+   (`ci.yml:41,43`).
 
 7. **Match timeline in the dashboard.** `tools/match_timeline.py` draws one window as swimlanes
     (referee band, each robot's tactic, possession, distance to the ball, events). The Replay tab
@@ -167,7 +166,7 @@ entry by its title, not its number.
 
 11. **Vision filter for real cameras.** Found 2026-10-09 reviewing `data_processing/`; rsim
      (noise off) never exercises any of it. Needs logged SSL-Vision data from the real field
-     to tune, so it waits on the hardware team like 10c.
+     to tune, so it waits on the hardware team like "Real-robot profiles and calibration".
      - *Velocity:* `KalmanFilter` tracks position only; `VelocityRefiner` differentiates
        consecutive filtered positions and that velocity feeds the next prediction. With the
        current noise settings (process noise twice the measurement noise) the steady-state
@@ -194,12 +193,15 @@ entry by its title, not its number.
     logs) are done; Phase 2's knobs are built — `SimNoise` seeds latency, kick speed and
     direction spread, two-phase ball friction, per-robot acceleration limits and vision
     noise/dropouts per match, and is wired through `run_match`, `evaluate.py` and `pool_v1`
-    (`v3_seed2`). A sensitivity sweep was run (results in `sim_realism.md`). Still open: the
+    (the v3 ranges; the 2026-10-17 round-robin played them as `v3_seed2`). A sensitivity sweep
+    was run (results in `sim_realism.md`). Still open: the
     scorecard's remaining gaps (sim keepers save about twice as many good chances, and sim
     shots almost never go wide), the 2022-24 held-out check, choosing which knobs become the
     evaluation default, and using that noise in a round-robin by default (`round_robin.py`
-    still needs an explicit `--sim-noise`). P1 (a real-data value model) and P2 (structured
-    strategy search) are not started.
+    still needs an explicit `--sim-noise`). P1, the real-data value model, is fitted (passes 1-3,
+    2026-10-16/17, in `~/dev/ssl/xg-analysis/value/`; AUC about 0.8 on held-out years) but does
+    not yet rank strategies better than goals, so it explains results rather than saving matches
+    (`sim_realism.md`, "P1"). P2 (structured strategy search scored by it) is not started.
 
 13. **Deferred, revisit only when forced** (minimalism):
     - `@pytest.mark.engine` marker for kernel tests — wait for real CI bottleneck data.
