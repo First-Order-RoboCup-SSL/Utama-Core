@@ -50,6 +50,10 @@
   function render() {
     drawQueued = false;
     const d = latest;
+    // The command and the auto-HALT banner are safety-relevant: drawn first, every frame, so
+    // neither waits on the panel's throttle or fails with a drawing error further down.
+    renderRefereeHeaderInto(REF_HEADER_IDS, d);
+    renderAutoHalt(d.field_check);
     let layoutChanged = false;
     // With a camera (field_check present), draw the field as ssl-vision sees it, +x to the
     // right, so the picture matches the pitch in front of the operator; otherwise our goal
@@ -68,9 +72,7 @@
     if (timeline && timeline.ts != null) timeline.draw(timeline.ts);
 
     const now = performance.now();
-    // The banner and the command are safety-relevant: never later than the field.
-    renderRefereeHeaderInto(REF_HEADER_IDS, d);
-    if (now - panelDrawnAt < PANEL_EVERY_MS && !(d.field_check && d.field_check.auto_halt)) {
+    if (now - panelDrawnAt < PANEL_EVERY_MS) {
       // Skipped: come back for it, so the panel shows the last state even if the stream stops.
       if (!panelPending) {
         panelPending = true;
@@ -138,16 +140,19 @@
       '</span><span class="muted">' + r.detail + "</span></div>"
     );
   }
+  // Shown while the HALT a failing check forced lasts (the runner clears it once play resumes).
+  function renderAutoHalt(fc) {
+    const banner = document.getElementById("ref-auto-halt");
+    const text = fc && fc.auto_halt ? "Auto-HALT " + fc.auto_halt : "";
+    banner.style.display = text ? "" : "none";
+    if (banner.textContent !== text) banner.textContent = text;
+  }
   function renderFieldCheck(fc) {
     const box = document.getElementById("ref-field-check");
-    const banner = document.getElementById("ref-auto-halt");
     if (!fc) {
       box.innerHTML = "";
-      banner.style.display = "none";
       return;
     }
-    banner.style.display = fc.auto_halt ? "" : "none";
-    banner.textContent = fc.auto_halt ? "Auto-HALT " + fc.auto_halt : "";
     const fails = fc.rows.filter((r) => r.status === "fail");
     const warns = fc.rows.filter((r) => r.status === "warn");
     const oks = fc.rows.filter((r) => r.status === "ok");

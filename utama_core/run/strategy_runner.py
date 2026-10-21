@@ -430,7 +430,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.opp_control_scheme = self.opp.control_scheme if self.opp is not None else None
         self.field_check = self._make_field_check()
         self._field_check_rows: list[dict] = []
-        self._auto_halt: Optional[str] = None  # last auto-HALT's reason, shown on the dashboard
+        self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
 
         ### functions below rely on self.my and self.opp ###
 
@@ -967,6 +967,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         rows = self.field_check.rows(now, self._robot_feedback_snapshot if self.mode == Mode.REAL else None)
         self._field_check_rows = rows
         reason = self.field_check.halt_reason(rows)
+        if self._prev_custom_ref_command != RefereeCommand.HALT:
+            self._auto_halt = None  # play resumed: the banner was for the HALT that ended
         if (
             reason is not None
             and self.mode == Mode.REAL

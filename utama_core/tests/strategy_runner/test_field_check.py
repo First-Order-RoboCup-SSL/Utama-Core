@@ -209,3 +209,17 @@ def test_an_auto_halt_is_the_command_of_the_tick_that_forced_it():
     with pytest.raises(_Stop):
         StrategyRunner._run_step(runner)
     assert seen["command"] == RefereeCommand.HALT
+
+
+def test_the_auto_halt_reason_is_kept_through_the_halt_and_cleared_once_play_resumes():
+    """It stayed for good: the dashboard's red banner was still up with the robots playing."""
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    StrategyRunner._tick_field_check(runner, [_frame()], now=0.0)  # yellow 1 never seen: HALT
+    runner._prev_custom_ref_command = RefereeCommand.HALT
+    seen = [_frame(yellow=[(1, 1.0, 0.0)])]
+    StrategyRunner._tick_field_check(runner, seen, now=0.1)
+    assert runner.referee.set_field_check.call_args.args[0]["auto_halt"]
+    runner._prev_custom_ref_command = RefereeCommand.STOP  # the operator resumed
+    StrategyRunner._tick_field_check(runner, seen, now=0.2)
+    assert runner._auto_halt is None
+    assert runner.referee.set_field_check.call_args.args[0]["auto_halt"] is None
