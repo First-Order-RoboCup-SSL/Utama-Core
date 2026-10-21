@@ -123,21 +123,38 @@
   function mountPlacementMenu(canvas) {
     const menu = document.getElementById("ref-place-menu");
     let target = null;
+    let openedAt = 0;
     const hide = () => (menu.style.display = "none");
-    canvas.addEventListener("contextmenu", (e) => {
+    const openAt = (clientX, clientY) => {
       if (!fieldView) return;
-      e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       const p = fieldView.toField(
-        (e.clientX - rect.left) * (canvas.width / rect.width),
-        (e.clientY - rect.top) * (canvas.height / rect.height)
+        (clientX - rect.left) * (canvas.width / rect.width),
+        (clientY - rect.top) * (canvas.height / rect.height)
       );
       target = [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100];
       menu.querySelector(".place-at").textContent = "Ball placement to (" + target[0].toFixed(2) + ", " + target[1].toFixed(2) + ")";
       menu.style.display = "block";
-      menu.style.left = Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 4) + "px";
-      menu.style.top = Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 4) + "px";
+      openedAt = performance.now();
+      menu.style.left = Math.min(clientX, window.innerWidth - menu.offsetWidth - 4) + "px";
+      menu.style.top = Math.min(clientY, window.innerHeight - menu.offsetHeight - 4) + "px";
+    };
+    canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openAt(e.clientX, e.clientY);
     });
+    // iPhone Safari fires no contextmenu on a long press: a held, still touch opens it too.
+    let press = null;
+    canvas.addEventListener("touchstart", (e) => {
+      const t = e.touches[0];
+      clearTimeout(press && press.timer);
+      press = { x: t.clientX, y: t.clientY, timer: setTimeout(() => openAt(t.clientX, t.clientY), 600) };
+    }, { passive: true });
+    canvas.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (press && Math.hypot(t.clientX - press.x, t.clientY - press.y) > 10) clearTimeout(press.timer);
+    }, { passive: true });
+    canvas.addEventListener("touchend", () => press && clearTimeout(press.timer));
     for (const btn of menu.querySelectorAll("button[data-place]")) {
       btn.addEventListener("click", () => {
         hide();
@@ -145,7 +162,8 @@
       });
     }
     document.addEventListener("click", (e) => {
-      if (!menu.contains(e.target)) hide();
+      // A click right after opening is the lifted finger of the press that opened it.
+      if (performance.now() - openedAt > 400 && !menu.contains(e.target)) hide();
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") hide();
