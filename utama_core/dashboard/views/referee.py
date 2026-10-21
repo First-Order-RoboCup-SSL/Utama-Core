@@ -47,6 +47,9 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
         designated = payload.get("designated")
         if designated is not None and hasattr(referee, "force_command"):
             target = (float(designated[0]), float(designated[1]))
+            error = placement_target_error(target, referee.geometry, referee.field_check)
+            if error:
+                raise ValueError(error)  # the page shows it; nothing is sent to the robots
             referee.force_command(cmd, time.time(), ball_placement_target=target)
         else:
             referee.set_command(cmd, time.time())
@@ -55,6 +58,20 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
     server.add_command_handler("/referee/command", _handle_command)
 
     referee.attach_dashboard_notifier(lambda *args: notify(server, *args))
+
+
+def placement_target_error(target: tuple[float, float], geometry, field_check: Optional[dict]) -> Optional[str]:
+    """Why a ball placement to `target` is refused, or None: it must lie inside the field lines
+    and, with a camera, inside the area in play (`FieldCheck.payload`'s bounds), the part the
+    camera sees; elsewhere the placing robots would leave vision."""
+    x, y = target
+    if abs(x) > geometry.half_length or abs(y) > geometry.half_width:
+        return f"({x:.2f}, {y:.2f}) is outside the field"
+    if field_check:
+        x1, y1, x2, y2 = field_check["bounds"]
+        if not (x1 <= x <= x2 and y1 <= y <= y2):
+            return f"({x:.2f}, {y:.2f}) is outside the area in play"
+    return None
 
 
 def notify(

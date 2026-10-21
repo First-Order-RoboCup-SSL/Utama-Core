@@ -349,6 +349,11 @@ class CustomReferee:
         """
         self._field_check = field_check
 
+    @property
+    def field_check(self) -> Optional[dict]:
+        """The last `set_field_check` payload; None without a camera."""
+        return self._field_check
+
     def seed_clock(self, timestamp: float, initial_command: RefereeCommand = RefereeCommand.HALT) -> None:
         """Align all internal state-machine timers to *timestamp* and apply
         *initial_command*.
