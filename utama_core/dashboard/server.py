@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Dict, List
@@ -26,6 +27,30 @@ CommandHandler = Callable[[dict], None]
 
 
 _GZIP_MIN_BYTES = 64 * 1024
+
+
+class _StreamClient:
+    """One live-stream connection. `notify` writes on the control loop and the handler thread
+    writes keep-alives: the lock keeps their frames whole, and the socket is non-blocking, so a
+    client that stops reading (a locked phone, a sleeping laptop) fails a write at once instead
+    of blocking the loop. A failed write closes it; its browser reconnects."""
+
+    def __init__(self, sock: socket.socket) -> None:
+        self._sock = sock
+        self._lock = threading.Lock()
+        sock.setblocking(False)
+
+    def send(self, data: bytes) -> bool:
+        with self._lock:
+            try:
+                self._sock.sendall(data)
+                return True
+            except OSError:  # full (BlockingIOError) or gone
+                try:
+                    self._sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                return False
 
 
 def attach_dashboard(port: int = 8080) -> "DashboardServer":
@@ -69,7 +94,7 @@ class DashboardServer(threading.Thread):
         self._latest_state: Dict[str, str] = {}  # channel -> last JSON payload
 
         self._sse_lock = threading.Lock()
-        self._sse_clients: Dict[str, List] = {}  # channel -> [wfile, ...]
+        self._sse_clients: Dict[str, List[_StreamClient]] = {}
 
         self._command_handlers: Dict[str, CommandHandler] = {}
         self._routes: Dict[str, Callable[[], bytes]] = {}
@@ -109,13 +134,7 @@ class DashboardServer(threading.Thread):
         with self._sse_lock:
             clients = list(self._sse_clients.get(channel, ()))
 
-        dead = []
-        for wfile in clients:
-            try:
-                wfile.write(frame)
-                wfile.flush()
-            except (BrokenPipeError, ConnectionResetError, OSError):
-                dead.append(wfile)
+        dead = [client for client in clients if not client.send(frame)]
 
         if dead:
             with self._sse_lock:
@@ -165,37 +184,28 @@ class DashboardServer(threading.Thread):
                 self.send_header("X-Accel-Buffering", "no")
                 self.end_headers()
                 self.wfile.flush()
-                # `notify` writes on the control loop: a client that stops reading (a locked
-                # phone, a sleeping laptop) must not block it. Once its buffers are full a write
-                # fails at once, the client is dropped and its browser reconnects.
-                self.connection.setblocking(False)
+                client = _StreamClient(self.connection)
+                # A dropped client's browser reconnects after half a second, not the default 3 s.
+                client.send(b"retry: 500\n\n")
 
                 with server._sse_lock:
-                    server._sse_clients.setdefault(channel, []).append(self.wfile)
+                    server._sse_clients.setdefault(channel, []).append(client)
 
                 # Replay the last known state immediately so a newly-opened
                 # tab isn't blank until the next tick.
                 with server._state_lock:
                     last = server._latest_state.get(channel)
                 if last is not None:
-                    try:
-                        self.wfile.write(f"event: {channel}\ndata: {last}\n\n".encode())
-                        self.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError, OSError):
-                        pass
+                    client.send(f"event: {channel}\ndata: {last}\n\n".encode())
 
                 try:
-                    while True:
+                    while client.send(b": keep-alive\n\n"):
                         threading.Event().wait(0.5)
-                        self.wfile.write(b": keep-alive\n\n")
-                        self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError, OSError):
-                    pass
                 finally:
                     with server._sse_lock:
                         bucket = server._sse_clients.get(channel)
-                        if bucket and self.wfile in bucket:
-                            bucket.remove(self.wfile)
+                        if bucket and client in bucket:
+                            bucket.remove(client)
 
             def _handle_command(self, path: str) -> None:
                 length = int(self.headers.get("Content-Length", 0))

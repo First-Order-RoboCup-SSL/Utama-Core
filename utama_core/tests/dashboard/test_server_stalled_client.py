@@ -47,6 +47,12 @@ def test_a_client_that_never_reads_is_dropped_instead_of_blocking_notify():
     threading.Thread(target=push, daemon=True).start()
     assert done.wait(5), "notify blocked on a client that stopped reading"
     assert not server._sse_clients["live"]
+    # Dropped, it is closed, so its browser reconnects and gets states again (left open, a phone
+    # woken up got keep-alives for good and no states, its page frozen).
+    stalled.settimeout(1)
+    deadline = time.time() + 5
+    while stalled.recv(1 << 20):
+        assert time.time() < deadline, "the dropped client's connection was left open"
     stalled.close()
 
 
