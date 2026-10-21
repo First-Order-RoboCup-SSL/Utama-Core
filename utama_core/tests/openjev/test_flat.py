@@ -345,3 +345,25 @@ def test_questions_list_the_coached_roles_still_unfilled():
     assert fs.still_to_fill("carrier", {}) == ""
     full = {1: "get_ball", 2: "get_ball", 3: "block_shot", 4: "block_shot", 5: "move:attacking_centre"}
     assert fs.still_to_fill("them", full) == "Every role the coaching asks for is taken."
+
+
+def test_the_keeper_waits_off_its_line_on_the_bisector_and_covers_the_near_post_from_wide():
+    from utama_core.tactics.flat import KEEPER_OUT_M, keeper_spot
+
+    # Our goal at x = -4.5, posts at y = +-0.5. A central ball: the middle of the goal, KEEPER_OUT_M out.
+    p = keeper_spot(_game(ball_xy=(-2.0, 0.0)))
+    assert abs(p.y) < 1e-9 and abs(p.x - (-4.5 + KEEPER_OUT_M)) < 1e-9
+    # A ball out wide near our goal line (split_shape's corner goals): towards the near post, off the line.
+    p = keeper_spot(_game(ball_xy=(-3.3, 2.3)))
+    assert 0.05 < p.y < 0.5 and p.x > -4.5 + 0.09
+    # The ball almost on the line: the keeper keeps a robot radius off it, not behind it.
+    p = keeper_spot(_game(ball_xy=(-4.45, 1.0)))
+    assert p.x >= -4.5 + 0.09 - 1e-9
+
+
+def test_the_flat_strategys_keeper_is_its_own():
+    from utama_core.tactics.flat import FlatKeeperTactic, flat_strategy
+
+    strategy = flat_strategy(OUTFIELD, FlatJevTactic(None, policy="scripted"), motion_controller=None)
+    strategy.set_goalkeeper(0)
+    assert isinstance(strategy._pinned_slot.tactic, FlatKeeperTactic)

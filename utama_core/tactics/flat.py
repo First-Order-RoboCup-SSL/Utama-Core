@@ -35,10 +35,12 @@ from typing import IO, Any, Callable, Optional
 
 import numpy as np
 
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee.actions import (
     DirectFreeOursStep,
     _clear_to_legal_positions,
 )
+from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
@@ -47,6 +49,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.src.controllers.pid_controller import PIDController
 from utama_core.shared.pass_and_score_geometry import (
     CARRY_LIMIT_M,
     ball_in_own_defense_area,
@@ -68,6 +71,7 @@ from utama_core.skills.src.block import block_attacker
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.src.goalkeep import _ball_needs_clearing, _ball_needs_retrieval
 from utama_core.skills.src.man_mark import mark_target
 from utama_core.skills.src.utils.move_utils import (
     empty_command,
@@ -79,6 +83,7 @@ from utama_core.tactics import flat_net
 from utama_core.tactics import flat_state as fs
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 from utama_core.tactics.flat_state import possession
+from utama_core.tactics.goalkeeper import GoalkeeperMem, GoalkeeperTactic
 
 LOCKED_ACTIONS = ("pass:", "receive", "shoot", "clear")
 EVENT_MIN_GAP_S = 0.1  # an event-triggered decision never comes sooner than this after the last one
@@ -842,12 +847,60 @@ def free_kick_overrides(outfield_robot_ids: tuple[int, ...]) -> dict[RefereeComm
     return out
 
 
+# --- goalkeeper ----------------------------------------------------------------------------------
+
+KEEPER_OUT_M = 0.35  # how far off its goal line the keeper waits, towards the ball
+
+
+def keeper_spot(game: Game) -> Vector2D:
+    """Where our keeper waits for a shot: `KEEPER_OUT_M` off the goal line towards the ball, on the
+    bisector of the angle the goal makes at the ball, which narrows both corners at once. `goalkeep`
+    waits on the line at the goal's middle unless robots 1 and 2 (no one in particular here) are goal
+    side: from a ball out wide its near post stays open."""
+    ball = game.ball.p.to_2d()
+    gx, w = game.field.my_goal_line[0][0], game.field.half_goal_width
+    d1, d2 = ball.distance_to(Vector2D(gx, -w)), ball.distance_to(Vector2D(gx, w))
+    base = Vector2D(gx, -w + 2.0 * w * d1 / max(d1 + d2, 1e-6))
+    to_ball = ball - base
+    p = base + to_ball.norm() * min(KEEPER_OUT_M, max(0.0, to_ball.mag() - 0.3))
+    a = fs.attack_dir(game)
+    return Vector2D(gx + a * max(a * (p.x - gx), ROBOT_RADIUS), p.y)
+
+
+class FlatKeeperTactic(GoalkeeperTactic):
+    """`GoalkeeperTactic` waiting at `keeper_spot` instead of on the line; a shot on its way is met
+    where it crosses the keeper's x, and a ball to fetch or clear is `goalkeep`'s as before."""
+
+    def tick(
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: GoalkeeperMem
+    ) -> tuple[dict[RobotId, RobotCommand], GoalkeeperMem]:
+        rid = self.robot_id
+        if game.ball is None or rid not in game.friendly_robots:
+            return super().tick(game, ctx, robot_ids, mem)
+        if _ball_needs_retrieval(game, rid) or _ball_needs_clearing(game, rid):
+            return super().tick(game, ctx, robot_ids, mem)
+        if mem.pid_controller is None:
+            mem.pid_controller = PIDController(ctx.motion_controller.mode, ctx.motion_controller.rsim_env)
+        target = keeper_spot(game)
+        me = game.friendly_robots[rid].p
+        shot = predict_ball_pos_at_x(game, me.x)
+        w = game.field.half_goal_width
+        if shot is not None and abs(shot.y) <= w + 0.1:
+            target = Vector2D(me.x, max(-w, min(w, shot.y)))
+        return {rid: go_to_point(game, mem.pid_controller, rid, target, dribbling=True)}, mem
+
+
+class _FlatStrategy(KernelSchedulerStrategy):
+    def set_goalkeeper(self, robot_id: int, tactic: Optional[Any] = None) -> None:
+        super().set_goalkeeper(robot_id, tactic or FlatKeeperTactic(robot_id))
+
+
 def flat_strategy(
     outfield_robot_ids: tuple[int, ...], tactic: FlatJevTactic, motion_controller: MotionController
 ) -> KernelSchedulerStrategy:
     """The kernel `Strategy` around one `FlatJevTactic`: it owns every outfield robot, with this engine's
     free-kick formations."""
-    return KernelSchedulerStrategy(
+    return _FlatStrategy(
         tactics={"flat": tactic},
         partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, prev: "flat"),
         outfield_robot_ids=outfield_robot_ids,
