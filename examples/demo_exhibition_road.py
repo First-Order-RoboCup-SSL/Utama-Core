@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """examples/demo_exhibition_road.py — Exhibition Road Festival demo.
 
 Run:
@@ -26,6 +27,12 @@ Operator workflow:
   5. Goals are detected automatically; the referee waits for the operator to
      advance play (human auto-advance profile).
 """
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.custom_referee import CustomReferee

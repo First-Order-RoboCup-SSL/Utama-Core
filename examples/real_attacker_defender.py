@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """examples/real_attacker_defender.py — one attacker against one defender on a small field.
 
 Run:
@@ -47,6 +48,12 @@ Before running on real robots:
   - The radio dongle is `PORT` in `utama_core/config/settings.py` (/dev/ttyACM0).
   - Real robots are capped at REAL_PARAMS.MAX_VEL (1 m/s, `config/robot_params.py`).
 """
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import dataclasses
