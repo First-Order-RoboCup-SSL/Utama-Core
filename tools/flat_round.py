@@ -1,6 +1,7 @@
 """flat_round.py — the flat engine without a server, in parallel on the CPU: the scripted rule or the
-policy network (`--weights`) against strategies, full matches, the 4 side x kickoff cells at several
-decision rates (one rate is a lucky draw, not a measurement: docs/openjev.md).
+policy network (`--weights`) against strategies, full matches, the 4 side x kickoff cells as yellow (and,
+with `--cells bRk,bR,bLk,bL`, as blue: the colour a round-robin's config_b plays) at several decision
+rates (one rate is a lucky draw, not a measurement: docs/openjev.md).
 
   # the rule against the round-robin's pool: 12 strategies x 4 cells x 7 rates = 336 matches
   pixi run python -m tools.flat_round pool --policy scripted --out replays/flatnet/rule_pool
@@ -27,7 +28,8 @@ import time
 import zlib
 from pathlib import Path
 
-CELLS = (("_Rk", True, True), ("_R", True, False), ("_Lk", False, True), ("_L", False, False))
+# (tag, we are on the right, we kick off, we are blue); `run_match`'s config_a is yellow, so blue plays as config_b
+CELLS = tuple((f"_{c}{s}{k}", s == "R", k == "k", c == "b") for c in ("", "b") for s in ("R", "L") for k in ("k", ""))
 RATES = (1.0, 0.98, 1.02, 0.96, 1.04, 0.94, 1.06)
 
 
@@ -62,15 +64,28 @@ def _play(job: dict) -> dict:
     )
     t0 = time.time()
     try:
-        r = run_match(
-            "flat",
-            job["opponent"],
-            duration_seconds=job["duration"],
-            a_is_right=job["is_right"],
-            a_kicks_off=job["kicks_off"],
-            factory_a=factory,
-            factory_b=factory_b,
-        )
+        if job["blue"]:
+            r = run_match(
+                job["opponent"],
+                "flat",
+                duration_seconds=job["duration"],
+                a_is_right=not job["is_right"],
+                a_kicks_off=not job["kicks_off"],
+                factory_a=factory_b,
+                factory_b=factory,
+            )
+            gf, ga = r.score_b, r.score_a
+        else:
+            r = run_match(
+                "flat",
+                job["opponent"],
+                duration_seconds=job["duration"],
+                a_is_right=job["is_right"],
+                a_kicks_off=job["kicks_off"],
+                factory_a=factory,
+                factory_b=factory_b,
+            )
+            gf, ga = r.score_a, r.score_b
     finally:
         for tactic in built + built_b:
             tactic.close()
@@ -82,8 +97,8 @@ def _play(job: dict) -> dict:
         "rate": job["rate"],
         "policy": job["policy"],
         "weights": job["weights"],
-        "gf": r.score_a,
-        "ga": r.score_b,
+        "gf": gf,
+        "ga": ga,
         "wall_s": round(time.time() - t0, 1),
         "flat": built[0].summary() if built else None,
         "flat_b": built_b[0].summary() if built_b else None,
@@ -123,7 +138,7 @@ def main() -> None:
         "--temperature", type=float, default=0.0, help="the network's: 0 plays its best action, above 0 draws one"
     )
     ap.add_argument("--seed", type=int, default=0, help="the draws' seed (with each match's tag)")
-    ap.add_argument("--cells", default="Rk,R,Lk,L")
+    ap.add_argument("--cells", default="Rk,R,Lk,L", help="side x kickoff as yellow; a b prefix (bRk ...) plays blue")
     ap.add_argument("--rates", default=",".join(f"{r:g}" for r in RATES), help="decisions per sim second")
     ap.add_argument("--duration", type=float, default=1200.0, help="sim-time cap; a match ends at full time")
     ap.add_argument("--workers", type=int, default=12)
@@ -149,7 +164,7 @@ def main() -> None:
     ]
     jobs, done = [], []
     for opponent, label, vs_weights in opponents:
-        for suffix, is_right, kicks_off in cells:
+        for suffix, is_right, kicks_off, blue in cells:
             for rate in rates:
                 tag = f"{label}{suffix}_{rate:g}"
                 if (out / f"{tag}.result.json").exists():
@@ -166,6 +181,7 @@ def main() -> None:
                         cell=suffix[1:],
                         is_right=is_right,
                         kicks_off=kicks_off,
+                        blue=blue,
                         rate=rate,
                         policy=a.policy,
                         weights=str(Path(a.weights).resolve()) if a.weights else None,
