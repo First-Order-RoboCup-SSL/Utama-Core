@@ -219,10 +219,14 @@ class FieldCanvas {
           // direction pointer rather than disappearing into the fill.
           ctx.strokeStyle = FIELD_COLORS.pitch;
           ctx.lineWidth = Math.max(1, r * 0.28);
-          const headingLen = r * 1.6;
+          // Through toX/toY, so a mirrored view (our goal on the right) mirrors it too.
+          const headingM = (r * 1.6) / scale;
           ctx.beginPath();
           ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + headingLen * Math.cos(bot.orientation), cy - headingLen * Math.sin(bot.orientation));
+          ctx.lineTo(
+            toX(bot.x + headingM * Math.cos(bot.orientation)),
+            toY(bot.y + headingM * Math.sin(bot.orientation))
+          );
           ctx.stroke();
           ctx.fillStyle = fill;
           ctx.font = "7px ui-monospace, monospace";
