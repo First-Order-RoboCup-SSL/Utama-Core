@@ -148,6 +148,7 @@ def _best_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) 
 
 
 _MIN_SAFE_PASS_DISTANCE = 0.7  # metres — matches score_pass_setup's own min_pass_distance
+_SHOT_SWITCH_MARGIN = 0.15  # metres a new shot gap must beat the aimed-at one by; same as _pass_and_score's
 
 
 def _nearest_safe_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) -> Optional[int]:
@@ -274,6 +275,7 @@ class GiveAndGoMem:
     lane_blocked_ticks: int = 0  # consecutive ticks _pass_exec reported the lane blocked; feeds early hop abandon
     carry_origin: Optional[Vector2D] = None  # see shared carry_origin; caps the no-lane strafe
     first_touch_hold_spent: bool = False  # the no-receiver hold ran its _MAX_HOP_TICKS once; never hold again
+    prev_best_shot_y: Optional[float] = None  # last tick's aim, for find_best_shot's switch margin (see below)
 
 
 class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
@@ -381,6 +383,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             and ball_line_receive_point(game, mem.receiver_id) is not None
         )
         if not carrier_has_ball and not pass_rolling:
+            mem.prev_best_shot_y = None
             if ball_in_own_defense_area(game):
                 # The ball is inside our own box — an outfield robot may not
                 # enter it (DefenseAreaRule: the keeper owns the area). Hold
@@ -550,7 +553,19 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # cap and are forcing one regardless of lane quality.
         goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
         carrier_pos = game.friendly_robots[carrier_id].p
-        best_shot_y, _gap = find_best_shot(carrier_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
+        # With hysteresis: against a centred keeper the two corners are near-equal,
+        # and the aim flipped between them every tick, so a lone carrier turned back
+        # and forth ~11 s before shooting (1v1 on a small field, 2026-10-21).
+        best_shot_y, _gap = find_best_shot(
+            carrier_pos,
+            list(game.enemy_robots.values()),
+            goal_x,
+            goal_y1,
+            goal_y2,
+            prev_best_shot_y=mem.prev_best_shot_y,
+            switch_margin=_SHOT_SWITCH_MARGIN,
+        )
+        mem.prev_best_shot_y = best_shot_y
 
         if ctx.match_log is not None:
             ctx.match_log.trace_if_changed(
