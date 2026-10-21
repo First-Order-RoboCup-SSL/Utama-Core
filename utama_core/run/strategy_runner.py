@@ -1581,6 +1581,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             opp_own_res = self.opp.strategy.robot_controller.get_robots_responses() or []
             sim_response_pairs = (my_own_res, opp_own_res)
 
+        if self.mode != Mode.RSIM:
+            vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
+            # Before the referee steps: a HALT forced here is then this tick's command. Judged
+            # after it, one tick of the command it replaced (FORCE_START, say) reached the robots.
+            self._tick_field_check(vision_frames, frame_start)
+
         if isinstance(self.referee, CustomReferee):
             ref_data = self.referee.step(self.my.current_game_frame, self.my.current_game_frame.ts)
             if self.match_stats is not None:
@@ -1748,8 +1754,6 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             vision_frames = [obs[0]]
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
-            vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
-            self._tick_field_check(vision_frames, frame_start)
             if self.ref_buffer:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data

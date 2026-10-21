@@ -157,3 +157,55 @@ def test_runner_forces_halt_on_a_failing_check_on_real_robots_only(mode, command
         assert runner.referee.force_command.call_args.args[0] == RefereeCommand.HALT
         assert "yellow 1" in runner._auto_halt
     assert runner.referee.set_field_check.call_args.args[0]["rows"]
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_an_auto_halt_is_the_command_of_the_tick_that_forced_it():
+    """Judged after the referee stepped, the tick that forced HALT still carried the
+    command it replaced (FORCE_START here), so the robots got one more tick of motion."""
+    from collections import deque
+
+    command = {"now": RefereeCommand.FORCE_START}
+    referee = MagicMock(spec=CustomReferee)
+    referee.step.side_effect = lambda frame, t: SimpleNamespace(
+        referee_command=command["now"], designated_position=None, next_command=None
+    )
+    referee.force_command.side_effect = lambda cmd, t, **kw: command.update(now=cmd)
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    runner.referee = referee
+    seen = {}
+
+    def step_game(vision_frames, referee_data, *args, **kwargs):
+        seen["command"] = referee_data.referee_command
+        raise _Stop
+
+    runner.__dict__.update(
+        _vision_receiver=None,
+        _draw_rsim_field_bounds_overlay=lambda: None,
+        _update_robot_feedback_snapshot=lambda *a: None,
+        _push_robot_feedback_to_referee=lambda: None,
+        _tick_pending_placement_teleport=lambda: None,
+        _tick_teleport_settle=lambda: None,
+        _follow_referee_sides=lambda data: None,
+        _tick_field_check=lambda frames, now: StrategyRunner._tick_field_check(runner, frames, now),
+        _step_game=step_game,
+        match_stats=None,
+        sim_controller=None,
+        ref_buffer=deque(),
+        _last_referee_data=None,
+        vision_buffers=[deque([_frame()])],  # yellow 1 never seen: the check fails
+        game_log=None,
+        opp=None,
+        my_team_is_yellow=True,
+        yellow_cmd_to_vision_mapping={},
+        toggle_opp_first=False,
+        _halt_entered_at=None,
+        _halt_resume_stop_entered_at=None,
+    )
+    runner.my.strategy = SimpleNamespace(robot_controller=MagicMock(**{"get_robots_responses.return_value": []}))
+    with pytest.raises(_Stop):
+        StrategyRunner._run_step(runner)
+    assert seen["command"] == RefereeCommand.HALT
