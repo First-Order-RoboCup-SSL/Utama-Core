@@ -112,5 +112,6 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
+| `examples/real_attacker_defender.py` | One attacker against one defender on real robots (or `--mode rsim`/`grsim`): field, camera half and IDs in one config block; the Live tab's field check gates the start |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
 | `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |

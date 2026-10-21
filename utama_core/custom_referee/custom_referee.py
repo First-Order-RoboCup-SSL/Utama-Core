@@ -205,6 +205,7 @@ class CustomReferee:
         self._dashboard_notifier: Optional[callable] = None
         self._debug_status_per_robot: dict[int, list[str]] = {}
         self._robot_feedback_data: list[dict] = []
+        self._field_check: Optional[dict] = None
         self._match_log = None
         self._match_log_tick = 0
         self._last_logged_ref_data: Optional[RefereeData] = None
@@ -233,7 +234,7 @@ class CustomReferee:
         return cls(profile, n_robots_yellow=n_robots_yellow, n_robots_blue=n_robots_blue)
 
     def attach_dashboard_notifier(self, notifier: callable) -> None:
-        """Set the callback invoked with (ref_data, game_frame, debug_status, robot_feedback)
+        """Set the callback invoked with (ref_data, game_frame, debug_status, robot_feedback, field_check)
         on every `step()`. Set by `dashboard.views.referee.attach()`; not meant
         to be called directly by strategy code.
         """
@@ -292,7 +293,9 @@ class CustomReferee:
             for rule in self._rules:
                 rule.reset()
         if self._dashboard_notifier is not None:
-            self._dashboard_notifier(result, game_frame, self._debug_status_per_robot, self._robot_feedback_data)
+            self._dashboard_notifier(
+                result, game_frame, self._debug_status_per_robot, self._robot_feedback_data, self._field_check
+            )
 
         self._match_log_tick += 1
         if self._match_log is not None and result != self._last_logged_ref_data:
@@ -338,6 +341,13 @@ class CustomReferee:
         Called by StrategyRunner in real mode after polling the controller port.
         """
         self._robot_feedback_data = [dict(row) for row in robot_feedback_data]
+
+    def set_field_check(self, field_check: dict) -> None:
+        """Set the field-test checks for GUI display (`FieldCheck.payload`).
+
+        Called by StrategyRunner every tick when vision comes from a camera.
+        """
+        self._field_check = field_check
 
     def seed_clock(self, timestamp: float, initial_command: RefereeCommand = RefereeCommand.HALT) -> None:
         """Align all internal state-machine timers to *timestamp* and apply

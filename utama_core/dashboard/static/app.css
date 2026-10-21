@@ -180,6 +180,12 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .conn-dot.live { background: var(--accent); }
 
+/* Field check (live view): one row per check, coloured by status; the auto-HALT banner. */
+.check-ok { color: #5fb87a; }
+.check-warn { color: #e0a14a; }
+.check-fail { color: #e06a60; font-weight: 600; }
+.auto-halt { background: var(--halt); color: #fff; padding: 6px 8px; border-radius: var(--radius); font-size: .75rem; }
+
 /* Replay timeline markers: one tick per goal / foul / stall / ball loss. */
 .marker-strip { position: relative; height: 10px; margin: 0 7px; }
 .marker { position: absolute; top: 0; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; cursor: pointer; }

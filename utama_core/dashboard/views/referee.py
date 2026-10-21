@@ -62,8 +62,9 @@ def notify(
     game_frame=None,
     tactic_status=None,
     robot_feedback_data=None,
+    field_check=None,
 ) -> None:
-    server.notify(CHANNEL, _serialise_state(ref_data, game_frame, tactic_status, robot_feedback_data))
+    server.notify(CHANNEL, _serialise_state(ref_data, game_frame, tactic_status, robot_feedback_data, field_check))
 
 
 def _serialise_robots(game_frame) -> dict:
@@ -96,7 +97,7 @@ def _serialise_ball(game_frame):
     return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y, "vx": game_frame.ball.v.x, "vy": game_frame.ball.v.y}
 
 
-def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedback_data=None) -> dict:
+def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedback_data=None, field_check=None) -> dict:
     designated = None
     if ref_data.designated_position is not None:
         try:
@@ -119,6 +120,7 @@ def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedba
         "ball": _serialise_ball(game_frame),
         "tactic_status": tactic_status or {},
         "robot_feedback": robot_feedback_data or [],
+        "field_check": field_check,
     }
 
 

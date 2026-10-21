@@ -16,6 +16,10 @@ What it does:
     only starts and stops from the dashboard. Real mode starts in HALT; Ctrl+C sends
     stop commands to the robots before exiting.
 
+On the dashboard's Live tab, the field check must be all green or amber before Force Start:
+a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
+robots at once. See docs/custom_referee_gui.md, "Field check".
+
 Before running on real robots:
   - ssl-vision's field geometry (length and width) must equal FIELD below, or the
     runner stops at the first geometry packet with "Field geometry mismatch".

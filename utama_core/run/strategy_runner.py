@@ -54,6 +54,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
+from utama_core.run.field_check import FieldCheck
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.side_runtime import SideRuntime, _mirrored, _turned
@@ -384,6 +385,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         self.control_scheme = self.my.control_scheme
         self.opp_control_scheme = self.opp.control_scheme if self.opp is not None else None
+        self.field_check = self._make_field_check()
+        self._field_check_rows: list[dict] = []
+        self._auto_halt: Optional[str] = None  # last auto-HALT's reason, shown on the dashboard
 
         ### functions below rely on self.my and self.opp ###
 
@@ -887,6 +891,47 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 self.start_threads(vision_receiver)
         return vision_buffers, ref_buffer
 
+    def _make_field_check(self) -> Optional[FieldCheck]:
+        """A `FieldCheck` of the robots we drive, for vision from a camera (grSim or real)."""
+        if self.mode == Mode.RSIM:
+            return None
+        if self.mode == Mode.REAL:
+            yellow, blue = self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
+        else:
+            # The simulators number each team's robots from 0.
+            yellow, blue = (
+                range(n)
+                for n in map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+            )
+        driven = {"yellow": yellow, "blue": blue}
+        if self.opp is None:
+            driven["blue" if self.my_team_is_yellow else "yellow"] = ()
+        expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
+        return FieldCheck(expected, self.field_bounds, self.full_field_dims)
+
+    def _tick_field_check(self, vision_frames: List[Optional[RawVisionData]], now: float) -> None:
+        """Judge the field against the setup; on real robots, HALT while any check fails.
+
+        Real mode only for the HALT: the simulators resume a HALT on their own.
+        """
+        if self.field_check is None:
+            return
+        self.field_check.observe_vision(vision_frames, now)
+        rows = self.field_check.rows(now, self._robot_feedback_snapshot if self.mode == Mode.REAL else None)
+        self._field_check_rows = rows
+        reason = self.field_check.halt_reason(rows)
+        if (
+            reason is not None
+            and self.mode == Mode.REAL
+            and isinstance(self.referee, CustomReferee)
+            and self._prev_custom_ref_command != RefereeCommand.HALT
+        ):
+            self.referee.force_command(RefereeCommand.HALT, self.my.current_game_frame.ts)
+            self._auto_halt = f"{time.strftime('%H:%M:%S')} {reason}"
+            self.logger.warning("Auto-HALT: %s", reason)
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_field_check(self.field_check.payload(rows, self._auto_halt))
+
     def _make_geometry_validation_callback(self):
         """Return a one-shot callback that validates vision geometry matches full_field_dims.
 
@@ -895,6 +940,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         """
 
         def _on_geometry(field_size) -> None:
+            # Runs on the receiver thread, possibly before __init__ has made the check.
+            field_check = getattr(self, "field_check", None)
+            if field_check is not None:
+                field_check.observe_geometry(field_size.field_length, field_size.field_width)
             vision_half_length = field_size.field_length / 2000.0
             vision_half_width = field_size.field_width / 2000.0
             d = self.full_field_dims
@@ -1597,6 +1646,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             referee_data = self.ref_buffer.popleft() if self.ref_buffer else None
         else:
             vision_frames = [buffer.popleft() if buffer else None for buffer in self.vision_buffers]
+            self._tick_field_check(vision_frames, frame_start)
             if self.ref_buffer:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
