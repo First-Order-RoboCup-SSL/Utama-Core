@@ -13,17 +13,17 @@ This fork is the physics step of the rsim stack. The diagram of the whole tick, 
 Since 2026-10-16 `pixi.toml` builds the `robosim` environment's `rc-robosim` from this
 directory, not from PyPI (see "Installed from source by pixi" below). This copy first existed
 because we found and fixed real bugs in rSim's native ball/dribbler/kicker
-physics (see `docs/roadmap.md`'s "TODO — add grsim as a CI/tournament
-environment" section, item 1, for the dribbler-release writeup, and the
-"scoreless-draw pattern" section for the kick-direction writeup) and there
-was nowhere else to keep a rebuildable, git-trackable copy of the fixes.
+physics (the dribbler-release and kick-direction writeups are the patch diffs
+below, plus `git log -- vendor/rSim/FORK_NOTES.md`; the roadmap sections that
+once held them were folded into its "Done" list) and there was nowhere else to
+keep a rebuildable, git-trackable copy of the fixes.
 
 The patches themselves are also saved as plain diffs at
 `patches/rSim-dribbler-release.diff` and
 `patches/rSim-kick-direction.diff` — those are the reviewable
 artifacts. This directory is the actual buildable source they apply to, so
-whoever picks up the open regression (see roadmap TODO) doesn't have to
-re-clone upstream and re-apply the diffs by hand first.
+whoever picks up an open regression here doesn't have to re-clone upstream and
+re-apply the diffs by hand first.
 
 ## What's patched here (already applied, not a diff you need to apply)
 
@@ -37,9 +37,8 @@ re-clone upstream and re-apply the diffs by hand first.
    substep). Now also repositions the ball just clear of the kicker's
    collision envelope and gives it a small outward velocity.
 3. `src/robosim/sslrobot.cpp` — `Kicker::kick()` had two compounding
-   direction bugs (see `patches/rSim-kick-direction.diff` and
-   `docs/roadmap.md`'s "New blocker found, native-simulator-level" writeup
-   for full detail):
+   direction bugs (see `patches/rSim-kick-direction.diff`, and the commit
+   message that added it, for full detail):
    - It gated on `isTouchingBall()`, a razor-thin box check (~3cm forward,
      4cm lateral) meant for deciding whether to grab the ball into the
      dribbler hold — far stricter than any Python-side "do I have the

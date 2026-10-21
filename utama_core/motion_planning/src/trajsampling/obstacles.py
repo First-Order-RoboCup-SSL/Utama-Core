@@ -102,11 +102,11 @@ class EnemyRobotObstacle:
     champion paper section 2.5 (equations 5-8): the opponent could be
     anywhere within a 1D bang-bang envelope of its current speed along its
     current direction of travel, for a bounded lookahead `t_max`. Modeled
-    here as a growing circle (the paper's "tube" refinement -- shrinking the
-    circle to a directional tube plus a fixed-radius circle for a stationary
-    robot -- is a further tightening skipped in this first pass; see
-    `EnemyRobotObstacle.distance_at`'s docstring for why a circle alone is
-    still safe, just more conservative for a fast-moving opponent).
+    here as the paper's directional tube: the capsule from the envelope's
+    rearward reach to its forward reach (`f_minus`..`f_plus`) along the
+    direction of travel, inflated by the robot radius, so a fast-moving
+    opponent is not over-inflated sideways as a growing circle would be. A
+    stationary opponent is a fixed-radius circle.
     """
 
     p0: Tuple[float, float]

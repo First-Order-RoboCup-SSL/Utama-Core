@@ -14,9 +14,13 @@ symptom. Adopting mypy/pyright is undecided given the codebase isn't typed to th
 
 **6. New rules never systematically fuzzed against real match dynamics** — partly open.
 `pushing` (closed, `a3f3795`) and `keeper_held_ball` (fired 10 times in 6 full matches) are
-confirmed live. `ball_placement_interference` has never fired live: across ~200 placements the
-longest non-placer dwell in the 0.5m stadium was 1.0s, under the rulebook's 2s grace. Not
-treated as a bug; recheck if a match produces a ≥2s linger, or build an adversarial scenario.
+confirmed live. `ball_placement_interference` has never fired in real play: across ~200
+placements the longest non-placer dwell in the 0.5m stadium was 1.0s, under the rulebook's 2s
+grace. Not treated as a bug; recheck if a real match produces a ≥2s linger, or build an
+adversarial scenario. Our own sim does reach it, so it is no longer untested:
+`tests/moments/placement_in_corner_traps_defender.json` (round-robin
+`tournament_20261017_002337`) pins a corner placement that trapped a defender inside the
+keep-out circle, and must keep passing.
 
 ## Closed (one line each)
 
@@ -56,4 +60,4 @@ treated as a bug; recheck if a match produces a ≥2s linger, or build an advers
     finish timeout (`ae6a6f3`), `ball_is_loose` ignoring a legally barred enemy near our
     defense area (`10fc89c`); and a same-team two-robot ball scrum
     (`_teammate_already_has_ball()`, `a59a8e5`). Cross-tactic convergence in general is
-    roadmap item 7.
+    roadmap item 5.
