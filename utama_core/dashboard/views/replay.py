@@ -46,7 +46,6 @@ written into `ReplayMetadata` at record time, which is out of scope here.
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import List, Optional
 
@@ -106,47 +105,43 @@ def _iter_game_frames(replay_path: Path):
             yield obj
 
 
-def columnar_frames(replay) -> list[dict]:
-    """Every tick of a columnar replay in `_serialise_robots`/`_serialise_ball`'s shape, straight
-    from its arrays: building a `GameFrame` per tick first took most of a replay's load time."""
+def _ints(a: np.ndarray, scale: float) -> list:
+    """`a` in whole units of 1/`scale` (NaN as 0: a `seen` mask says which are real), as lists."""
+    return np.nan_to_num(np.round(a * scale)).astype(np.int32).tolist()
 
-    def side(ids, p, v, orientation, has_ball):
-        p, v, o = np.round(p, 3).tolist(), np.round(v, 2).tolist(), np.round(orientation, 3).tolist()
-        has_ball = has_ball.tolist()
-        ids = [int(i) for i in ids]
-        return [
-            [
-                {"id": rid, "x": p[t][i][0], "y": p[t][i][1], "vx": v[t][i][0], "vy": v[t][i][1]}
-                | {"orientation": o[t][i], "has_ball": bool(has_ball[t][i])}
-                for i, rid in enumerate(ids)
-                if not math.isnan(p[t][i][0])
-            ]
-            for t in range(len(p))
-        ]
 
-    friendly = side(
-        replay.friendly_ids,
-        replay.friendly_p,
-        replay.friendly_v,
-        replay.friendly_orientation,
-        replay.friendly_has_ball,
-    )
-    enemy = side(replay.enemy_ids, replay.enemy_p, replay.enemy_v, replay.enemy_orientation, replay.enemy_has_ball)
-    ball_p, ball_v = np.round(replay.ball_p, 3).tolist(), np.round(replay.ball_v, 2).tolist()
-    right = replay.side_is_right.tolist() if replay.side_is_right is not None else None
-    return [
-        {
-            "ts": round(float(ts), 4),
-            "my_team_is_right": bool(right[t]) if right is not None else bool(replay.my_team_is_right),
-            "robots": {"friendly": friendly[t], "enemy": enemy[t]},
-            "ball": (
-                None
-                if math.isnan(ball_p[t][0])
-                else {"x": ball_p[t][0], "y": ball_p[t][1], "vx": ball_v[t][0], "vy": ball_v[t][1]}
-            ),
+def columnar_payload(replay) -> dict:
+    """A columnar replay's ticks as columns of whole numbers: positions in mm, speeds in cm/s,
+    headings in mrad, `seen` masks for robots and ball. The page (`replay.js`,
+    `framesFromColumns`) rebuilds each tick in `_serialise_robots`/`_serialise_ball`'s shape;
+    as one JSON object per tick, repeating every key, a match was 65 MB and took 4 s to build."""
+
+    def team(ids, p, v, orientation, has_ball):
+        return {
+            "ids": [int(i) for i in ids],
+            "seen": (~np.isnan(p[..., 0])).astype(np.int8).tolist(),
+            "x": _ints(p[..., 0], 1000),
+            "y": _ints(p[..., 1], 1000),
+            "vx": _ints(v[..., 0], 100),
+            "vy": _ints(v[..., 1], 100),
+            "o": _ints(orientation, 1000),
+            "has_ball": has_ball.astype(np.int8).tolist(),
         }
-        for t, ts in enumerate(replay.ts.tolist())
-    ]
+
+    r = replay
+    return {
+        "ts": np.round(r.ts, 4).tolist(),
+        "right": r.side_is_right.astype(np.int8).tolist() if r.side_is_right is not None else None,
+        "friendly": team(r.friendly_ids, r.friendly_p, r.friendly_v, r.friendly_orientation, r.friendly_has_ball),
+        "enemy": team(r.enemy_ids, r.enemy_p, r.enemy_v, r.enemy_orientation, r.enemy_has_ball),
+        "ball": {
+            "seen": (~np.isnan(r.ball_p[:, 0])).astype(np.int8).tolist(),
+            "x": _ints(r.ball_p[:, 0], 1000),
+            "y": _ints(r.ball_p[:, 1], 1000),
+            "vx": _ints(r.ball_v[:, 0], 100),
+            "vy": _ints(r.ball_v[:, 1], 100),
+        },
+    }
 
 
 def _frames_bytes(query: Optional[dict] = None) -> bytes:
@@ -163,11 +158,12 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
     analysis = _analysis(replay_path)
 
     frames = []
+    columns = None
     my_team_is_right = None
     my_team_is_yellow = True
     if replay_path.suffix == ".npz":
         replay = load_columnar_replay(replay_path)
-        frames = columnar_frames(replay)
+        columns = columnar_payload(replay)
         my_team_is_right, my_team_is_yellow = replay.my_team_is_right, replay.my_team_is_yellow
     else:
         for obj in _iter_game_frames(replay_path):
@@ -196,7 +192,8 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
             "center_circle_radius": _DEFAULT_GEOMETRY.center_circle_radius,
             "goal_depth": _DEFAULT_GEOMETRY.goal_depth,
         },
-        "frames": frames,
+        "frames": frames,  # a pickled replay's ticks; a columnar one sends `columns` instead
+        "columns": columns,
         # Sparse — one row per assignment/state *change*, not per frame. The
         # frontend forward-fills these against the currently-viewed frame's
         # `ts`, mirroring what this module used to do server-side.

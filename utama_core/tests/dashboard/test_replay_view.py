@@ -128,7 +128,35 @@ def test_play_rows_end_each_situation_at_a_stoppage_or_the_next_side_winning_the
     ]
 
 
-def test_columnar_frames_are_what_serialising_each_game_frame_gives(tmp_path):
+def _frames_from_columns(c: dict) -> list[dict]:
+    """`framesFromColumns` in replay.js, line for line."""
+
+    def team(t, i):
+        return [
+            {"id": rid, "x": t["x"][i][k] / 1000, "y": t["y"][i][k] / 1000}
+            | {"vx": t["vx"][i][k] / 100, "vy": t["vy"][i][k] / 100, "orientation": t["o"][i][k] / 1000}
+            | {"has_ball": bool(t["has_ball"][i][k])}
+            for k, rid in enumerate(t["ids"])
+            if t["seen"][i][k]
+        ]
+
+    b = c["ball"]
+    return [
+        {
+            "ts": ts,
+            "my_team_is_right": bool(c["right"][i]),
+            "robots": {"friendly": team(c["friendly"], i), "enemy": team(c["enemy"], i)},
+            "ball": (
+                {"x": b["x"][i] / 1000, "y": b["y"][i] / 1000, "vx": b["vx"][i] / 100, "vy": b["vy"][i] / 100}
+                if b["seen"][i]
+                else None
+            ),
+        }
+        for i, ts in enumerate(c["ts"])
+    ]
+
+
+def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_path):
     from utama_core.dashboard.views.referee import _serialise_ball, _serialise_robots
     from utama_core.replay.columnar_reader import load_columnar_replay
     from utama_core.replay.columnar_writer import (
@@ -159,7 +187,8 @@ def test_columnar_frames_are_what_serialising_each_game_frame_gives(tmp_path):
     writer.close()
     replay = load_columnar_replay(writer.path)
 
-    for tick, row in enumerate(replay_view.columnar_frames(replay)):
+    columns = json.loads(json.dumps(replay_view.columnar_payload(replay)))  # as the page receives it
+    for tick, row in enumerate(_frames_from_columns(columns)):
         frame = replay.frame_at(tick)
         assert row == {
             "ts": round(frame.ts, 4),

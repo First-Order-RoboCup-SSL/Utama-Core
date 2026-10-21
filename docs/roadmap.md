@@ -94,8 +94,9 @@ entry by its title, not its number.
     event and intention logs: one row per situation (`goal_ledger.situations`: a restart going live
     or a side winning the ball), with its third, length, shots and how it ended (the stoppage's
     reason, or who won the ball and how); the raw intention log stays, folded. The slow analysis is
-    kept beside the replay (`<stem>.timeline.json`), so a replay serves in ~3 s. Not yet: enemy
-    lanes (no intentions are recorded for the opponent).
+    kept beside the replay (`<stem>.timeline.json`) and ticks are sent as columns of whole numbers
+    (a match: 4 MB gzipped), so a replay serves in ~1.5 s. Not yet: enemy lanes (no intentions are
+    recorded for the opponent).
 
 8. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones. No new `Tactic` class has been added since this

@@ -18,6 +18,35 @@
 // Video-player conventions: mm:ss timestamps (not frame counts), a speed
 // selector, frame-step buttons, and space/arrow-key transport shortcuts.
 
+// A columnar replay arrives as columns of whole numbers (`columnar_payload` in
+// dashboard/views/replay.py: mm, cm/s, mrad, `seen` masks); this rebuilds the per-tick frames
+// the rest of the page reads, as a pickled replay sends them.
+function framesFromColumns(c) {
+  const team = (t, i) => {
+    const out = [];
+    for (let k = 0; k < t.ids.length; k++) {
+      if (!t.seen[i][k]) continue;
+      out.push({
+        id: t.ids[k],
+        x: t.x[i][k] / 1000,
+        y: t.y[i][k] / 1000,
+        vx: t.vx[i][k] / 100,
+        vy: t.vy[i][k] / 100,
+        orientation: t.o[i][k] / 1000,
+        has_ball: !!t.has_ball[i][k],
+      });
+    }
+    return out;
+  };
+  const b = c.ball;
+  return c.ts.map((ts, i) => ({
+    ts,
+    my_team_is_right: c.right ? !!c.right[i] : undefined,
+    robots: { friendly: team(c.friendly, i), enemy: team(c.enemy, i) },
+    ball: b.seen[i] ? { x: b.x[i] / 1000, y: b.y[i] / 1000, vx: b.vx[i] / 100, vy: b.vy[i] / 100 } : null,
+  }));
+}
+
 (function () {
   let fieldView = null;
   let timeline = null; // Timeline (timeline.js)
@@ -404,7 +433,7 @@
           console.error("replay load error:", data.error);
           return;
         }
-        frames = data.frames || [];
+        frames = data.columns ? framesFromColumns(data.columns) : data.frames || [];
         tacticEvents = data.tactic_events || [];
         refereeEvents = data.referee_events || [];
         traceEvents = data.trace_events || [];
