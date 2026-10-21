@@ -230,4 +230,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .field-wrap { flex: none !important; aspect-ratio: 3 / 2; }
   button { padding: 10px 14px; font-size: .8rem; }
   #replay-play-list { max-height: 50vh; }
+  /* Halt stays in reach of the thumb wherever the page is scrolled. */
+  button.btn-halt {
+    position: fixed; right: 12px; bottom: 12px; z-index: 20;
+    padding: 16px 24px; font-size: 1rem; background: var(--halt); color: #fff;
+  }
 }

@@ -20,13 +20,35 @@
   let panelPending = false;
   const PANEL_EVERY_MS = 250;
 
+  // A command the server refused (a placement outside the area in play) or never got (the
+  // network) is shown under the buttons, so a Halt that did not go through is seen at once.
+  let sendErrorTimer = null;
+  function showSendError(command, reason) {
+    const el = document.getElementById("ref-send-error");
+    el.textContent = command + " not sent: " + reason;
+    clearTimeout(sendErrorTimer);
+    sendErrorTimer = setTimeout(() => (el.textContent = ""), 6000);
+  }
   function send(command, designated) {
     const body = designated ? { command, designated } : { command };
     fetch("/referee/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).catch((err) => console.error("command error:", err));
+    })
+      .then((r) => (r.ok ? null : r.text().then((t) => showSendError(command, t || "HTTP " + r.status))))
+      .catch((err) => showSendError(command, err.message || "no connection"));
+  }
+
+  // States come at the runner's rate; none for half a second means the page is showing the
+  // past (the match stopped, the network dropped): the dot goes grey and the gap is shown.
+  let lastEventAt = null;
+  let streamOpen = false;
+  function checkStale() {
+    const age = lastEventAt == null ? 0 : (performance.now() - lastEventAt) / 1000;
+    const stale = age > 0.5;
+    document.getElementById("ref-conn-dot").classList.toggle("live", streamOpen && !stale);
+    document.getElementById("ref-stale").textContent = stale ? "no update for " + Math.floor(age) + " s" : "";
   }
 
   const REF_HEADER_IDS = {
@@ -37,6 +59,7 @@
   };
 
   function onEvent(d) {
+    lastEventAt = performance.now();
     currentCmd = d.command;
     d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (timeline && d.ts != null) timeline.append(d.ts, d);
@@ -199,8 +222,15 @@
 
     const es = new EventSource("/events/referee");
     es.addEventListener("referee", (ev) => onEvent(JSON.parse(ev.data)));
-    es.onopen = () => document.getElementById("ref-conn-dot").classList.add("live");
-    es.onerror = () => document.getElementById("ref-conn-dot").classList.remove("live");
+    es.onopen = () => {
+      streamOpen = true;
+      checkStale();
+    };
+    es.onerror = () => {
+      streamOpen = false;
+      checkStale();
+    };
+    setInterval(checkStale, 250);
 
     for (const btn of document.querySelectorAll("#view-live button[data-cmd]")) {
       btn.addEventListener("click", () => send(btn.dataset.cmd));
