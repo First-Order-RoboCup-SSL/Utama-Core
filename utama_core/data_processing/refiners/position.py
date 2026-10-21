@@ -84,7 +84,11 @@ class PositionRefiner(BaseRefiner):
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
             self.kalman_filters_yellow: dict[int, KalmanFilter] = {}
             self.kalman_filters_blue: dict[int, KalmanFilter] = {}
-            self.kalman_filter_ball = KalmanFilterBall()
+            self.kalman_filter_ball = self._ball_filter()
+
+    def _ball_filter(self) -> KalmanFilterBall:
+        b = self.vision_bounds
+        return KalmanFilterBall(bounds=(b.x_min, b.x_max, b.y_min, b.y_max))
 
     # Primary function for the Refiner interface
     def refine(
@@ -222,7 +226,7 @@ class PositionRefiner(BaseRefiner):
         if self._uses_kalman:
             self.kalman_filters_yellow = {}
             self.kalman_filters_blue = {}
-            self.kalman_filter_ball = KalmanFilterBall()
+            self.kalman_filter_ball = self._ball_filter()
 
     def start_filtering(self):
         """

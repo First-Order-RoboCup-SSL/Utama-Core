@@ -14,6 +14,7 @@ import math
 import numpy as np
 import pytest
 
+from utama_core.config.settings import BALL_ROLL_DECEL
 from utama_core.data_processing.refiners.filters.kalman import (
     KalmanFilter,
     KalmanFilterBall,
@@ -329,19 +330,22 @@ class TestKalmanFilterBallStep:
         assert abs(result[2] - 0.0) < 1e-3
 
     def test_vanished_frame_uses_velocity_prediction(self):
-        """Consecutive vanished steps must each advance position by exactly v * dt."""
+        """Unseen, the ball rolls on from where it was lost at its velocity then, slowing at
+        BALL_ROLL_DECEL: each step is shorter than the one before by a * dt^2."""
         kf = KalmanFilterBall()
-        vx, vy, vz = 1.0, 2.0, 0.5
+        vx, vy, vz = 0.6, 0.8, 0.5
         ball = make_ball(x=0.0, y=0.0, z=0.0, vx=vx, vy=vy, vz=vz)
-        kf._step(None, ball, time_elapsed=0.1)  # init (no Kalman update)
+        p0 = kf._step((0.0, 0.0, 0.0), ball, time_elapsed=0.1)  # last seen
 
         dt = 0.1
-        result1 = kf._step(None, ball, time_elapsed=dt)
-        result2 = kf._step(None, ball, time_elapsed=dt)
-        # Each vanished step should advance by v * dt
-        assert abs((result2[0] - result1[0]) - vx * dt) < 1e-6
-        assert abs((result2[1] - result1[1]) - vy * dt) < 1e-6
-        assert abs((result2[2] - result1[2]) - vz * dt) < 1e-6
+        p1 = kf._step(None, ball, time_elapsed=dt)
+        p2 = kf._step(None, make_ball(x=p1[0], y=p1[1]), time_elapsed=dt)  # its later velocity is ignored
+        step1 = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        step2 = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        assert step1 == pytest.approx(1.0 * dt - 0.5 * BALL_ROLL_DECEL * dt * dt)
+        assert step1 - step2 == pytest.approx(BALL_ROLL_DECEL * dt * dt)
+        assert (p2[0] - p0[0]) / (p2[1] - p0[1]) == pytest.approx(vx / vy)  # along the velocity it was lost with
+        assert p2[2] == p0[2]  # height held
 
     def test_output_between_prediction_and_measurement(self):
         kf = KalmanFilterBall()

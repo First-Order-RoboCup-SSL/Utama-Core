@@ -1,4 +1,9 @@
+from dataclasses import replace
+
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.settings import BALL_ROLL_DECEL
 from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -268,6 +273,42 @@ def test_impute_vanished_true_keeps_vanished_robot():
     result = p.refine(g, frames)
 
     assert 0 in result.friendly_robots
+
+
+def _unseen_ball_path(v0: tuple[float, float], seconds: float, dt: float = 1 / 60) -> list[Ball]:
+    """The ball, rolling at `v0` from the centre, then unseen for `seconds`. Between ticks its
+    velocity is recomputed from its positions, as `VelocityRefiner` does."""
+    p = PositionRefiner(full_field_dims)
+    p.start_filtering()
+    ball = Ball(Vector3D(0, 0, 0), Vector3D(*v0, 0), Vector3D(0, 0, 0))
+    g = GameFrame(0, True, True, {}, {}, ball)
+    path = []
+    for k in range(1, round(seconds / dt) + 1):
+        g = p.refine(g, [RawVisionData(k * dt, [], [], [], 0)])
+        last = path[-1].p if path else ball.p
+        v = Vector3D((g.ball.p.x - last.x) / dt, (g.ball.p.y - last.y) / dt, 0)
+        g = replace(g, ball=replace(g.ball, v=v))
+        path.append(g.ball)
+    return path
+
+
+def test_an_unseen_ball_slows_at_the_rolling_deceleration_and_stops():
+    """The rsim ball 'escape' (2026-10-21): a ball unseen kept its last velocity forever and was
+    600 m away after 15 minutes. Unseen, it now rolls as a real ball does, then stops."""
+    path = _unseen_ball_path((1.0, 0.0), seconds=5.0)
+    stop = 1.0 / BALL_ROLL_DECEL
+    assert path[59].p.x == pytest.approx(1.0 - 0.5 * BALL_ROLL_DECEL, abs=0.01)  # 1 s in
+    assert path[-1].p.x == pytest.approx(0.5 * stop, abs=0.01)  # 1 m/s rolls 1/(2a) m, then stops
+    assert path[-1].p.y == 0
+
+
+def test_an_unseen_ball_stays_where_vision_would_still_see_it():
+    """Fast and unseen towards the corner: it stops at the edge of what vision accepts (field plus
+    `VISION_BOUNDS_BUFFER`), not beyond."""
+    path = _unseen_ball_path((4.0, 4.0), seconds=10.0)
+    bounds = PositionRefiner(full_field_dims).vision_bounds
+    assert (path[-1].p.x, path[-1].p.y) == pytest.approx((bounds.x_max, bounds.y_max))
+    assert max(abs(b.p.x) for b in path) <= bounds.x_max
 
 
 if __name__ == "__main__":
