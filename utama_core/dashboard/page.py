@@ -20,6 +20,7 @@ def build_page() -> str:
         .replace("__STATUS_PANEL_JS__", (_STATIC_DIR / "status_panel.js").read_text())
         .replace("__APP_JS__", (_STATIC_DIR / "app.js").read_text())
         .replace("__LIVE_JS__", (_STATIC_DIR / "live.js").read_text())
+        .replace("__TIMELINE_JS__", (_STATIC_DIR / "timeline.js").read_text())
         .replace("__REPLAY_JS__", (_STATIC_DIR / "replay.js").read_text())
         .replace("__TOURNAMENT_JS__", (_STATIC_DIR / "tournament.js").read_text())
     )

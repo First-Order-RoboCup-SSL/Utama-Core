@@ -10,6 +10,8 @@
   let fieldView = null;
   let cfg = null;
   let currentCmd = null;
+  let timeline = null; // Timeline (timeline.js), the last minutes up to now
+  let timelineQueued = false;
 
   function send(command, designated) {
     const body = designated ? { command, designated } : { command };
@@ -53,6 +55,16 @@
     renderTacticStatusInto("ref-tactic-entries", d.tactic_status);
     d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (fieldView) fieldView.draw(d);
+    if (timeline && d.ts != null) {
+      timeline.append(d.ts, d);
+      if (!timelineQueued) {
+        timelineQueued = true; // one draw per screen frame, however fast states arrive
+        requestAnimationFrame(() => {
+          timelineQueued = false;
+          timeline.draw(timeline.ts);
+        });
+      }
+    }
   }
 
   // The runner's field checks (utama_core/run/field_check.py): only the problems are listed,
@@ -109,6 +121,15 @@
         document.getElementById("ref-profile-name").textContent = c.profile_name;
         Dashboard.showView("live"); // a running match is what this page is open for
       });
+
+    timeline = new Timeline(
+      document.getElementById("live-timeline"),
+      document.getElementById("live-timeline-legend"),
+      null
+    );
+    document.getElementById("live-timeline-window").addEventListener("change", (e) => {
+      timeline.setWindow(Number(e.target.value));
+    });
 
     const es = new EventSource("/events/referee");
     es.addEventListener("referee", (ev) => onEvent(JSON.parse(ev.data)));

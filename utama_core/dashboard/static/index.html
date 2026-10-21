@@ -15,9 +15,21 @@
 </div>
 
 <div class="view" id="view-live" style="gap:8px; padding:8px;">
-  <div class="panel" style="flex:2">
+  <div class="panel stack" style="flex:2">
     <div class="panel-title" id="ref-profile-name">Field</div>
-    <div class="field-wrap"><canvas id="ref-field-canvas"></canvas></div>
+    <div class="field-wrap" style="flex:1;"><canvas id="ref-field-canvas"></canvas></div>
+    <div class="stack" style="padding:6px 10px 10px; gap:4px;">
+      <div class="timeline-wrap"><canvas id="live-timeline"></canvas></div>
+      <div class="row" style="align-items:center; justify-content:space-between;">
+        <div id="live-timeline-legend" class="timeline-legend"></div>
+        <select id="live-timeline-window" title="Timeline window">
+          <option value="30">30 s</option>
+          <option value="60" selected>60 s</option>
+          <option value="180">3 min</option>
+          <option value="0">5 min</option>
+        </select>
+      </div>
+    </div>
   </div>
   <div class="panel stack" style="flex:1; padding:12px; overflow-y:auto;">
     <div class="row" style="justify-content:space-between; align-items:baseline;">
@@ -84,6 +96,16 @@
           <option value="4">4x</option>
         </select>
       </div>
+      <div class="timeline-wrap"><canvas id="replay-timeline" title="click or drag to seek"></canvas></div>
+      <div class="row" style="align-items:center; justify-content:space-between;">
+        <div id="replay-timeline-legend" class="timeline-legend"></div>
+        <select id="replay-timeline-window" title="Timeline window">
+          <option value="30">30 s</option>
+          <option value="60" selected>60 s</option>
+          <option value="180">3 min</option>
+          <option value="0">whole match</option>
+        </select>
+      </div>
     </div>
   </div>
   <div class="panel stack" style="flex:1; padding:12px; overflow-y:auto;">
@@ -112,6 +134,7 @@
 <script>__STATUS_PANEL_JS__</script>
 <script>__APP_JS__</script>
 <script>__LIVE_JS__</script>
+<script>__TIMELINE_JS__</script>
 <script>__REPLAY_JS__</script>
 <script>__TOURNAMENT_JS__</script>
 <script>Dashboard.init("replay");</script>

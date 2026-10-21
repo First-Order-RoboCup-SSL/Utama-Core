@@ -15,6 +15,7 @@ means one browser tab, one port, one process — not a GUI per concern.
 
 from __future__ import annotations
 
+import gzip
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,9 @@ from typing import Callable, Dict, List
 from urllib.parse import parse_qs, urlsplit
 
 CommandHandler = Callable[[dict], None]
+
+
+_GZIP_MIN_BYTES = 64 * 1024
 
 
 def attach_dashboard(port: int = 8080) -> "DashboardServer":
@@ -137,6 +141,10 @@ class DashboardServer(threading.Thread):
             def _send_json_bytes(self, body: bytes, status: int = 200) -> None:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
+                # A replay's frames are tens of MB of JSON; gzip makes them about a tenth.
+                if len(body) > _GZIP_MIN_BYTES and "gzip" in self.headers.get("Accept-Encoding", ""):
+                    body = gzip.compress(body, compresslevel=5)
+                    self.send_header("Content-Encoding", "gzip")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)

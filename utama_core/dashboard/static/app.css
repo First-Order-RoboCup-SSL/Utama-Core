@@ -186,6 +186,12 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .check-fail { color: #e06a60; font-weight: 600; }
 .auto-halt { background: var(--halt); color: #fff; padding: 6px 8px; border-radius: var(--radius); font-size: .75rem; }
 
+/* Replay timeline (timeline.js): swimlanes under the transport controls. */
+.timeline-wrap { width: 100%; cursor: pointer; }
+.timeline-wrap canvas { display: block; }
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .65rem; color: var(--muted); }
+.timeline-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 2px; vertical-align: -1px; }
+
 /* Replay timeline markers: one tick per goal / foul / stall / ball loss. */
 .marker-strip { position: relative; height: 10px; margin: 0 7px; }
 .marker { position: absolute; top: 0; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; cursor: pointer; }

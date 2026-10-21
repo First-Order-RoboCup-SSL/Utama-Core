@@ -20,6 +20,7 @@
 
 (function () {
   let fieldView = null;
+  let timeline = null; // Timeline (timeline.js)
   let frames = [];
   let index = 0;
   let playing = false;
@@ -186,18 +187,21 @@
     if (i >= 0) jumpToMarker(i);
   }
 
-  function jumpToEvent(sim_time) {
-    // Nearest frame whose ts >= sim_time (falls back to the last frame if
-    // the event is at/after the final recorded ts).
-    let target = frames.length - 1;
-    for (let i = 0; i < frames.length; i++) {
-      if (frames[i].ts >= sim_time) {
-        target = i;
-        break;
-      }
+  function firstFrameAtOrAfter(sim_time) {
+    // the last frame if sim_time is at/after the final recorded ts
+    let lo = 0;
+    let hi = frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (frames[mid].ts < sim_time) lo = mid + 1;
+      else hi = mid;
     }
+    return lo;
+  }
+
+  function jumpToEvent(sim_time) {
     stopPlayback();
-    setIndex(target);
+    setIndex(firstFrameAtOrAfter(sim_time));
   }
 
   function setIndex(i) {
@@ -219,6 +223,7 @@
       fieldView.setTeamLayout(frame.my_team_is_right, fieldView.myTeamIsYellow);
     }
     if (fieldView) fieldView.draw(frame);
+    if (timeline) timeline.draw(frame.ts);
     renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
     renderTacticStatusInto("replay-tactic-entries", tacticStatus, {
       emptyLabel: "no tactic data at this frame",
@@ -338,6 +343,7 @@
     lastIndex = 0;
     resetEventCursors();
     setIndex(0);
+    if (timeline) timeline.load([], [], [], [], []);
     setLoading(true);
     fetch("/replay/frames?path=" + encodeURIComponent(path))
       .then((r) => r.json())
@@ -366,6 +372,7 @@
         if (refBanner) refBanner.style.display = data.has_referee_data ? "none" : "";
         renderIntentionLog();
         renderMarkers();
+        timeline.load(frames, tacticEvents, refereeEvents, traceEvents, markers);
         setIndex(0);
         if (atTime != null) jumpToEvent(atTime - MARKER_LEAD_S);
       })
@@ -400,6 +407,17 @@
     document.getElementById("replay-slider").addEventListener("input", (e) => {
       stopPlayback();
       setIndex(Number(e.target.value));
+    });
+    timeline = new Timeline(
+      document.getElementById("replay-timeline"),
+      document.getElementById("replay-timeline-legend"),
+      (ts) => {
+        stopPlayback();
+        setIndex(firstFrameAtOrAfter(ts));
+      }
+    );
+    document.getElementById("replay-timeline-window").addEventListener("change", (e) => {
+      timeline.setWindow(Number(e.target.value));
     });
     document.getElementById("replay-speed").addEventListener("change", (e) => {
       speed = Number(e.target.value);

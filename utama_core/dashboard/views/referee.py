@@ -68,6 +68,16 @@ def notify(
     server.notify(CHANNEL, _serialise_state(ref_data, game_frame, tactic_status, robot_feedback_data, field_check))
 
 
+# Millimetres, mrad and cm/s: finer than anything drawn, and a full float's 17 digits made a
+# match's replay ~7x its size on disk.
+def _mm(value: float) -> float:
+    return round(value, 3)
+
+
+def _cm(value: float) -> float:
+    return round(value, 2)
+
+
 def _serialise_robots(game_frame) -> dict:
     if game_frame is None:
         return {"friendly": [], "enemy": []}
@@ -76,11 +86,11 @@ def _serialise_robots(game_frame) -> dict:
         return [
             {
                 "id": r.id,
-                "x": r.p.x,
-                "y": r.p.y,
-                "vx": r.v.x,
-                "vy": r.v.y,
-                "orientation": r.orientation,
+                "x": _mm(r.p.x),
+                "y": _mm(r.p.y),
+                "vx": _cm(r.v.x),
+                "vy": _cm(r.v.y),
+                "orientation": _mm(r.orientation),
                 "has_ball": r.has_ball,
             }
             for r in robots_dict.values()
@@ -95,7 +105,8 @@ def _serialise_robots(game_frame) -> dict:
 def _serialise_ball(game_frame):
     if game_frame is None or game_frame.ball is None:
         return None
-    return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y, "vx": game_frame.ball.v.x, "vy": game_frame.ball.v.y}
+    ball = game_frame.ball
+    return {"x": _mm(ball.p.x), "y": _mm(ball.p.y), "vx": _cm(ball.v.x), "vy": _cm(ball.v.y)}
 
 
 def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedback_data=None, field_check=None) -> dict:
@@ -115,6 +126,7 @@ def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedba
         "blue_score": ref_data.blue_team.score,
         "designated": designated,
         "status_message": ref_data.status_message,
+        "ts": getattr(game_frame, "ts", None),  # game time, for the Live timeline
         "my_team_is_right": getattr(game_frame, "my_team_is_right", False),
         "my_team_is_yellow": getattr(game_frame, "my_team_is_yellow", True),
         "robots": _serialise_robots(game_frame),

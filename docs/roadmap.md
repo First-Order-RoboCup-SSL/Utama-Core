@@ -86,12 +86,12 @@ entry by its title, not its number.
    runner or can run faster than real time headless. CI hardcodes `--ignore-glob "**/*grsim*"`
    (`ci.yml:41,43`).
 
-7. **Match timeline in the dashboard.** `tools/match_timeline.py` draws one window as swimlanes
-    (referee band, each robot's tactic, possession, distance to the ball, events). The Replay tab
-    has only a per-tick marker strip (goals, fouls, stalls, ball losses); the swimlane panel that
-    follows the replay cursor, with clicking a lane to seek, is what is missing. The data is all
-    in the replay and its `intentions.jsonl` already (`load_window` computes it without drawing).
-    Not started (user idea, 2026-10-17).
+7. **Match timeline in the dashboard.** Built 2026-10-21 (`dashboard/static/timeline.js`): the
+    swimlanes of `tools/match_timeline.py` (referee band, each robot's tactic, possession, distance
+    to the ball, events) under the Replay tab's controls, following the cursor, click or drag to
+    seek; and in the Live tab, the last minutes up to now. Not yet: switch ticks and shots (the
+    tool has them), enemy lanes. A replay's frames still take ~10 s to serve, nearly all of it the
+    ball-loss markers (`turnover_breakdown.analyse_match` re-reads the replay frame by frame).
 
 8. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones. No new `Tactic` class has been added since this

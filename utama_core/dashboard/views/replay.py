@@ -116,7 +116,7 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
 
         frames.append(
             {
-                "ts": obj.ts,
+                "ts": round(obj.ts, 4),
                 "my_team_is_right": bool(obj.my_team_is_right),  # the teams change ends at half-time
                 "robots": _serialise_robots(obj),
                 "ball": _serialise_ball(obj),
