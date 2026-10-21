@@ -2,8 +2,8 @@
 AlphaGo's reinforcement-learning stage: the network plays full matches against itself, against earlier
 versions of itself (a league, so it does not only learn to beat its latest self) and, as an anchor,
 against the round-robin's pool, drawing its actions (`tools/flat_round.py`, on the CPU); then it learns
-from the goals that followed (on the GPU), and again. No tree search: the simulator cannot snapshot and
-restore a match, and one 10 s look-ahead costs seconds.
+from the goals that followed (on the GPU, or `--device cpu` when another job fills it), and again. No
+tree search: the simulator cannot snapshot and restore a match, and one 10 s look-ahead costs seconds.
 
   CUDA_VISIBLE_DEVICES=GPU-5206cf34-8623-f6a9-dace-e0fb425f562f \\
     /workspace/FOR-Engine/.pixi/envs/sglang/bin/python tools/flat_net_rl.py \\
@@ -231,9 +231,10 @@ def main() -> None:
     ap.add_argument("--eval-every", type=int, default=5, help="iterations between greedy checks (0: none)")
     ap.add_argument("--eval-opponents", nargs="*", default=["pool"])
     ap.add_argument("--duration", type=float, default=1200.0, help="sim-time cap (full time ends a match first)")
+    ap.add_argument("--device", default="cuda", help="where it learns: cuda, or cpu when another job fills the GPU")
     a = ap.parse_args()
 
-    dev = torch.device("cuda")
+    dev = torch.device(a.device)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     if not (out / "w0.npz").exists():
