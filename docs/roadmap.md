@@ -155,7 +155,15 @@ entry by its title, not its number.
       reach of strategy branches, so they are not something a search tunes.
     - *Open, not yet:* one profile per match day vs updated while playing; kick-to-kick
       spread in the sim (more realistic, but noisier round-robins).
-    - *Calibration routine (to write before measuring day):* per robot, at full battery on the
+    - *Measuring, built 2026-10-21:* every camera run records an SSL game log (raw vision,
+      referee, radio bytes both ways: `GameLogWriter`); `examples/real_attacker_defender.py
+      --calibrate` plays fixed moves (`tactics/scripted_moves.py`), and `tools/robot_calibration.py`
+      measures loop delay, speed gain, acceleration, vision noise and kick speed from any such log.
+      Checked on a synthetic robot (delay within 10 ms, acceleration within 15 %; turn
+      acceleration only roughly, its ramp lasts a few frames) and on grSim; not yet on a real robot.
+      Not yet done: the numbers feed nothing (the sim's latency, the controller), and drift,
+      dribbling, passes and chips are not measured.
+    - *Calibration routine (the full plan):* per robot, at full battery on the
       competition carpet: commanded vs measured speed at a few speeds, acceleration and
       braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from
       vision, direction error, roll distance) and ten chips; recharge time between kicks;

@@ -21,12 +21,14 @@ class VisionReceiver:
         vision_buffers: List[Deque[RawVisionData]],
         on_geometry: Optional[Callable] = None,
         stop_event: Optional[threading.Event] = None,
+        on_packet: Optional[Callable[[bytes], None]] = None,
     ):
         self.net = network_manager.NetworkManager(address=(MULTICAST_GROUP, VISION_PORT), bind_socket=True)
         self.vision_buffers = vision_buffers
         self._on_geometry = on_geometry
         self._geometry_fired = False
         self._stop_event = stop_event
+        self._on_packet = on_packet  # every packet as received, before parsing (`GameLogWriter`)
         # Parked exception from the geometry callback — re-raised in the main
         # thread by StrategyRunner._run_step() so the process exits cleanly.
         self.thread_exception: Optional[BaseException] = None
@@ -55,6 +57,8 @@ class VisionReceiver:
     def _handle_packet(self, vision_packet: SSL_WrapperPacket, data: bytes) -> bool:
         """Parse one wrapper packet into `vision_packet` and buffer its detection. Returns False
         when the geometry callback failed and the receiver should stop."""
+        if self._on_packet:
+            self._on_packet(data)
         vision_packet.Clear()
         vision_packet.ParseFromString(data)
         if self._on_geometry and not self._geometry_fired and vision_packet.HasField("geometry"):

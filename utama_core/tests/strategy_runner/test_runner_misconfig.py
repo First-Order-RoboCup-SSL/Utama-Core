@@ -80,7 +80,7 @@ def test_setup_vision_and_referee_starts_vision_only_when_referee_none(monkeypat
     started = []
 
     class DummyVisionReceiver:
-        def __init__(self, buffers, on_geometry=None):
+        def __init__(self, buffers, on_geometry=None, on_packet=None):
             pass
 
     class DummyRefereeReceiver:
@@ -113,7 +113,7 @@ def test_setup_vision_and_referee_starts_vision_only_when_referee_custom(monkeyp
     started = []
 
     class DummyVisionReceiver:
-        def __init__(self, buffers, on_geometry=None):
+        def __init__(self, buffers, on_geometry=None, on_packet=None):
             pass
 
     monkeypatch.setattr(runner_mod, "VisionReceiver", DummyVisionReceiver)
@@ -140,7 +140,7 @@ def test_setup_vision_and_referee_starts_both_receivers_when_referee_official(
     started = []
 
     class DummyVisionReceiver:
-        def __init__(self, buffers, on_geometry=None):
+        def __init__(self, buffers, on_geometry=None, on_packet=None):
             pass
 
     class DummyRefereeReceiver:

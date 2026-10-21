@@ -76,6 +76,8 @@ class RealRobotController(AbstractRobotController):
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
+        # Set by StrategyRunner to record the radio's bytes both ways (`GameLogWriter`).
+        self.game_log = None
         if serial_port is None:
             logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         else:
@@ -111,7 +113,10 @@ class RealRobotController(AbstractRobotController):
         # 1. Non-blocking read: Only read if bytes are actually waiting
         bytes_available = self._serial_port.in_waiting
         if bytes_available > 0:
-            self._buffer.extend(self._serial_port.read(bytes_available))
+            data = self._serial_port.read(bytes_available)
+            self._buffer.extend(data)
+            if self.game_log is not None:
+                self.game_log.radio_in(bytes(data))
 
         responses = []
         responded_ids = set()
@@ -179,6 +184,8 @@ class RealRobotController(AbstractRobotController):
                 f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending empty commands for unassigned robots."
             )
         self._serial_port.write(self._out_packet)
+        if self.game_log is not None:
+            self.game_log.radio_out(bytes(self._out_packet))
 
         ### update kick and chip trackers. We persist the kick/chip command for KICKER_PERSIST_TIMESTEPS
         ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period

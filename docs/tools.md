@@ -112,6 +112,7 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
-| `examples/real_attacker_defender.py` | One attacker against one defender on real robots (or `--mode rsim`/`grsim`): field, camera half and IDs in one config block; the Live tab's field check gates the start |
+| `examples/real_attacker_defender.py` | One attacker against one defender on real robots (or `--mode rsim`/`grsim`): field, camera half, IDs and each robot's working hardware in one config block; the Live tab's field check gates the start. Records every camera run as an SSL game log in `replays/field/`; `--calibrate attacker\|defender` plays fixed moves for measuring that robot |
+| `tools/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/convert_ssl_log.py` |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
 | `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |

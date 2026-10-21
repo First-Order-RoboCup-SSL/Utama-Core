@@ -49,6 +49,7 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
+from utama_core.replay.game_log_writer import GameLogWriter
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -261,6 +262,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             Applies in every mode, so a test with broken hardware can be rehearsed in a simulator.
             ``None``: everything works.
         blue_robot_profiles (dict[int, RobotProfile], optional): Same as ``yellow_robot_profiles`` for the blue team.
+        game_log_path (str, optional): Record the run as an SSL game log (`.log`): every vision packet,
+            the referee's state and, on real robots, the radio's bytes both ways; see `GameLogWriter`.
+            grSim and real mode only (rsim has no packets).
     """
 
     def __init__(
@@ -298,6 +302,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         blue_trusted_ir_robots: Optional[FrozenSet[int]] = None,
         yellow_robot_profiles: Optional[dict[int, RobotProfile]] = None,
         blue_robot_profiles: Optional[dict[int, RobotProfile]] = None,
+        game_log_path: Optional[str] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -345,6 +350,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
             self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims))
 
+        if game_log_path is not None and self.mode == Mode.RSIM:
+            raise ValueError("game_log_path needs vision packets: grsim or real mode, not rsim")
+        self.game_log = GameLogWriter(game_log_path) if game_log_path is not None else None
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(
@@ -371,6 +379,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
         self.yellow_robot_profiles = yellow_robot_profiles or {}
         self.blue_robot_profiles = blue_robot_profiles or {}
+        if self.game_log is not None:
+            self.game_log.run_info(
+                {
+                    "mode": self.mode.value,
+                    "my_team_is_yellow": my_team_is_yellow,
+                    "my_team_is_right": my_team_is_right,
+                    "vision_to_cmd": {
+                        "yellow": self.yellow_vision_to_cmd_mapping,
+                        "blue": self.blue_vision_to_cmd_mapping,
+                    },
+                    "profiles": {
+                        "yellow": {k: dataclasses.asdict(p) for k, p in self.yellow_robot_profiles.items()},
+                        "blue": {k: dataclasses.asdict(p) for k, p in self.blue_robot_profiles.items()},
+                    },
+                }
+            )
         for is_yellow in (True, False):
             self._check_profiles_are_driven(is_yellow)
         yellow_trusted_ir_robots = self._trusted_ir(True, yellow_trusted_ir_robots)
@@ -903,7 +927,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         ref_buffer = deque(maxlen=1)
         if self.mode != Mode.RSIM:
             on_geometry = self._make_geometry_validation_callback()
-            vision_receiver = VisionReceiver(vision_buffers, on_geometry=on_geometry)
+            vision_receiver = VisionReceiver(
+                vision_buffers,
+                on_geometry=on_geometry,
+                on_packet=self.game_log.vision if getattr(self, "game_log", None) is not None else None,
+            )
             if isinstance(self.referee, OfficialReferee):
                 self.start_threads(vision_receiver, RefereeMessageReceiver(ref_buffer))
             else:
@@ -1113,6 +1141,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
+        if self.mode == Mode.REAL:
+            my_robot_controller.game_log = getattr(self, "game_log", None)
+            if self.opp:
+                opp_robot_controller.game_log = my_robot_controller.game_log
+
         my_profiles, opp_profiles = map_colors_to_friendly_enemy(
             self.my_team_is_yellow, self.yellow_robot_profiles, self.blue_robot_profiles
         )
@@ -1260,6 +1293,13 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp:
             self.opp.strategy.load_game(self.opp.game)
 
+    def _with_sides(self, referee_data: "RefereeData") -> "RefereeData":
+        """`referee_data` with the sides filled in from ours when the referee leaves them out (ours does)."""
+        if referee_data.blue_team_on_positive_half is not None:
+            return referee_data
+        blue_on_positive = self.my_team_is_right != self.my_team_is_yellow
+        return dataclasses.replace(referee_data, blue_team_on_positive_half=blue_on_positive)
+
     def _follow_referee_sides(self, referee_data: Optional["RefereeData"]) -> None:
         """Change ends when the referee says the teams have.
 
@@ -1369,6 +1409,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.match_stats.finalize().to_json(self.stats_path)
         if self.replay_writer:
             self.replay_writer.close()
+        if getattr(self, "game_log", None) is not None:
+            self.game_log.close()  # after the stop commands, so they are in the log
         if self.vision_stream:
             self.vision_stream.stop()
         if self.rsim_env:
@@ -1711,6 +1753,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if self.ref_buffer:
                 self._last_referee_data = self.ref_buffer.popleft()
             referee_data = self._last_referee_data
+            if getattr(self, "game_log", None) is not None and referee_data is not None:
+                self.game_log.referee(self._with_sides(referee_data))
 
         self._follow_referee_sides(referee_data)
 

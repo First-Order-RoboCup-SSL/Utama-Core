@@ -89,7 +89,7 @@ friction). **Within** means kick-to-kick noise for the same robot.
 
 | Parameter | Why it matters | From official logs? | rsim today |
 |---|---|---|---|
-| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating | None: commands act on the next tick |
+| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating; for our robots, `tools/robot_calibration.py` on a recorded field test (command sent to motion seen) | None: commands act on the next tick |
 | Ball rolling deceleration (and the switch from sliding to rolling) | Pass and shot timing; keeper reaction time | Yes: fit free-rolling segments, per match (venue carpet) | Fixed in the C++ physics (`vendor/rSim`) |
 | Kick speed: between and within | How much time the keeper has; pass weight | Yes: peak ball speed after each kick, per team | Fixed |
 | Kick direction error | Wide rate (6% vs 22%) | Partly: shot miss distance, pass error relative to the receiver | None: exact |

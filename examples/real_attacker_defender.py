@@ -5,6 +5,7 @@ Run:
     pixi run python examples/real_attacker_defender.py --mode rsim
     pixi run python examples/real_attacker_defender.py --mode grsim   # grSim must be running
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
+    pixi run python examples/real_attacker_defender.py --calibrate attacker   # or defender
 
 What it does:
   - Two robots, one per team, both ours on one radio: the attacker attacks the goal in
@@ -19,6 +20,13 @@ On the dashboard's Live tab, the field check must be all green or amber before F
 a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
 robots at once. See docs/custom_referee_gui.md, "Field check".
 
+Measuring a robot (`--calibrate attacker|defender`): that robot plays fixed moves instead
+(`tactics/scripted_moves.py`, about 70 s: 10 s still, steps forward and back at 0.3, 0.6 and
+1 m/s, sideways, turns) while the other stands still. Put it 1 m inside the area, facing
+along the field's long side, and a ball at rest in view; Force Start. Halting (to put it
+back) restarts the interrupted move. Then measure it from the recorded log:
+    pixi run python tools/robot_calibration.py replays/field/<run>.log
+
 Before running on real robots:
   - ssl-vision's field geometry (length and width) must equal FIELD below, or the
     runner stops at the first geometry packet with "Field geometry mismatch".
@@ -28,7 +36,8 @@ Before running on real robots:
 
 import argparse
 import dataclasses
-from typing import NamedTuple
+import time
+from typing import NamedTuple, Optional
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.custom_referee import CustomReferee
@@ -50,6 +59,7 @@ from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
+from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
 
 # ---------------------------------------------------------------------------
@@ -97,6 +107,10 @@ DEFENDER_TACTIC = "goalkeeper"  # see DEFENDER_TACTICS
 # bounds, defense area ...) stop play and set up restarts; the operator still starts each
 # restart, nothing advances on its own.
 RULES = "off"
+
+# With a camera (real, grsim), record every run as an SSL game log in replays/field/: raw
+# vision, referee and radio bytes, for measuring the robots later (`GameLogWriter`).
+RECORD = True
 
 DASHBOARD_PORT = 8080
 
@@ -179,7 +193,7 @@ def _referee_profile() -> RefereeProfile:
     )
 
 
-def build_runner(mode: str) -> StrategyRunner:
+def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
     attacker_id = ATTACKER.vision_id if real else 0
@@ -203,9 +217,21 @@ def build_runner(mode: str) -> StrategyRunner:
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)
 
+    attacker_tactic, defender_tactic = ATTACKER_TACTICS[ATTACKER_TACTIC], DEFENDER_TACTICS[DEFENDER_TACTIC]
+    if calibrate is not None:
+        moves, still = ScriptedMovesTactic, lambda: ScriptedMovesTactic(script=())
+        attacker_tactic, defender_tactic = (moves, still) if calibrate == "attacker" else (still, moves)
+    game_log = (
+        f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}{'_calibrate_' + calibrate if calibrate else ''}.log"
+        if RECORD and mode != "rsim"
+        else None
+    )
+    if game_log:
+        print(f"Recording to {game_log}")
     return StrategyRunner(
-        strategy=_one_robot_strategy(attacker_id, ATTACKER_TACTICS[ATTACKER_TACTIC]),
-        opp_strategy=_one_robot_strategy(defender_id, DEFENDER_TACTICS[DEFENDER_TACTIC]),
+        game_log_path=game_log,
+        strategy=_one_robot_strategy(attacker_id, attacker_tactic),
+        opp_strategy=_one_robot_strategy(defender_id, defender_tactic),
         my_team_is_yellow=attacker_is_yellow,
         my_team_is_right=attacker_is_right,
         mode=mode,
@@ -226,8 +252,11 @@ def build_runner(mode: str) -> StrategyRunner:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("real", "rsim", "grsim"), default=MODE)
+    parser.add_argument("--calibrate", choices=("attacker", "defender"), help="measure this robot: fixed moves")
     args = parser.parse_args()
-    build_runner(args.mode).run()
+    if args.calibrate and not RECORD:
+        parser.error("--calibrate needs RECORD = True: the measurement is read from the log")
+    build_runner(args.mode, args.calibrate).run()
 
 
 if __name__ == "__main__":
