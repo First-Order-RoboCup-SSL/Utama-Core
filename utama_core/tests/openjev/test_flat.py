@@ -255,6 +255,18 @@ def test_each_question_carries_the_coachings_call_unless_turned_off(tmp_path):
     assert not any("coaching's call" in q[fs.QUESTION_KEY]["instructions"] for _, q in plain.requests)
 
 
+def test_the_scripted_rules_log_names_each_robots_action(tmp_path):
+    game = _carrier_game()
+    tactic = FlatJevTactic(None, policy="scripted", log_path=str(tmp_path / "log.jsonl"))
+    mem = FlatMem()
+    tactic._decide(game, 0.0, OUTFIELD, 2, mem)
+    tactic.close()
+    chain = json.loads((tmp_path / "log.jsonl").read_text())["chain"]
+    assert chain and all(asked["scripted"] for asked in chain)
+    assert chain[0]["choice"] == scripted_choice(game, _view(game, 2), {}, True)
+    assert all(asked["choice"] == mem.plans[asked["robot"]].action for asked in chain)
+
+
 def test_a_failing_server_falls_back_to_the_scripted_rule_per_robot():
     tactic = FlatJevTactic(FakeClient(fail=True))
     mem = FlatMem()

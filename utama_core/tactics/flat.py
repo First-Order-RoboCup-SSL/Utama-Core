@@ -471,7 +471,7 @@ class FlatJevTactic(BaseTactic[FlatMem]):
             choice = rule if rule in view.options else "hold"
             if moment is not None:
                 self._record(game, moment, view.robot_id, feats, mask, rule, flat_net.action_index(choice, moment), 0.0)
-            return choice, {"choice": None, "scripted": True}
+            return choice, {"choice": choice, "scripted": True}
         self.n_questions += 1
         try:
             q = fs.question(view, lines, fs.still_to_fill(view.phase, decided), call=rule if self.call else None)
