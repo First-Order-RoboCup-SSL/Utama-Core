@@ -377,8 +377,9 @@ whoever runs it.
   dark strip where it had the ball), each robot's distance to the ball, and goals, fouls and shots on
   top. Use it for thrashing (a robot switching tactics every few ticks), a tactic stuck committed, or
   everyone chasing the ball. Friendly side only has tactic lanes (the intentions log is config_a's).
-  The dashboard draws the same lanes under the Replay tab's controls (click to seek) and live in
-  the Live tab.
+  The dashboard draws the same lanes under the Replay tab's controls (click to seek; hover for what
+  each mark is) and live in the Live tab. Beside a replay, its Play list reads the match as
+  situations: who had the ball from which restart or regain, for how long, and how it ended.
   Thrashing in `split_shape` against `tiki_taka_plus`: robots 2-4 flip between the attack and defence
   slots about every 1.5 s, in pairs of rows at the same tick. It is not split_shape's alone: most
   strategies that split attack and defence on possession take a tactic for under 1 s and revert about

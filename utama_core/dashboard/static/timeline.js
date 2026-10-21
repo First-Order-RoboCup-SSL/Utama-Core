@@ -2,17 +2,23 @@
 // tools/match_timeline.py's figure, in the Replay tab around the viewed frame and in the
 // Live tab up to now. Top to bottom, on one time axis:
 //   - the referee command band (live play, STOP, kickoff, free kick, penalty, placement, HALT);
+//   - possession: whose ball it is, in the team's colour. In a replay, one span per situation
+//     (a restart going live or a side winning the ball, as goal_ledger counts them); live,
+//     the side with a robot on the ball;
 //   - one lane per friendly robot: a span per tactic it was in (the Tactic class from the
-//     intention log), and a light strip along the bottom where it had the ball;
+//     intention log), a dark tick where it switched, and a light strip where it had the ball;
 //   - each friendly robot's distance to the ball, 0-3 m;
-//   - events: goals, fouls, stalls, ball losses (the replay's markers).
-// A cursor marks the viewed frame; in a replay, clicking or dragging seeks. A replay is computed
-// once from data replay.js already holds (`load`); live, each streamed state extends the lanes
-// (`append`) and the last LIVE_KEEP_S are kept. Drawing only clips and paints.
+//   - events: goals, fouls, stalls, ball losses (the replay's markers) and shots (dots in the
+//     shooting team's colour).
+// Hovering names what is under the pointer. A cursor marks the viewed frame; in a replay,
+// clicking or dragging seeks. A replay is computed once from data replay.js already holds
+// (`load`); live, each streamed state extends the lanes (`append`) and the last LIVE_KEEP_S
+// are kept. Drawing only clips and paints.
 
 (function () {
   const SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"];
   const OTHER = "#5f636c"; // tactics beyond the seven slots
+  const TEAM = { yellow: "#e0a527", blue: "#3d7fd1" }; // field_canvas.js's robot colours
   const REF_FILL = {
     "live play": "#2b3a30",
     STOP: "#5b5f68",
@@ -30,6 +36,7 @@
 
   const GUTTER = 44; // left labels
   const REF_H = 16;
+  const BALL_H = 12;
   const LANE_H = 18;
   const DIST_H = 46;
   const EVENT_H = 12;
@@ -49,7 +56,8 @@
     return "other";
   }
 
-  // Spans [{t0, t1, label}] tiling [start, end] from change points [[t, label]], merging repeats.
+  // Spans [{t0, t1, label, text}] tiling [start, end] from change points [[t, label, text]],
+  // merging repeats (a merged span keeps its first text).
   function spansFrom(changes, start, end) {
     const out = [];
     for (let i = 0; i < changes.length; i++) {
@@ -59,7 +67,7 @@
       if (t1 <= t0) continue;
       const last = out[out.length - 1];
       if (last && last.label === label) last.t1 = t1;
-      else out.push({ t0, t1, label });
+      else out.push({ t0, t1, label, text: changes[i][2] });
     }
     return out;
   }
@@ -103,11 +111,11 @@
       const on = flag(i);
       if (on && start === null) start = frames[i].ts;
       else if (!on && start !== null) {
-        out.push({ t0: start, t1: frames[i].ts });
+        out.push({ t0: start, t1: frames[i].ts, label: true });
         start = null;
       }
     }
-    if (start !== null) out.push({ t0: start, t1: frames[frames.length - 1].ts });
+    if (start !== null) out.push({ t0: start, t1: frames[frames.length - 1].ts, label: true });
     return out;
   }
 
@@ -120,6 +128,19 @@
       else hi = mid;
     }
     return lo;
+  }
+
+  function at(spans, t) {
+    return spans.find((s) => s.t0 <= t && t <= s.t1 && s.label !== null && s.label !== false);
+  }
+
+  function short(tactic) {
+    return tactic.replace(/Tactic$/, "");
+  }
+
+  function mmss(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   }
 
   // A live tactic status entry ["<slot>[ (committed)]", "<tag>"] as a lane label.
@@ -136,21 +157,42 @@
       this.data = null;
       this.ts = 0;
       this._view = null; // [t0, t1] last drawn
+      this._rows = []; // [{y0, y1, kind, lane}] last drawn, for hovering
+      this.tip = document.createElement("div");
+      this.tip.className = "timeline-tip";
+      canvas.parentElement.appendChild(this.tip);
+
       let dragging = false;
-      const seek = (e) => {
-        if (!this._view || !this.onSeek) return;
+      const timeAt = (e) => {
+        if (!this._view) return null;
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - GUTTER;
         const w = rect.width - GUTTER;
-        if (x < 0 || w <= 0) return;
-        this.onSeek(this._view[0] + (x / w) * (this._view[1] - this._view[0]));
+        if (x < 0 || w <= 0) return null;
+        return this._view[0] + (x / w) * (this._view[1] - this._view[0]);
+      };
+      const seek = (e) => {
+        const t = timeAt(e);
+        if (t !== null && this.onSeek) this.onSeek(t);
       };
       canvas.addEventListener("mousedown", (e) => {
-        dragging = true;
+        dragging = Boolean(this.onSeek);
         seek(e);
       });
       window.addEventListener("mousemove", (e) => dragging && seek(e));
       window.addEventListener("mouseup", () => (dragging = false));
+      canvas.addEventListener("mousemove", (e) => {
+        const t = timeAt(e);
+        const rect = canvas.getBoundingClientRect();
+        const text = t === null ? null : this._describe(t, e.clientY - rect.top);
+        this.tip.style.display = text ? "" : "none";
+        if (!text) return;
+        this.tip.textContent = text;
+        const x = e.clientX - rect.left;
+        this.tip.style.left = Math.min(x + 12, rect.width - this.tip.offsetWidth - 4) + "px";
+        this.tip.style.top = e.clientY - rect.top + 14 + "px";
+      });
+      canvas.addEventListener("mouseleave", () => (this.tip.style.display = "none"));
       new ResizeObserver(() => this.draw(this.ts)).observe(canvas.parentElement);
     }
 
@@ -159,7 +201,8 @@
       this.draw(this.ts);
     }
 
-    load(frames, tacticEvents, refereeEvents, traceEvents, markers) {
+    // A replay. `play` rows carry `title` and `ended` text (replay.js words them, for its list).
+    load(frames, { tactics = [], referee = [], trace = [], markers = [], shots = [], play = [], myTeamIsYellow = true } = {}) {
       if (!frames.length) {
         this.data = null;
         this.legend.innerHTML = "";
@@ -173,17 +216,17 @@
       const robotIds = Array.from(ids).sort((a, b) => a - b);
 
       const keepers = new Set();
-      for (const e of traceEvents) {
+      for (const e of trace) {
         if (e.key === "highlights.goalkeeper" && e.value) for (const k in e.value) keepers.add(Number(k));
       }
-      const changes = tacticChanges(tacticEvents, robotIds);
+      const changes = tacticChanges(tactics, robotIds);
       const lanes = robotIds.map((id) => {
         const points = [[start, keepers.has(id) ? KEEPER : null]].concat(changes[id]);
-        const tactics = spansFrom(points, start, end).map((s) =>
+        const spans = spansFrom(points, start, end).map((s) =>
           s.label === null && keepers.has(id) ? { ...s, label: KEEPER } : s
         );
         const has = (i) => frames[i].robots.friendly.some((r) => r.id === id && r.has_ball);
-        return { id, tactics, ball: runs(frames, has) };
+        return { id, tactics: spans, ball: runs(frames, has) };
       });
 
       const total = {};
@@ -196,8 +239,18 @@
       const colours = {};
       ranked.forEach((name, i) => (colours[name] = i < SLOTS.length ? SLOTS[i] : OTHER));
 
-      const refPoints = refereeEvents.map((e) => [e.sim_time, refGroup(e.command)]);
-      const referee = refPoints.length ? spansFrom(refPoints, start, end) : [];
+      const refPoints = referee.map((e) => [
+        e.sim_time,
+        refGroup(e.command),
+        e.command.replace(/_/g, " ").toLowerCase() + (e.note ? ": " + e.note : ""),
+      ]);
+      const possession = play.map((r) => ({
+        t0: r.t,
+        t1: r.t_end,
+        label: r.side || "none",
+        text: r.title + (r.ended ? " → " + r.ended : ""),
+        kind: r.kind,
+      }));
 
       // distance to the ball per robot per frame, NaN when either is missing
       const dist = {};
@@ -209,12 +262,32 @@
         }
       });
 
-      this.data = { frames, origin: start, start, end, lanes, colours, referee, dist, markers, robotColour: {} };
+      this.data = {
+        frames,
+        origin: start,
+        start,
+        end,
+        lanes,
+        colours,
+        referee: refPoints.length ? spansFrom(refPoints, start, end) : [],
+        possession,
+        dist,
+        markers,
+        shots,
+        robotColour: {},
+        team: this._teams(myTeamIsYellow),
+      };
       robotIds.forEach((id, i) => (this.data.robotColour[id] = SLOTS[i % SLOTS.length]));
       this.legend.innerHTML = ranked
-        .map((name) => `<span><i style="background:${colours[name]}"></i>${name.replace(/Tactic$/, "")}</span>`)
+        .map((name) => `<span><i style="background:${colours[name]}"></i>${short(name)}</span>`)
         .join("");
       this.draw(start);
+    }
+
+    _teams(myTeamIsYellow) {
+      const friendly = myTeamIsYellow ? "yellow" : "blue";
+      const enemy = myTeamIsYellow ? "blue" : "yellow";
+      return { friendly: TEAM[friendly], enemy: TEAM[enemy], names: { friendly, enemy } };
     }
 
     // Live: one state from the Live view's stream (robots, ball, command, scores,
@@ -226,15 +299,17 @@
       if (!fresh && ts <= d.end) return;
       if (fresh) {
         d = this.data = { live: true, frames: [], origin: ts, start: ts, end: ts, lanes: [], colours: {}, referee: [] };
-        Object.assign(d, { dist: {}, markers: [], robotColour: {}, score: null });
+        Object.assign(d, { possession: [], dist: {}, markers: [], shots: [], robotColour: {}, score: null });
+        d.team = this._teams(state.my_team_is_yellow !== false);
         this.legend.innerHTML = "";
       }
-      const extend = (spans, label) => {
+      const extend = (spans, label, text) => {
         const last = spans[spans.length - 1];
         if (last) last.t1 = ts;
-        if (!last || last.label !== label) spans.push({ t0: ts, t1: ts, label });
+        if (!last || last.label !== label) spans.push({ t0: ts, t1: ts, label, text });
       };
       const friendly = (state.robots && state.robots.friendly) || [];
+      const enemy = (state.robots && state.robots.enemy) || [];
       for (const r of friendly) {
         if (d.dist[r.id]) continue;
         d.dist[r.id] = d.frames.map(() => NaN);
@@ -244,7 +319,17 @@
       }
       d.frames.push({ ts });
       d.end = ts;
-      extend(d.referee, refGroup(state.command));
+      const group = refGroup(state.command);
+      extend(d.referee, group, (state.command || "").replace(/_/g, " ").toLowerCase());
+
+      // possession as goal_ledger reads it: the side with a robot on the ball while the other
+      // has none keeps it until the other side touches it; nobody holds it outside live play
+      const last = d.possession[d.possession.length - 1];
+      const ours = friendly.some((r) => r.has_ball);
+      const theirs = enemy.some((r) => r.has_ball);
+      const holder = group !== "live play" ? null : ours !== theirs ? (ours ? "friendly" : "enemy") : last ? last.label : null;
+      extend(d.possession, holder, holder ? d.team.names[holder] + "'s ball" : null);
+
       const status = state.tactic_status || {};
       for (const lane of d.lanes) {
         const r = friendly.find((q) => q.id === lane.id);
@@ -272,6 +357,7 @@
         for (const id in d.dist) d.dist[id].splice(0, k);
         const keep = (spans) => spans.filter((s) => s.t1 >= cut);
         d.referee = keep(d.referee);
+        d.possession = keep(d.possession);
         d.markers = d.markers.filter((m) => m.sim_time >= cut);
         for (const lane of d.lanes) {
           lane.tactics = keep(lane.tactics);
@@ -282,9 +368,46 @@
       this.ts = ts;
     }
 
+    // What is under the pointer at time `t`, height `y`, as one line.
+    _describe(t, y) {
+      const d = this.data;
+      const row = this._rows.find((r) => y >= r.y0 && y < r.y1);
+      if (!d || !row) return null;
+      const when = mmss(t - d.origin) + "  ";
+      if (row.kind === "ref") {
+        const s = at(d.referee, t);
+        return s ? when + (s.text || s.label) : null;
+      }
+      if (row.kind === "ball") {
+        const s = at(d.possession, t);
+        return s && s.text ? when + s.text : null;
+      }
+      if (row.kind === "lane") {
+        const s = at(row.lane.tactics, t);
+        const ball = at(row.lane.ball, t) ? ", on the ball" : "";
+        return when + "#" + row.lane.id + " " + (s ? s.label : "no tactic") + ball;
+      }
+      if (row.kind === "dist") {
+        const i = Math.min(firstAtOrAfter(d.frames, t), d.frames.length - 1);
+        const parts = d.lanes
+          .filter((l) => !Number.isNaN(d.dist[l.id][i]))
+          .map((l) => "#" + l.id + " " + d.dist[l.id][i].toFixed(1) + " m");
+        return parts.length ? when + "to the ball: " + parts.join(", ") : null;
+      }
+      if (row.kind === "events") {
+        const tol = (4 * (this._view[1] - this._view[0])) / Math.max(1, this.canvas.clientWidth - GUTTER); // 4 px
+        const hits = d.markers.filter((m) => Math.abs(m.sim_time - t) <= tol).map((m) => m.label);
+        for (const s of d.shots) {
+          if (Math.abs(s.t - t) <= tol) hits.push("shot by " + d.team.names[s.side]);
+        }
+        return hits.length ? when + hits.join("; ") : null;
+      }
+      return null;
+    }
+
     _height() {
       const lanes = this.data ? this.data.lanes.length : 0;
-      return REF_H + GAP + lanes * LANE_H + GAP + DIST_H + GAP + EVENT_H + AXIS_H;
+      return REF_H + BALL_H + GAP + lanes * LANE_H + GAP + DIST_H + GAP + EVENT_H + AXIS_H;
     }
 
     draw(ts) {
@@ -303,6 +426,7 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
       const d = this.data;
+      this._rows = [];
       if (!d) return;
 
       const span = Math.min(this.windowS || d.end - d.start, d.end - d.start) || 1;
@@ -329,31 +453,50 @@
           }
         }
       };
-      const rowLabel = (text, y, h) => {
+      const row = (kind, text, y, h, lane) => {
+        this._rows.push({ kind, y0: y, y1: y + h, lane });
         ctx.fillStyle = "#8b909b";
         ctx.fillText(text, 2, y + h / 2);
       };
 
       let y = 0;
-      rowLabel("ref", y, REF_H);
+      row("ref", "ref", y, REF_H);
       band(d.referee, y, REF_H, (s) => REF_FILL[s.label] || REF_FILL.other, (s) => s.label);
-      y += REF_H + GAP;
+      y += REF_H;
+
+      row("ball", "ball", y, BALL_H);
+      band(
+        d.possession,
+        y + 2,
+        BALL_H - 3,
+        (s) => d.team[s.label] || OTHER,
+        (s) => (s.kind && s.kind !== "ball won" ? s.kind : null)
+      );
+      y += BALL_H + GAP;
 
       for (const lane of d.lanes) {
-        rowLabel("#" + lane.id, y, LANE_H);
+        row("lane", "#" + lane.id, y, LANE_H, lane);
         band(
           lane.tactics,
           y,
           LANE_H - 2,
           (s) => (s.label === KEEPER ? OTHER : d.colours[s.label] || OTHER),
-          (s) => s.label.replace(/Tactic$/, "")
+          (s) => short(s.label)
         );
+        // a tick where the robot switched from one tactic to another
+        ctx.fillStyle = "#101114";
+        let prev = null;
+        for (const s of lane.tactics) {
+          if (!s.label) continue;
+          if (prev && prev !== s.label && s.t0 >= t0 && s.t0 <= t1) ctx.fillRect(x(s.t0) - 1, y, 2, LANE_H - 2);
+          prev = s.label;
+        }
         band(lane.ball, y + LANE_H - 5, 3, () => "#f2f2f2");
         y += LANE_H;
       }
       y += GAP;
 
-      rowLabel("ball m", y, DIST_H);
+      row("dist", "ball m", y, DIST_H);
       ctx.strokeStyle = "#33373f";
       ctx.beginPath();
       for (const m of [1, 2]) {
@@ -386,11 +529,20 @@
       }
       y += DIST_H + GAP;
 
-      rowLabel("events", y, EVENT_H);
+      row("events", "events", y, EVENT_H);
       for (const m of d.markers) {
         if (m.sim_time < t0 || m.sim_time > t1) continue;
         ctx.fillStyle = MARKER_FILL[m.kind] || "#8b909b";
         ctx.fillRect(x(m.sim_time) - 1.5, y, 3, EVENT_H);
+      }
+      ctx.strokeStyle = "#101114";
+      for (const s of d.shots) {
+        if (s.t < t0 || s.t > t1) continue;
+        ctx.fillStyle = d.team[s.side] || OTHER;
+        ctx.beginPath();
+        ctx.arc(x(s.t), y + EVENT_H / 2, 3.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
       }
       y += EVENT_H;
 
@@ -401,9 +553,7 @@
       for (let s = Math.ceil((t0 - d.origin) / step) * step; d.origin + s <= t1; s += step) {
         const px = x(d.origin + s);
         ctx.fillRect(px, y, 1, 3);
-        if (px > GUTTER + 12 && px < cssW - 12) {
-          ctx.fillText(Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"), px, y + 9);
-        }
+        if (px > GUTTER + 12 && px < cssW - 12) ctx.fillText(mmss(s), px, y + 9);
       }
       ctx.textAlign = "start";
 

@@ -89,9 +89,13 @@ entry by its title, not its number.
 7. **Match timeline in the dashboard.** Built 2026-10-21 (`dashboard/static/timeline.js`): the
     swimlanes of `tools/match_timeline.py` (referee band, each robot's tactic, possession, distance
     to the ball, events) under the Replay tab's controls, following the cursor, click or drag to
-    seek; and in the Live tab, the last minutes up to now. Not yet: switch ticks and shots (the
-    tool has them), enemy lanes. A replay's frames still take ~10 s to serve, nearly all of it the
-    ball-loss markers (`turnover_breakdown.analyse_match` re-reads the replay frame by frame).
+    seek; and in the Live tab, the last minutes up to now. Switch ticks, shots and a possession
+    band (each situation's side) as in the tool. The Replay side panel's Play list replaces the raw
+    event and intention logs: one row per situation (`goal_ledger.situations`: a restart going live
+    or a side winning the ball), with its third, length, shots and how it ended (the stoppage's
+    reason, or who won the ball and how); the raw intention log stays, folded. The slow analysis is
+    kept beside the replay (`<stem>.timeline.json`), so a replay serves in ~3 s. Not yet: enemy
+    lanes (no intentions are recorded for the opponent).
 
 8. **More tactics from real football vocabulary** (formations, set plays, pressing schemes)
     rather than variations on existing ones. No new `Tactic` class has been added since this

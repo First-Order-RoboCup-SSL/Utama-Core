@@ -96,7 +96,7 @@
           <option value="4">4x</option>
         </select>
       </div>
-      <div class="timeline-wrap"><canvas id="replay-timeline" title="click or drag to seek"></canvas></div>
+      <div class="timeline-wrap"><canvas id="replay-timeline"></canvas></div>
       <div class="row" style="align-items:center; justify-content:space-between;">
         <div id="replay-timeline-legend" class="timeline-legend"></div>
         <select id="replay-timeline-window" title="Timeline window">
@@ -119,10 +119,12 @@
     <div class="ref-section-title">Tactics</div>
     <div id="replay-tactic-entries" style="font-size:.75rem;"></div>
     <div id="replay-status-entries" style="font-size:.75rem;"></div>
-    <div class="ref-section-title">Events <span class="muted" style="font-size:.65rem;">[ and ] step through them</span></div>
-    <div id="replay-marker-list" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
-    <div class="ref-section-title">Intention log</div>
-    <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
+    <div class="ref-section-title">Play <span class="muted" style="font-size:.65rem;">one row per restart or ball won; [ and ] step through events</span></div>
+    <div id="replay-play-list" style="font-size:.72rem; flex:1; min-height:120px; overflow-y:auto;"></div>
+    <details class="raw-log">
+      <summary class="muted">Intention log (raw: every slot change)</summary>
+      <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
+    </details>
   </div>
 </div>
 
