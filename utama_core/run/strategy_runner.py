@@ -79,6 +79,10 @@ from utama_core.team_controller.src.controllers import (
     RSimPVPManager,
     RSimRobotController,
 )
+from utama_core.team_controller.src.controllers.common.robot_profile import (
+    ProfiledRobotController,
+    RobotProfile,
+)
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
@@ -250,6 +254,13 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             is confirmed working.  Robots NOT in this set fall back to vision-proximity inference (~0.13 m).
             Pass ``None`` (default) to trust all IR sensors — remove this argument once sensors are stable.
         blue_trusted_ir_robots (FrozenSet[int], optional): Same as ``yellow_trusted_ir_robots`` for the blue team.
+        yellow_robot_profiles (dict[int, RobotProfile], optional): What each yellow robot has working (kicker,
+            dribbler, ball sensor), keyed by the ID the strategy commands (the vision ID on real robots). A robot
+            without a kicker pushes the ball instead of kicking it, see `ProfiledRobotController`; one without a
+            ball sensor has ``has_ball`` judged from vision (so not with ``yellow_trusted_ir_robots`` too).
+            Applies in every mode, so a test with broken hardware can be rehearsed in a simulator.
+            ``None``: everything works.
+        blue_robot_profiles (dict[int, RobotProfile], optional): Same as ``yellow_robot_profiles`` for the blue team.
     """
 
     def __init__(
@@ -285,6 +296,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         yellow_trusted_ir_robots: Optional[FrozenSet[int]] = None,
         blue_trusted_ir_robots: Optional[FrozenSet[int]] = None,
+        yellow_robot_profiles: Optional[dict[int, RobotProfile]] = None,
+        blue_robot_profiles: Optional[dict[int, RobotProfile]] = None,
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -341,9 +354,6 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         self.referee_refiner = RefereeRefiner()
 
-        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
-        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
-
         # Set self.opp to a sentinel before mapping validation so _validate_vision_to_cmd_mapping
         # can check whether an opponent strategy is present (full SideRuntime is set later).
         self.opp = opp_strategy  # temporary sentinel; overwritten by _setup_sides_data below
@@ -358,6 +368,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         self.yellow_cmd_to_vision_mapping = {v: k for k, v in self.yellow_vision_to_cmd_mapping.items()}
         self.blue_cmd_to_vision_mapping = {v: k for k, v in self.blue_vision_to_cmd_mapping.items()}
+
+        self.yellow_robot_profiles = yellow_robot_profiles or {}
+        self.blue_robot_profiles = blue_robot_profiles or {}
+        for is_yellow in (True, False):
+            self._check_profiles_are_driven(is_yellow)
+        yellow_trusted_ir_robots = self._trusted_ir(True, yellow_trusted_ir_robots)
+        blue_trusted_ir_robots = self._trusted_ir(False, blue_trusted_ir_robots)
+        my_trusted_ir = yellow_trusted_ir_robots if my_team_is_yellow else blue_trusted_ir_robots
+        opp_trusted_ir = blue_trusted_ir_robots if my_team_is_yellow else yellow_trusted_ir_robots
 
         if self.opp and self.mode == Mode.REAL:
             self._check_no_cmd_duplicate_if_transmission_sharing(
@@ -1094,6 +1113,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         else:
             raise ValueError("mode is invalid. Must be 'rsim', 'grsim' or 'real'")
 
+        my_profiles, opp_profiles = map_colors_to_friendly_enemy(
+            self.my_team_is_yellow, self.yellow_robot_profiles, self.blue_robot_profiles
+        )
+        my_robot_controller = self._with_profiles(my_robot_controller, my_profiles)
         self.my.strategy.load_robot_controller(my_robot_controller)
         self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
         if self.match_log is not None:
@@ -1107,8 +1130,46 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
         if self.opp:
+            opp_robot_controller = self._with_profiles(opp_robot_controller, opp_profiles)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
+
+    def _driven_ids(self, is_yellow: bool) -> set[int]:
+        """The IDs the strategy commands for one colour: the mapped vision IDs on real robots."""
+        if self.mode == Mode.REAL:
+            return set(self.yellow_vision_to_cmd_mapping if is_yellow else self.blue_vision_to_cmd_mapping)
+        n_yellow, n_blue = map_friendly_enemy_to_colors(self.my_team_is_yellow, self.exp_friendly, self.exp_enemy)
+        return set(range(n_yellow if is_yellow else n_blue))
+
+    def _check_profiles_are_driven(self, is_yellow: bool) -> None:
+        """A typo in a profile's ID must stop the run, not leave a broken robot unhandled."""
+        profiles = self.yellow_robot_profiles if is_yellow else self.blue_robot_profiles
+        driven = self._driven_ids(is_yellow)
+        unknown = set(profiles) - driven
+        if unknown:
+            colour = "yellow" if is_yellow else "blue"
+            raise ValueError(
+                f"Robot profiles for {colour} robots that are not driven: {sorted(unknown)} (driven: {sorted(driven)})"
+            )
+
+    def _trusted_ir(self, is_yellow: bool, trusted_ir_robots: Optional[FrozenSet[int]]) -> Optional[FrozenSet[int]]:
+        """The robots whose ball sensor is trusted: from the profiles, or as passed (not both)."""
+        profiles = self.yellow_robot_profiles if is_yellow else self.blue_robot_profiles
+        broken = {rid for rid, p in profiles.items() if not p.ir}
+        if not broken:
+            return trusted_ir_robots
+        if trusted_ir_robots is not None:
+            colour = "yellow" if is_yellow else "blue"
+            raise ValueError(
+                f"Give the {colour} ball sensors in robot profiles or {colour}_trusted_ir_robots, not both"
+            )
+        return frozenset(self._driven_ids(is_yellow) - broken)
+
+    def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
+        """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""
+        if all(p.kicker and p.dribbler for p in profiles.values()):
+            return controller
+        return ProfiledRobotController(controller, profiles)
 
     def _init_refiners(
         self,

@@ -136,8 +136,10 @@ entry by its title, not its number.
       firmware command ID, real mode only) is the robot roster. It is validated (one entry
       per expected robot, integers, no command ID used by both teams on a shared transmitter,
       every observed vision ID covered: `game_gater.py`) and filters vision to those IDs.
-      `*_trusted_ir_robots` (robots whose ball sensor is trusted, the rest infer possession
-      from vision) is the only per-robot capability today. There is no checked-in roster
+      `{yellow,blue}_robot_profiles` (`RobotProfile`: kicker, dribbler, ball sensor working
+      or not, 2026-10-21) say what each robot can do; a robot without a kicker pushes the
+      ball, one without a dribbler carries it slowly, one without a ball sensor infers
+      possession from vision (`robot_profile.py`). These are on/off, not measured. There is no checked-in roster
       file: whoever writes the run script passes the mapping. The command ID is fixed in the
       robot's firmware, so it is the key a profile would use.
     - *What can differ per robot:* driving (top speed, acceleration and braking, turning,
