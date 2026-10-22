@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from functools import partial
@@ -6,7 +7,11 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from utama_core.config.field_params import FieldDimensions
-from utama_core.config.settings import BALL_MERGE_THRESHOLD, VISION_BOUNDS_BUFFER
+from utama_core.config.settings import (
+    BALL_MERGE_THRESHOLD,
+    CAMERA_AGREEMENT,
+    VISION_BOUNDS_BUFFER,
+)
 from utama_core.data_processing.refiners.base_refiner import BaseRefiner
 from utama_core.data_processing.refiners.filters.kalman import (
     KalmanFilter,
@@ -383,6 +388,14 @@ class PositionRefiner(BaseRefiner):
 
 
 class CameraCombiner:
+    """Merges the cameras' latest frames into one. A robot seen by several cameras is placed at
+    the average of their detections, each weighted by how steeply its camera looks at the robot
+    when ssl-vision sends where the cameras are: a camera's error on the floor grows as
+    1/cos^2 of its view angle (a pixel covers more floor, a wrong robot height shifts the robot
+    more), so the weight is cos^4. A detection further than `CAMERA_AGREEMENT` from the
+    best-placed camera's is dropped, so a camera that disagrees (a poor calibration far from it)
+    does not pull the robot away. Without camera positions every camera counts the same."""
+
     def combine_cameras(
         self,
         frames: List[RawVisionData],
@@ -399,7 +412,7 @@ class CameraCombiner:
         """
 
         ts = []
-        # maps robot id to list of frames seen for that robot
+        # maps robot id to the (detection, its camera's position) of every camera that saw it
         yellow_captured = defaultdict(list)
         blue_captured = defaultdict(list)
         balls_captured = defaultdict(list)
@@ -408,11 +421,11 @@ class CameraCombiner:
         for frame_ind, frame in enumerate(frames):
             for yr in frame.yellow_robots:
                 if self._bounds_check(yr.x, yr.y, bounds):
-                    yellow_captured[yr.id].append(yr)
+                    yellow_captured[yr.id].append((yr, frame.camera_position))
 
             for br in frame.blue_robots:
                 if self._bounds_check(br.x, br.y, bounds):
-                    blue_captured[br.id].append(br)
+                    blue_captured[br.id].append((br, frame.camera_position))
 
             for b in frame.balls:
                 if self._bounds_check(b.x, b.y, bounds):
@@ -426,28 +439,35 @@ class CameraCombiner:
 
         return VisionData(sum(ts) / len(ts), avg_yellows, avg_blues, balls)
 
-    def _avg_robots(self, rs: List[RawRobotData]) -> Optional[VisionRobotData]:
+    @staticmethod
+    def _view_weight(x: float, y: float, camera: Optional[Tuple[float, float, float]]) -> float:
+        """cos^4 of the angle from the vertical at which `camera` sees (`x`, `y`); 1 when unknown."""
+        if camera is None:
+            return 1.0
+        cx, cy, height = camera
+        h2 = height * height
+        return (h2 / (h2 + (x - cx) ** 2 + (y - cy) ** 2)) ** 2
+
+    def _avg_robots(self, seen: List[Tuple[RawRobotData, Optional[Tuple[float, float, float]]]]) -> VisionRobotData:
         # All these robots should have the same id
-        if not rs:
-            return None
+        rs = [r for r, _ in seen]
         base_id = rs[0].id
-        tx, ty, tc = 0, 0, 0
+        assert all(r.id == base_id for r in rs)
+        if all(camera is not None for _, camera in seen):
+            weights = [self._view_weight(r.x, r.y, camera) for r, camera in seen]
+            best = rs[int(np.argmax(weights))]
+            kept = [(r, w) for r, w in zip(rs, weights) if math.hypot(r.x - best.x, r.y - best.y) <= CAMERA_AGREEMENT]
+        else:
+            kept = [(r, 1.0) for r in rs]
 
-        sum_orientation_x_component = 0.0
-        sum_orientation_y_component = 0.0
-        for r in rs:
-            assert base_id == r.id
-            tx += r.x
-            ty += r.y
-            sum_orientation_x_component += np.cos(r.orientation)
-            sum_orientation_y_component += np.sin(r.orientation)
-            tc += r.confidence
-
-        avg_orientation_x = sum_orientation_x_component / len(rs)
-        avg_orientation_y = sum_orientation_y_component / len(rs)
-        avg_orientation = np.atan2(avg_orientation_y, avg_orientation_x)
-
-        return VisionRobotData(base_id, tx / len(rs), ty / len(rs), avg_orientation)
+        total = sum(w for _, w in kept)
+        x = sum(r.x * w for r, w in kept) / total
+        y = sum(r.y * w for r, w in kept) / total
+        avg_orientation = math.atan2(
+            sum(math.sin(r.orientation) * w for r, w in kept),
+            sum(math.cos(r.orientation) * w for r, w in kept),
+        )
+        return VisionRobotData(base_id, x, y, avg_orientation)
 
     def _combine_balls_by_proximity(self, bs: Dict[int, List[RawBallData]]) -> List[VisionBallData]:
         combined_balls: List[VisionBallData] = []

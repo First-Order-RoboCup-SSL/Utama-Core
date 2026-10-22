@@ -46,6 +46,8 @@ FPS_PRINT_INTERVAL = 1.0  # seconds
 
 ### Refiners ###
 BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
+# CameraCombiner: a robot's detection further than this from the best-placed camera's is dropped (m)
+CAMERA_AGREEMENT = 0.1
 VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
 # An unseen ball is assumed to roll on at this deceleration (m/s^2): official Div B logs, 1 s or
 # more after a kick (docs/sim_realism.md). A field's own value comes from its free-rolling balls.

@@ -146,3 +146,33 @@ def test_geometry_only_packet_adds_no_frame():
     assert v._handle_packet(SSL_WrapperPacket(), with_detection.SerializeToString())
     assert len(buffers[0]) == 0
     assert buffers[1][0].ts == 5.0
+
+
+def test_a_cameras_position_from_geometry_rides_on_its_frames():
+    # CameraCombiner weights each camera by how steeply it sees a robot: it needs where ssl-vision
+    # calibrated each camera to be, which only the geometry packets carry.
+    buffers = [deque(maxlen=1) for _ in range(2)]
+    v = VisionReceiver(buffers)
+    geometry = SSL_WrapperPacket()
+    field = geometry.geometry.field
+    field.field_length, field.field_width, field.goal_width, field.goal_depth, field.boundary_width = (
+        3000,
+        2250,
+        800,
+        180,
+        300,
+    )
+    calib = geometry.geometry.calib.add()
+    calib.camera_id, calib.focal_length, calib.principal_point_x, calib.principal_point_y = 0, 700, 640, 480
+    calib.distortion, calib.q0, calib.q1, calib.q2, calib.q3, calib.tx, calib.ty, calib.tz = (0,) * 8
+    calib.derived_camera_world_tx, calib.derived_camera_world_ty, calib.derived_camera_world_tz = -1728, -57, 2078
+    assert v._handle_packet(SSL_WrapperPacket(), geometry.SerializeToString())
+
+    for camera_id in (0, 1):
+        packet = SSL_WrapperPacket()
+        d = packet.detection
+        d.camera_id, d.t_capture, d.t_sent, d.frame_number = camera_id, 1.0, 1.0, 1
+        assert v._handle_packet(SSL_WrapperPacket(), packet.SerializeToString())
+
+    assert buffers[0][0].camera_position == (-1.728, -0.057, 2.078)
+    assert buffers[1][0].camera_position is None  # camera 1 sent no calibration

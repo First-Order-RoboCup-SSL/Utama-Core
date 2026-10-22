@@ -159,3 +159,50 @@ if __name__ == "__main__":
     test_combine_with_both_camera_empty_gives_empty()
     test_combine_proximity_multiple_balls()
     test_combine_filters_low_confidence()
+
+
+# Two cameras over the whole lab field, each behind one goal (as on 2026-10-22).
+CAMERA_LEFT, CAMERA_RIGHT = (-1.73, 0.0, 2.08), (1.73, 0.0, 2.08)
+
+
+def _robot_seen_at(left_xy, right_xy, left=CAMERA_LEFT, right=CAMERA_RIGHT):
+    frames = [
+        RawVisionData(0, [RawRobotData(2, *left_xy, 0, 1)], [], [], 0, left),
+        RawVisionData(0, [RawRobotData(2, *right_xy, 0, 1)], [], [], 1, right),
+    ]
+    return CameraCombiner().combine_cameras(frames, infinite_bounds).yellow_robots[0]
+
+
+def test_cameras_that_disagree_give_the_robot_where_the_steeper_camera_sees_it():
+    # The 2026-10-22 test: at x = 0.8 the camera behind the far goal put a robot 17 cm from where
+    # the camera above that end did, and the average left it 9 cm off both, jumping 9 cm whenever
+    # a camera missed a frame. Beyond CAMERA_AGREEMENT (0.1 m) only the steeper camera counts.
+    robot = _robot_seen_at((0.80, 0.07), (0.97, 0.13))
+    assert math.isclose(robot.x, 0.97) and math.isclose(robot.y, 0.13)
+
+    robot = _robot_seen_at((0.80, 0.07), (0.889, 0.07))  # 8.9 cm apart: both count
+    assert 0.80 < robot.x < 0.889
+
+
+def test_cameras_that_agree_are_weighted_towards_the_steeper_one():
+    robot = _robot_seen_at((0.80, 0.0), (0.86, 0.0))
+    assert robot.x > 0.83  # past the plain average, towards the camera above that end
+
+    robot = _robot_seen_at((-0.03, 0.0), (0.03, 0.0))  # halfway between the cameras: equal weight
+    assert math.isclose(robot.x, 0.0, abs_tol=1e-12)
+
+
+def test_without_camera_positions_every_camera_counts_the_same():
+    robot = _robot_seen_at((0.80, 0.0), (0.97, 0.0), left=None, right=None)
+    assert math.isclose(robot.x, 0.885)
+    robot = _robot_seen_at((0.80, 0.0), (0.97, 0.0), right=None)  # one camera unknown: no weighting
+    assert math.isclose(robot.x, 0.885)
+
+
+def test_robot_orientation_is_the_weighted_circular_mean():
+    frames = [
+        RawVisionData(0, [RawRobotData(2, 0.0, 0.0, math.pi - 0.1, 1)], [], [], 0, CAMERA_LEFT),
+        RawVisionData(0, [RawRobotData(2, 0.0, 0.0, -math.pi + 0.1, 1)], [], [], 1, CAMERA_RIGHT),
+    ]
+    robot = CameraCombiner().combine_cameras(frames, infinite_bounds).yellow_robots[0]
+    assert math.isclose(abs(robot.orientation), math.pi)
