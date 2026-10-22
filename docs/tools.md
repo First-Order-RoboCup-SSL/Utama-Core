@@ -16,7 +16,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `build-planner` | build the C++ fast-path planner (`utama_core/motion_planning/src/fastpathplanning/cpp`) into `build/fpp` with cmake |
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
-| `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio |
+| `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [real_robot_setup.md](real_robot_setup.md)) |
 
 ## Worktrees
 
@@ -113,6 +113,8 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
 | `examples/real_attacker_defender.py` | One attacker against one defender on real robots (or `--mode rsim`/`grsim`): field, camera half, IDs and each robot's working hardware in one config block; the Live tab's field check gates the start. Records every camera run as an SSL game log in `replays/field/`; `--calibrate attacker\|defender` plays fixed moves for measuring that robot |
+| `tools/vision_check.py` | Does ssl-vision's multicast reach this machine: sender, packets per second per camera, detections and the field size, in 5 s with no radio or runner. The first check of a test day ([real_robot_setup.md](real_robot_setup.md)) |
+| `tools/ssl-vision-lab-field.patch` | Not a script: adds a **Lab Field** preset (our 3 m x 2.25 m field, two cameras) to an ssl-vision checkout; `git apply` it there and rebuild |
 | `tools/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/convert_ssl_log.py` |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
 | `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |
