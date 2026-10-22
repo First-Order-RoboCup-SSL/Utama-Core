@@ -21,7 +21,7 @@ ladder with no strategies named plays these.
 | Strategy | Description |
 |---|---|
 | `split_shape` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
-| `flat_rule` | The OpenJev flat engine's scripted rule (`tactics/flat.py`, `docs/openjev.md`): one tactic gives each robot an action from its menu at 1 Hz and when play changes; the carrier shoots unless blocked, else passes or dribbles; without the ball two chase, two block, one outlet (three chase in our third); with it three forward, one back; own free-kick formations. |
+| `flat_rule` | The OpenJev flat engine's scripted rule (`tactics/flat.py`, `docs/openjev.md`): one tactic gives each robot an action from its menu at 1 Hz and when play changes; the carrier shoots unless blocked, else passes or dribbles; without the ball two chase, two block, one outlet (three chase in our third); with it three forward, one back; own free-kick formations, and its own keeper, waiting off its line on the bisector of the goal's angle. |
 | `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
 | `counter_flow` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
 | `score_aware_counter_flow` | `counter_flow` plus a late-half scoreline shift (protect a lead / chase). |
@@ -56,31 +56,31 @@ against the round-robin's top.
 
 ## Latest results
 
-**Round-robin** (2026-10-19, `jev-engine` at 64a0eed8 plus `flat_rule`, the 13 strategies above, 78
-matches, two halves of 300 s of playing time, `replays/tournament_20261019_121857/summary.json`). Points
-are 3 a win, 1 a draw; 14 of 78 matches were draws. 5 matches stalled, none of them `flat_rule`'s
-(`--strict` fails the run): three restarts with no taker for STOP and two frozen commitments, all
-between strategies that ran without a stall on 2026-10-10; 98% of 2241 restarts reached NORMAL_START.
+**Round-robin** (2026-10-22, `jev-engine` at 2265a8ac, the 13 strategies above, 78 matches, two halves
+of 300 s of playing time, `replays/tournament_20261022_103108/summary.json`). Points are 3 a win, 1 a
+draw; 14 of 78 matches were draws. With `--reuse`, only `flat_rule`'s 12 matches were played again (its
+own keeper, `FlatKeeperTactic`); the other 66 are the 2026-10-19 run's, 3 of them replayed as a
+spot-check without a mismatch. 5 matches stalled, none of them `flat_rule`'s (`--strict` fails the run):
+the 2026-10-19 run's three restarts with no taker for STOP and two frozen commitments.
 
-Against the 2026-10-10 run: `flat_rule` joins, and the code has since taken in v2.1.0-v2.2.0 (planner
-and sim speed-ups, referee fixes). `split_shape` and `flat_rule` both won 11 of 12: `flat_rule` beat
-`split_shape` 4-3, its only loss, and lost only to `counter_flow`, 2-3.
+Against the 2026-10-19 run: `flat_rule` won all 12, conceding 7 goals where it conceded 20. It beat
+`counter_flow` 3-0, its only loss before (2-3), and `split_shape` 5-3.
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 11-0-1 | 79-18 | 2.75 |
-| `flat_rule` | 11-0-1 | 64-20 | 2.75 |
-| `give_and_go_solo` | 6-3-3 | 37-34 | 1.75 |
-| `counter_flow` | 5-4-3 | 22-21 | 1.58 |
-| `score_aware_counter_flow` | 5-3-4 | 18-20 | 1.50 |
-| `overload_press` | 6-0-6 | 31-34 | 1.50 |
-| `tiki_taka_plus` | 5-1-6 | 30-40 | 1.33 |
-| `high_press` | 3-3-6 | 16-28 | 1.00 |
-| `clear_danger` | 3-3-6 | 23-36 | 1.00 |
-| `decoy_and_overload` | 3-2-7 | 20-35 | 0.92 |
-| `press_and_pass` | 3-2-7 | 16-34 | 0.92 |
-| `press_trigger_flow` | 2-4-6 | 16-35 | 0.83 |
-| `clear_press_plus` | 1-3-8 | 13-30 | 0.50 |
+| `flat_rule` | 12-0-0 | 59-7 | 3.00 |
+| `split_shape` | 11-0-1 | 79-19 | 2.75 |
+| `give_and_go_solo` | 6-3-3 | 33-32 | 1.75 |
+| `score_aware_counter_flow` | 5-3-4 | 18-22 | 1.50 |
+| `overload_press` | 6-0-6 | 29-38 | 1.50 |
+| `counter_flow` | 4-4-4 | 19-22 | 1.33 |
+| `tiki_taka_plus` | 5-1-6 | 30-36 | 1.33 |
+| `high_press` | 3-3-6 | 16-27 | 1.00 |
+| `clear_danger` | 3-3-6 | 22-39 | 1.00 |
+| `decoy_and_overload` | 3-2-7 | 18-30 | 0.92 |
+| `press_and_pass` | 3-2-7 | 14-29 | 0.92 |
+| `press_trigger_flow` | 2-4-6 | 17-33 | 0.83 |
+| `clear_press_plus` | 1-3-8 | 13-33 | 0.50 |
 
 ## Known open bugs
 
