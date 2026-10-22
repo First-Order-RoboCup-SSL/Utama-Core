@@ -41,6 +41,22 @@ with everything outside `field_bounds` dimmed, so a half-field test shows which 
 expects. Space halts; nothing on the keyboard starts the robots. The Kickoff and Free Kick
 buttons are hidden when the profile has no rule that sets up a restart (goal detection only).
 
+## Strategy panel
+
+A script can let the page change what each side plays, or restart it, without restarting the
+run (`utama_core/dashboard/views/strategy.py`):
+
+```python
+strategy_view.attach(server, runner,
+    choices={"my": {"lead": make_lead, "press": make_press}},  # name -> builds a fresh AbstractStrategy
+    running={"my": "lead"})
+```
+
+The Live tab then lists the choices per side with a Run button; Run on the one running restarts
+it. `StrategyRunner.replace_strategy` takes the new strategy at the next tick and only while
+halted, so the page refuses otherwise. `examples/real_attacker_defender.py` offers its attacker
+and defender tactics this way.
+
 ## Commands and what robots do
 
 | Button | Command | Use | Robots |
