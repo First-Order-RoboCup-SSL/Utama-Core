@@ -16,6 +16,8 @@ What it does:
     each robot plays, and whether the referee's rules are on.
   - Nothing advances on its own: play only starts and stops from the dashboard. Real
     mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting.
+  - To change what a robot plays, or restart it, Halt and use the Live tab's Strategy panel
+    (Run on the one running restarts it); no need to restart the script.
 
 On the dashboard's Live tab, the field check must be all green or amber before Force Start:
 a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
@@ -71,6 +73,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
 )
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
+from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
@@ -161,6 +164,14 @@ def _field_bounds(field: FieldDimensions, half: str) -> FieldBounds:
     raise ValueError(f"CAMERA_HALF must be 'left', 'right' or 'full', got {half!r}")
 
 
+def _play_or_hold(game, free_robots, prev_partition, available_tactic_ids) -> dict:
+    """The robot plays its tactic; while that does not apply (press: no opponent near the ball),
+    it holds the shot line instead of the kernel rejecting the pick."""
+    if not free_robots:
+        return {}
+    return {("play" if "play" in available_tactic_ids else "hold"): free_robots}
+
+
 def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     """`robot_id` plays `tactic_cls`, or keeps goal when `tactic_cls` is None."""
     outfield = () if tactic_cls is None else (robot_id,)
@@ -168,8 +179,8 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     def _build(motion_controller) -> KernelSchedulerStrategy:
         # A Strategy needs one registered tactic even with no outfield robot to run it.
         return KernelSchedulerStrategy(
-            tactics={"play": (tactic_cls or DefenseTactic)()},
-            partitioner=KernelSchedulerStrategy.single_tactic_picker(lambda game, active: "play"),
+            tactics={"play": (tactic_cls or DefenseTactic)(), "hold": DefenseTactic()},
+            partitioner=_play_or_hold,
             outfield_robot_ids=outfield,
             ctx=TickContext(motion_controller=motion_controller),
         )
@@ -249,7 +260,7 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
     )
     if game_log:
         print(f"Recording to {game_log}")
-    return StrategyRunner(
+    runner = StrategyRunner(
         game_log_path=game_log,
         strategy=_one_robot_strategy(attacker_id, attacker_tactic),
         opp_strategy=_one_robot_strategy(defender_id, defender_tactic),
@@ -268,6 +279,18 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
         yellow_robot_profiles=attacker_profiles if attacker_is_yellow else defender_profiles,
         blue_robot_profiles=defender_profiles if attacker_is_yellow else attacker_profiles,
     )
+    if calibrate is None:
+        # The Live tab's Strategy panel: change either robot's tactic, or restart it, while halted.
+        strategy_view.attach(
+            server,
+            runner,
+            choices={
+                "my": {n: (lambda t=t: _one_robot_strategy(attacker_id, t)) for n, t in ATTACKER_TACTICS.items()},
+                "opp": {n: (lambda t=t: _one_robot_strategy(defender_id, t)) for n, t in DEFENDER_TACTICS.items()},
+            },
+            running={"my": ATTACKER_TACTIC, "opp": DEFENDER_TACTIC},
+        )
+    return runner
 
 
 def main() -> None:

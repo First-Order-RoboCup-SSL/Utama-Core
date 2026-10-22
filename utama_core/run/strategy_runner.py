@@ -431,6 +431,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.field_check = self._make_field_check()
         self._field_check_rows: list[dict] = []
         self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
+        self._pending_strategies: dict[str, AbstractStrategy] = {}  # side -> its replacement, see replace_strategy
 
         ### functions below rely on self.my and self.opp ###
 
@@ -955,6 +956,47 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             driven["blue" if self.my_team_is_yellow else "yellow"] = ()
         expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
         return FieldCheck(expected, self.field_bounds, self.full_field_dims)
+
+    def replace_strategy(self, side: str, strategy: AbstractStrategy) -> None:
+        """Run `strategy` for `side` ("my" or "opp") from the next tick, in place of the one
+        running: a different one, or a fresh copy of the same to restart it. Vision, the radio and
+        the dashboard carry on. Only while HALTed, so no robot is mid-move when its strategy
+        changes: raises ValueError otherwise (the dashboard shows it). Safe from any thread."""
+        runtime = self.my if side == "my" else self.opp if side == "opp" else None
+        if runtime is None:
+            raise ValueError(f"no {side!r} side in this run")
+        if not self._halted(runtime):
+            raise ValueError("press Halt first: a strategy is only changed while halted")
+        if strategy.control_scheme not in (None, runtime.control_scheme):
+            raise ValueError(
+                f"needs control scheme {strategy.control_scheme!r}, this run uses {runtime.control_scheme!r}"
+            )
+        self._pending_strategies[side] = strategy
+
+    @staticmethod
+    def _halted(runtime: SideRuntime) -> bool:
+        referee = runtime.game.referee if runtime.game is not None else None
+        return referee is not None and referee.referee_command == RefereeCommand.HALT
+
+    def _swap_in_pending_strategy(self, runtime: SideRuntime, side: str) -> None:
+        """Called on the control loop, just before `runtime`'s strategy steps."""
+        new = self._pending_strategies.pop(side, None)
+        if new is None:
+            return
+        if not self._halted(runtime):  # play restarted between the request and this tick
+            self.logger.warning("Strategy change for %s dropped: no longer halted", side)
+            return
+        old = runtime.strategy
+        if old.rsim_env is not None:
+            new.load_rsim_env(old.rsim_env)
+        new.load_robot_controller(old.robot_controller)
+        new.load_motion_controller(old.motion_controller)
+        new.load_game(old.game)
+        kernel_strategy = getattr(new, "_kernel_strategy", None)
+        if side == "my" and self.match_log is not None and kernel_strategy is not None:
+            kernel_strategy.match_log = self.match_log
+        runtime.strategy = new
+        self.logger.info("Strategy for %s replaced", side)
 
     def _tick_field_check(self, vision_frames: List[Optional[RawVisionData]], now: float) -> None:
         """Judge the field against the setup; on real robots, HALT while any check fails.
@@ -1989,4 +2031,5 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         side.game.add_game_frame(new_game_frame)
         if not running_opp and self.match_stats is not None:
             self.match_stats.record_tick(new_game_frame, committed_tactics=self._committed_tactics())
+        self._swap_in_pending_strategy(side, "opp" if running_opp else "my")
         side.strategy.step()
