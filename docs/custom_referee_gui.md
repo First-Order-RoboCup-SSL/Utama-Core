@@ -33,6 +33,12 @@ With vision from a camera (real robots or grSim) the Live tab also shows the fie
 | `<colour> <id>` (any other) | | seen inside `field_bounds` but not configured: our planners cannot see it, often a wrong ID |
 | Ball | | not seen, or outside `field_bounds` |
 
+Before it gets that far, the runner keeps our robots inside `field_bounds` on camera runs
+(`utama_core/run/field_fence.py`): each robot's speed towards an edge is capped to what it can
+stop from before the line, whatever tactic sent the command, so a robot chasing a ball out of the
+camera's area stops at the line. The planners' walls at `field_bounds` are only obstacles to plan
+around, and did not stop it (0.5–0.9 m out in grSim before the fence).
+
 Only the red and amber rows are listed; the green ones fold into an "N ok" line that opens on
 click. On real robots any red row forces `HALT`, whatever the command and whether or not the page is
 open; the red banner says why. Pressing Force Start while a row is red halts again at once, so

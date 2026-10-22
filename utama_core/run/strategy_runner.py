@@ -56,6 +56,7 @@ from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNo
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.field_check import FieldCheck
+from utama_core.run.field_fence import FencedRobotController
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.side_runtime import SideRuntime, _mirrored, _turned
@@ -1193,7 +1194,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         my_profiles, opp_profiles = map_colors_to_friendly_enemy(
             self.my_team_is_yellow, self.yellow_robot_profiles, self.blue_robot_profiles
         )
-        my_robot_controller = self._with_profiles(my_robot_controller, my_profiles)
+        my_robot_controller = self._fenced(self._with_profiles(my_robot_controller, my_profiles), lambda: self.my.game)
         self.my.strategy.load_robot_controller(my_robot_controller)
         self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
         if self.match_log is not None:
@@ -1207,7 +1208,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
         if self.opp:
-            opp_robot_controller = self._with_profiles(opp_robot_controller, opp_profiles)
+            opp_robot_controller = self._fenced(
+                self._with_profiles(opp_robot_controller, opp_profiles), lambda: self.opp.game
+            )
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
 
@@ -1241,6 +1244,13 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 f"Give the {colour} ball sensors in robot profiles or {colour}_trusted_ir_robots, not both"
             )
         return frozenset(self._driven_ids(is_yellow) - broken)
+
+    def _fenced(self, controller, game):
+        """`controller`, its robots kept inside `field_bounds` when vision comes from a camera
+        (grSim or real): outside it nothing sees them (`field_fence.py`)."""
+        if self.mode == Mode.RSIM:
+            return controller
+        return FencedRobotController(controller, self.field_bounds, game)
 
     def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
         """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""
