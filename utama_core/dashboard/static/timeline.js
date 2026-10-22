@@ -56,6 +56,43 @@
     return "other";
   }
 
+  // The commands the referee's match clock runs under (referee_command.py's CLOCK_RUNS): it stops in
+  // STOP, HALT, kickoff and penalty preparation and ball placement, so a 10 min match takes longer.
+  const CLOCK_RUNS = new Set([
+    "NORMAL_START",
+    "FORCE_START",
+    "DIRECT_FREE_YELLOW",
+    "DIRECT_FREE_BLUE",
+    "INDIRECT_FREE_YELLOW",
+    "INDIRECT_FREE_BLUE",
+  ]);
+
+  // The match clock from the referee's change rows [{sim_time, command, stage}], as the referee
+  // keeps it (state_machine.py's `_stage_played`): a function of time giving the stage and its
+  // playing time so far, or null before the first row.
+  function matchClock(referee) {
+    const played = [];
+    let total = 0;
+    for (let i = 0; i < referee.length; i++) {
+      const prev = referee[i - 1];
+      if (prev && CLOCK_RUNS.has(prev.command)) total += referee[i].sim_time - prev.sim_time;
+      if (prev && referee[i].stage !== prev.stage) total = 0;
+      played.push(total);
+    }
+    return (t) => {
+      let lo = 0;
+      let hi = referee.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (referee[mid].sim_time <= t) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo === 0) return null;
+      const e = referee[lo - 1];
+      return { stage: e.stage, played: played[lo - 1] + (CLOCK_RUNS.has(e.command) ? t - e.sim_time : 0) };
+    };
+  }
+
   // Spans [{t0, t1, label, text}] tiling [start, end] from change points [[t, label, text]],
   // merging repeats (a merged span keeps its first text).
   function spansFrom(changes, start, end) {
@@ -278,10 +315,20 @@
         team: this._teams(myTeamIsYellow),
       };
       robotIds.forEach((id, i) => (this.data.robotColour[id] = SLOTS[i % SLOTS.length]));
-      this.legend.innerHTML = ranked
-        .map((name) => `<span><i style="background:${colours[name]}"></i>${short(name)}</span>`)
-        .join("");
+      this.legend.innerHTML =
+        this._refKey(this.data.referee) +
+        ranked.map((name) => `<span><i style="background:${colours[name]}"></i>${short(name)}</span>`).join("");
       this.draw(start);
+    }
+
+    // The referee band's colours, for the groups this match has: a short STOP or placement is
+    // too narrow to carry its name.
+    _refKey(spans) {
+      const groups = new Set(spans.map((s) => s.label));
+      const present = Object.keys(REF_FILL).filter((g) => groups.has(g));
+      if (!present.length) return "";
+      const keys = present.map((g) => `<span><i style="background:${REF_FILL[g]}"></i>${g}</span>`).join("");
+      return `<span class="muted">ref</span>${keys}<span class="muted">tactics</span>`;
     }
 
     _teams(myTeamIsYellow) {
@@ -470,7 +517,7 @@
         y + 2,
         BALL_H - 3,
         (s) => d.team[s.label] || OTHER,
-        (s) => (s.kind && s.kind !== "ball won" ? s.kind : null)
+        (s) => (s.kind && s.kind !== "ball won" ? "from " + s.kind : null)
       );
       y += BALL_H + GAP;
 
@@ -563,6 +610,6 @@
     }
   }
 
-  if (typeof window !== "undefined") window.Timeline = Timeline;
-  if (typeof module !== "undefined") module.exports = { refGroup, spansFrom, tacticChanges };
+  if (typeof window !== "undefined") Object.assign(window, { Timeline, matchClock });
+  if (typeof module !== "undefined") module.exports = { refGroup, spansFrom, tacticChanges, matchClock };
 })();
