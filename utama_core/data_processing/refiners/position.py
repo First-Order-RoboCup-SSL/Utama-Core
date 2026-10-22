@@ -9,6 +9,7 @@ import numpy as np
 from utama_core.config.field_params import FieldDimensions
 from utama_core.config.settings import (
     BALL_MERGE_THRESHOLD,
+    BALL_ROBOT_SHIFT_RANGE,
     CAMERA_AGREEMENT,
     VISION_BOUNDS_BUFFER,
 )
@@ -394,7 +395,13 @@ class CameraCombiner:
     1/cos^2 of its view angle (a pixel covers more floor, a wrong robot height shifts the robot
     more), so the weight is cos^4. A detection further than `CAMERA_AGREEMENT` from the
     best-placed camera's is dropped, so a camera that disagrees (a poor calibration far from it)
-    does not pull the robot away. Without camera positions every camera counts the same."""
+    does not pull the robot away. Without camera positions every camera counts the same. A ball
+    is fused by the same rule, its detections grouped by being within `BALL_MERGE_THRESHOLD`
+    of each other: fused one way and the robots another, a ball at a robot's dribbler came out
+    inside the robot (2026-10-22). Each camera's ball is first moved by that camera's offset at
+    the nearest robot it also sees (within `BALL_ROBOT_SHIFT_RANGE`): the fused robot minus its
+    own detection of it. So a ball seen by one camera only (the robot hides it from the other)
+    stays where that camera put it relative to the robot."""
 
     def combine_cameras(
         self,
@@ -415,10 +422,10 @@ class CameraCombiner:
         # maps robot id to the (detection, its camera's position) of every camera that saw it
         yellow_captured = defaultdict(list)
         blue_captured = defaultdict(list)
-        balls_captured = defaultdict(list)
+        balls_captured = []  # (detection, its camera's position, ids of that frame's robot objects)
 
         # Each frame is from a different camera
-        for frame_ind, frame in enumerate(frames):
+        for frame in frames:
             for yr in frame.yellow_robots:
                 if self._bounds_check(yr.x, yr.y, bounds):
                     yellow_captured[yr.id].append((yr, frame.camera_position))
@@ -429,13 +436,28 @@ class CameraCombiner:
 
             for b in frame.balls:
                 if self._bounds_check(b.x, b.y, bounds):
-                    balls_captured[frame_ind].append(b)
+                    frame_robots = {id(r) for r in frame.yellow_robots + frame.blue_robots}
+                    balls_captured.append((b, frame.camera_position, frame_robots))
             ts.append(frame.ts)
 
         avg_yellows = list(map(self._avg_robots, yellow_captured.values()))
         avg_blues = list(map(self._avg_robots, blue_captured.values()))
-        # Current strategy is just to take the most confident ball
-        balls = self._combine_balls_by_proximity(balls_captured)
+
+        # Each ball in the fused robots' frame: shifted by its camera's offset at its nearest robot.
+        fused = [
+            (r, fused_r)
+            for captured, avg in ((yellow_captured, avg_yellows), (blue_captured, avg_blues))
+            for seen, fused_r in zip(captured.values(), avg)
+            for r, _ in seen
+        ]
+        shifted = []
+        for b, camera, frame_robots in balls_captured:
+            near = [(r, f) for r, f in fused if id(r) in frame_robots]
+            r, f = min(near, key=lambda rf: math.hypot(rf[0].x - b.x, rf[0].y - b.y), default=(None, None))
+            if r is not None and math.hypot(r.x - b.x, r.y - b.y) <= BALL_ROBOT_SHIFT_RANGE:
+                b = RawBallData(b.x + f.x - r.x, b.y + f.y - r.y, b.z, b.confidence)
+            shifted.append((b, camera))
+        balls = self._combine_balls_by_proximity(shifted)
 
         return VisionData(sum(ts) / len(ts), avg_yellows, avg_blues, balls)
 
@@ -448,18 +470,23 @@ class CameraCombiner:
         h2 = height * height
         return (h2 / (h2 + (x - cx) ** 2 + (y - cy) ** 2)) ** 2
 
+    def _fuse(self, seen: list) -> list:
+        """(detection, weight) of the detections of one thing, `seen` as (detection, camera
+        position): those within `CAMERA_AGREEMENT` of the best-placed camera's, weighted by view
+        angle; every detection at weight 1 when a camera's position is unknown."""
+        if any(camera is None for _, camera in seen):
+            return [(d, 1.0) for d, _ in seen]
+        weights = [self._view_weight(d.x, d.y, camera) for d, camera in seen]
+        best = seen[int(np.argmax(weights))][0]
+        return [
+            (d, w) for (d, _), w in zip(seen, weights) if math.hypot(d.x - best.x, d.y - best.y) <= CAMERA_AGREEMENT
+        ]
+
     def _avg_robots(self, seen: List[Tuple[RawRobotData, Optional[Tuple[float, float, float]]]]) -> VisionRobotData:
         # All these robots should have the same id
-        rs = [r for r, _ in seen]
-        base_id = rs[0].id
-        assert all(r.id == base_id for r in rs)
-        if all(camera is not None for _, camera in seen):
-            weights = [self._view_weight(r.x, r.y, camera) for r, camera in seen]
-            best = rs[int(np.argmax(weights))]
-            kept = [(r, w) for r, w in zip(rs, weights) if math.hypot(r.x - best.x, r.y - best.y) <= CAMERA_AGREEMENT]
-        else:
-            kept = [(r, 1.0) for r in rs]
-
+        base_id = seen[0][0].id
+        assert all(r.id == base_id for r, _ in seen)
+        kept = self._fuse(seen)
         total = sum(w for _, w in kept)
         x = sum(r.x * w for r, w in kept) / total
         y = sum(r.y * w for r, w in kept) / total
@@ -469,33 +496,30 @@ class CameraCombiner:
         )
         return VisionRobotData(base_id, x, y, avg_orientation)
 
-    def _combine_balls_by_proximity(self, bs: Dict[int, List[RawBallData]]) -> List[VisionBallData]:
-        combined_balls: List[VisionBallData] = []
-        for ball_list in bs.values():
-            for b in ball_list:
-                found = False
-                for i, cb in enumerate(combined_balls):
-                    if CameraCombiner.ball_merge_predicate(b, cb):
-                        found = True
-                        combined_balls[i] = CameraCombiner.ball_merge(cb, b)
-                        break
-
-                if not found:
-                    # If no ball close enough, must have found a new separate ball
-                    combined_balls.append(b)
-        return combined_balls
+    def _combine_balls_by_proximity(self, seen: list) -> List[VisionBallData]:
+        """One ball per group of detections (`seen`: (detection, camera position)) within
+        `BALL_MERGE_THRESHOLD` of the group's first, fused like a robot."""
+        groups: list = []
+        for b, camera in seen:
+            for group in groups:
+                if math.hypot(b.x - group[0][0].x, b.y - group[0][0].y) < BALL_MERGE_THRESHOLD:
+                    group.append((b, camera))
+                    break
+            else:
+                groups.append([(b, camera)])
+        balls = []
+        for group in groups:
+            kept = self._fuse(group)
+            total = sum(w for _, w in kept)
+            balls.append(
+                RawBallData(
+                    sum(b.x * w for b, w in kept) / total,
+                    sum(b.y * w for b, w in kept) / total,
+                    sum(b.z * w for b, w in kept) / total,
+                    max(b.confidence for b, _ in kept),
+                )
+            )
+        return balls
 
     def _bounds_check(self, x: float, y: float, bounds: VisionBounds) -> bool:
         return bounds.x_min <= x <= bounds.x_max and bounds.y_min <= y <= bounds.y_max
-
-    @staticmethod
-    def ball_merge_predicate(b1: RawBallData, b2: RawBallData) -> bool:
-        return abs(b1.x - b2.x) + abs(b1.y - b2.y) < BALL_MERGE_THRESHOLD
-
-    @staticmethod
-    def ball_merge(b1: RawBallData, b2: RawBallData) -> RawBallData:
-        nx = (b1.x + b2.x) / 2
-        ny = (b1.y + b2.y) / 2
-        nz = (b1.z + b2.z) / 2
-        nc = max(b1.confidence, b2.confidence)
-        return RawBallData(nx, ny, nz, nc)

@@ -50,14 +50,16 @@ def test_combine_with_one_camera_empty():
 
 
 def test_combine_proximity_multiple_balls():
-    c = CameraCombiner()
-
-    balls = {
-        0: [RawBallData(0, 0, 0, 1), RawBallData(5, 5, 0, 1)],
-        1: [RawBallData(0.02, 0.03, 0, 1), RawBallData(1, 1, 0, 1)],
-    }
-    balls = c._combine_balls_by_proximity(balls)
-    assert len(balls) == 4
+    # (0, 0) and (0.02, 0.03) are one ball seen by two cameras; the others are balls of their own.
+    seen = [
+        (RawBallData(0, 0, 0, 1), None),
+        (RawBallData(5, 5, 0, 1), None),
+        (RawBallData(0.02, 0.03, 0, 1), None),
+        (RawBallData(1, 1, 0, 1), None),
+    ]
+    balls = CameraCombiner()._combine_balls_by_proximity(seen)
+    assert len(balls) == 3
+    assert (balls[0].x, balls[0].y) == (0.01, 0.015)
 
 
 def test_combine_with_both_camera_empty_gives_empty():
@@ -71,11 +73,12 @@ def test_combine_with_both_camera_empty_gives_empty():
 
 
 def test_combine_filters_low_confidence():
-    balls = {
-        0: [RawBallData(0, 0, 0, 0.05), RawBallData(5, 5, 0, 0.05)],
-        1: [RawBallData(0.02, 0.02, 0, 0.05)],
-    }
-    assert len(CameraCombiner()._combine_balls_by_proximity(balls)) == 2
+    seen = [
+        (RawBallData(0, 0, 0, 0.05), None),
+        (RawBallData(5, 5, 0, 0.05), None),
+        (RawBallData(0.02, 0.02, 0, 0.05), None),
+    ]
+    assert len(CameraCombiner()._combine_balls_by_proximity(seen)) == 2
 
 
 # --- Bounds filtering tests ---
@@ -206,3 +209,37 @@ def test_robot_orientation_is_the_weighted_circular_mean():
     ]
     robot = CameraCombiner().combine_cameras(frames, infinite_bounds).yellow_robots[0]
     assert math.isclose(abs(robot.orientation), math.pi)
+
+
+def test_a_ball_at_the_dribbler_stays_there_when_the_cameras_disagree():
+    # 2026-10-22: the cameras put robot and ball 6 cm apart from each other's view. The robot was
+    # averaged and the ball (beyond the old 5 cm merge) taken from one camera, so the ball came
+    # out 3 cm inside the robot. Fused alike, the ball stays 11 cm ahead of the robot's centre.
+    shift = 0.06
+    frames = [
+        RawVisionData(0, [], [RawRobotData(2, -0.9, 0.4, 0, 1)], [RawBallData(-0.79, 0.4, 0, 0.9)], 0),
+        RawVisionData(0, [], [RawRobotData(2, -0.9 + shift, 0.4, 0, 1)], [RawBallData(-0.79 + shift, 0.4, 0, 0.8)], 1),
+    ]
+    combined = CameraCombiner().combine_cameras(frames, infinite_bounds)
+    assert len(combined.balls) == 1
+    assert math.isclose(combined.balls[0].x - combined.blue_robots[0].x, 0.11)
+
+    frames[0].camera_position, frames[1].camera_position = CAMERA_LEFT, CAMERA_RIGHT  # positions known
+    combined = CameraCombiner().combine_cameras(frames, infinite_bounds)
+    assert len(combined.balls) == 1
+    assert math.isclose(combined.balls[0].x - combined.blue_robots[0].x, 0.11, abs_tol=0.005)
+
+
+def test_a_ball_only_one_camera_sees_keeps_its_place_at_the_dribbler():
+    # 2026-10-22: the robot hid the ball from one camera; the robot was fused from both cameras
+    # (6 cm apart) and the ball came from the other alone, so it sat 3 cm inside the robot.
+    shift = 0.06
+    frames = [
+        RawVisionData(0, [], [RawRobotData(2, -0.9, 0.4, 0, 1)], [RawBallData(-0.79, 0.4, 0, 0.9)], 0),
+        RawVisionData(0, [], [RawRobotData(2, -0.9 + shift, 0.4, 0, 1)], [], 1),
+    ]
+    combined = CameraCombiner().combine_cameras(frames, infinite_bounds)
+    assert math.isclose(combined.balls[0].x - combined.blue_robots[0].x, 0.11)
+
+    far = [RawVisionData(0, [], [RawRobotData(2, -0.9, 0.4, 0, 1)], [RawBallData(0.5, 0.4, 0, 0.9)], 0), frames[1]]
+    assert CameraCombiner().combine_cameras(far, infinite_bounds).balls[0].x == 0.5  # no robot near: unmoved
