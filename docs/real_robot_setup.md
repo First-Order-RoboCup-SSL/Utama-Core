@@ -85,6 +85,14 @@ Expect each camera at about its frame rate and the field at 3000 x 2250 mm. Noth
 means the network or the firewall (steps 3-4 above, step 1 here); one camera missing means its
 capture is not running.
 
+After a calibration, check it against known spots: `tools/vision_check.py --guided ball`, then
+`--guided "blue 2"` (any robot, facing +x). It asks for the ball or robot on the 9 points
+(corners, edge midpoints, centre) and prints each camera's error there; the results land in
+`replays/field/*_vision_truth_*.json` to compare with the next setup. The pattern points at the
+cause: errors growing towards the edges are the distortion or focal length, the same shift
+everywhere the camera's position, more at one end than the other its tilt or height. The ball
+right but the robot not is the robot height in ssl-vision.
+
 ### 3. Radio
 
 Plug the dongle in, then in admin PowerShell (leave it open: it re-attaches after a replug):
