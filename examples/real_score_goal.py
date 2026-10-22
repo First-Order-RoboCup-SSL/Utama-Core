@@ -1,0 +1,95 @@
+# ruff: noqa: E402
+"""examples/real_score_goal.py — one robot, no opponent: it takes the ball and scores.
+
+Run:
+    pixi run python examples/real_score_goal.py            # real robot
+    pixi run python examples/real_score_goal.py --mode rsim
+    # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
+
+The field and the camera's view are `FIELD` and `CAMERA_HALF` in `real_attacker_defender.py`,
+so the two examples always agree; the robot is set below. It attacks the goal at +x (the right
+one in ssl-vision's coordinates) with `LeadAndSupportTactic`: alone, it goes to the ball, turns
+to the open corner and shoots. It starts in HALT, and the field check gates Force Start as in
+`real_attacker_defender.py`. Put the ball back and Force Start again for the next shot.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
+import time
+
+from real_attacker_defender import (
+    CAMERA_HALF,
+    DASHBOARD_PORT,
+    FIELD,
+    RECORD,
+    TestRobot,
+    _field_bounds,
+    _one_robot_strategy,
+    _referee_profile,
+)
+
+from utama_core.custom_referee import CustomReferee
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.run import StrategyRunner
+from utama_core.tactics.lead_and_support import LeadAndSupportTactic
+
+# ---------------------------------------------------------------------------
+# Test-day configuration
+# ---------------------------------------------------------------------------
+
+SHOOTER_COLOUR = "blue"
+SHOOTER = TestRobot(vision_id=2, firmware_id=0)
+
+# ---------------------------------------------------------------------------
+
+
+def build_runner(mode: str) -> StrategyRunner:
+    real = mode == "real"
+    shooter_id = SHOOTER.vision_id if real else 0  # in the simulators robots are numbered from 0
+    is_yellow = SHOOTER_COLOUR == "yellow"
+    if SHOOTER_COLOUR not in ("yellow", "blue"):
+        raise ValueError(f"SHOOTER_COLOUR must be 'yellow' or 'blue', got {SHOOTER_COLOUR!r}")
+    mapping = {SHOOTER.vision_id: SHOOTER.firmware_id} if real else None
+
+    profile = _referee_profile()
+    referee = CustomReferee(profile, n_robots_yellow=int(is_yellow), n_robots_blue=int(not is_yellow))
+    server = attach_dashboard(port=DASHBOARD_PORT)
+    referee_view.attach(server, referee, profile)
+
+    game_log = f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_score_goal.log" if RECORD and real else None
+    if game_log:
+        print(f"Recording to {game_log}")
+    return StrategyRunner(
+        game_log_path=game_log,
+        strategy=_one_robot_strategy(shooter_id, LeadAndSupportTactic),
+        my_team_is_yellow=is_yellow,
+        my_team_is_right=False,  # own goal at -x: it attacks the goal at +x
+        mode=mode,
+        exp_friendly=1,
+        exp_enemy=0,
+        full_field_dims=FIELD,
+        field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        referee=referee,
+        referee_initial_command=RefereeCommand.HALT,
+        show_live_status=not real,
+        yellow_vision_to_cmd_mapping=mapping if is_yellow else None,
+        blue_vision_to_cmd_mapping=None if is_yellow else mapping,
+        yellow_robot_profiles={shooter_id: SHOOTER.profile} if is_yellow else None,
+        blue_robot_profiles=None if is_yellow else {shooter_id: SHOOTER.profile},
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--mode", choices=("real", "rsim", "grsim"), default="real")
+    build_runner(parser.parse_args().mode).run()
+
+
+if __name__ == "__main__":
+    main()
