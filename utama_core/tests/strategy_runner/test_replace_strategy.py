@@ -80,3 +80,16 @@ def test_there_is_no_opp_side_to_replace_without_an_opponent(runner):
     runner._run_step()
     with pytest.raises(ValueError, match="opp"):
         runner.replace_strategy("opp", _strategy([]))
+
+
+def test_in_the_simulator_an_operators_halt_lasts_until_they_end_it(runner):
+    """A HALT the rules call resumes on its own after 5 s in sim (no operator in a tournament);
+    one pressed on the dashboard waited only that long, so the Strategy panel had 5 s to act."""
+    runner._run_step()
+    runner.referee.set_command(RefereeCommand.FORCE_START, runner.my.current_game_frame.ts)
+    runner._run_step()
+    runner.referee.set_command(RefereeCommand.HALT, runner.my.current_game_frame.ts, by_operator=True)
+    start = runner.my.current_game_frame.ts
+    while runner.my.current_game_frame.ts - start < 12:  # past the 5 s resume and 4 s clearing
+        runner._run_step()
+    assert runner.referee._state.command == RefereeCommand.HALT

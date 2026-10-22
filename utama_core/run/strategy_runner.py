@@ -1712,13 +1712,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if ref_data.referee_command not in _BALL_PLACEMENT_COMMANDS:
                 self._pending_placement_teleport = None
             self._tick_pending_placement_teleport()
-            if self.sim_controller is not None:
+            if self.sim_controller is not None and not self.referee.halted_by_operator:
                 # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
                 # no auto-advance in GameStateMachine by design — on a real
                 # pitch it requires a human referee/GameController to resume.
                 # An automated sim/tournament run has neither, so left alone
                 # a HALT here would freeze the match forever. Auto-resume to
-                # NORMAL_START after a grace period, sim-only.
+                # NORMAL_START after a grace period, sim-only. Not a HALT an
+                # operator called from the dashboard: they end it (the Strategy
+                # panel needs one that lasts).
                 if ref_data.referee_command == RefereeCommand.HALT:
                     if self._prev_custom_ref_command != RefereeCommand.HALT:
                         self._halt_entered_at = self.my.current_game_frame.ts

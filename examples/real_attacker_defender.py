@@ -14,7 +14,7 @@ What it does:
   - Everything to edit for a test day is in the "Test-day configuration" block: the
     field, which part of it the camera sees, each robot's IDs and working hardware, what
     each robot plays, and whether the referee's rules are on.
-  - Nothing advances on its own: play only starts and stops from the dashboard. Real
+  - Nothing advances on its own: play only starts and stops from the dashboard. Every
     mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting.
   - To change what a robot plays, or restart it, Halt and use the Live tab's Strategy panel
     (Run on the one running restarts it); no need to restart the script.

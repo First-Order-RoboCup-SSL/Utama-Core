@@ -53,9 +53,9 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
             error = placement_target_error(target, referee.geometry, referee.field_check)
             if error:
                 raise ValueError(error)  # the page shows it; nothing is sent to the robots
-            referee.force_command(cmd, now, ball_placement_target=target)
+            referee.force_command(cmd, now, ball_placement_target=target, by_operator=True)
         else:
-            referee.set_command(cmd, now)
+            referee.set_command(cmd, now, by_operator=True)
 
     server.add_route("/referee/config", _config_bytes)
     server.add_command_handler("/referee/command", _handle_command)
