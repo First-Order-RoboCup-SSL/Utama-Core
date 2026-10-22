@@ -208,6 +208,7 @@ class CustomReferee:
         self._field_check: Optional[dict] = None
         self._match_log = None
         self._match_log_tick = 0
+        self._now: Optional[float] = None  # the last step's time, see `now`
         self._last_logged_ref_data: Optional[RefereeData] = None
         # Last non-stopping foul per team (True = yellow), for §7's goal validity.
         self._non_stopping_foul_at: dict[bool, float] = {}
@@ -266,6 +267,7 @@ class CustomReferee:
         effect in `GameStateMachine._handle_foul` — it never touches
         `command`.
         """
+        self._now = current_time
         violation: Optional[RuleViolation] = None
         non_stopping_violation: Optional[RuleViolation] = None
         for rule in self._rules:
@@ -348,6 +350,12 @@ class CustomReferee:
         Called by StrategyRunner every tick when vision comes from a camera.
         """
         self._field_check = field_check
+
+    @property
+    def now(self) -> Optional[float]:
+        """The time of the last `step`, on the clock this referee runs on (sim time in rsim, not
+        the wall clock); None before the first. A command from outside the loop is stamped with it."""
+        return self._now
 
     @property
     def field_check(self) -> Optional[dict]:

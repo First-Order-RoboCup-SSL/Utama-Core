@@ -44,15 +44,18 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
 
     def _handle_command(payload: dict) -> None:
         cmd = RefereeCommand[payload["command"]]
+        # The referee's own clock: in rsim that is sim time, and a wall-clock stamp threw its
+        # match clock and timers 1.8e9 s out.
+        now = referee.now if referee.now is not None else time.time()
         designated = payload.get("designated")
         if designated is not None and hasattr(referee, "force_command"):
             target = (float(designated[0]), float(designated[1]))
             error = placement_target_error(target, referee.geometry, referee.field_check)
             if error:
                 raise ValueError(error)  # the page shows it; nothing is sent to the robots
-            referee.force_command(cmd, time.time(), ball_placement_target=target)
+            referee.force_command(cmd, now, ball_placement_target=target)
         else:
-            referee.set_command(cmd, time.time())
+            referee.set_command(cmd, now)
 
     server.add_route("/referee/config", _config_bytes)
     server.add_command_handler("/referee/command", _handle_command)
