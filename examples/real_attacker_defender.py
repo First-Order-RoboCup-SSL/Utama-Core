@@ -92,13 +92,14 @@ from utama_core.team_controller.src.controllers.common.robot_profile import Robo
 
 MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 
-# PLACEHOLDER: measure the real field. Every value is a half-size in metres
-# (half length, half width, ...), as in `STANDARD_FIELD_DIMS`.
+# The lab field: 3 m x 2.25 m, goal 0.8 m wide, defense area 1 m wide x 0.5 m deep. Every
+# value is a half-size in metres (half length, half width, ...), as in `STANDARD_FIELD_DIMS`;
+# ssl-vision's field configuration must match it (lengths there are full sizes, in mm).
 FIELD = FieldDimensions(
-    full_field_half_length=2.0,
-    full_field_half_width=1.5,
-    half_defense_area_depth=0.3,
-    half_defense_area_width=0.6,
+    full_field_half_length=1.5,
+    full_field_half_width=1.125,
+    half_defense_area_depth=0.25,
+    half_defense_area_width=0.5,
     half_goal_width=0.4,
     center_circle_radius=0.3,
 )
