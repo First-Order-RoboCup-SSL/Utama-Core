@@ -408,13 +408,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
             )
 
-        # Derive per-color roster allowlists from the validated mappings (real mode only).
-        # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
-        # stray detections from robots not in play never pollute the game state.
-        # Blue filtering is only applied when there is an opponent strategy — in single-team
-        # mode blue robots are tracked as enemies and must not be filtered out.
-        _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
-        _allowed_blue = (frozenset(self.blue_vision_to_cmd_mapping) or None) if opp_strategy is not None else None
+        _allowed_yellow, _allowed_blue = self._roster_allowlists(
+            self.yellow_vision_to_cmd_mapping,
+            self.blue_vision_to_cmd_mapping,
+            my_team_is_yellow,
+            has_opp=opp_strategy is not None,
+        )
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
@@ -532,6 +531,25 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+
+    @staticmethod
+    def _roster_allowlists(
+        yellow_mapping: dict[int, int], blue_mapping: dict[int, int], my_team_is_yellow: bool, has_opp: bool
+    ) -> Tuple[Optional[frozenset[int]], Optional[frozenset[int]]]:
+        """Per-colour roster allowlists from the validated mappings (real mode only; empty
+        elsewhere, so None). A robot ID vision reports that is not in its colour's allowlist is
+        dropped, so a misread pattern (a ghost blue 5 beside our blue 2) never becomes a robot
+        the Kalman filter then keeps alive. A colour we drive (ours, and the opponent's with an
+        opponent strategy) is filtered; the opponent's colour without one is the enemies we
+        track, unfiltered."""
+
+        def allowlist(mapping: dict[int, int], driven: bool) -> Optional[frozenset[int]]:
+            return (frozenset(mapping) or None) if driven else None
+
+        return (
+            allowlist(yellow_mapping, my_team_is_yellow or has_opp),
+            allowlist(blue_mapping, not my_team_is_yellow or has_opp),
+        )
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
