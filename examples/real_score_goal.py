@@ -10,7 +10,8 @@ The field and the camera's view are `FIELD` and `CAMERA_HALF` in `real_attacker_
 so the two examples always agree; the robot is set below. It attacks the goal at +x (the right
 one in ssl-vision's coordinates) with `LeadAndSupportTactic`: alone, it goes to the ball, turns
 to the open corner and shoots. It starts in HALT, and the field check gates Force Start as in
-`real_attacker_defender.py`. Put the ball back and Force Start again for the next shot.
+`real_attacker_defender.py`. Put the ball back and Force Start again for the next shot; Halt and
+Run in the Live tab's Strategy panel restarts the tactic.
 """
 
 import sys
@@ -35,6 +36,7 @@ from real_attacker_defender import (
 from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
+from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
@@ -49,7 +51,10 @@ SHOOTER = TestRobot(vision_id=2, firmware_id=0)
 # ---------------------------------------------------------------------------
 
 
-def build_runner(mode: str) -> StrategyRunner:
+def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyRunner:
+    """The robot plays `tactics[next(iter(tactics))]`; the Strategy panel switches among `tactics`
+    ({name: tactic class}, default this example's shooter). `name` tags the recorded log."""
+    tactics = tactics or {"shoot": LeadAndSupportTactic}
     real = mode == "real"
     shooter_id = SHOOTER.vision_id if real else 0  # in the simulators robots are numbered from 0
     is_yellow = SHOOTER_COLOUR == "yellow"
@@ -62,12 +67,13 @@ def build_runner(mode: str) -> StrategyRunner:
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)
 
-    game_log = f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_score_goal.log" if RECORD and real else None
+    game_log = f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_{name}.log" if RECORD and real else None
     if game_log:
         print(f"Recording to {game_log}")
-    return StrategyRunner(
+    first = next(iter(tactics))
+    runner = StrategyRunner(
         game_log_path=game_log,
-        strategy=_one_robot_strategy(shooter_id, LeadAndSupportTactic),
+        strategy=_one_robot_strategy(shooter_id, tactics[first]),
         my_team_is_yellow=is_yellow,
         my_team_is_right=False,  # own goal at -x: it attacks the goal at +x
         mode=mode,
@@ -83,6 +89,13 @@ def build_runner(mode: str) -> StrategyRunner:
         yellow_robot_profiles={shooter_id: SHOOTER.profile} if is_yellow else None,
         blue_robot_profiles=None if is_yellow else {shooter_id: SHOOTER.profile},
     )
+    strategy_view.attach(
+        server,
+        runner,
+        choices={"my": {n: (lambda t=t: _one_robot_strategy(shooter_id, t)) for n, t in tactics.items()}},
+        running={"my": first},
+    )
+    return runner
 
 
 def main() -> None:
