@@ -44,8 +44,12 @@ Built during the test day; it hides the cameras' disagreement but cannot remove 
   and drops a detection more than `CAMERA_AGREEMENT` (0.1 m) from the best camera's.
 - The ball is fused across cameras by the same rule, and each camera's ball is first moved by
   that camera's own error at the robot nearest it (`BALL_ROBOT_SHIFT_RANGE`), so a ball at the
-  dribbler stays at the dribbler. 2.4% of frames in the log above still put the ball inside the
-  robot: those where camera 1 sees the ball but loses the robot.
+  dribbler stays at the dribbler. When a camera loses the robot for a frame or two, it places
+  the robot from another camera plus the gap between them just before: the 2.4% of frames of
+  the log above that put the ball inside the robot are gone.
+- `PositionRefiner` takes a ball inside the field or a goal over one outside them, then the one
+  nearest the last ball. Replayed, `20261022_213347_real_score_goal.log`'s ball jumps of over 0.3 m in one frame went
+  from 5,439 to 4.
 - `tools/vision_check.py` prints where each camera puts each robot and ball and the gap
   between them, and with `--guided` checks each camera against 9 known spots and saves the
   result as a baseline.

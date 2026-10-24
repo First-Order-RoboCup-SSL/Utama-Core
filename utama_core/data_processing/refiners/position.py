@@ -84,6 +84,7 @@ class PositionRefiner(BaseRefiner):
         )
 
         self._combiner = CameraCombiner()
+        self._field_dims = full_field_dims
         self.exp_ball = exp_ball
         self.allowed_yellow_ids = allowed_yellow_ids
         self.allowed_blue_ids = allowed_blue_ids
@@ -187,8 +188,7 @@ class PositionRefiner(BaseRefiner):
             combined_vision_data.blue_robots,
         )
 
-        # After the balls have been combined, take the most confident
-        new_ball = PositionRefiner._get_most_confident_ball(combined_vision_data.balls)
+        new_ball = self._pick_ball(combined_vision_data.balls, game_frame.ball)
 
         # Skip filtering when there's no ball and we don't expect one
         if new_ball is not None or self.exp_ball:
@@ -330,6 +330,24 @@ class PositionRefiner(BaseRefiner):
     def _ball_from_vision(ball_data: VisionBallData) -> Ball:
         zv = Vector3D(0, 0, 0)
         return Ball(Vector3D(ball_data.x, ball_data.y, ball_data.z), zv, zv)
+
+    def _pick_ball(self, balls: List[VisionBallData], last: Optional[Ball]) -> Optional[Ball]:
+        """The ball among `balls`: one inside the field lines or a goal when any is (a ball rarely
+        leaves the field, stray orange things off it do: 2026-10-22, four steady "balls" 15 cm
+        past the touch line, as confident as the real one), then the nearest to `last`, the ball
+        the frame before. With no last ball, the most confident."""
+        inside = [b for b in balls if self._in_field_or_goal(b.x, b.y)]
+        candidates = inside or balls
+        if last is None or not candidates:
+            return PositionRefiner._get_most_confident_ball(candidates)
+        nearest = min(candidates, key=lambda b: math.hypot(b.x - last.p.x, b.y - last.p.y))
+        return PositionRefiner._ball_from_vision(nearest)
+
+    def _in_field_or_goal(self, x: float, y: float) -> bool:
+        d = self._field_dims
+        if abs(y) <= d.full_field_half_width and abs(x) <= d.full_field_half_length:
+            return True
+        return abs(y) <= d.half_goal_width and abs(x) <= d.full_field_half_length + d.goal_depth
 
     @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:
