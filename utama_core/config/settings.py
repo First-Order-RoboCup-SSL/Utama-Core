@@ -52,6 +52,8 @@ BALL_MERGE_THRESHOLD = (
 CAMERA_AGREEMENT = 0.1
 # CameraCombiner: a ball this close to a robot its camera sees takes that camera's offset at the robot (m)
 BALL_ROBOT_SHIFT_RANGE = 0.3
+# CameraCombiner: a camera that just lost a robot still places it from its gap to another camera this long (s)
+BALL_ROBOT_OFFSET_MEMORY = 0.5
 VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
 # An unseen ball is assumed to roll on at this deceleration (m/s^2): official Div B logs, 1 s or
 # more after a kick (docs/sim_realism.md). A field's own value comes from its free-rolling balls.

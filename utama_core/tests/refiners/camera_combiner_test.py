@@ -243,3 +243,24 @@ def test_a_ball_only_one_camera_sees_keeps_its_place_at_the_dribbler():
 
     far = [RawVisionData(0, [], [RawRobotData(2, -0.9, 0.4, 0, 1)], [RawBallData(0.5, 0.4, 0, 0.9)], 0), frames[1]]
     assert CameraCombiner().combine_cameras(far, infinite_bounds).balls[0].x == 0.5  # no robot near: unmoved
+
+
+def test_a_camera_that_loses_the_robot_for_a_frame_keeps_the_ball_at_its_dribbler():
+    # 2026-10-22: camera 1 kept the ball at the dribbler but lost the robot for a frame or two; the
+    # robot then came from camera 0 alone, 8.5 cm from camera 1's view, and the ball sat inside it
+    # (95 of 3,971 frames). Camera 1 now places the robot from camera 0 plus their gap just before.
+    gap, combiner = 0.085, CameraCombiner()
+
+    def frames(ts, camera_1_sees_robot):
+        robot_1 = [RawRobotData(2, -0.5 + gap, 0.3, 0, 1)] if camera_1_sees_robot else []
+        return [
+            RawVisionData(ts, [], [RawRobotData(2, -0.5, 0.3, 0, 1)], [], 0),
+            RawVisionData(ts, [], robot_1, [RawBallData(-0.5 + gap + 0.115, 0.3, 0, 0.9)], 1),
+        ]
+
+    combiner.combine_cameras(frames(0.0, True), infinite_bounds)
+    lost = combiner.combine_cameras(frames(0.016, False), infinite_bounds)
+    assert math.isclose(lost.balls[0].x - lost.blue_robots[0].x, 0.115)
+
+    stale = combiner.combine_cameras(frames(0.6, False), infinite_bounds)  # lost longer than the memory
+    assert math.isclose(stale.balls[0].x - stale.blue_robots[0].x, gap + 0.115)
