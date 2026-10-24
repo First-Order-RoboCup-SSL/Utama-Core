@@ -55,6 +55,10 @@
       <button data-cmd="DIRECT_FREE_YELLOW">Free Kick Yellow</button>
       <button data-cmd="DIRECT_FREE_BLUE">Free Kick Blue</button>
     </div>
+    <div id="strategy-run" style="display:none;">
+      <div class="ref-section-title">Strategy <span class="muted" style="font-size:.65rem;">changed only while halted; Run on the one running restarts it</span></div>
+      <div id="strategy-rows" class="stack" style="gap:4px;"></div>
+    </div>
     <div class="ref-section-title">Tactics</div>
     <div id="ref-tactic-entries" style="font-size:.75rem;"></div>
     <div id="ref-status-entries" style="font-size:.75rem;"></div>
@@ -93,6 +97,7 @@
           <button class="btn-accent" id="replay-play" style="min-width:70px;">Play</button>
           <button id="replay-step-fwd" title="Next frame (→)">⏭</button>
           <span class="muted" id="replay-frame-label" style="min-width:100px; font-variant-numeric:tabular-nums;">0:00 / 0:00</span>
+          <span class="muted" id="replay-match-clock" style="font-variant-numeric:tabular-nums;" title="The referee's match clock: it stops in STOP, HALT, kickoff and penalty preparation and ball placement, so it runs behind the replay time on the left (which every list and the timeline use)."></span>
         </div>
         <select id="replay-speed" title="Playback speed">
           <option value="0.25">0.25x</option>

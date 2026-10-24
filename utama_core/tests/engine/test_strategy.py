@@ -17,7 +17,7 @@ from typing import Optional
 import pytest
 
 from utama_core.engine.context import TickContext
-from utama_core.engine.match_log import IntentionEvent, MatchLog
+from utama_core.engine.match_log import IntentionEvent, MatchLog, TraceEvent
 from utama_core.engine.strategy import Strategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -733,6 +733,32 @@ def test_match_log_records_reassignment_when_active_tactic_switches():
         ("a", ()),
         ("b", (1, 2)),
     ]
+
+
+class _OverlayTactic(RecordingTactic):
+    """Traces one overlay key every tick it runs, as tactics do for the replay canvas."""
+
+    def tick(self, game, ctx, robot_ids, mem):
+        ctx.match_log.trace_if_changed(tick=0, sim_time=0.0, key="a.overlay", value=list(robot_ids))
+        return super().tick(game, ctx, robot_ids, mem)
+
+
+def test_an_overlay_is_cleared_once_its_tactic_stops_tracing_it():
+    picks = iter(["a", "a", "b"])
+    strategy = Strategy(
+        tactics={"a": _OverlayTactic(), "b": RecordingTactic()},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: next(picks)),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    for _ in range(3):
+        strategy.tick(_FakeGame())
+
+    overlay = [e.value for e in strategy.match_log.events() if isinstance(e, TraceEvent) and e.key == "a.overlay"]
+    # unchanged on the second tick, so logged once; cleared on the third, when "b" runs instead
+    assert overlay == [[1, 2], None]
 
 
 def test_match_log_records_tactic_release_without_commitment():

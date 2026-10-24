@@ -145,10 +145,14 @@ class DashboardServer(threading.Thread):
 
     # ---- thread entry point ----
 
+    def start(self) -> None:
+        # Bound here, on the caller's thread: a port already taken (another dashboard) raises
+        # at once, instead of in the server thread while the match runs on with no dashboard.
+        self._http_server = ThreadingHTTPServer(("", self._port), self._make_handler_class())
+        super().start()
+
     def run(self) -> None:
-        handler_factory = self._make_handler_class()
-        http_server = ThreadingHTTPServer(("", self._port), handler_factory)
-        http_server.serve_forever()
+        self._http_server.serve_forever()
 
     def _make_handler_class(self):
         server = self

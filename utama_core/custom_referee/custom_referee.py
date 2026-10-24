@@ -208,6 +208,8 @@ class CustomReferee:
         self._field_check: Optional[dict] = None
         self._match_log = None
         self._match_log_tick = 0
+        self._now: Optional[float] = None  # the last step's time, see `now`
+        self._operator_halt = False  # see halted_by_operator
         self._last_logged_ref_data: Optional[RefereeData] = None
         # Last non-stopping foul per team (True = yellow), for §7's goal validity.
         self._non_stopping_foul_at: dict[bool, float] = {}
@@ -266,6 +268,7 @@ class CustomReferee:
         effect in `GameStateMachine._handle_foul` — it never touches
         `command`.
         """
+        self._now = current_time
         violation: Optional[RuleViolation] = None
         non_stopping_violation: Optional[RuleViolation] = None
         for rule in self._rules:
@@ -350,6 +353,19 @@ class CustomReferee:
         self._field_check = field_check
 
     @property
+    def halted_by_operator(self) -> bool:
+        """In a HALT an operator called (the dashboard's Halt, or a run started halted with the
+        dashboard there to end it), as against one the rules called: the simulators resume
+        only the latter on their own."""
+        return self._operator_halt and self._state.command == RefereeCommand.HALT
+
+    @property
+    def now(self) -> Optional[float]:
+        """The time of the last `step`, on the clock this referee runs on (sim time in rsim, not
+        the wall clock); None before the first. A command from outside the loop is stamped with it."""
+        return self._now
+
+    @property
     def field_check(self) -> Optional[dict]:
         """The last `set_field_check` payload; None without a camera."""
         return self._field_check
@@ -364,6 +380,7 @@ class CustomReferee:
         (wall-clock timestamps that may be far from 0).
         """
         self._state.seed_clock(timestamp)
+        self._operator_halt = initial_command == RefereeCommand.HALT and self._dashboard_notifier is not None
         if initial_command != RefereeCommand.HALT:
             self._state.set_command(initial_command, timestamp)
 
@@ -374,6 +391,7 @@ class CustomReferee:
         designated_position: Optional[tuple[float, float]] = None,
         next_command: Optional[RefereeCommand] = None,
         status_message: Optional[str] = None,
+        by_operator: bool = False,
     ) -> None:
         """Manual override for operator use or test scripting.
 
@@ -385,12 +403,14 @@ class CustomReferee:
             next_command: Optional queued command to expose through
                 ``RefereeData.next_command``.
             status_message: Optional human-readable referee status.
+            by_operator: A person called it (the dashboard); see `halted_by_operator`.
 
         The optional fields are intentionally thin wrappers around the custom
         referee state machine so integration tests and scenario runners do not
         need to reach into private ``_state`` attributes.
         """
         self._state.set_command(command, timestamp)
+        self._operator_halt = by_operator and command == RefereeCommand.HALT
         if designated_position is not None:
             self._state.ball_placement_target = designated_position
         if next_command is not None:
@@ -403,9 +423,11 @@ class CustomReferee:
         command: "RefereeCommand",
         timestamp: float,
         ball_placement_target=None,
+        by_operator: bool = False,
     ) -> None:
-        """God-mode override — bypasses the STOP-first guard."""
+        """God-mode override — bypasses the STOP-first guard. `by_operator` as in `set_command`."""
         self._state.force_command(command, timestamp, ball_placement_target)
+        self._operator_halt = by_operator and command == RefereeCommand.HALT
 
     def resume_from_halt(self, timestamp: float) -> bool:
         """HALT → STOP, keeping any queued restart (`GameStateMachine.resume_from_halt`)."""

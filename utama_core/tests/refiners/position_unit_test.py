@@ -334,6 +334,50 @@ def test_with_no_filtering_a_seen_ball_passes_through():
     assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5))
 
 
+def test_the_refiner_keeps_a_cameras_gap_between_frames():
+    # The combiner remembers each camera's gap to the others at a robot; a fresh combiner per
+    # frame would forget it, and a ball whose camera just lost the robot lands inside the robot.
+    p = PositionRefiner(full_field_dims, filtering=False)
+    g = GameFrame(0, True, True, {}, {}, bfac3d(0, 0))
+    for ts, robot_1 in ((0.0, [RawRobotData(2, -0.415, 0.3, 0, 1)]), (0.016, [])):
+        frames = [
+            RawVisionData(ts, [], [RawRobotData(2, -0.5, 0.3, 0, 1)], [], 0),
+            RawVisionData(ts, [], robot_1, [RawBallData(-0.3, 0.3, 0, 0.9)], 1),
+        ]
+        g = p.refine(g, frames)
+    assert g.ball.p.x - g.enemy_robots[2].p.x == pytest.approx(0.115)
+
+
+def _picked(p, last, balls):
+    g = GameFrame(0, True, True, {}, {}, last)
+    return p.refine(g, [RawVisionData(0.1, [], [], balls, 0)]).ball
+
+
+def test_stray_balls_off_the_field_do_not_take_the_ball():
+    # 2026-10-22: camera 0 also saw four steady "balls" 15 cm past the +y touch line, as confident
+    # as the real one; the most confident, ties in list order, picked a fake 22% of the time.
+    p = PositionRefiner(full_field_dims, filtering=False)
+    w = full_field_dims.full_field_half_width
+    fakes = [RawBallData(x, w + 0.15, 0, 1.0) for x in (-0.705, -0.22, -0.075, 0.079)]
+    real = RawBallData(-0.8, -0.35, 0, 1.0)
+    for balls in (fakes + [real], [real] + fakes, fakes[:2] + [real] + fakes[2:]):
+        ball = _picked(p, bfac3d(-0.8, -0.35), balls)
+        assert (ball.p.x, ball.p.y) == pytest.approx((-0.8, -0.35))
+    alone = _picked(p, bfac3d(0, 0), [fakes[0]])  # the only ball: taken, though off the field
+    assert alone.p.y == pytest.approx(w + 0.15)
+
+
+def test_among_balls_in_play_the_one_nearest_the_last_is_kept():
+    p = PositionRefiner(full_field_dims, filtering=False)
+    balls = [RawBallData(1.0, 0.0, 0, 1.0), RawBallData(-1.0, 0.0, 0, 0.5)]
+    assert _picked(p, bfac3d(-0.9, 0.0), balls).p.x == pytest.approx(-1.0)
+    assert _picked(p, None, balls).p.x == pytest.approx(1.0)  # no last ball: the most confident
+    # A ball in the goal is in play (2026-10-22: a shot past the goal line, a blob elsewhere).
+    in_goal = full_field_dims.full_field_half_length + 0.05
+    balls = [RawBallData(1.0, 0.0, 0, 1.0), RawBallData(in_goal, 0.0, 0, 1.0)]
+    assert _picked(p, bfac3d(in_goal, 0.0), balls).p.x == pytest.approx(in_goal)
+
+
 if __name__ == "__main__":
     test_combining_single_team_combines_single_robot()
     test_combining_with_robot_not_in_game_adds()

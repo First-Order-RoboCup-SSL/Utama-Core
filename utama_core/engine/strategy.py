@@ -347,6 +347,12 @@ class Strategy:
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
+        commands = self._tick(game)
+        if self.match_log is not None:
+            self.match_log.clear_untraced(self._tick_count, getattr(game, "ts", 0.0))
+        return commands
+
+    def _tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         referee = getattr(game, "referee", None)
         current_command = getattr(referee, "referee_command", None) if referee is not None else None
 

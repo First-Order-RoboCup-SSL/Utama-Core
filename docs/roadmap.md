@@ -218,6 +218,14 @@ entry by its title, not its number.
     not yet rank strategies better than goals, so it explains results rather than saving matches
     (`sim_realism.md`, "P1"). P2 (structured strategy search scored by it) is not started.
 
-13. **Deferred, revisit only when forced** (minimalism):
+13. **In-house vision for lab days (plan, 2026-10-24):** [`in_house_vision.md`](in_house_vision.md).
+    The 2026-10-22 test day lost most of its time to ssl-vision: cameras 5–8.5 cm apart and 3–9 cm off known spots, colour
+    calibration slow and noisy at the edges, fake balls, no way to lock focus or zoom. The plan:
+    per-session tag calibration of both cameras, tags on robots, an orange ball inside the field
+    mask, sent as standard SSL packets so our stack is unchanged. Lab only; competitions keep
+    the league's ssl-vision. Two experiments (calibration alone; tags against patterns) come
+    first; nothing is built yet.
+
+14. **Deferred, revisit only when forced** (minimalism):
     - `@pytest.mark.engine` marker for kernel tests — wait for real CI bottleneck data.
     - `TickContext` responsibilities beyond `motion_controller`/`match_log`.

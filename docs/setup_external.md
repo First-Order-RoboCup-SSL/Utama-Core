@@ -50,31 +50,7 @@ cd AutoReferee && ./gradlew run
 Then run your own strategy. The GameController's web UI is at http://localhost:8081/#/match
 (this repo's dashboard is :8080).
 
-## SSL Vision for real testing (WSL)
+## SSL Vision and the radio for real robots
 
-1. Connect the vision Linux laptop and your own laptop to the same network (an external
-   hotspot).
-2. Allow inbound UDP packets through the vision port. With admin privileges, in PowerShell:
-
-   ```
-   New-NetFirewallRule -DisplayName "Allow Multicast UDP 10006" -Direction Inbound -Protocol UDP -LocalPort 10006 -Action Allow
-   ```
-
-3. Type `%USERPROFILE%` into Windows + R and add a `.wslconfig` file there (file type
-   WSLCONFIG):
-
-   ```
-   [wsl2]
-   networkingMode=mirrored
-   ```
-
-4. Restart WSL with `wsl --shutdown`, then check the connection:
-
-   ```
-   sudo tcpdump -i eth1 -n host 224.5.23.2 and udp port 10006
-   ```
-
-   If you see UDP packets, everything is working.
-
-For the robot radio and controllers see
-[`utama_core/team_controller/README.md`](../utama_core/team_controller/README.md).
+The whole procedure (vision laptop, WSL networking and USB, radio, the checks before a robot
+moves) is in [real_robot_setup.md](real_robot_setup.md).

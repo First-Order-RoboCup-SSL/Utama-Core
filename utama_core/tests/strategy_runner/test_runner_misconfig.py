@@ -495,9 +495,25 @@ def test_blue_allowlist_not_set_in_single_team_real_mode():
     # Validate mapping returns {} for blue (no opp, mapping=None)
     blue_mapping = StrategyRunner._validate_vision_to_cmd_mapping(runner, None, is_yellow=False)
     assert blue_mapping == {}
-    # Simulate the allowlist derivation: empty mapping with no opp → None, not frozenset()
-    _allowed_blue = (frozenset(blue_mapping) or None) if runner.opp is not None else None
-    assert _allowed_blue is None
+    assert StrategyRunner._roster_allowlists({0: 3}, blue_mapping, my_team_is_yellow=True, has_opp=False) == (
+        frozenset({0}),
+        None,
+    )
+
+
+def test_a_blue_team_alone_tracks_only_its_own_robots():
+    # 2026-10-22, real_score_goal.py with our blue 2 alone: misread patterns came through as blue 1
+    # and blue 5, became our robots and lived on in the Kalman filter as ghosts. The allowlists
+    # assumed our team was yellow, so a blue team alone was never filtered (and yellow was).
+    assert StrategyRunner._roster_allowlists({}, {2: 0}, my_team_is_yellow=False, has_opp=False) == (
+        None,
+        frozenset({2}),
+    )
+    # Both teams driven: both filtered.
+    assert StrategyRunner._roster_allowlists({1: 1}, {2: 0}, my_team_is_yellow=False, has_opp=True) == (
+        frozenset({1}),
+        frozenset({2}),
+    )
 
 
 def test_trusted_ir_robots_both_teams_pvp():

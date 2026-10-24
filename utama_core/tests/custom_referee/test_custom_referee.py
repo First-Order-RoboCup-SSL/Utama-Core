@@ -1406,3 +1406,21 @@ game:
     def test_unknown_profile_raises(self):
         with pytest.raises(FileNotFoundError):
             load_profile("nonexistent_profile")
+
+
+def test_only_a_halt_an_operator_called_counts_as_the_operators():
+    """The simulators resume a HALT the rules call; one the operator called waits for them."""
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.seed_clock(0.0, RefereeCommand.HALT)
+    assert not referee.halted_by_operator  # no dashboard: nobody to end it
+    referee.set_command(RefereeCommand.STOP, 1.0, by_operator=True)
+    assert not referee.halted_by_operator
+    referee.force_command(RefereeCommand.HALT, 2.0, by_operator=True)
+    assert referee.halted_by_operator
+    referee.force_command(RefereeCommand.HALT, 3.0)  # the runner's or a rule's
+    assert not referee.halted_by_operator
+
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.attach_dashboard_notifier(lambda *args: None)
+    referee.seed_clock(0.0, RefereeCommand.HALT)  # started halted, with a page to end it
+    assert referee.halted_by_operator

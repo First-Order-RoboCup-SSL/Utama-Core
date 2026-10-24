@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Callable, Deque, List, Optional
+from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 from utama_core.config.settings import MULTICAST_GROUP, VISION_PORT
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -29,6 +29,8 @@ class VisionReceiver:
         self._geometry_fired = False
         self._stop_event = stop_event
         self._on_packet = on_packet  # every packet as received, before parsing (`GameLogWriter`)
+        # camera id -> (x, y, height) in m, from every geometry packet's calibrations
+        self._camera_positions: Dict[int, Tuple[float, float, float]] = {}
         # Parked exception from the geometry callback — re-raised in the main
         # thread by StrategyRunner._run_step() so the process exits cleanly.
         self.thread_exception: Optional[BaseException] = None
@@ -70,6 +72,15 @@ class VisionReceiver:
                     self._stop_event.set()
                 return False
             self._geometry_fired = True
+        if vision_packet.HasField("geometry"):
+            for calib in vision_packet.geometry.calib:
+                # A height of 0 is a camera not calibrated yet: its view-angle weights would all be 0.
+                if calib.HasField("derived_camera_world_tz") and calib.derived_camera_world_tz > 0:
+                    self._camera_positions[calib.camera_id] = (
+                        calib.derived_camera_world_tx / 1000,
+                        calib.derived_camera_world_ty / 1000,
+                        calib.derived_camera_world_tz / 1000,
+                    )
         # SSL-Vision and grSim send geometry in packets of its own: an absent detection reads as an
         # empty camera-0 frame captured at t=0, which would drag the combined frame's timestamp down.
         if vision_packet.HasField("detection"):
@@ -104,4 +115,5 @@ class VisionReceiver:
                 for ball in detection_frame.balls
             ],
             camera_id=detection_frame.camera_id,
+            camera_position=self._camera_positions.get(detection_frame.camera_id),
         )
