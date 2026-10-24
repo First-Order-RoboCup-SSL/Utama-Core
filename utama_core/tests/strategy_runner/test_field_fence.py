@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from utama_core.config.enums import Mode
+from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
@@ -17,7 +19,10 @@ from utama_core.run.field_fence import (
     FencedRobotController,
     _max_speed_towards,
     fence,
+    inner_edges,
 )
+from utama_core.run.strategy_runner import StrategyRunner
+from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
 
 LEFT_HALF = FieldBounds(top_left=(-2.0, 1.5), bottom_right=(0.0, -1.5))
 
@@ -65,3 +70,49 @@ def test_the_controller_fences_the_robots_it_sees_and_passes_the_rest():
     controller.add_robot_commands({0: _cmd(1.0), 1: _cmd(1.0)})
     assert sent[0].local_forward_vel == 0.0
     assert sent[1].local_forward_vel == 1.0
+
+
+FULL = STANDARD_FIELD_DIMS.full_field_bounds  # 9 m x 6 m: x in [-4.5, 4.5], y in [-3, 3]
+
+
+def test_only_the_edges_inside_the_field_are_fenced():
+    left_half = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(0.0, -3.0))
+    assert inner_edges(left_half, FULL) == FieldBounds(top_left=(-math.inf, math.inf), bottom_right=(0.0, -math.inf))
+    assert inner_edges(FULL, FULL) is None
+
+
+def test_a_robot_may_cross_the_touch_line_to_fetch_a_ball_out_of_play():
+    # The ball 0.2 m past the touch line on a free kick: a fence at the line froze the restart.
+    left_half = inner_edges(FieldBounds(top_left=(-4.5, 3.0), bottom_right=(0.0, -3.0)), FULL)
+    assert fence(-2.0, 3.0, 0.0, _cmd(left=1.0), left_half).local_left_vel == 1.0
+    assert fence(-4.5, 0.0, 0.0, _cmd(-1.0), left_half).local_forward_vel == -1.0  # into its goal mouth
+    assert fence(0.0, 0.0, 0.0, _cmd(1.0), left_half).local_forward_vel == 0.0  # the half-way line holds
+
+
+def _runner(mode, field_bounds) -> StrategyRunner:
+    runner = StrategyRunner.__new__(StrategyRunner)
+    runner.mode, runner.field_bounds, runner.full_field_dims = mode, field_bounds, STANDARD_FIELD_DIMS
+    return runner
+
+
+def _robot_on_the_half_way_line():
+    return SimpleNamespace(friendly_robots={0: SimpleNamespace(p=Vector2D(0.0, 0.0), orientation=0.0)})
+
+
+def test_a_kicker_less_robots_push_is_fenced_too():
+    # The profile turns a kick into a 1 m/s push; fenced before it, the push drove 0.3 m past the line.
+    sent = {}
+    left_half = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(0.0, -3.0))
+    controller = _runner(Mode.GRSIM, left_half)._wrapped(
+        SimpleNamespace(add_robot_commands=sent.update), {0: RobotProfile(kicker=False)}, _robot_on_the_half_way_line
+    )
+    controller.add_robot_commands({0: RobotCommand(0.0, 0.0, 0.0, kick=True, chip=False, dribble=False)})
+    assert sent[0].local_forward_vel == 0.0
+
+
+@pytest.mark.parametrize(
+    "mode, bounds", [(Mode.RSIM, FieldBounds(top_left=(-4.5, 3.0), bottom_right=(0.0, -3.0))), (Mode.GRSIM, FULL)]
+)
+def test_no_fence_in_rsim_or_when_the_cameras_see_the_whole_field(mode, bounds):
+    inner = SimpleNamespace(add_robot_commands=lambda commands: None)
+    assert _runner(mode, bounds)._fenced(inner, _robot_on_the_half_way_line) is inner

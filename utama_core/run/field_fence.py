@@ -7,6 +7,10 @@ attacker 0.9 m past the half-way line). The field check only halts once a robot 
 caps each robot's speed towards each edge of the area to what it can still stop from before the
 line; speed away from an edge is never limited, so a robot outside drives back in. It knows the
 robots' poses, nothing of the tactics, so it holds whichever tactic or skill made the command.
+
+Only edges inside the field are fenced (the half-way line on a half-field run): a robot must
+cross the touch and goal lines to fetch a ball out of play, or a restart never completes
+(`custom_referee/actions.py`, `_clamp_to_field_or_ball`), and the cameras see past them.
 """
 
 from __future__ import annotations
@@ -27,6 +31,22 @@ def _max_speed_towards(distance: float) -> float:
     if distance <= 0:
         return 0.0
     return BRAKE * (-DELAY + math.sqrt(DELAY * DELAY + 2 * distance / BRAKE))
+
+
+def inner_edges(bounds: FieldBounds, full: FieldBounds) -> Optional[FieldBounds]:
+    """`bounds` with each edge on `full`'s outer lines moved out to infinity; None when every
+    edge is on them (the cameras see the whole field: nothing to fence)."""
+    (left, top), (right, bottom) = bounds.top_left, bounds.bottom_right
+    (f_left, f_top), (f_right, f_bottom) = full.top_left, full.bottom_right
+    opened = (
+        -math.inf if left <= f_left else left,
+        math.inf if top >= f_top else top,
+        math.inf if right >= f_right else right,
+        -math.inf if bottom <= f_bottom else bottom,
+    )
+    if all(math.isinf(edge) for edge in opened):
+        return None
+    return FieldBounds(top_left=(opened[0], opened[1]), bottom_right=(opened[2], opened[3]))
 
 
 def fence(x: float, y: float, orientation: float, command: RobotCommand, bounds: FieldBounds) -> RobotCommand:
