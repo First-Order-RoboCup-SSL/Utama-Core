@@ -74,7 +74,8 @@ class VisionReceiver:
             self._geometry_fired = True
         if vision_packet.HasField("geometry"):
             for calib in vision_packet.geometry.calib:
-                if calib.HasField("derived_camera_world_tz"):
+                # A height of 0 is a camera not calibrated yet: its view-angle weights would all be 0.
+                if calib.HasField("derived_camera_world_tz") and calib.derived_camera_world_tz > 0:
                     self._camera_positions[calib.camera_id] = (
                         calib.derived_camera_world_tx / 1000,
                         calib.derived_camera_world_ty / 1000,
