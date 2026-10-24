@@ -50,6 +50,22 @@ def _socket():
     return sock
 
 
+def drain(sock) -> int:
+    """Throws away the packets queued on `sock`, and returns how many: in the guided check, those
+    from while the thing was carried to the next spot."""
+    sock.setblocking(False)
+    dropped = 0
+    try:
+        while True:
+            sock.recv(65536)
+            dropped += 1
+    except BlockingIOError:
+        pass
+    finally:
+        sock.settimeout(0.5)
+    return dropped
+
+
 def listen(sock, seconds: float) -> dict:
     """What arrives in `seconds`: senders, packets and detections per camera, the field size and
     `positions`, (thing, camera) -> [(x, y, orientation)] in mm and rad (orientation None for a ball),
@@ -157,6 +173,7 @@ def guided(thing: str, seconds: float) -> None:
     results = []
     for i, (x, y) in enumerate(guide_points(*field), 1):
         input(f"\n[{i}/9] Put the {thing} at ({x:.0f}, {y:.0f}) mm, then press Enter ")
+        drain(sock)
         heard = listen(sock, seconds)
         point = {"truth": [x, y], "cameras": {}}
         if thing == "ball":
