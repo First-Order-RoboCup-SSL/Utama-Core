@@ -3,11 +3,13 @@ import dataclasses
 import json
 import logging
 import signal
+import sys
 import threading
 import time
 import warnings
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
 
 from rich.live import Live
@@ -19,6 +21,7 @@ from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
 from utama_core.config.settings import (
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
+    REPLAY_BASE_PATH,
     ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
@@ -49,7 +52,7 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
-from utama_core.replay.game_log_writer import GameLogWriter
+from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
@@ -123,6 +126,16 @@ class _RobotPortFeedbackState:
     port_id: int
     has_ball: bool
     last_seen: float
+
+
+def _replay_name(game_log_path: str) -> str:
+    """The replay's name for a game log: the same path without `.log`, under `REPLAY_BASE_PATH`
+    when the log is (`replays/field/X.log` -> `field/X`), else the log's own name."""
+    stem = Path(game_log_path).resolve().with_suffix("")
+    try:
+        return str(stem.relative_to(REPLAY_BASE_PATH.resolve()))
+    except ValueError:
+        return stem.name
 
 
 def _record_robot_feedback_responses(
@@ -265,7 +278,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         blue_robot_profiles (dict[int, RobotProfile], optional): Same as ``yellow_robot_profiles`` for the blue team.
         game_log_path (str, optional): Record the run as an SSL game log (`.log`): every vision packet,
             the referee's state and, on real robots, the radio's bytes both ways; see `GameLogWriter`.
-            grSim and real mode only (rsim has no packets).
+            grSim and real mode only (rsim has no packets). Unless ``replay_writer_config`` is given, the
+            world the strategy saw is also saved as a columnar replay beside it, at close
+            (`replays/field/X.log` -> `replays/field/X.npz`).
     """
 
     def __init__(
@@ -394,8 +409,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                         "yellow": {k: dataclasses.asdict(p) for k, p in self.yellow_robot_profiles.items()},
                         "blue": {k: dataclasses.asdict(p) for k, p in self.blue_robot_profiles.items()},
                     },
+                    "command": sys.argv,
+                    "code": code_version(),
+                    "field_bounds": {
+                        "top_left": [float(v) for v in self.field_bounds.top_left],
+                        "bottom_right": [float(v) for v in self.field_bounds.bottom_right],
+                    },
                 }
             )
+            # The world as the strategy saw it (after the refiners and filters), beside the log:
+            # the log holds only what went in and out. Saved once, at close: a checkpoint rewrites the
+            # whole replay on the control loop (385 ms ten minutes in), and a crash loses only what
+            # replaying the log rebuilds.
+            if replay_writer_config is None:
+                replay_writer_config = ColumnarReplayWriterConfig(
+                    replay_name=_replay_name(game_log_path), checkpoint_every_s=0
+                )
         for is_yellow in (True, False):
             self._check_profiles_are_driven(is_yellow)
         yellow_trusted_ir_robots = self._trusted_ir(True, yellow_trusted_ir_robots)
@@ -432,6 +461,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._field_check_rows: list[dict] = []
         self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
         self._pending_strategies: dict[str, AbstractStrategy] = {}  # side -> its replacement, see replace_strategy
+        self._pending_strategy_names: dict[str, str] = {}
 
         ### functions below rely on self.my and self.opp ###
 
@@ -976,11 +1006,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
         return FieldCheck(expected, self.field_bounds, self.full_field_dims)
 
-    def replace_strategy(self, side: str, strategy: AbstractStrategy) -> None:
+    def replace_strategy(self, side: str, strategy: AbstractStrategy, name: str = "") -> None:
         """Run `strategy` for `side` ("my" or "opp") from the next tick, in place of the one
         running: a different one, or a fresh copy of the same to restart it. Vision, the radio and
         the dashboard carry on. Only while HALTed, so no robot is mid-move when its strategy
-        changes: raises ValueError otherwise (the dashboard shows it). Safe from any thread."""
+        changes: raises ValueError otherwise (the dashboard shows it). Safe from any thread.
+        `name` is what the game log's note calls it (default: the strategy's class)."""
         runtime = self.my if side == "my" else self.opp if side == "opp" else None
         if runtime is None:
             raise ValueError(f"no {side!r} side in this run")
@@ -991,6 +1022,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 f"needs control scheme {strategy.control_scheme!r}, this run uses {runtime.control_scheme!r}"
             )
         self._pending_strategies[side] = strategy
+        self._pending_strategy_names[side] = name
 
     @staticmethod
     def _halted(runtime: SideRuntime) -> bool:
@@ -1002,9 +1034,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         new = self._pending_strategies.pop(side, None)
         if new is None:
             return
+        name = self._pending_strategy_names.pop(side, "") or type(new).__name__
         if not self._halted(runtime):  # play restarted between the request and this tick
             self.logger.warning("Strategy change for %s dropped: no longer halted", side)
+            if self.game_log is not None:
+                self.game_log.note(f"{side} strategy change to {name} dropped: no longer halted")
             return
+        if self.game_log is not None:
+            self.game_log.note(f"{side} strategy: {name}")
         old = runtime.strategy
         if old.rsim_env is not None:
             new.load_rsim_env(old.rsim_env)

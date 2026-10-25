@@ -127,6 +127,12 @@ amber, each robot under its own ID and colour, a ball in each corner inside the 
 and a robot pushed by hand across the cameras' overlap moving smoothly (a jump there means the
 two calibrations disagree). Only then Force Start.
 
+Each run records `replays/field/<time>_<mode>_<name>.log`, a game log of every vision packet,
+the radio both ways, the referee and which code ran. Beside it is a `.npz` replay of the world
+the strategy saw, written when the run closes. Use the Live tab's Note box (Enter writes it into
+the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
+a test day is setting up, and notes make the useful minutes easy to find later.
+
 ## When something fails
 
 | Symptom | Cause |

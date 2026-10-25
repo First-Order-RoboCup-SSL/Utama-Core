@@ -14,7 +14,11 @@ sidecar gives our camera's noise. Records:
   the radio (12 bytes per robot, `RealRobotController._generate_command_buffer`) and the
   feedback bytes read back. Commanded against seen motion gives the control delay.
 - `RUN_INFO` (ours): one JSON object at the start: mode, colours, sides, each team's vision
-  ID -> firmware ID mapping and robot profiles, so the radio's IDs can be matched to vision's.
+  ID -> firmware ID mapping and robot profiles, so the radio's IDs can be matched to vision's;
+  the command line, the git commit (and whether the tree had uncommitted changes) and the field
+  bounds, so a log can be replayed through the code that ran it.
+- `NOTE` (ours): `{"text": ...}`, a note from the operator (the dashboard's note box) or the
+  runner (a strategy change), so a log's idle stretches and tests can be told apart.
 
 Every record is stamped with the receive (or send) time on this machine's clock,
 `time.time_ns()`, so vision and radio share one clock: their difference is the whole loop,
@@ -26,6 +30,7 @@ from __future__ import annotations
 
 import json
 import struct
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -40,8 +45,22 @@ from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 im
 # in the whole reader).
 LOG_HEADER = b"SSL_LOG_FILE"
 REFEREE, VISION_2014 = 3, 4
-RADIO_OUT, RADIO_IN, RUN_INFO = 100, 101, 102
+RADIO_OUT, RADIO_IN, RUN_INFO, NOTE = 100, 101, 102, 103
 _FLUSH_S = 1.0
+
+
+def code_version() -> Optional[dict]:
+    """The git commit this code runs from and whether the tree has uncommitted changes; None
+    outside a git checkout (an installed package)."""
+    repo = Path(__file__).resolve().parent
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, timeout=5)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if commit.returncode != 0:
+        return None
+    return {"commit": commit.stdout.strip(), "dirty": bool(status.stdout.strip())}
 
 
 def referee_message(data: RefereeData, command_counter: int) -> Referee:
@@ -99,6 +118,9 @@ class GameLogWriter:
 
     def run_info(self, info: dict) -> None:
         self.write(RUN_INFO, json.dumps(info).encode())
+
+    def note(self, text: str) -> None:
+        self.write(NOTE, json.dumps({"text": text}).encode())
 
     def vision(self, packet: bytes) -> None:
         self.write(VISION_2014, packet)

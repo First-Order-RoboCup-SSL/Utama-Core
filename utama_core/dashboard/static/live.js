@@ -211,11 +211,14 @@
 
   // What each side plays, when the script offers choices (dashboard/views/strategy.py): a list
   // and Run per side. The server refuses unless halted, and the refusal shows under the buttons.
+  // A run that records a game log also gets a note box: Enter writes the note into the log.
   function mountStrategy() {
     fetch("/strategy/config")
       .then((r) => (r.ok ? r.json() : null))
-      .then((sides) => {
-        if (!sides) return;
+      .then((cfg) => {
+        if (!cfg) return;
+        const sides = cfg.sides;
+        if (cfg.notes) mountNote();
         const rows = document.getElementById("strategy-rows");
         rows.innerHTML = "";
         for (const side in sides) {
@@ -243,6 +246,22 @@
         }
         document.getElementById("strategy-run").style.display = "";
       });
+  }
+
+  function mountNote() {
+    const input = document.getElementById("log-note");
+    document.getElementById("log-note-row").style.display = "";
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || !input.value.trim()) return;
+      const text = input.value;
+      fetch("/log/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+        .then((r) => (r.ok ? (input.value = "") : r.text().then((t) => showSendError("note", t || "HTTP " + r.status))))
+        .catch((err) => showSendError("note", err.message || "no connection"));
+    });
   }
 
   function mount() {

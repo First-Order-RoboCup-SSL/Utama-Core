@@ -76,6 +76,20 @@ def test_a_replacement_queued_while_halted_is_dropped_if_play_starts_first(runne
     assert runner.my.strategy is old
 
 
+def test_a_recorded_run_notes_each_strategy_change_and_each_dropped_one(runner):
+    # A field test's log said nothing of a strategy changed from the dashboard, so its tests
+    # couldn't be told apart; a dropped change looked like one that ran.
+    notes = []
+    runner.game_log = type("Log", (), {"note": lambda self, text: notes.append(text), "close": lambda self: None})()
+    runner._run_step()
+    runner.replace_strategy("my", _strategy([]), "press")
+    runner._run_step()
+    runner.replace_strategy("my", _strategy([]), "lead")
+    runner.referee.set_command(RefereeCommand.FORCE_START, runner.my.current_game_frame.ts)
+    runner._run_step()
+    assert notes == ["my strategy: press", "my strategy change to lead dropped: no longer halted"]
+
+
 def test_there_is_no_opp_side_to_replace_without_an_opponent(runner):
     runner._run_step()
     with pytest.raises(ValueError, match="opp"):
