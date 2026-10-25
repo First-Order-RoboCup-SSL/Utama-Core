@@ -88,6 +88,24 @@ def test_a_recorded_run_notes_each_strategy_change_and_each_dropped_one(runner):
     runner.referee.set_command(RefereeCommand.FORCE_START, runner.my.current_game_frame.ts)
     runner._run_step()
     assert notes == ["my strategy: press", "my strategy change to lead dropped: no longer halted"]
+    assert runner.strategy_names == {"my": "press"}  # what the dashboard shows running
+
+
+def test_a_swap_between_the_dashboards_writes_still_takes_the_chosen_name(runner):
+    # The dashboard's thread queued the strategy, then its name, in two writes; the control loop
+    # swapping in between noted the class name, and the chosen name labelled the next change.
+    notes = []
+    runner.game_log = type("Log", (), {"note": lambda self, text: notes.append(text), "close": lambda self: None})()
+    runner._run_step()
+
+    class SwapOnWrite(dict):  # the control loop takes its turn right after each write
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            runner._swap_in_pending_strategy(runner.my, key)
+
+    runner._pending_strategies = SwapOnWrite()
+    runner.replace_strategy("my", _strategy([]), "press")
+    assert notes == ["my strategy: press"] and runner.strategy_names == {"my": "press"}
 
 
 def test_there_is_no_opp_side_to_replace_without_an_opponent(runner):

@@ -4,6 +4,8 @@ The script that builds the runner says what can be chosen: for each side ("my", 
 mapped to functions that build a fresh `AbstractStrategy`, and the name it started with. Running a
 choice (the one running restarts it) hands a new strategy to `StrategyRunner.replace_strategy`,
 which takes it at the next tick and only while HALTed; a refusal comes back to the page as a 400.
+What the panel shows running is what the runner swapped in (`StrategyRunner.strategy_names`), so a
+change dropped because play restarted first never shows as running.
 When the run records a game log, a note box writes the operator's notes into it (`GameLogWriter.note`).
 """
 
@@ -29,7 +31,6 @@ def attach(
 ) -> None:
     """`choices`: side ("my"/"opp") -> {name: build a fresh strategy}; `running`: side -> the
     name each side started with."""
-    running = dict(running)
 
     def _config_bytes() -> bytes:
         yellow = {"my": runner.my_team_is_yellow, "opp": not runner.my_team_is_yellow}
@@ -39,7 +40,7 @@ def attach(
                     side: {
                         "team": "yellow" if yellow[side] else "blue",
                         "choices": list(names),
-                        "running": running[side],
+                        "running": runner.strategy_names.get(side, running[side]),
                     }
                     for side, names in choices.items()
                 },
@@ -52,7 +53,6 @@ def attach(
         if side not in choices or name not in choices[side]:
             raise ValueError(f"no strategy {name!r} for {side!r}")
         runner.replace_strategy(side, choices[side][name](), name)
-        running[side] = name
 
     def _handle_note(payload: dict) -> None:
         text = str(payload.get("text", "")).strip()

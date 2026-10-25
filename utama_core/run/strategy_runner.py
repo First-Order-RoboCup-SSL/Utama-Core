@@ -460,8 +460,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.field_check = self._make_field_check()
         self._field_check_rows: list[dict] = []
         self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
-        self._pending_strategies: dict[str, AbstractStrategy] = {}  # side -> its replacement, see replace_strategy
-        self._pending_strategy_names: dict[str, str] = {}
+        # side -> (its replacement, its name), see replace_strategy: one entry, so the control loop
+        # never takes a strategy without its name.
+        self._pending_strategies: dict[str, tuple[AbstractStrategy, str]] = {}
+        self.strategy_names: dict[str, str] = {}  # side -> the name of the strategy swapped in last
 
         ### functions below rely on self.my and self.opp ###
 
@@ -1011,7 +1013,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         running: a different one, or a fresh copy of the same to restart it. Vision, the radio and
         the dashboard carry on. Only while HALTed, so no robot is mid-move when its strategy
         changes: raises ValueError otherwise (the dashboard shows it). Safe from any thread.
-        `name` is what the game log's note calls it (default: the strategy's class)."""
+        `name` is what the game log's note and `strategy_names` call it (default: the strategy's class)."""
         runtime = self.my if side == "my" else self.opp if side == "opp" else None
         if runtime is None:
             raise ValueError(f"no {side!r} side in this run")
@@ -1021,8 +1023,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             raise ValueError(
                 f"needs control scheme {strategy.control_scheme!r}, this run uses {runtime.control_scheme!r}"
             )
-        self._pending_strategies[side] = strategy
-        self._pending_strategy_names[side] = name
+        self._pending_strategies[side] = (strategy, name)
 
     @staticmethod
     def _halted(runtime: SideRuntime) -> bool:
@@ -1031,10 +1032,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _swap_in_pending_strategy(self, runtime: SideRuntime, side: str) -> None:
         """Called on the control loop, just before `runtime`'s strategy steps."""
-        new = self._pending_strategies.pop(side, None)
-        if new is None:
+        pending = self._pending_strategies.pop(side, None)
+        if pending is None:
             return
-        name = self._pending_strategy_names.pop(side, "") or type(new).__name__
+        new, name = pending
+        name = name or type(new).__name__
         if not self._halted(runtime):  # play restarted between the request and this tick
             self.logger.warning("Strategy change for %s dropped: no longer halted", side)
             if self.game_log is not None:
@@ -1052,6 +1054,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if side == "my" and self.match_log is not None and kernel_strategy is not None:
             kernel_strategy.match_log = self.match_log
         runtime.strategy = new
+        self.strategy_names[side] = name
         self.logger.info("Strategy for %s replaced", side)
 
     def _tick_field_check(self, vision_frames: List[Optional[RawVisionData]], now: float) -> None:
