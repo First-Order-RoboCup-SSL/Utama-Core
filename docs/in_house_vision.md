@@ -103,9 +103,31 @@ cameras -> capture -> [calibration each session] -> tag detector + ball detector
 - A few tags on boxes at robot-top height (about 14 cm). A flat floor alone cannot tell a longer
   lens from a higher camera, which is today's camera-height problem; tags off the floor
   separate the two, and they calibrate exactly the plane the robot positions come from.
-- Press calibrate: one bundle adjustment fits each camera's lens (focal length, image centre,
-  distortion), its position and tilt, and the loose tags' positions, over hundreds of tag
-  corners. Both cameras see shared tags, so they agree with each other by construction.
+- Tags are told apart by ID. A small config file gives each tag's height and names the
+  anchors, for example tags 0–19 on the floor (z = 0), tags 20–24 on boxes (z = 0.143 m,
+  box plus paper, measured once with a ruler), tags 0–2 on the anchor spots. Only the
+  height is given: the solver finds each loose tag's x, y and rotation. The box height and
+  the printed tag size are the only things measured by hand.
+- Press calibrate: one fit of all the numbers at once (bundle adjustment). Unknowns:
+  - per camera, about 11: focal length, image centre, 1–2 distortion terms, position
+    (x, y, height) and tilt;
+  - per loose tag, 3: x, y and rotation on its plane.
+
+  Measurements: each tag's 4 corners in each image, about 200 coordinates per camera for 25
+  tags. The fit moves every number until each tag, projected from its place through its
+  camera, lands on the corners seen. Both cameras see shared tags, so they agree with each
+  other by construction. Put a box or two where the cameras overlap, so they are tied at
+  robot height too.
+- Why raised tags fix the camera height: a raised tag is nearer the camera, so it appears
+  pushed outward, away from the spot under the camera. A tag at height h, a distance d out,
+  looks like a floor point at about d × H / (H − h). With the camera at H = 3 m, a 14 cm box
+  1.5 m out appears about 73 mm further out; were the camera 10 cm higher, about 2.5 mm less.
+  Corners are found to about 1 mm, so the fit pins the height down. With the camera model
+  known, a pixel's line of sight gives the field position at any height: robots at the tag's
+  height (about 14 cm), the ball at its centre (about 2 cm). Tags at a single height, all at
+  robot height for example, would leave the ball's height poorly fixed.
+- The fit prints each tag's error (where its corners land against where they were seen), so
+  a tag set up wrongly, at a height the config doesn't say, stands out straight away.
 - Because the camera model alone isn't trusted (assumption 2), fit a smooth correction map from
   the residual error at the tags: one for robot-top height, one for ball height (about 21 mm).
 - It ends by running the guided check itself and prints the error per camera.
@@ -140,6 +162,26 @@ for a large one (a bumped or sagging mount). This answers "something moved betwe
 The same `SSL_WrapperPacket` on the same multicast address, so `CameraCombiner`, the refiners
 and everything above stay unchanged. While both run, send on a second port so the two can be
 compared side by side on the same scene with `vision_check`.
+
+### A session, start to finish
+
+1. Set up the cameras; the program sets fixed exposure (about 2 ms, so moving tags don't
+   blur), gain and white balance, and timestamps each frame at capture.
+2. Lay out the tags, press calibrate (about a minute), check the error it prints, and pick
+   up the floor tags, leaving the few just outside the field lines for the movement watch.
+3. Play: per frame, robots from tags and the ball from colour inside the field mask, sent as
+   SSL packets. Calibration also outputs the field mask and the empty-field picture for
+   flat-field correction.
+
+### Code
+
+A handful of Python modules on OpenCV and numpy, roughly 1,000–1,500 lines:
+- `capture` (one backend per camera type);
+- `calibrate` (the hardest part);
+- `robots`;
+- `ball`;
+- `send`;
+- a config holding camera settings, tag heights and anchors, and the tag-to-robot map.
 
 ### Practical
 
