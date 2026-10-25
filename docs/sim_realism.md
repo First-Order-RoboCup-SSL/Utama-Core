@@ -414,6 +414,49 @@ Replace league ranges with measurements of our robots. Tests, each short and rep
 Ranges for our robots then replace the league ranges for our side only. Opponents keep the
 league ranges.
 
+#### First measurements of our robot (field test 2026-10-22)
+
+From the logs in `replays/field/20261022_*_real_*.log`, one robot (blue 2, firmware 0), mostly
+`real_score_goal` runs. Of 33 recorded minutes, the robot moved for under 3, dribbled for 3.5
+and kicked 9 times, so these are small samples. The radio log (`RADIO_OUT`) says when the
+dribbler and kicker were commanded. Kicks and ball slow-down come from one camera's raw ball
+detections, because the two cameras disagreed by several cm. Vision noise comes from
+`tools/robot_calibration.py`.
+
+| Measure | Ours | League / sim |
+|---|---|---|
+| Full kick, launch speed | 1.95–2.37 m/s (3 kicks on one camera; a 4th, from the fused ball, about 2.5); one weak kick at 1.07 | league full power 4.1–6.3; sim 5 (`KICK_SPD`) |
+| Kick misfire: the ball moved under 15 cm | 4 of 9, the IR sensor seeing the ball every time | sim never |
+| Kick direction, against the robot's heading | +2.6° to +4.9°: a steady offset, about 1° of spread | sim 0 |
+| Kick command to the ball moving (camera seen) | 63–89 ms | sim: next tick |
+| Ball slide, first 0.4 s after a kick | 1.0–3.5 m/s² | league 2–4; sim 0.65 |
+| Ball rolling, after 0.5 s | 0.22–0.37 m/s² | league 0.29; sim 0.65 |
+| Robot position noise at rest | 0.2–0.6 mm (2–8 mm in 4 logs where the robot rocked or the cameras traded off) | league 0.4–1.0 |
+| Robot heading noise at rest | 0.3–0.5° | league 0.2–0.3 |
+| Robot missing from a camera frame | 3–9% | league 0.1–0.9% |
+| Ball at rest, position noise | 0.2–0.5 mm | |
+| Ball lost while dribbling | 12 losses, nearly all with ≥ 0.85 m/s or ≥ 2.5 rad/s commanded in the 0.7 s before; slow, straight dribbles held 10–15 s | |
+| Loop delay (command to motion seen) | 80 ms, from 3 noisy steps in one log | sim 0.05–0.10 when on |
+
+- **Our kicker is less than half as fast as the league's and the sim's.** The electronics team
+  says the capacitor's charge, and so the kick strength, depends on how long it has been
+  charging, and they can't control it. So the sim should treat every kick as a full kick, at
+  about 2.1 m/s for our robots, with the league range kept for opponents.
+- **Misfires aren't explained by the ball's place in the mouth.** On the misfires, vision put the
+  ball within 22 mm of where it sits when IR sees it, and within 8 mm sideways; full kicks sat
+  just as far off. Vision in those logs is only good to about ±2 cm, so a ball a centimetre
+  short of the kicker can't be ruled out. Off-centre balls didn't explain direction either: the
+  offset was +3° to +5° whatever the ball's sideways place. It is likely the robot's heading as
+  vision reads it, or the kicker's mounting.
+- **The ball on this floor slows like the league's carpet:** it slides, then rolls at about
+  0.3 m/s². This is the two-phase friction found in Phase 1, which rsim's single 0.65 doesn't
+  reproduce.
+- **The IR ball sensor never fired with the ball more than 25 cm away.** Where vision puts the
+  ball while IR fires shows vision's own error at the dribbler. It was steady (95–99 mm from
+  the robot's centre) after the cameras were retuned, but spread over 66–104 mm earlier.
+- **Still unmeasured:** loop delay and acceleration limits (they need a `--calibrate` run, not
+  strategy runs), spread across robots (one robot), and kick strength against charging time.
+
 ## P1: Value model on real data
 
 The xG model is already a small value model fitted on reality, for shots only. The extension
