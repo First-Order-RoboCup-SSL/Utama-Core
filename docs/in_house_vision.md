@@ -1,7 +1,8 @@
 # In-house vision: plan, experiments and findings
 
-Status: plan, 2026-10-24. Nothing below is built unless it says so. Written after the
-2026-10-22 test day, where vision took most of the day.
+Status: plan, 2026-10-24; on 2026-10-25 the team chose the full in-house stack (below,
+"Plan now"). Nothing below is built unless it says so. Written after the 2026-10-22 test day,
+where vision took most of the day.
 
 The goal is less time spent on vision each test day, and robot positions accurate to about
 1 cm instead of 3–9 cm. This applies to **lab and test days only**: at competitions the league
@@ -177,17 +178,74 @@ Run on recorded frames where possible, so they need no test-day time beyond the 
 
 None yet. Record each result here with its date, the recording it used and the numbers.
 
-## Order of work, each step with a pass mark
+## Plan now (team decision, 2026-10-25)
 
-1. **Recorder:** synchronised frames from both cameras to disk. Needed for everything after,
-   and it moves most of the work off test days.
-2. **Calibration tool, offline on recorded frames.** Pass: guided error under 1 cm on both
-   cameras.
-3. **Live tag detector and SSL output.** Pass: beside ssl-vision, fewer dropouts and less
-   jitter, no ID swaps, and corners as good as the centre.
-4. **Ball detector.** Pass: no false balls on an empty field, and the ball tracked while a
-   robot moves it.
-5. Retire ssl-vision on lab days.
+The team chose the full in-house stack. The guided check by hand (`vision_check.py --guided`)
+took too long to run every session, and we have one ball, which rolls off its spot. So
+experiments 1 and 2 no longer decide anything: their questions become pass marks below. Every
+step is measured on recordings, so most of the work happens off test days.
+
+### Before the next test day (no hardware)
+
+- **Facts to collect:**
+  - the camera models, resolution, frame rate and interface (USB/V4L2 or FLIR Spinnaker);
+  - whether we can SSH into the vision laptop and run Python there.
+
+  Resolution decides whether robot tags are big enough. A robot top fits a tag of about
+  100 mm; at 2–3 mm per pixel that is 35–50 pixels, 4–5 pixels per tag cell, which is
+  marginal. Exposure decides motion blur: 1 m/s for 10 ms is 1 cm, about 4 pixels, so
+  exposure must be about 2 ms.
+- **Vision scorecard** (`tools/vision_bench.py`, to build): replays `replays/field/*.log`
+  through our vision layer and gives one table:
+  - robot and ball jitter at rest;
+  - dropped frames;
+  - camera disagreement where the cameras overlap;
+  - how far rolling balls stray from a straight line;
+  - the spread of the IR-on ball offset (ball in the mouth);
+  - ball jumps, balls off the field, balls inside a robot, ID swaps.
+
+  Its first run is the ssl-vision baseline from 2026-10-22 that every step below must beat.
+  Our own stack sends the same `SSL_WrapperPacket`s, so the same scorecard judges it.
+- **Calibration solver, offline:** `cv2.aruco` AprilTag 36h11 detection, then a least-squares
+  fit of each camera's lens, position and tilt and of every loose tag's position (design 1).
+  It is tested on synthetic images rendered from a known camera, so it is right before it
+  meets a real one.
+- **Print** about 20 A4 tags, 3 with crosshairs for the anchor spots (centre and two
+  corners), plus a few robot-top tags and boxes about 14 cm high for raised tags.
+
+### Next test day (about 30 minutes of vision)
+
+1. **Recorder:** a small script on the vision laptop that saves frames from both cameras to
+   disk, with ssl-vision stopped, since a camera opens for one program at a time. Needs the
+   facts above.
+2. **Record:**
+   - the tag layout, still: calibration;
+   - one robot with a top tag driving a scripted path over the whole field: tag
+     detection while moving, blur and corners;
+   - the ball rolled across the field: ball detection and straight-line checks;
+   - the empty field: flat-field correction.
+
+### Then, offline on those recordings, each with a pass mark
+
+3. **Calibration from the tag frames.** Pass:
+   - the anchors land within 3 mm of their spots;
+   - the two cameras agree within 1 cm on shared tags;
+   - raised tags fit as well as floor tags.
+
+   This answers experiment 1 for our own model.
+4. **Robot tag detector, sending SSL packets** on a second port, replayed from the robot
+   recording. Pass: beats the ssl-vision baseline on the scorecard for jitter, dropouts and
+   ID swaps, corners included. This is experiment 2's question.
+5. **Ball detector**, inside the field mask, after flat-field correction. Pass:
+   - no false balls on the empty field;
+   - the ball tracked while a robot moves it;
+   - straight-line error under 1 cm.
+6. **Live on a test day**, side by side with ssl-vision, then retire ssl-vision on lab days.
+   Calibration and the movement watch (design 2) then run every session.
+
+The IR offset correction (`docs/sim_realism.md`, the IR finding) sits above either stack and
+is judged by the same scorecard. It waits until our own calibration shows how much offset is
+left.
 
 ## Risks
 
