@@ -35,6 +35,24 @@ def test_nearby_same_id_robot_duplicates_do_not_give_one_camera_extra_weight():
     assert result.blue_robots[0].x == pytest.approx(0.055)
 
 
+@pytest.mark.parametrize("colour", ["yellow", "blue"])
+@pytest.mark.parametrize("axis,sign", [("x", -1), ("x", 1), ("y", -1), ("y", 1)])
+@pytest.mark.parametrize("inside", [2.45, 2.49, 2.5])
+def test_outside_robot_repeat_cannot_erase_or_bias_an_inside_observation(colour, axis, sign, inside):
+    bounds = VisionBounds(-2.5, 2.5, -2.5, 2.5)
+    x, y = (sign * inside, 0) if axis == "x" else (0, sign * inside)
+    outside_x, outside_y = (sign * 2.55, 0) if axis == "x" else (0, sign * 2.55)
+    robots = [RawRobotData(2, x, y, 0.4, 0.9), RawRobotData(2, outside_x, outside_y, 1, 0.99)]
+    frame = RawVisionData(1, robots if colour == "yellow" else [], robots if colour == "blue" else [], [], 0)
+
+    result = CameraCombiner().combine_cameras([frame], bounds)
+
+    combined = result.yellow_robots if colour == "yellow" else result.blue_robots
+    assert len(combined) == 1
+    assert combined[0].id == 2
+    assert (combined[0].x, combined[0].y, combined[0].orientation) == pytest.approx((x, y, 0.4))
+
+
 def test_close_different_robot_identities_are_not_silently_combined():
     frame = RawVisionData(1, [], [RawRobotData(2, 0, 0, 0, 1), RawRobotData(3, 0.08, 0, 0, 1)], [], 0)
     assert {r.id for r in CameraCombiner().combine_cameras([frame], BOUNDS).blue_robots} == {2, 3}
@@ -209,6 +227,23 @@ def test_in_field_ball_is_not_discarded_for_a_stronger_nearby_outside_candidate(
         candidates.reverse()
     result = position.refine(current, [RawVisionData(1.02, [], [], candidates, 0)])
     assert result.ball.p.x == pytest.approx(1.4)
+
+
+@pytest.mark.parametrize("filtering", [False, True])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_reset_preserves_preference_for_an_in_field_ball(filtering, reverse):
+    position = PositionRefiner(FieldDimensions(1.5, 1.125, 0.25, 0.5, 0.4, 0.4), filtering=filtering)
+    candidates = [RawBallData(1.4, 0.8, 0, 0.9), RawBallData(1.55, 0.8, 0, 0.99)]
+    if reverse:
+        candidates.reverse()
+
+    for _ in range(3):
+        current = position.refine(GameFrame(0, False, False, {}, {}, None), [RawVisionData(1, [], [], candidates, 0)])
+        assert (current.ball.p.x, current.ball.p.y) == pytest.approx((1.4, 0.8))
+        position.start_filtering()
+        result = position.refine(current, [RawVisionData(1.02, [], [], candidates, 0)])
+        assert (result.ball.p.x, result.ball.p.y) == pytest.approx((1.4, 0.8))
+        position.reset()
 
 
 def test_a_ball_inside_the_goal_is_a_plausible_candidate():

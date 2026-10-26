@@ -293,7 +293,7 @@ class PositionRefiner(BaseRefiner):
         Should be called at the start of each game to ensure no leakage of information between games.
         """
         self._filter_running = False
-        self._combiner = CameraCombiner()
+        self._combiner = CameraCombiner(self._field_dims)
         if self._uses_kalman:
             self.kalman_filters_yellow = {}
             self.kalman_filters_blue = {}
@@ -504,8 +504,12 @@ class CameraCombiner:
         frames = [
             replace(
                 frame,
-                yellow_robots=self._nearby_robot_duplicates(frame.yellow_robots),
-                blue_robots=self._nearby_robot_duplicates(frame.blue_robots),
+                yellow_robots=self._nearby_robot_duplicates(
+                    [r for r in frame.yellow_robots if self._bounds_check(r.x, r.y, bounds)]
+                ),
+                blue_robots=self._nearby_robot_duplicates(
+                    [r for r in frame.blue_robots if self._bounds_check(r.x, r.y, bounds)]
+                ),
             )
             for frame in frames
         ]
