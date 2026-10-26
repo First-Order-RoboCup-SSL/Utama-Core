@@ -57,7 +57,7 @@ def test_combine_proximity_multiple_balls():
         (RawBallData(0.02, 0.03, 0, 1), None),
         (RawBallData(1, 1, 0, 1), None),
     ]
-    balls = CameraCombiner()._combine_balls_by_proximity(seen)
+    balls = CameraCombiner()._combine_balls_by_proximity([(b, camera, i) for i, (b, camera) in enumerate(seen)])
     assert len(balls) == 3
     assert (balls[0].x, balls[0].y) == (0.01, 0.015)
 
@@ -78,7 +78,9 @@ def test_combine_filters_low_confidence():
         (RawBallData(5, 5, 0, 0.05), None),
         (RawBallData(0.02, 0.02, 0, 0.05), None),
     ]
-    assert len(CameraCombiner()._combine_balls_by_proximity(seen)) == 2
+    assert (
+        len(CameraCombiner()._combine_balls_by_proximity([(b, camera, i) for i, (b, camera) in enumerate(seen)])) == 2
+    )
 
 
 # --- Bounds filtering tests ---
