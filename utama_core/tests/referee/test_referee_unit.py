@@ -462,7 +462,7 @@ class TestBallPlacementOursStep:
 
     def test_placer_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
         """Regression for the same bug shape as `DirectFreeOursStep`'s kicker
-        thrashing (roadmap item 15): a bare `min(..., key=distance)`
+        thrashing (roadmap "trajsample liveness fixes"): a bare `min(..., key=distance)`
         recomputed fresh every tick flips identity on ordinary sim noise
         whenever two-plus robots are near-tied, resetting whoever newly
         "wins" to a standing start. `BallPlacementOursStep` must hold its
@@ -2081,7 +2081,7 @@ class TestDirectFreeOursStep:
 
     def test_kicker_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
         """Regression for the DIRECT_FREE congestion stall root-caused via
-        `clear_danger_vs_clear_press_plus` (roadmap item 15): three robots
+        `clear_danger_vs_clear_press_plus` (roadmap "trajsample liveness fixes"): three robots
         within a couple cm of each other's distance to the ball flipped
         which one `min(..., key=distance)` called "closest" on ordinary
         rsim position noise, ~9 times/second, so no robot ever held the

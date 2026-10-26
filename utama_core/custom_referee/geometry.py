@@ -157,7 +157,7 @@ class RefereeGeometry:
         scoreboard -- it lets the very defender/attacker that caused the
         violation instantly re-trigger it, deadlocking the match in a rapid
         STOP/FORCE_START churn. Confirmed live for `DefenseAreaRule`
-        2026-09-04 (roadmap item 15/16): 6 churn cycles in under 2 seconds
+        2026-09-04 (roadmap "`custom_referee` missing-`designated_position` audit"): 6 churn cycles in under 2 seconds
         from exactly this gap. Only x needs clamping for either defense
         area (both are full-width rectangles spanning the goal line to
         `2*half_defense_depth` in) -- y is already legal by construction

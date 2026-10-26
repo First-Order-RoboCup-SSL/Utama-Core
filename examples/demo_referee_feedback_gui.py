@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Preview the referee web UI controller-feedback panel without hardware.
 
 Run:
@@ -10,6 +11,12 @@ real robots, serial hardware, grSim, or RSim.
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import math

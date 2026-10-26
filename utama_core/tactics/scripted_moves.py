@@ -1,0 +1,100 @@
+"""Fixed moves for measuring a robot: the commands are a script, not a decision.
+
+`ScriptedMovesTactic` sends `CALIBRATION_SCRIPT`'s raw velocity commands, step by step, to the
+one robot it is given, then stands still. Run with a game log being recorded
+(`StrategyRunner(game_log_path=...)`), the log holds each command as sent and the robot's
+motion as the camera saw it; `tools/robot_calibration.py` turns that into the robot's
+numbers (vision noise, delay, speed and turn tracking, acceleration).
+
+Each move goes and comes back (forward then backward, left then right), so the robot
+ends near where it started; the longest is 0.8 m forward. Pauses (HALT, STOP) do not
+advance the script, and the step a pause interrupted starts again, so no measurement is
+split: halt to put the robot back, then Force Start to carry on.
+"""
+
+from __future__ import annotations
+
+from typing import NamedTuple, Optional
+
+from utama_core.engine.context import TickContext
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.game import Game
+
+
+class Move(NamedTuple):
+    name: str
+    seconds: float
+    forward: float = 0.0  # m/s, robot frame (kicker forward)
+    left: float = 0.0  # m/s
+    turn: float = 0.0  # rad/s, anticlockwise
+
+
+_REST = 1.5  # s still between moves, so each response settles
+_GAP_S = 0.1  # a tick this long after the last one means play was paused
+
+
+def _there_and_back(name: str, speed: float, distance: float, sideways: bool = False) -> list[Move]:
+    t = distance / speed
+    axis = "left" if sideways else "forward"
+    go, back = Move(name, t, **{axis: speed}), Move(name, t, **{axis: -speed})
+    return [go, Move("rest", _REST), back, Move("rest", _REST)]
+
+
+def _turns(rate: float, seconds: float) -> list[Move]:
+    name = f"turn {rate:g} rad/s"
+    return [Move(name, seconds, turn=rate), Move("rest", _REST), Move(name, seconds, turn=-rate), Move("rest", _REST)]
+
+
+# About 70 s. Speeds stay within the real robots' caps (REAL_PARAMS: 1 m/s, 4 rad/s).
+CALIBRATION_SCRIPT: tuple[Move, ...] = (
+    Move("still", 10.0),  # vision noise: robot (and a ball placed in view) at rest
+    *_there_and_back("forward 0.3 m/s", 0.3, 0.6),
+    *_there_and_back("forward 0.6 m/s", 0.6, 0.8),
+    *_there_and_back("forward 1 m/s", 1.0, 0.8),
+    *_there_and_back("sideways 0.5 m/s", 0.5, 0.6, sideways=True),
+    *_turns(2.0, 3.0),
+    *_turns(4.0, 1.6),
+    Move("still", 3.0),
+)
+
+
+class ScriptedMovesTactic(BaseTactic[None]):
+    """Plays `script` on its first robot; others (and the first, once done) stand still."""
+
+    tag = TacticTag.MIXED
+
+    def __init__(self, script: tuple[Move, ...] = CALIBRATION_SCRIPT):
+        self.script = script
+        # Progress lives here, not in `mem`: the kernel may reset `mem` when play resumes.
+        self._step = 0
+        self._step_elapsed = 0.0
+        self._last_ts: Optional[float] = None
+
+    def initial_mem(self) -> None:
+        return None
+
+    @property
+    def done(self) -> bool:
+        return self._step >= len(self.script)
+
+    def tick(
+        self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: None
+    ) -> tuple[dict[RobotId, RobotCommand], None]:
+        still = RobotCommand(0.0, 0.0, 0.0, kick=False, chip=False, dribble=False)
+        commands = {rid: still for rid in robot_ids}
+        if not robot_ids:
+            return commands, mem
+        dt = 0.0 if self._last_ts is None else game.ts - self._last_ts
+        self._last_ts = game.ts
+        if dt > _GAP_S:
+            self._step_elapsed = 0.0  # resumed after a pause: this step again, from its start
+        else:
+            self._step_elapsed += dt
+        while not self.done and self._step_elapsed >= self.script[self._step].seconds:
+            self._step_elapsed -= self.script[self._step].seconds
+            self._step += 1
+        if not self.done:
+            m = self.script[self._step]
+            commands[robot_ids[0]] = RobotCommand(m.forward, m.left, m.turn, kick=False, chip=False, dribble=False)
+        return commands, mem

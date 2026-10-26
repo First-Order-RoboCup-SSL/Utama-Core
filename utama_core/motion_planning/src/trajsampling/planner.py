@@ -295,7 +295,7 @@ def _has_priority(robot_id: int, other_id: int, game: Optional[Game] = None) -> 
 # on formation -- none of them settle for more than a fraction of a second,
 # so within priority-blocking's collision margin there is almost always some
 # higher-priority teammate's (itself about to be replaced) trajectory
-# crossing somewhere. Confirmed live (roadmap item 15/16): a
+# crossing somewhere. Confirmed live (roadmap "trajsample liveness fixes"): a
 # PREPARE_KICKOFF_YELLOW restart's designated kicker -- always the lowest
 # non-keeper robot ID, so by `_has_priority`'s fixed ordering also the LOWEST
 # priority outfield robot -- had every direct-line candidate to the ball
@@ -367,8 +367,8 @@ _TRAJECTORY_TARGET_TOLERANCE = 0.01
 # invalidate an already-committed, currently-collision-clear trajectory just
 # because a higher-priority teammate's OWN committed trajectory crosses its
 # margin somewhere in that window. Originally widened to the full
-# `MAX_LOOKAHEAD_TIME` (1.5s, see roadmap item 15's Sumatra-fidelity audit,
-# finding #3) so a robot would notice a priority conflict as soon as it
+# `MAX_LOOKAHEAD_TIME` (1.5s, see the roadmap's "Sumatra-fidelity audit,
+# top 3 findings", finding #3) so a robot would notice a priority conflict as soon as it
 # appeared anywhere in its remaining plan, not only once `elapsed` caught up
 # to it. That's correct when the crossing trajectory is settled, but at a
 # kickoff/formation restart every non-keeper teammate is SIMULTANEOUSLY
@@ -1295,7 +1295,7 @@ class TrajectorySamplingPlanner:
         instability in the same restart-congestion family as
         `_intermediate_targets`'s stale-direction/side-flip bugs: live-traced
         on `counter_press_vs_overload_flow`'s PREPARE_KICKOFF_BLUE stall
-        (roadmap item 15/16), where the blocking teammate was itself still
+        (roadmap "trajsample liveness fixes"), where the blocking teammate was itself still
         actively moving to ITS OWN formation spot (not one near-stationary
         robot, the earlier-fixed case) -- the collision was ~0.9m from the
         kicker's destination, so leniency never applied at all regardless of

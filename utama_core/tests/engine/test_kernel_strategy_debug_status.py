@@ -76,3 +76,21 @@ def test_debug_status_tag_is_the_assigned_tactics_own_tag(split_shape_runner):
         assert isinstance(info["tag"], TacticTag)
         for robot_id in info["robots"]:
             assert status[robot_id][1] == info["tag"].value
+
+
+def test_debug_status_leaves_out_a_goalkeeper_whose_robot_is_not_on_the_field():
+    """A test team without the goalkeeper's robot (e.g. one attacker alone) showed a
+    phantom "goalkeeper" row for a robot ID that is not there."""
+    from utama_core.run.strategy_runner import StrategyRunner
+
+    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((0, 1)), goalkeeper_id=15)
+    runner = StrategyRunner(
+        strategy=strategy, my_team_is_yellow=True, my_team_is_right=True, mode="rsim", exp_friendly=2, exp_enemy=0
+    )
+    try:
+        runner.step_once()
+        status = runner.my.strategy.debug_status()
+    finally:
+        runner.close()
+    assert 15 not in status
+    assert set(status) == {0, 1}

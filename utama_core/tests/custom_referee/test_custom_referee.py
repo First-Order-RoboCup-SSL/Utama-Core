@@ -396,7 +396,7 @@ class TestDoubleTouchRule:
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
-        ExcessiveDribblingRule/PushingRule/BallSpeedRule (roadmap item 15/16): a
+        ExcessiveDribblingRule/PushingRule/BallSpeedRule (roadmap "`custom_referee` missing-`designated_position` audit"): a
         double touch resolved right at a defense-area edge must not hand back
         a `designated_position` inside that box."""
         rule = DoubleTouchRule()

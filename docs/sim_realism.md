@@ -1,7 +1,7 @@
 # Sim realism: closing the gap between rsim and real matches
 
-Status: plan, 2026-10-14 (priorities added 2026-10-16). Nothing below is built yet unless it
-says so.
+Status: plan, 2026-10-14 (priorities added 2026-10-16; Phases 0-2 are built, 2026-10-16/17).
+Nothing below is built yet unless it says so.
 
 ## Where this leads
 
@@ -89,7 +89,7 @@ friction). **Within** means kick-to-kick noise for the same robot.
 
 | Parameter | Why it matters | From official logs? | rsim today |
 |---|---|---|---|
-| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating | None: commands act on the next tick |
+| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating; for our robots, `tools/robot_calibration.py` on a recorded field test (command sent to motion seen) | None: commands act on the next tick |
 | Ball rolling deceleration (and the switch from sliding to rolling) | Pass and shot timing; keeper reaction time | Yes: fit free-rolling segments, per match (venue carpet) | Fixed in the C++ physics (`vendor/rSim`) |
 | Kick speed: between and within | How much time the keeper has; pass weight | Yes: peak ball speed after each kick, per team | Fixed |
 | Kick direction error | Wide rate (6% vs 22%) | Partly: shot miss distance, pass error relative to the receiver | None: exact |
@@ -337,6 +337,11 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
 **Checkpoint:** review which ranges are trustworthy.
 
 ### Phase 2: Knobs in the sim (1–2 weeks)
+
+All of these are built (2026-10-17): `SimNoise` draws each knob per match from its range, seeded
+and recorded in the replay, and reaches `run_match`, the round-robin option, `evaluate.py` and
+`pool_v1` (the v3 ranges, played as `v3_seed2` in the 2026-10-17 round-robin). A knob at zero
+reproduces the old behaviour, so results played without `--sim-noise` are unchanged.
 
 Each knob is off by default, so current results are unchanged, and each comes with a test that
 pins its effect:

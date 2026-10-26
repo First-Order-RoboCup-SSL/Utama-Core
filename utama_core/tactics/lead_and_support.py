@@ -50,6 +50,7 @@ from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
+_SHOT_SWITCH_MARGIN = 0.15  # metres a new shot gap must beat the aimed-at one by; same as _pass_and_score's
 
 
 def _candidate_support_points(game: Game, count: int) -> list[Vector2D]:
@@ -143,6 +144,11 @@ def choose_leader(game: Game, robot_ids: tuple[int, ...]) -> int:
 @dataclass
 class LeadAndSupportMem:
     leader_id: Optional[int] = None
+    # The shot y aimed at last tick, for find_best_shot's switch-margin hysteresis:
+    # against a centred keeper the two corners are near-equal, and without it the
+    # aim flipped between them every tick, so the leader turned back and forth for
+    # ~11 s before drift broke the tie (1v1 on a small field, 2026-10-21).
+    prev_best_shot_y: Optional[float] = None
 
 
 class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
@@ -184,6 +190,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
 
         leader_has_ball = has_ball(game, leader_id)
         if not leader_has_ball:
+            mem.prev_best_shot_y = None
             # go_to_ball itself holds outside the enemy's box instead of
             # chasing an unreachable ball when the keeper is holding it
             # there during active play — see that function's docstring.
@@ -192,7 +199,16 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
             )
         else:
             goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
-            best_shot_y, gap = find_best_shot(leader_pos, list(game.enemy_robots.values()), goal_x, goal_y1, goal_y2)
+            best_shot_y, gap = find_best_shot(
+                leader_pos,
+                list(game.enemy_robots.values()),
+                goal_x,
+                goal_y1,
+                goal_y2,
+                prev_best_shot_y=mem.prev_best_shot_y,
+                switch_margin=_SHOT_SWITCH_MARGIN,
+            )
+            mem.prev_best_shot_y = best_shot_y
             if best_shot_y is None:
                 # See `no_shot_reposition_target`'s docstring: freezing here
                 # never resolves against a stationary blocker.

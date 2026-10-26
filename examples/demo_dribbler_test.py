@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """examples/demo_dribbler_test.py — Test the dribbler with one robot on the Exhibition Road field.
 
 Run:
@@ -9,6 +10,12 @@ What this does
 - DribbleTactic: robot fetches the ball, then loops corner-to-corner around a
   rectangle, releasing and reacquiring the ball each segment
 """
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.engine.abstract_strategy import AbstractStrategy

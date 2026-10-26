@@ -9,6 +9,7 @@ this module just says what "notify" means now.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import time
 from typing import TYPE_CHECKING, Optional
@@ -46,6 +47,9 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
         designated = payload.get("designated")
         if designated is not None and hasattr(referee, "force_command"):
             target = (float(designated[0]), float(designated[1]))
+            error = placement_target_error(target, referee.geometry, referee.field_check)
+            if error:
+                raise ValueError(error)  # the page shows it; nothing is sent to the robots
             referee.force_command(cmd, time.time(), ball_placement_target=target)
         else:
             referee.set_command(cmd, time.time())
@@ -56,14 +60,39 @@ def attach(server: DashboardServer, referee: "CustomReferee", profile: "RefereeP
     referee.attach_dashboard_notifier(lambda *args: notify(server, *args))
 
 
+def placement_target_error(target: tuple[float, float], geometry, field_check: Optional[dict]) -> Optional[str]:
+    """Why a ball placement to `target` is refused, or None: it must lie inside the field lines
+    and, with a camera, inside the area in play (`FieldCheck.payload`'s bounds), the part the
+    camera sees; elsewhere the placing robots would leave vision."""
+    x, y = target
+    if abs(x) > geometry.half_length or abs(y) > geometry.half_width:
+        return f"({x:.2f}, {y:.2f}) is outside the field"
+    if field_check:
+        x1, y1, x2, y2 = field_check["bounds"]
+        if not (x1 <= x <= x2 and y1 <= y <= y2):
+            return f"({x:.2f}, {y:.2f}) is outside the area in play"
+    return None
+
+
 def notify(
     server: DashboardServer,
     ref_data,
     game_frame=None,
     tactic_status=None,
     robot_feedback_data=None,
+    field_check=None,
 ) -> None:
-    server.notify(CHANNEL, _serialise_state(ref_data, game_frame, tactic_status, robot_feedback_data))
+    server.notify(CHANNEL, _serialise_state(ref_data, game_frame, tactic_status, robot_feedback_data, field_check))
+
+
+# Millimetres, mrad and cm/s: finer than anything drawn, and a full float's 17 digits made a
+# match's replay ~7x its size on disk.
+def _mm(value: float) -> float:
+    return round(value, 3)
+
+
+def _cm(value: float) -> float:
+    return round(value, 2)
 
 
 def _serialise_robots(game_frame) -> dict:
@@ -74,11 +103,11 @@ def _serialise_robots(game_frame) -> dict:
         return [
             {
                 "id": r.id,
-                "x": r.p.x,
-                "y": r.p.y,
-                "vx": r.v.x,
-                "vy": r.v.y,
-                "orientation": r.orientation,
+                "x": _mm(r.p.x),
+                "y": _mm(r.p.y),
+                "vx": _cm(r.v.x),
+                "vy": _cm(r.v.y),
+                "orientation": _mm(r.orientation),
                 "has_ball": r.has_ball,
             }
             for r in robots_dict.values()
@@ -93,10 +122,11 @@ def _serialise_robots(game_frame) -> dict:
 def _serialise_ball(game_frame):
     if game_frame is None or game_frame.ball is None:
         return None
-    return {"x": game_frame.ball.p.x, "y": game_frame.ball.p.y, "vx": game_frame.ball.v.x, "vy": game_frame.ball.v.y}
+    ball = game_frame.ball
+    return {"x": _mm(ball.p.x), "y": _mm(ball.p.y), "vx": _cm(ball.v.x), "vy": _cm(ball.v.y)}
 
 
-def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedback_data=None) -> dict:
+def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedback_data=None, field_check=None) -> dict:
     designated = None
     if ref_data.designated_position is not None:
         try:
@@ -113,12 +143,14 @@ def _serialise_state(ref_data, game_frame=None, tactic_status=None, robot_feedba
         "blue_score": ref_data.blue_team.score,
         "designated": designated,
         "status_message": ref_data.status_message,
+        "ts": getattr(game_frame, "ts", None),  # game time, for the Live timeline
         "my_team_is_right": getattr(game_frame, "my_team_is_right", False),
         "my_team_is_yellow": getattr(game_frame, "my_team_is_yellow", True),
         "robots": _serialise_robots(game_frame),
         "ball": _serialise_ball(game_frame),
         "tactic_status": tactic_status or {},
         "robot_feedback": robot_feedback_data or [],
+        "field_check": field_check,
     }
 
 
@@ -127,6 +159,9 @@ def _build_static_config(profile: "RefereeProfile") -> dict:
     gm = profile.game
     return {
         "profile_name": profile.profile_name,
+        # Whether any rule can stop play and set up a restart; the page hides the restart
+        # buttons when none can (goal detection alone only stops play).
+        "restarts": any(getattr(r, f.name).enabled for f in dataclasses.fields(r) if f.name != "goal_detection"),
         "rules": {
             "goal_detection": {
                 "enabled": r.goal_detection.enabled,

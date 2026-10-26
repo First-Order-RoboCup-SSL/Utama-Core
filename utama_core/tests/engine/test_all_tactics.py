@@ -138,8 +138,8 @@ def test_commands_every_assigned_robot_on_two_ticks(tactic_cls, robot_ids, exp_f
 
 
 def test_defense_carrier_stays_assigned_after_retriever_gets_the_ball(runner_factory):
-    """Regression test for the COMMITTED_FROZEN liveness stall (roadmap item
-    15, 2026-09-04): once a retriever actually acquires the ball,
+    """Regression test for the COMMITTED_FROZEN liveness stall (roadmap "trajsample liveness fixes",
+    2026-09-04): once a retriever actually acquires the ball,
     `ball_is_loose` goes False next tick and `retriever_id` resets to `None`
     — before the fix, that dropped the ball-carrying robot straight back
     into `defend_parameter`'s pure shot-shadow positioning, which has no

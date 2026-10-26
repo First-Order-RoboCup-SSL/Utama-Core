@@ -120,7 +120,7 @@ class TestPushingRule:
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as KeeperHeldBallRule/
-        ExcessiveDribblingRule/DefenseAreaRule (roadmap item 15/16): a
+        ExcessiveDribblingRule/DefenseAreaRule (roadmap "`custom_referee` missing-`designated_position` audit"): a
         shoving match plausibly happens right at a defense-area edge
         (defenders contesting a ball near their own box), so the ball
         position recorded at push-start must be projected clear before use

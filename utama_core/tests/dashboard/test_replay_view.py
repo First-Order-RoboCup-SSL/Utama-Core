@@ -72,7 +72,8 @@ def test_frames_payload_marks_goals_fouls_stalls_and_real_ball_losses_in_time_or
         {"kind": "tackled", "t": 5.0, "tactic": "GiveAndGoTactic", "regained_after_s": None},
         {"kind": "tackled", "t": 6.0, "tactic": "GiveAndGoTactic", "regained_after_s": 0.1},  # flicker, not real
     ]
-    monkeypatch.setattr(replay_view, "_ball_losses", lambda path: [t for t in turnovers if replay_view.is_real(t)])
+    real = [t for t in turnovers if replay_view.is_real(t)]
+    monkeypatch.setattr(replay_view, "_analysis", lambda path: {"losses": real, "shots": []})
     monkeypatch.setattr(replay_view, "REPLAY_BASE_PATH", tmp_path)
 
     payload = json.loads(replay_view._frames_bytes({"path": "a_vs_b.pkl"}))
@@ -84,3 +85,129 @@ def test_frames_payload_marks_goals_fouls_stalls_and_real_ball_losses_in_time_or
         (30.0, "stall"),
     ]
     assert "yellow" in payload["markers"][2]["label"] and "1-0" in payload["markers"][2]["label"]
+
+
+def test_the_slow_analysis_is_kept_beside_the_replay_until_the_replay_changes(tmp_path, monkeypatch):
+    replay = tmp_path / "a_vs_b.npz"
+    replay.write_bytes(b"first")
+    calls = []
+
+    def analyse(path):
+        calls.append(path)
+        return {"turnovers": [], "chances": {"shots": [{"t": 3.0, "side": "enemy", "xg": 0.1}]}}
+
+    monkeypatch.setattr(replay_view, "analyse_match", analyse)
+    first = replay_view._analysis(replay)
+    assert replay_view._analysis(replay) == first == {"losses": [], "shots": [{"t": 3.0, "side": "enemy"}]}
+    assert len(calls) == 1
+    replay.write_bytes(b"second, longer")  # a rerun match
+    replay_view._analysis(replay)
+    assert len(calls) == 2
+
+
+def test_play_rows_end_each_situation_at_a_stoppage_or_the_next_side_winning_the_ball():
+    from utama_core.engine.match_log import RefereeEvent
+
+    def referee(t, command, note=None):
+        return RefereeEvent(tick=0, sim_time=t, command=command, stage="", yellow_score=0, blue_score=0, note=note)
+
+    starts = [
+        {"t": 0.0, "kind": "kickoff", "side": "friendly", "third": "middle"},
+        {"t": 4.0, "kind": "ball won", "side": "enemy", "third": "defensive"},
+        {"t": 9.0, "kind": "ball won", "side": "friendly", "third": "middle"},
+        {"t": 20.0, "kind": "free kick", "side": "friendly", "third": "attacking"},
+    ]
+    events = [referee(0.0, "NORMAL_START"), referee(15.0, "STOP", "Goal by Yellow"), referee(20.0, "NORMAL_START")]
+    losses = [{"kind": "tackled", "t": 4.1}]
+    rows = replay_view.play_rows(starts, events, losses, end_t=30.0)
+    assert [(r["t"], r["t_end"], r["ended"]) for r in rows] == [
+        (0.0, 4.0, "won by enemy (tackled)"),
+        (4.0, 9.0, "won by friendly"),
+        (9.0, 15.0, "Goal by Yellow"),
+        (20.0, 30.0, None),
+    ]
+
+
+def _frames_from_columns(c: dict) -> list[dict]:
+    """`framesFromColumns` in replay.js, line for line."""
+
+    def team(t, i):
+        return [
+            {"id": rid, "x": t["x"][i][k] / 1000, "y": t["y"][i][k] / 1000}
+            | {"vx": t["vx"][i][k] / 100, "vy": t["vy"][i][k] / 100, "orientation": t["o"][i][k] / 1000}
+            | {"has_ball": bool(t["has_ball"][i][k])}
+            for k, rid in enumerate(t["ids"])
+            if t["seen"][i][k]
+        ]
+
+    b = c["ball"]
+    return [
+        {
+            "ts": ts,
+            "my_team_is_right": bool(c["right"][i]),
+            "robots": {"friendly": team(c["friendly"], i), "enemy": team(c["enemy"], i)},
+            "ball": (
+                {"x": b["x"][i] / 1000, "y": b["y"][i] / 1000, "vx": b["vx"][i] / 100, "vy": b["vy"][i] / 100}
+                if b["seen"][i]
+                else None
+            ),
+        }
+        for i, ts in enumerate(c["ts"])
+    ]
+
+
+def _two_tick_npz(tmp_path):
+    """A columnar replay of two ticks, 0.0 and 0.1."""
+    from utama_core.replay.columnar_writer import (
+        ColumnarReplayWriter,
+        ColumnarReplayWriterConfig,
+    )
+
+    def robot(rid, x, has_ball=False):
+        return Robot(
+            id=rid,
+            is_friendly=True,
+            has_ball=has_ball,
+            p=Vector2D(x, -0.12345),
+            v=Vector2D(0.987, 0.0),
+            a=Vector2D(0, 0),
+            orientation=1.23456,
+        )
+
+    ball = Ball(p=Vector3D(0.5, 0.25, 0), v=Vector3D(1.234, 0, 0), a=Vector3D(0, 0, 0))
+    frames = [  # robot 1 leaves, robot 3 joins: the array has a NaN row for each absent robot
+        GameFrame(0.0, True, True, {1: robot(1, 1.0)}, {}, ball),
+        GameFrame(0.1, True, False, {3: robot(3, 2.0, has_ball=True)}, {7: robot(7, -1.0)}, ball),
+    ]
+    config = ColumnarReplayWriterConfig(replay_name="m", overwrite_existing=True, checkpoint_every_s=0)
+    writer = ColumnarReplayWriter(config, my_team_is_yellow=True, exp_friendly=6, exp_enemy=6, path=tmp_path / "m.npz")
+    for frame in frames:
+        writer.write_frame(frame)
+    writer.close()
+    return writer.path
+
+
+def test_the_columns_rebuild_exactly_what_serialising_each_game_frame_gives(tmp_path):
+    from utama_core.dashboard.views.referee import _serialise_ball, _serialise_robots
+    from utama_core.replay.columnar_reader import load_columnar_replay
+
+    replay = load_columnar_replay(_two_tick_npz(tmp_path))
+
+    columns = json.loads(json.dumps(replay_view.columnar_payload(replay)))  # as the page receives it
+    for tick, row in enumerate(_frames_from_columns(columns)):
+        frame = replay.frame_at(tick)
+        assert row == {
+            "ts": round(frame.ts, 4),
+            "my_team_is_right": bool(frame.my_team_is_right),
+            "robots": _serialise_robots(frame),
+            "ball": _serialise_ball(frame),
+        }
+
+
+def test_the_last_play_row_of_a_columnar_replay_ends_at_its_last_tick(tmp_path, monkeypatch):
+    """It ended at 0 s (the end was read from `frames`, empty for a columnar replay): "-29 s"."""
+    _two_tick_npz(tmp_path)
+    monkeypatch.setattr(replay_view, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(replay_view, "_analysis", lambda path: {"losses": [], "shots": []})
+    monkeypatch.setattr(replay_view, "_play", lambda path, events, losses, end_t: end_t)
+    assert json.loads(replay_view._frames_bytes({"path": "m.npz"}))["play"] == 0.1

@@ -37,6 +37,10 @@ const TACTIC_TAG_COLORS = {
 // canvas or field geometry changes size.
 const ROBOT_RADIUS_M = 0.09;
 
+// The run-off around the field lines (Division B's boundary width), drawn so a ball or robot
+// just over a line stays in view.
+const RUNOFF_M = 0.3;
+
 class FieldCanvas {
   constructor(canvas, geometry, { myTeamIsRight = false, myTeamIsYellow = true } = {}) {
     this.canvas = canvas;
@@ -57,15 +61,9 @@ class FieldCanvas {
   _view() {
     const g = this.geometry;
     const goalDepth = Math.max(0, Number(g.goal_depth) || 0);
-    return {
-      minX: -g.half_length - goalDepth,
-      maxX: g.half_length + goalDepth,
-      minY: -g.half_width,
-      maxY: g.half_width,
-      width: 2 * (g.half_length + goalDepth),
-      height: 2 * g.half_width,
-      goalDepth,
-    };
+    const halfX = g.half_length + Math.max(goalDepth, RUNOFF_M);
+    const halfY = g.half_width + RUNOFF_M;
+    return { minX: -halfX, maxX: halfX, minY: -halfY, maxY: halfY, width: 2 * halfX, height: 2 * halfY, goalDepth };
   }
 
   _transform() {
@@ -95,6 +93,11 @@ class FieldCanvas {
         return { x: fx, y: fy };
       },
     };
+  }
+
+  // Canvas pixels -> field metres ({x, y}), for clicks on the field.
+  toField(px, py) {
+    return this._transform().toField(px, py);
   }
 
   resize() {
@@ -177,6 +180,8 @@ class FieldCanvas {
     strokeWorldRect(-g.half_length - goalDepth, -g.half_goal_width, -g.half_length, g.half_goal_width);
     strokeWorldRect(g.half_length, -g.half_goal_width, g.half_length + goalDepth, g.half_goal_width);
 
+    if (state.field_check) this._drawAreaInPlay(ctx, state.field_check, toX, toY, rectBounds, CW, CH);
+
     if (state.designated) {
       const dx = toX(state.designated[0]), dy = toY(state.designated[1]);
       ctx.strokeStyle = FIELD_COLORS.marker;
@@ -214,10 +219,14 @@ class FieldCanvas {
           // direction pointer rather than disappearing into the fill.
           ctx.strokeStyle = FIELD_COLORS.pitch;
           ctx.lineWidth = Math.max(1, r * 0.28);
-          const headingLen = r * 1.6;
+          // Through toX/toY, so a mirrored view (our goal on the right) mirrors it too.
+          const headingM = (r * 1.6) / scale;
           ctx.beginPath();
           ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + headingLen * Math.cos(bot.orientation), cy - headingLen * Math.sin(bot.orientation));
+          ctx.lineTo(
+            toX(bot.x + headingM * Math.cos(bot.orientation)),
+            toY(bot.y + headingM * Math.sin(bot.orientation))
+          );
           ctx.stroke();
           ctx.fillStyle = fill;
           ctx.font = "7px ui-monospace, monospace";
@@ -235,15 +244,74 @@ class FieldCanvas {
       this._drawTagLegend(ctx, tacticTags);
     }
 
+    if (state.field_check && robots) {
+      // A robot past the area in play by more than the margin has forced HALT on real robots.
+      const [x1, y1, x2, y2] = state.field_check.bounds;
+      const m = state.field_check.margin;
+      ctx.strokeStyle = "#e06a60";
+      ctx.lineWidth = 2;
+      for (const bot of [...(robots.friendly || []), ...(robots.enemy || [])]) {
+        if (bot.x < x1 - m || bot.x > x2 + m || bot.y < y1 - m || bot.y > y2 + m) {
+          ctx.beginPath();
+          ctx.arc(toX(bot.x), toY(bot.y), Math.max(2, ROBOT_RADIUS_M * scale) + 4, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+      }
+    }
+
     if (state.ball) {
-      const bx = toX(state.ball.x), by = toY(state.ball.y);
-      ctx.fillStyle = FIELD_COLORS.ball;
+      // Out of view, the ball is drawn hollow at the nearest edge, so it never just disappears.
+      const R = 3.5;
+      const rawX = toX(state.ball.x), rawY = toY(state.ball.y);
+      const bx = Math.min(CW - R - 1, Math.max(R + 1, rawX));
+      const by = Math.min(CH - R - 1, Math.max(R + 1, rawY));
       ctx.beginPath();
-      ctx.arc(bx, by, 3.5, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.arc(bx, by, R, 0, 2 * Math.PI);
+      if (bx === rawX && by === rawY) {
+        ctx.fillStyle = FIELD_COLORS.ball;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = FIELD_COLORS.ball;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
 
     this._drawOverlays(ctx, state, robots, toX, toY);
+  }
+
+  // The area in play (StrategyRunner's field_bounds): everything outside it is dimmed, so a
+  // half-field test shows at a glance which half the runner thinks the camera covers.
+  // The +x arrow ties the picture to ssl-vision's coordinates, since this view turns the
+  // field so our team's goal is on the right.
+  _drawAreaInPlay(ctx, fieldCheck, toX, toY, rectBounds, CW, CH) {
+    const [x1, y1, x2, y2] = fieldCheck.bounds;
+    const r = rectBounds(x1, y1, x2, y2);
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.beginPath();
+    ctx.rect(0, 0, CW, CH);
+    ctx.rect(r.x + r.w, r.y, -r.w, r.h); // opposite winding cuts the area in play out
+    ctx.fill();
+    ctx.strokeStyle = FIELD_COLORS.laneOpen;
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.setLineDash([]);
+    const ax = toX(0), ay = CH - 6, dir = toX(1) > ax ? 1 : -1;
+    ctx.strokeStyle = ctx.fillStyle = FIELD_COLORS.marker;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + dir * 24, ay);
+    ctx.lineTo(ax + dir * 20, ay - 3);
+    ctx.moveTo(ax + dir * 24, ay);
+    ctx.lineTo(ax + dir * 20, ay + 3);
+    ctx.stroke();
+    ctx.font = "7px ui-monospace, monospace";
+    ctx.textAlign = dir > 0 ? "left" : "right";
+    ctx.fillText("+x (vision)", ax + dir * 27, ay + 2);
+    ctx.restore();
   }
 
   // Small key for the tactic-tag rings, only when some robot has a tag.

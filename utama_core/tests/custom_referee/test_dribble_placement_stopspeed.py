@@ -78,7 +78,7 @@ class TestKeeperHeldBallRule:
         straight to `designated_position` and force-starts play the same
         tick, so an in-box position here would let the same violation
         instantly re-trigger (same class of bug fixed for `DefenseAreaRule`,
-        roadmap item 15/16)."""
+        roadmap "`custom_referee` missing-`designated_position` audit")."""
         rule = KeeperHeldBallRule(max_hold_seconds=10.0)
         v = None
         for ts in [0.0, 5.0, 10.5]:

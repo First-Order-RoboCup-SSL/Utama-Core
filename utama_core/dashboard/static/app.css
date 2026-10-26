@@ -180,6 +180,29 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .conn-dot.live { background: var(--accent); }
 
+/* Field check (live view): one row per check, coloured by status; the auto-HALT banner. */
+.check-ok { color: #5fb87a; }
+.check-warn { color: #e0a14a; }
+.check-fail { color: #e06a60; font-weight: 600; }
+.auto-halt { background: var(--halt); color: #fff; padding: 6px 8px; border-radius: var(--radius); font-size: .75rem; }
+
+/* Replay timeline (timeline.js): swimlanes under the transport controls. */
+.timeline-wrap { width: 100%; cursor: pointer; position: relative; }
+.timeline-tip { position: absolute; display: none; pointer-events: none; z-index: 2; padding: 2px 6px; white-space: nowrap;
+  font-size: .68rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+
+/* Replay play list: one row per situation, a bar in the owning team's colour. */
+.play-row { display: flex; gap: 8px; padding: 3px 4px 3px 6px; border-left: 3px solid var(--border); cursor: pointer; }
+.play-row:hover { background: var(--surface-2); }
+.play-row.current { background: var(--surface-2); }
+.play-row.goal .play-ended { color: #e0c14f; font-weight: bold; }
+.play-time { min-width: 38px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.play-detail { color: var(--muted); }
+.raw-log summary { cursor: pointer; font-size: .68rem; margin-top: 8px; }
+.timeline-wrap canvas { display: block; }
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .65rem; color: var(--muted); }
+.timeline-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 3px; border-radius: 2px; vertical-align: -1px; }
+
 /* Replay timeline markers: one tick per goal / foul / stall / ball loss. */
 .marker-strip { position: relative; height: 10px; margin: 0 7px; }
 .marker { position: absolute; top: 0; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; cursor: pointer; }
@@ -190,4 +213,26 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .marker-kind { display: inline-block; min-width: 38px; font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; }
 .marker-kind.marker-goal, .marker-kind.marker-foul, .marker-kind.marker-stall, .marker-kind.marker-loss {
   position: static; width: auto; height: auto; margin: 0 6px 0 0; padding: 0 4px; color: #17191d;
+}
+
+/* Live: right-click / long-press menu on the field (live.js, ball placement). */
+.place-menu { position: fixed; display: none; z-index: 10; padding: 6px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius); font-size: .7rem; }
+.place-menu .place-at { padding: 2px 4px 6px; }
+.place-menu button { display: block; width: 100%; margin-top: 4px; text-align: left; }
+
+/* A phone or a narrow laptop window beside the field: panels stack, the page scrolls, the field
+   keeps the pitch's shape, buttons are big enough to hit. */
+@media (max-width: 760px) {
+  body { height: auto; min-height: 100%; overflow: auto; }
+  .view.active { flex-direction: column; }
+  .view > .panel { flex: none !important; }
+  .field-wrap { flex: none !important; aspect-ratio: 3 / 2; }
+  button { padding: 10px 14px; font-size: .8rem; }
+  #replay-play-list { max-height: 50vh; }
+  /* Halt stays in reach of the thumb wherever the page is scrolled. */
+  button.btn-halt {
+    position: fixed; right: 12px; bottom: 12px; z-index: 20;
+    padding: 16px 24px; font-size: 1rem; background: var(--halt); color: #fff;
+  }
 }

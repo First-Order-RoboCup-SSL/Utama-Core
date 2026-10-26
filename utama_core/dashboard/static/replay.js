@@ -18,8 +18,38 @@
 // Video-player conventions: mm:ss timestamps (not frame counts), a speed
 // selector, frame-step buttons, and space/arrow-key transport shortcuts.
 
+// A columnar replay arrives as columns of whole numbers (`columnar_payload` in
+// dashboard/views/replay.py: mm, cm/s, mrad, `seen` masks); this rebuilds the per-tick frames
+// the rest of the page reads, as a pickled replay sends them.
+function framesFromColumns(c) {
+  const team = (t, i) => {
+    const out = [];
+    for (let k = 0; k < t.ids.length; k++) {
+      if (!t.seen[i][k]) continue;
+      out.push({
+        id: t.ids[k],
+        x: t.x[i][k] / 1000,
+        y: t.y[i][k] / 1000,
+        vx: t.vx[i][k] / 100,
+        vy: t.vy[i][k] / 100,
+        orientation: t.o[i][k] / 1000,
+        has_ball: !!t.has_ball[i][k],
+      });
+    }
+    return out;
+  };
+  const b = c.ball;
+  return c.ts.map((ts, i) => ({
+    ts,
+    my_team_is_right: c.right ? !!c.right[i] : undefined,
+    robots: { friendly: team(c.friendly, i), enemy: team(c.enemy, i) },
+    ball: b.seen[i] ? { x: b.x[i] / 1000, y: b.y[i] / 1000, vx: b.vx[i] / 100, vy: b.vy[i] / 100 } : null,
+  }));
+}
+
 (function () {
   let fieldView = null;
+  let timeline = null; // Timeline (timeline.js)
   let frames = [];
   let index = 0;
   let playing = false;
@@ -41,6 +71,10 @@
   let traceValues = {}; // key -> last-seen value, e.g. "shadow_and_mark.marks" -> {marker_id: opponent_id}
   let overlaysEnabled = true;
   let markers = []; // {sim_time, kind, label}: goals, fouls, stalls, ball losses, in time order
+  let shots = []; // {t, side: friendly|enemy}
+  let play = []; // one row per situation (dashboard/views/replay.py play_rows), worded by wordPlay
+  let playIdx = -1; // the row highlighted as the one being played
+  let myTeamIsYellow = true;
   const MARKER_LEAD_S = 2; // jump a little before an event, to see it happen
 
   function frameTs(i) {
@@ -146,10 +180,64 @@
     c.innerHTML = html;
   }
 
+  // A situation in words: "Yellow free kick" / "Blue won the ball", where, how long, its shots,
+  // and how it ended ("friendly"/"enemy" from the server named by colour).
+  function wordPlay(rows) {
+    const team = { friendly: myTeamIsYellow ? "Yellow" : "Blue", enemy: myTeamIsYellow ? "Blue" : "Yellow" };
+    const name = (text) => text.replace(/\b(friendly|enemy)\b/g, (side) => team[side]);
+    return rows.map((r) => {
+      const who = r.side ? team[r.side] : "";
+      const title = r.kind === "ball won" ? who + " won the ball" : r.side ? who + " " + r.kind : "Force start";
+      const n = shots.filter((s) => s.t >= r.t && s.t <= r.t_end).length;
+      const detail = [r.third ? r.third + " third" : null, Math.round(r.t_end - r.t) + " s"];
+      if (n) detail.push(n + (n === 1 ? " shot" : " shots"));
+      return { ...r, title, detail: detail.filter(Boolean).join(" · "), ended: r.ended ? name(r.ended) : null };
+    });
+  }
+
+  function renderPlay() {
+    const list = document.getElementById("replay-play-list");
+    if (!list) return;
+    if (!play.length) {
+      list.innerHTML = '<div class="muted">no situations: a columnar (.npz) replay with referee data has them</div>';
+      return;
+    }
+    const t0 = frameTs(0);
+    const colour = { Yellow: "#e0a527", Blue: "#3d7fd1" };
+    list.innerHTML = play
+      .map((r, i) => {
+        const goal = r.ended && r.ended.startsWith("Goal") ? " goal" : "";
+        const bar = colour[r.title.split(" ")[0]] || "var(--border)";
+        return (
+          `<div class="play-row${goal}" data-play-idx="${i}" style="border-left-color:${bar}">` +
+          `<span class="play-time">${fmtTime(r.t - t0)}</span><div><div>${r.title}` +
+          ` <span class="play-detail">· ${r.detail}</span></div>` +
+          (r.ended ? `<div class="play-ended play-detail">→ ${r.ended}</div>` : "") +
+          "</div></div>"
+        );
+      })
+      .join("");
+  }
+
+  // Highlights the situation being played at `ts` (the last one started), scrolled into view.
+  function markPlay(ts) {
+    let i = -1;
+    while (i + 1 < play.length && play[i + 1].t <= ts) i++;
+    if (i === playIdx) return;
+    const list = document.getElementById("replay-play-list");
+    const old = list && list.querySelector(".play-row.current");
+    if (old) old.classList.remove("current");
+    playIdx = i;
+    const row = list && i >= 0 ? list.querySelector(`[data-play-idx="${i}"]`) : null;
+    if (row) {
+      row.classList.add("current");
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }
+
   function renderMarkers() {
     const strip = document.getElementById("replay-markers");
-    const list = document.getElementById("replay-marker-list");
-    if (!strip || !list) return;
+    if (!strip) return;
     const t0 = frameTs(0);
     const span = Math.max(1e-6, frameTs(frames.length - 1) - t0);
     strip.innerHTML = markers
@@ -159,16 +247,6 @@
           ` style="left:${(100 * (m.sim_time - t0)) / span}%;"></div>`
       )
       .join("");
-    list.innerHTML = markers.length
-      ? markers
-          .map(
-            (m, i) =>
-              `<div class="ref-row" style="cursor:pointer;" data-marker-idx="${i}">` +
-              `<span class="muted" style="min-width:44px;">${fmtTime(m.sim_time - t0)}</span>` +
-              `<span><span class="marker-kind marker-${m.kind}">${m.kind}</span>${m.label}</span></div>`
-          )
-          .join("")
-      : '<div class="muted" style="font-size:.72rem;">no goals, fouls, stalls or ball losses recorded</div>';
   }
 
   function jumpToMarker(i) {
@@ -186,18 +264,21 @@
     if (i >= 0) jumpToMarker(i);
   }
 
-  function jumpToEvent(sim_time) {
-    // Nearest frame whose ts >= sim_time (falls back to the last frame if
-    // the event is at/after the final recorded ts).
-    let target = frames.length - 1;
-    for (let i = 0; i < frames.length; i++) {
-      if (frames[i].ts >= sim_time) {
-        target = i;
-        break;
-      }
+  function firstFrameAtOrAfter(sim_time) {
+    // the last frame if sim_time is at/after the final recorded ts
+    let lo = 0;
+    let hi = frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (frames[mid].ts < sim_time) lo = mid + 1;
+      else hi = mid;
     }
+    return lo;
+  }
+
+  function jumpToEvent(sim_time) {
     stopPlayback();
-    setIndex(target);
+    setIndex(firstFrameAtOrAfter(sim_time));
   }
 
   function setIndex(i) {
@@ -219,6 +300,8 @@
       fieldView.setTeamLayout(frame.my_team_is_right, fieldView.myTeamIsYellow);
     }
     if (fieldView) fieldView.draw(frame);
+    if (timeline) timeline.draw(frame.ts);
+    markPlay(frame.ts);
     renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
     renderTacticStatusInto("replay-tactic-entries", tacticStatus, {
       emptyLabel: "no tactic data at this frame",
@@ -332,12 +415,16 @@
     stopPlayback();
     frames = [];
     markers = [];
+    shots = [];
+    play = [];
+    playIdx = -1;
     tacticEvents = [];
     refereeEvents = [];
     traceEvents = [];
     lastIndex = 0;
     resetEventCursors();
     setIndex(0);
+    if (timeline) timeline.load([]);
     setLoading(true);
     fetch("/replay/frames?path=" + encodeURIComponent(path))
       .then((r) => r.json())
@@ -346,11 +433,15 @@
           console.error("replay load error:", data.error);
           return;
         }
-        frames = data.frames || [];
+        frames = data.columns ? framesFromColumns(data.columns) : data.frames || [];
         tacticEvents = data.tactic_events || [];
         refereeEvents = data.referee_events || [];
         traceEvents = data.trace_events || [];
         markers = data.markers || [];
+        shots = data.shots || [];
+        myTeamIsYellow = data.my_team_is_yellow;
+        play = wordPlay(data.play || []);
+        playIdx = -1;
         lastIndex = 0;
         resetEventCursors();
         const canvas = document.getElementById("replay-field-canvas");
@@ -366,6 +457,16 @@
         if (refBanner) refBanner.style.display = data.has_referee_data ? "none" : "";
         renderIntentionLog();
         renderMarkers();
+        renderPlay();
+        timeline.load(frames, {
+          tactics: tacticEvents,
+          referee: refereeEvents,
+          trace: traceEvents,
+          markers,
+          shots,
+          play,
+          myTeamIsYellow,
+        });
         setIndex(0);
         if (atTime != null) jumpToEvent(atTime - MARKER_LEAD_S);
       })
@@ -401,6 +502,17 @@
       stopPlayback();
       setIndex(Number(e.target.value));
     });
+    timeline = new Timeline(
+      document.getElementById("replay-timeline"),
+      document.getElementById("replay-timeline-legend"),
+      (ts) => {
+        stopPlayback();
+        setIndex(firstFrameAtOrAfter(ts));
+      }
+    );
+    document.getElementById("replay-timeline-window").addEventListener("change", (e) => {
+      timeline.setWindow(Number(e.target.value));
+    });
     document.getElementById("replay-speed").addEventListener("change", (e) => {
       speed = Number(e.target.value);
     });
@@ -415,12 +527,14 @@
       if (event) jumpToEvent(event.sim_time);
     });
 
-    for (const id of ["replay-markers", "replay-marker-list"]) {
-      document.getElementById(id).addEventListener("click", (e) => {
-        const el = e.target.closest("[data-marker-idx]");
-        if (el) jumpToMarker(Number(el.dataset.markerIdx));
-      });
-    }
+    document.getElementById("replay-markers").addEventListener("click", (e) => {
+      const el = e.target.closest("[data-marker-idx]");
+      if (el) jumpToMarker(Number(el.dataset.markerIdx));
+    });
+    document.getElementById("replay-play-list").addEventListener("click", (e) => {
+      const el = e.target.closest("[data-play-idx]");
+      if (el) jumpToEvent(play[Number(el.dataset.playIdx)].t - 1); // a second before it starts
+    });
 
     document.addEventListener("keydown", (e) => {
       if (!document.getElementById("view-replay").classList.contains("active")) return;
