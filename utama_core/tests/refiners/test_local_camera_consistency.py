@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from utama_core.config.field_params import FieldDimensions
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.data_processing.refiners import PositionRefiner, VelocityRefiner
 from utama_core.data_processing.refiners.position import CameraCombiner, VisionBounds
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
@@ -287,3 +288,61 @@ def test_a_second_camera_outside_candidate_cannot_pull_a_valid_ball_out_of_field
     ]
     result = position.refine(GameFrame(0, False, False, {}, {}, None), frames)
     assert result.ball.p.x == pytest.approx(1.4)
+
+
+def test_single_camera_tick_after_two_camera_fusion_does_not_jump_robot_onto_ball():
+    cam_positions = {0: (-1.1, 0.0, 1.73), 1: (1.1, 0.0, 1.73)}
+
+    cam0_t1 = RawVisionData(
+        ts=1.0,
+        yellow_robots=[],
+        blue_robots=[RawRobotData(2, -0.554, 1.084, 0.0, 1.0)],
+        balls=[],
+        camera_id=0,
+        camera_position=cam_positions[0],
+    )
+    cam1_t1 = RawVisionData(
+        ts=1.0,
+        yellow_robots=[],
+        blue_robots=[RawRobotData(2, -0.638, 1.093, 0.0, 1.0)],
+        balls=[RawBallData(-0.521, 1.076, 0.0, 1.0)],
+        camera_id=1,
+        camera_position=cam_positions[1],
+    )
+
+    cam0_t2 = RawVisionData(
+        ts=1.016,
+        yellow_robots=[],
+        blue_robots=[RawRobotData(2, -0.554, 1.084, 0.0, 1.0)],
+        balls=[],
+        camera_id=0,
+        camera_position=cam_positions[0],
+    )
+
+    combiner = CameraCombiner()
+    fused_t1 = combiner.combine_cameras([cam0_t1, cam1_t1], BOUNDS)
+    assert len(fused_t1.blue_robots) == 1
+    assert fused_t1.blue_robots[0].x == pytest.approx(-0.577, abs=0.01)
+    assert fused_t1.blue_robots[0].y == pytest.approx(1.086, abs=0.01)
+
+    fused_t2 = combiner.combine_cameras([cam0_t2], BOUNDS)
+    assert len(fused_t2.blue_robots) == 1
+    assert fused_t2.blue_robots[0].x == pytest.approx(-0.577, abs=0.01)
+    assert fused_t2.blue_robots[0].y == pytest.approx(1.086, abs=0.01)
+    assert abs(fused_t2.blue_robots[0].x - (-0.554)) > 0.015
+
+    position = PositionRefiner(
+        FieldDimensions(1.5, 1.125, 0.25, 0.5, 0.4, 0.4),
+        allowed_blue_ids=frozenset({2}),
+        allowed_yellow_ids=frozenset(),
+    )
+    current = GameFrame(0, False, False, {}, {}, None)
+    frame1 = position.refine(current, [cam0_t1, cam1_t1])
+    position.start_filtering()
+
+    frame2 = position.refine(frame1, [cam0_t2])
+    assert frame2.ball is not None
+    assert 2 in frame2.friendly_robots
+    dist = math.hypot(frame2.ball.p.x - frame2.friendly_robots[2].p.x, frame2.ball.p.y - frame2.friendly_robots[2].p.y)
+    assert dist >= ROBOT_RADIUS
+    assert dist > 0.11

@@ -135,7 +135,6 @@ class PositionRefiner(BaseRefiner):
             bounds=self.vision_bounds,
         )
 
-        measurement_vision = combined_vision_data
         time_elapsed = combined_vision_data.ts - game_frame.ts
 
         # Kalman smoothing and vanished-robot imputation share the same predict/update filter,
@@ -207,7 +206,6 @@ class PositionRefiner(BaseRefiner):
         )
 
         new_ball = self._pick_ball(combined_vision_data.balls, game_frame.ball)
-        measured_ball = new_ball
 
         # Skip filtering when there's no ball and we don't expect one
         if new_ball is not None or self.exp_ball:
@@ -229,10 +227,6 @@ class PositionRefiner(BaseRefiner):
                 # from this ball rather than carrying on the old roll.
                 self.kalman_filter_ball = self._ball_filter()
 
-        new_ball = self._preserve_local_geometry(
-            new_ball, measured_ball, measurement_vision, new_yellow_robots, new_blue_robots
-        )
-
         if game_frame.my_team_is_yellow:
             new_game_frame = replace(
                 game_frame,
@@ -251,41 +245,6 @@ class PositionRefiner(BaseRefiner):
             )
 
         return new_game_frame
-
-    def _preserve_local_geometry(
-        self,
-        ball: Optional[Ball],
-        measured_ball: Optional[Ball],
-        measurements: VisionData,
-        yellows: dict[int, Robot],
-        blues: dict[int, Robot],
-    ) -> Optional[Ball]:
-        """Do not let separate smoothing put an observed dribbler-side ball inside its robot.
-
-        This uses a current measured relative vector, not assumed possession or a global
-        collision clamp. Distant balls, missing measurements and measurements already inside
-        the robot are left alone.
-        """
-        if ball is None or measured_ball is None:
-            return ball
-        for observed, refined in ((measurements.yellow_robots, yellows), (measurements.blue_robots, blues)):
-            for raw in observed:
-                robot = refined.get(raw.id)
-                if robot is None:
-                    continue
-                dx, dy = measured_ball.p.x - raw.x, measured_ball.p.y - raw.y
-                distance = math.hypot(dx, dy)
-                forward = dx * math.cos(raw.orientation) + dy * math.sin(raw.orientation)
-                lateral = -dx * math.sin(raw.orientation) + dy * math.cos(raw.orientation)
-                if not (ROBOT_RADIUS <= distance <= BALL_ROBOT_SHIFT_RANGE and forward >= abs(lateral)):
-                    continue
-                if math.hypot(ball.p.x - robot.p.x, ball.p.y - robot.p.y) >= ROBOT_RADIUS:
-                    continue
-                position = Vector3D(robot.p.x + dx, robot.p.y + dy, ball.p.z)
-                if self._uses_kalman and self.kalman_filter_ball.state is not None:
-                    self.kalman_filter_ball.correct_position(position)
-                return replace(ball, p=position)
-        return ball
 
     def reset(self):
         """
@@ -485,6 +444,10 @@ class CameraCombiner:
         # (camera id, other camera id, (colour, robot id)) -> (camera's detection minus the other's
         # in x, y; frame time)
         self._gaps: Dict[tuple, Tuple[float, float, float]] = {}
+        # (colour, robot id) -> (fused robot, {camera id: (x, y)}, frame time)
+        self._remembered: Dict[Tuple[str, int], Tuple[VisionRobotData, Dict[int, Tuple[float, float]], float]] = {}
+        # (camera id, (colour, robot id)) -> (x, y, frame time, camera position)
+        self._last_seen: Dict[tuple, Tuple[float, float, float, Optional[Tuple[float, float, float]]]] = {}
 
     def combine_cameras(
         self,
@@ -529,6 +492,7 @@ class CameraCombiner:
                     blue_captured[br.id].append((br, frame.camera_position))
             ts.append(frame.ts)
 
+        frame_ts = sum(ts) / len(ts)
         avg_yellows = list(map(self._avg_robots, yellow_captured.values()))
         avg_blues = list(map(self._avg_robots, blue_captured.values()))
         fused = {("yellow", r.id): r for r in avg_yellows} | {("blue", r.id): r for r in avg_blues}
@@ -540,11 +504,46 @@ class CameraCombiner:
                 for r in robots:
                     if self._bounds_check(r.x, r.y, bounds):
                         seen_by[(colour, r.id)][frame.camera_id] = (r.x, r.y)
+
+        # Keep single-camera ticks in the fused frame using the last multi-camera bias.
+        for key, detections in seen_by.items():
+            f = fused[key]
+            if len(detections) >= 2:
+                self._remembered[key] = (f, dict(detections), frame_ts)
+            elif len(detections) == 1:
+                cam_id, (x, y) = next(iter(detections.items()))
+                rem = self._remembered.get(key)
+                if rem is None or frame_ts - rem[2] > BALL_ROBOT_OFFSET_MEMORY:
+                    for (other, last_key), (ox, oy, ot, o_pos) in list(self._last_seen.items()):
+                        if last_key == key and other != cam_id and abs(frame_ts - ot) <= 0.05:
+                            captured = yellow_captured[key[1]] if key[0] == "yellow" else blue_captured[key[1]]
+                            f = self._avg_robots(captured + [(RawRobotData(key[1], ox, oy, f.orientation, 1.0), o_pos)])
+                            self._remembered[key] = (f, {cam_id: (x, y), other: (ox, oy)}, frame_ts)
+                            self._gaps[(cam_id, other, key)] = (x - ox, y - oy, frame_ts)
+                            self._gaps[(other, cam_id, key)] = (ox - x, oy - y, frame_ts)
+                            rem = self._remembered[key]
+                            break
+                if rem is not None and frame_ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY and cam_id in rem[1]:
+                    rx, ry = rem[1][cam_id]
+                    fused[key] = VisionRobotData(f.id, x + rem[0].x - rx, y + rem[0].y - ry, f.orientation)
+
+        for frame in frames:
+            for colour, robots in (("yellow", frame.yellow_robots), ("blue", frame.blue_robots)):
+                for r in robots:
+                    self._last_seen[(frame.camera_id, (colour, r.id))] = (r.x, r.y, frame.ts, frame.camera_position)
+
+        avg_yellows = [fused[("yellow", r.id)] for r in avg_yellows]
+        avg_blues = [fused[("blue", r.id)] for r in avg_blues]
+
         shifted = []
+        all_keys = set(fused) | {
+            k for k, rem in self._remembered.items() if frame_ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY
+        }
         for frame in frames:
             own = []  # (where this camera puts a robot, the fused robot there)
-            for key, f in fused.items():
-                detections = seen_by[key]
+            for key in all_keys:
+                f = fused.get(key) or self._remembered[key][0]
+                detections = seen_by.get(key, {})
                 if frame.camera_id in detections:
                     x, y = detections[frame.camera_id]
                     for other, (ox, oy) in detections.items():
@@ -557,6 +556,11 @@ class CameraCombiner:
                     if gap is not None and frame.ts - gap[2] <= BALL_ROBOT_OFFSET_MEMORY:
                         own.append((ox + gap[0], oy + gap[1], f))
                         break
+                else:
+                    rem = self._remembered.get(key)
+                    if rem is not None and frame.ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY and frame.camera_id in rem[1]:
+                        rx, ry = rem[1][frame.camera_id]
+                        own.append((f.x - (rem[0].x - rx), f.y - (rem[0].y - ry), f))
             for b in frame.balls:
                 if not self._bounds_check(b.x, b.y, bounds):
                     continue
@@ -567,7 +571,7 @@ class CameraCombiner:
                 shifted.append((b, frame.camera_position, frame.camera_id))
         balls = self._combine_balls_by_proximity(shifted, avg_yellows + avg_blues)
 
-        return VisionData(sum(ts) / len(ts), avg_yellows, avg_blues, balls)
+        return VisionData(frame_ts, avg_yellows, avg_blues, balls)
 
     @staticmethod
     def _nearby_robot_duplicates(robots: List[RawRobotData]) -> List[RawRobotData]:

@@ -4,9 +4,9 @@ on:
   push:
   pull_request:
 
-# Keep push and PR checks independent; only cancel older runs of the same event and branch.
+# A PR's push and pull_request events run the same tests: let the later one cancel the earlier.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

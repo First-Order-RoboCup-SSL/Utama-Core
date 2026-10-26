@@ -393,12 +393,6 @@ class KalmanFilterBall:
 
         return tuple(self.state)
 
-    def correct_position(self, position: Vector3D) -> None:
-        """Keep prediction consistent after a current local-geometry correction."""
-        self.state = np.array((position.x, position.y, position.z))
-        self._lost = None
-        self._unseen_s = 0.0
-
     def _rolled(self, p0: np.ndarray, v0: np.ndarray, t: float) -> np.ndarray:
         """Where a ball at `p0` rolling at `v0` is after `t` s of `BALL_ROLL_DECEL`, within `bounds`."""
         speed = math.hypot(v0[0], v0[1])
