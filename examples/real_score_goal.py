@@ -54,7 +54,7 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 # ---------------------------------------------------------------------------
 
 SHOOTER_COLOUR = "yellow"
-SHOOTER = TestRobot(vision_id=0, firmware_id=0)
+SHOOTER = TestRobot(vision_id=1, firmware_id=0)  # yellow 1: what its pattern reads as
 
 # ---------------------------------------------------------------------------
 
