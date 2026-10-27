@@ -75,6 +75,7 @@ function framesFromColumns(c) {
   let play = []; // one row per situation (dashboard/views/replay.py play_rows), worded by wordPlay
   let playIdx = -1; // the row highlighted as the one being played
   let myTeamIsYellow = true;
+  let clockAt = () => null; // the referee's match clock at a time (timeline.js matchClock)
   const MARKER_LEAD_S = 2; // jump a little before an event, to see it happen
 
   function frameTs(i) {
@@ -128,13 +129,17 @@ function framesFromColumns(c) {
   function updateReadouts() {
     const label = document.getElementById("replay-frame-label");
     if (!label) return;
+    const clockEl = document.getElementById("replay-match-clock");
     if (!frames.length) {
       label.textContent = "0:00 / 0:00";
+      if (clockEl) clockEl.textContent = "";
       return;
     }
     const elapsed = frameTs(index) - frameTs(0);
     const total = frameTs(frames.length - 1) - frameTs(0);
     label.textContent = fmtTime(elapsed) + " / " + fmtTime(total);
+    const clock = clockAt(frameTs(index));
+    if (clockEl) clockEl.textContent = clock ? "match clock " + fmtTime(clock.played) : "";
   }
 
   const REPLAY_HEADER_IDS = {
@@ -436,6 +441,7 @@ function framesFromColumns(c) {
         frames = data.columns ? framesFromColumns(data.columns) : data.frames || [];
         tacticEvents = data.tactic_events || [];
         refereeEvents = data.referee_events || [];
+        clockAt = matchClock(refereeEvents);
         traceEvents = data.trace_events || [];
         markers = data.markers || [];
         shots = data.shots || [];

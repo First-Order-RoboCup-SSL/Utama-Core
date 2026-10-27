@@ -209,7 +209,63 @@
     box.querySelector("#ref-check-ok").addEventListener("toggle", (e) => (okOpen = e.target.open));
   }
 
+  // What each side plays, when the script offers choices (dashboard/views/strategy.py): a list
+  // and Run per side. The server refuses unless halted, and the refusal shows under the buttons.
+  // A run that records a game log also gets a note box: Enter writes the note into the log.
+  function mountStrategy() {
+    fetch("/strategy/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (!cfg) return;
+        const sides = cfg.sides;
+        if (cfg.notes) mountNote();
+        const rows = document.getElementById("strategy-rows");
+        rows.innerHTML = "";
+        for (const side in sides) {
+          const s = sides[side];
+          const row = document.createElement("div");
+          row.className = "row";
+          row.style.alignItems = "center";
+          const options = s.choices
+            .map((n) => `<option${n === s.running ? " selected" : ""}>${n}</option>`)
+            .join("");
+          row.innerHTML =
+            `<span class="muted" style="min-width:48px;">${s.team}</span><select style="flex:1;">${options}</select>` +
+            "<button>Run</button>";
+          row.querySelector("button").addEventListener("click", () => {
+            const name = row.querySelector("select").value;
+            fetch("/strategy/run", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ side, name }),
+            })
+              .then((r) => (r.ok ? null : r.text().then((t) => showSendError(name, t || "HTTP " + r.status))))
+              .catch((err) => showSendError(name, err.message || "no connection"));
+          });
+          rows.appendChild(row);
+        }
+        document.getElementById("strategy-run").style.display = "";
+      });
+  }
+
+  function mountNote() {
+    const input = document.getElementById("log-note");
+    document.getElementById("log-note-row").style.display = "";
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || !input.value.trim()) return;
+      const text = input.value;
+      fetch("/log/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+        .then((r) => (r.ok ? (input.value = "") : r.text().then((t) => showSendError("note", t || "HTTP " + r.status))))
+        .catch((err) => showSendError("note", err.message || "no connection"));
+    });
+  }
+
   function mount() {
+    mountStrategy();
     fetch("/referee/config")
       .then((r) => (r.ok ? r.json() : null))
       .then((c) => {

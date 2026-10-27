@@ -3,11 +3,13 @@ import dataclasses
 import json
 import logging
 import signal
+import sys
 import threading
 import time
 import warnings
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
 
 from rich.live import Live
@@ -19,6 +21,7 @@ from utama_core.config.physical_constants import MAX_ROBOT_ID, MAX_ROBOTS
 from utama_core.config.settings import (
     MAX_CAMERAS,
     MAX_GAME_HISTORY,
+    REPLAY_BASE_PATH,
     ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
@@ -49,13 +52,14 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
-from utama_core.replay.game_log_writer import GameLogWriter
+from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.field_check import FieldCheck
+from utama_core.run.field_fence import FencedRobotController, inner_edges
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
 from utama_core.run.side_runtime import SideRuntime, _mirrored, _turned
@@ -122,6 +126,16 @@ class _RobotPortFeedbackState:
     port_id: int
     has_ball: bool
     last_seen: float
+
+
+def _replay_name(game_log_path: str) -> str:
+    """The replay's name for a game log: the same path without `.log`, under `REPLAY_BASE_PATH`
+    when the log is (`replays/field/X.log` -> `field/X`), else the log's own name."""
+    stem = Path(game_log_path).resolve().with_suffix("")
+    try:
+        return str(stem.relative_to(REPLAY_BASE_PATH.resolve()))
+    except ValueError:
+        return stem.name
 
 
 def _record_robot_feedback_responses(
@@ -264,7 +278,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         blue_robot_profiles (dict[int, RobotProfile], optional): Same as ``yellow_robot_profiles`` for the blue team.
         game_log_path (str, optional): Record the run as an SSL game log (`.log`): every vision packet,
             the referee's state and, on real robots, the radio's bytes both ways; see `GameLogWriter`.
-            grSim and real mode only (rsim has no packets).
+            grSim and real mode only (rsim has no packets). Unless ``replay_writer_config`` is given, the
+            world the strategy saw is also saved as a columnar replay beside it, at close
+            (`replays/field/X.log` -> `replays/field/X.npz`).
     """
 
     def __init__(
@@ -393,8 +409,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                         "yellow": {k: dataclasses.asdict(p) for k, p in self.yellow_robot_profiles.items()},
                         "blue": {k: dataclasses.asdict(p) for k, p in self.blue_robot_profiles.items()},
                     },
+                    "command": sys.argv,
+                    "code": code_version(),
+                    "field_bounds": {
+                        "top_left": [float(v) for v in self.field_bounds.top_left],
+                        "bottom_right": [float(v) for v in self.field_bounds.bottom_right],
+                    },
                 }
             )
+            # The world as the strategy saw it (after the refiners and filters), beside the log:
+            # the log holds only what went in and out. Saved once, at close: a checkpoint rewrites the
+            # whole replay on the control loop (385 ms ten minutes in), and a crash loses only what
+            # replaying the log rebuilds.
+            if replay_writer_config is None:
+                replay_writer_config = ColumnarReplayWriterConfig(
+                    replay_name=_replay_name(game_log_path), checkpoint_every_s=0
+                )
         for is_yellow in (True, False):
             self._check_profiles_are_driven(is_yellow)
         yellow_trusted_ir_robots = self._trusted_ir(True, yellow_trusted_ir_robots)
@@ -407,13 +437,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 self.yellow_vision_to_cmd_mapping, self.blue_vision_to_cmd_mapping
             )
 
-        # Derive per-color roster allowlists from the validated mappings (real mode only).
-        # Any robot ID seen by vision that is not in the allowlist is silently dropped so that
-        # stray detections from robots not in play never pollute the game state.
-        # Blue filtering is only applied when there is an opponent strategy — in single-team
-        # mode blue robots are tracked as enemies and must not be filtered out.
-        _allowed_yellow = frozenset(self.yellow_vision_to_cmd_mapping) or None
-        _allowed_blue = (frozenset(self.blue_vision_to_cmd_mapping) or None) if opp_strategy is not None else None
+        _allowed_yellow, _allowed_blue = self._roster_allowlists(
+            self.yellow_vision_to_cmd_mapping,
+            self.blue_vision_to_cmd_mapping,
+            my_team_is_yellow,
+            has_opp=opp_strategy is not None,
+        )
 
         self.my, self.opp = self._setup_sides_data(
             strategy,
@@ -431,6 +460,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.field_check = self._make_field_check()
         self._field_check_rows: list[dict] = []
         self._auto_halt: Optional[str] = None  # the auto-HALT in force's reason, shown on the dashboard
+        # side -> (its replacement, its name), see replace_strategy: one entry, so the control loop
+        # never takes a strategy without its name.
+        self._pending_strategies: dict[str, tuple[AbstractStrategy, str]] = {}
+        self.strategy_names: dict[str, str] = {}  # side -> the name of the strategy swapped in last
 
         ### functions below rely on self.my and self.opp ###
 
@@ -530,6 +563,25 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # Profiler setup
         self.profiler_name = profiler_name
         self.profiler = cProfile.Profile() if profiler_name else None
+
+    @staticmethod
+    def _roster_allowlists(
+        yellow_mapping: dict[int, int], blue_mapping: dict[int, int], my_team_is_yellow: bool, has_opp: bool
+    ) -> Tuple[Optional[frozenset[int]], Optional[frozenset[int]]]:
+        """Per-colour roster allowlists from the validated mappings (real mode only; empty
+        elsewhere, so None). A robot ID vision reports that is not in its colour's allowlist is
+        dropped, so a misread pattern (a ghost blue 5 beside our blue 2) never becomes a robot
+        the Kalman filter then keeps alive. A colour we drive (ours, and the opponent's with an
+        opponent strategy) is filtered; the opponent's colour without one is the enemies we
+        track, unfiltered."""
+
+        def allowlist(mapping: dict[int, int], driven: bool) -> Optional[frozenset[int]]:
+            return (frozenset(mapping) or None) if driven else None
+
+        return (
+            allowlist(yellow_mapping, my_team_is_yellow or has_opp),
+            allowlist(blue_mapping, not my_team_is_yellow or has_opp),
+        )
 
     def _validate_vision_to_cmd_mapping(self, mapping: Optional[dict[int, int]], is_yellow: bool) -> dict[int, int]:
         if self.mode == Mode.REAL:
@@ -956,6 +1008,55 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
         return FieldCheck(expected, self.field_bounds, self.full_field_dims)
 
+    def replace_strategy(self, side: str, strategy: AbstractStrategy, name: str = "") -> None:
+        """Run `strategy` for `side` ("my" or "opp") from the next tick, in place of the one
+        running: a different one, or a fresh copy of the same to restart it. Vision, the radio and
+        the dashboard carry on. Only while HALTed, so no robot is mid-move when its strategy
+        changes: raises ValueError otherwise (the dashboard shows it). Safe from any thread.
+        `name` is what the game log's note and `strategy_names` call it (default: the strategy's class)."""
+        runtime = self.my if side == "my" else self.opp if side == "opp" else None
+        if runtime is None:
+            raise ValueError(f"no {side!r} side in this run")
+        if not self._halted(runtime):
+            raise ValueError("press Halt first: a strategy is only changed while halted")
+        if strategy.control_scheme not in (None, runtime.control_scheme):
+            raise ValueError(
+                f"needs control scheme {strategy.control_scheme!r}, this run uses {runtime.control_scheme!r}"
+            )
+        self._pending_strategies[side] = (strategy, name)
+
+    @staticmethod
+    def _halted(runtime: SideRuntime) -> bool:
+        referee = runtime.game.referee if runtime.game is not None else None
+        return referee is not None and referee.referee_command == RefereeCommand.HALT
+
+    def _swap_in_pending_strategy(self, runtime: SideRuntime, side: str) -> None:
+        """Called on the control loop, just before `runtime`'s strategy steps."""
+        pending = self._pending_strategies.pop(side, None)
+        if pending is None:
+            return
+        new, name = pending
+        name = name or type(new).__name__
+        if not self._halted(runtime):  # play restarted between the request and this tick
+            self.logger.warning("Strategy change for %s dropped: no longer halted", side)
+            if self.game_log is not None:
+                self.game_log.note(f"{side} strategy change to {name} dropped: no longer halted")
+            return
+        if self.game_log is not None:
+            self.game_log.note(f"{side} strategy: {name}")
+        old = runtime.strategy
+        if old.rsim_env is not None:
+            new.load_rsim_env(old.rsim_env)
+        new.load_robot_controller(old.robot_controller)
+        new.load_motion_controller(old.motion_controller)
+        new.load_game(old.game)
+        kernel_strategy = getattr(new, "_kernel_strategy", None)
+        if side == "my" and self.match_log is not None and kernel_strategy is not None:
+            kernel_strategy.match_log = self.match_log
+        runtime.strategy = new
+        self.strategy_names[side] = name
+        self.logger.info("Strategy for %s replaced", side)
+
     def _tick_field_check(self, vision_frames: List[Optional[RawVisionData]], now: float) -> None:
         """Judge the field against the setup; on real robots, HALT while any check fails.
 
@@ -1151,7 +1252,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         my_profiles, opp_profiles = map_colors_to_friendly_enemy(
             self.my_team_is_yellow, self.yellow_robot_profiles, self.blue_robot_profiles
         )
-        my_robot_controller = self._with_profiles(my_robot_controller, my_profiles)
+        my_robot_controller = self._wrapped(my_robot_controller, my_profiles, lambda: self.my.game)
         self.my.strategy.load_robot_controller(my_robot_controller)
         self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
         if self.match_log is not None:
@@ -1165,7 +1266,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if kernel_strategy is not None:
                 kernel_strategy.match_log = self.match_log
         if self.opp:
-            opp_robot_controller = self._with_profiles(opp_robot_controller, opp_profiles)
+            opp_robot_controller = self._wrapped(opp_robot_controller, opp_profiles, lambda: self.opp.game)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
 
@@ -1199,6 +1300,20 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 f"Give the {colour} ball sensors in robot profiles or {colour}_trusted_ir_robots, not both"
             )
         return frozenset(self._driven_ids(is_yellow) - broken)
+
+    def _wrapped(self, controller, profiles: dict[int, RobotProfile], game):
+        """`controller` fitted to `profiles`, then fenced: the fence sees the command the robot
+        is sent, a kicker-less robot's push included."""
+        return self._with_profiles(self._fenced(controller, game), profiles)
+
+    def _fenced(self, controller, game):
+        """`controller`, its robots kept inside the edges of `field_bounds` that are inside the
+        field when vision comes from a camera (grSim or real): past them nothing sees them
+        (`field_fence.py`)."""
+        bounds = inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
+        if self.mode == Mode.RSIM or bounds is None:
+            return controller
+        return FencedRobotController(controller, bounds, game)
 
     def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
         """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""
@@ -1670,13 +1785,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             if ref_data.referee_command not in _BALL_PLACEMENT_COMMANDS:
                 self._pending_placement_teleport = None
             self._tick_pending_placement_teleport()
-            if self.sim_controller is not None:
+            if self.sim_controller is not None and not self.referee.halted_by_operator:
                 # HALT (e.g. DefenseAreaStoppageRule's 2nd-foul escalation) has
                 # no auto-advance in GameStateMachine by design — on a real
                 # pitch it requires a human referee/GameController to resume.
                 # An automated sim/tournament run has neither, so left alone
                 # a HALT here would freeze the match forever. Auto-resume to
-                # NORMAL_START after a grace period, sim-only.
+                # NORMAL_START after a grace period, sim-only. Not a HALT an
+                # operator called from the dashboard: they end it (the Strategy
+                # panel needs one that lasts).
                 if ref_data.referee_command == RefereeCommand.HALT:
                     if self._prev_custom_ref_command != RefereeCommand.HALT:
                         self._halt_entered_at = self.my.current_game_frame.ts
@@ -1989,4 +2106,5 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         side.game.add_game_frame(new_game_frame)
         if not running_opp and self.match_stats is not None:
             self.match_stats.record_tick(new_game_frame, committed_tactics=self._committed_tactics())
+        self._swap_in_pending_strategy(side, "opp" if running_opp else "my")
         side.strategy.step()

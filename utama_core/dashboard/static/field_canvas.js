@@ -193,6 +193,8 @@ class FieldCanvas {
       ctx.stroke();
     }
 
+    // Labels grow with the robots but stay readable on a phone-sized field.
+    const textPx = Math.max(10, Math.round(ROBOT_RADIUS_M * scale * 1.4)) + "px ui-monospace, monospace";
     const robots = state.robots;
     const tactics = state.tactics || {};
     const tacticTags = state.tactic_tags || {};
@@ -228,14 +230,9 @@ class FieldCanvas {
             toY(bot.y + headingM * Math.sin(bot.orientation))
           );
           ctx.stroke();
-          ctx.fillStyle = fill;
-          ctx.font = "7px ui-monospace, monospace";
-          ctx.textAlign = "center";
-          ctx.fillText(bot.id, cx, cy - r - 1);
+          this._label(ctx, bot.id, cx, cy - r - 2, "bottom", "bold " + textPx, fill);
           if (label && tactics[String(bot.id)]) {
-            ctx.fillStyle = FIELD_COLORS.marker;
-            ctx.font = "6px ui-monospace, monospace";
-            ctx.fillText(tactics[String(bot.id)], cx, cy + r + 7);
+            this._label(ctx, tactics[String(bot.id)], cx, cy + r + 2, "top", textPx, FIELD_COLORS.marker);
           }
         }
       };
@@ -277,7 +274,21 @@ class FieldCanvas {
       }
     }
 
-    this._drawOverlays(ctx, state, robots, toX, toY);
+    this._drawOverlays(ctx, state, robots, toX, toY, textPx, Math.max(2, ROBOT_RADIUS_M * scale));
+  }
+
+  // Text with a pitch-coloured halo, so it reads over field lines and overlays.
+  _label(ctx, text, x, y, baseline, font, colour) {
+    ctx.font = font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = baseline;
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = FIELD_COLORS.pitch;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = colour;
+    ctx.fillText(text, x, y);
+    ctx.textBaseline = "alphabetic";
   }
 
   // The area in play (StrategyRunner's field_bounds): everything outside it is dimmed, so a
@@ -342,7 +353,7 @@ class FieldCanvas {
   // the few keys below by name — a tactic's trace value is inert here until
   // a case is added for its key, same opt-in shape as everything else in
   // this file.
-  _drawOverlays(ctx, state, robots, toX, toY) {
+  _drawOverlays(ctx, state, robots, toX, toY, textPx, r) {
     const overlays = state.overlays;
     if (!overlays || !robots) return;
 
@@ -536,6 +547,8 @@ class FieldCanvas {
     // "highlights.<tactic_id>" -> {robot_id: label}. Not tied to any
     // specific tactic or to is_committed() — a tactic decides what's worth
     // calling out and why; this renderer just draws whatever comes through.
+    // The label goes under the robot (its number is above), below its tactic label if it has one.
+    const tactics = state.tactics || {};
     for (const key in overlays) {
       if (!key.startsWith("highlights.")) continue;
       const labels = overlays[key];
@@ -546,12 +559,10 @@ class FieldCanvas {
         ctx.strokeStyle = FIELD_COLORS.marker;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(cx, cy, 8, 0, 2 * Math.PI);
+        ctx.arc(cx, cy, r + 1, 0, 2 * Math.PI);
         ctx.stroke();
-        ctx.fillStyle = FIELD_COLORS.marker;
-        ctx.font = "6px ui-monospace, monospace";
-        ctx.textAlign = "center";
-        ctx.fillText(labels[robotId], cx, cy - 8 - 3);
+        const below = cy + r + 2 + (tactics[robotId] ? parseInt(textPx, 10) + 1 : 0);
+        this._label(ctx, labels[robotId], cx, below, "top", textPx, FIELD_COLORS.marker);
       }
     }
   }

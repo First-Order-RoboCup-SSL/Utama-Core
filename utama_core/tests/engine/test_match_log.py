@@ -79,3 +79,20 @@ def test_load_jsonl_reads_intention_rows_without_event_key(tmp_path):
 
     events = load_jsonl(out)
     assert events == [IntentionEvent(tick=1, sim_time=0.0, tactic_id="a", robot_ids=(1,), tag=TacticTag.MIXED)]
+
+
+def test_clear_untraced_clears_only_keys_not_traced_since_the_last_sweep():
+    log = MatchLog()
+    log.trace_if_changed(tick=1, sim_time=0.0, key="kept", value=1)
+    log.trace_if_changed(tick=1, sim_time=0.0, key="dropped", value=2)
+    log.clear_untraced(tick=1, sim_time=0.0)
+    log.trace_if_changed(tick=2, sim_time=0.1, key="kept", value=1)  # unchanged: not logged again
+    log.clear_untraced(tick=2, sim_time=0.1)
+    log.clear_untraced(tick=3, sim_time=0.2)  # "dropped" is already None: not logged again
+
+    assert [(e.key, e.value) for e in log.events()] == [
+        ("kept", 1),
+        ("dropped", 2),
+        ("dropped", None),
+        ("kept", None),
+    ]

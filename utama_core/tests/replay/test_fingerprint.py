@@ -385,6 +385,8 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     analysis, never during play.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
+#     game_log_writer asks git for the commit it records, only for a camera run's game log
+#     (never in rsim), so no match result depends on it.
 #   getattr on a module by computed name: tools.evaluation.match looks a factory up by name ->
 #     the config names are the fingerprint's own inputs.
 #   module-level state: code in the closure, so already hashed; its values must not carry
@@ -413,7 +415,10 @@ AUDIT = {
         "utama_core.replay.game_log_writer",
         "utama_core.replay.replay_writer",
     ],
-    "subprocess": ["utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper"],
+    "subprocess": [
+        "utama_core.replay.game_log_writer",
+        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+    ],
 }
 
 

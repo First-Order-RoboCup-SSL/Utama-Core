@@ -113,3 +113,40 @@ def test_a_refused_placement_is_a_bad_request_and_sends_nothing(monkeypatch):
     referee.force_command.assert_not_called()
     handlers["/referee/command"]({"command": "BALL_PLACEMENT_YELLOW", "designated": [1.0, 0.0]})
     assert referee.force_command.call_args.kwargs["ball_placement_target"] == (1.0, 0.0)
+
+
+def test_a_command_from_the_page_is_stamped_on_the_referees_clock_not_the_wall_clock(monkeypatch):
+    """In rsim the referee runs on sim time; a wall-clock stamp put its match clock 1.8e9 s out."""
+    from types import SimpleNamespace
+
+    from utama_core.custom_referee import CustomReferee
+    from utama_core.dashboard.views import referee as referee_view
+    from utama_core.entities.data.vector import Vector3D
+    from utama_core.entities.game.ball import Ball
+    from utama_core.entities.game.game_frame import GameFrame
+    from utama_core.entities.referee.referee_command import RefereeCommand
+
+    handlers = {}
+    server = SimpleNamespace(
+        add_route=lambda path, getter: None, add_command_handler=handlers.__setitem__, notify=lambda *a: None
+    )
+    referee = CustomReferee.from_profile_name("simulation")
+    monkeypatch.setattr(referee_view, "_build_static_config", lambda profile: {})
+    referee_view.attach(server, referee, profile=None)
+    zero = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=12.5,
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        friendly_robots={},
+        enemy_robots={},
+        ball=Ball(p=zero, v=zero, a=zero),
+        referee=None,
+    )
+    referee.seed_clock(0.0, RefereeCommand.HALT)
+    referee.step(frame, 12.5)
+
+    handlers["/referee/command"]({"command": "STOP"})
+
+    assert referee._state.command == RefereeCommand.STOP
+    assert referee._state.command_timestamp == 12.5
