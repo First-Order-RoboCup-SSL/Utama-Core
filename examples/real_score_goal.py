@@ -53,8 +53,8 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 # Test-day configuration
 # ---------------------------------------------------------------------------
 
-SHOOTER_COLOUR = "blue"
-SHOOTER = TestRobot(vision_id=2, firmware_id=0)
+SHOOTER_COLOUR = "yellow"
+SHOOTER = TestRobot(vision_id=0, firmware_id=0)
 
 # ---------------------------------------------------------------------------
 
