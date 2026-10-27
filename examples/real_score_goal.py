@@ -4,7 +4,7 @@
 Run:
     pixi run python examples/real_score_goal.py            # real robot
     pixi run python examples/real_score_goal.py --mode rsim
-    pixi run python examples/real_score_goal.py --calibrate   # measure the robot: fixed moves
+    pixi run calibrate   # = --calibrate: measure the robot with fixed moves
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
 The field and the camera's view are `FIELD` and `CAMERA_HALF` in `real_attacker_defender.py`,

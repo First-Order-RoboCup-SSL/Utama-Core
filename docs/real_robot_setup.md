@@ -133,7 +133,21 @@ the strategy saw, written when the run closes. Use the Live tab's Note box (Ente
 the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
 a test day is setting up, and notes make the useful minutes easy to find later.
 
-## When something fails
+### 5. Measuring a robot
+
+With the robot set in `examples/real_score_goal.py` (its colour, vision and radio ID):
+
+```
+pixi run calibrate
+pixi run python tools/robot_calibration.py replays/field/<time>_real_calibrate.log
+```
+
+Put it near the middle of the camera's view facing +x, with 0.8 m clear ahead and 0.6 m to its
+left, and a ball at rest in view; Force Start on the dashboard. It plays fixed moves for about
+50 s (`tactics/scripted_moves.py`) and stops; Ctrl+C. The second command prints its loop delay,
+speed gain and acceleration per axis and its vision noise at rest. Run it twice, early and late:
+how far the two disagree is how far to trust them.
+
 
 | Symptom | Cause |
 |---|---|

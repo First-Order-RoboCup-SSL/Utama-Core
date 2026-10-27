@@ -17,6 +17,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [real_robot_setup.md](real_robot_setup.md)) |
+| `calibrate` | measure one real robot: it plays fixed moves (`real_score_goal.py --calibrate`), then `tools/robot_calibration.py <log>` gives its loop delay, speed gain, acceleration and vision noise ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
 
 ## Worktrees
 
