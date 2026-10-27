@@ -2,11 +2,12 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from utama_core.config.field_params import FieldDimensions
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.settings import (
     BALL_MERGE_THRESHOLD,
     BALL_ROBOT_OFFSET_MEMORY,
@@ -24,6 +25,12 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
 from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
+
+
+def _in_field_or_goal(x: float, y: float, dimensions: FieldDimensions) -> bool:
+    if abs(y) <= dimensions.full_field_half_width and abs(x) <= dimensions.full_field_half_length:
+        return True
+    return abs(y) <= dimensions.half_goal_width and abs(x) <= dimensions.full_field_half_length + dimensions.goal_depth
 
 
 @dataclass
@@ -83,7 +90,7 @@ class PositionRefiner(BaseRefiner):
             False  # Only start filtering once we have valid data to filter (i.e. after the first valid game frame)
         )
 
-        self._combiner = CameraCombiner()
+        self._combiner = CameraCombiner(full_field_dims)
         self._field_dims = full_field_dims
         self.exp_ball = exp_ball
         self.allowed_yellow_ids = allowed_yellow_ids
@@ -105,14 +112,24 @@ class PositionRefiner(BaseRefiner):
         game_frame: GameFrame,
         data: List[RawVisionData],
     ) -> GameFrame:
-        frames = [frame for frame in data if frame is not None]
+        frames = [
+            replace(
+                frame,
+                yellow_robots=[
+                    r for r in frame.yellow_robots if self.allowed_yellow_ids is None or r.id in self.allowed_yellow_ids
+                ],
+                blue_robots=[
+                    r for r in frame.blue_robots if self.allowed_blue_ids is None or r.id in self.allowed_blue_ids
+                ],
+            )
+            for frame in data
+            if frame is not None
+        ]
 
         # If no information just return the original
         if not frames:
             return game_frame
 
-        # class VisionData: ts: float; yellow_robots: List[VisionRobotData]; blue_robots: List[VisionRobotData]; balls: List[VisionBallData]
-        # class VisionRobotData: id: int; x: float; y: float; orientation: float
         combined_vision_data: VisionData = self._combiner.combine_cameras(
             frames,
             bounds=self.vision_bounds,
@@ -235,7 +252,7 @@ class PositionRefiner(BaseRefiner):
         Should be called at the start of each game to ensure no leakage of information between games.
         """
         self._filter_running = False
-        self._combiner = CameraCombiner()
+        self._combiner = CameraCombiner(self._field_dims)
         if self._uses_kalman:
             self.kalman_filters_yellow = {}
             self.kalman_filters_blue = {}
@@ -336,18 +353,12 @@ class PositionRefiner(BaseRefiner):
         leaves the field, stray orange things off it do: 2026-10-22, four steady "balls" 15 cm
         past the touch line, as confident as the real one), then the nearest to `last`, the ball
         the frame before. With no last ball, the most confident."""
-        inside = [b for b in balls if self._in_field_or_goal(b.x, b.y)]
+        inside = [b for b in balls if _in_field_or_goal(b.x, b.y, self._field_dims)]
         candidates = inside or balls
         if last is None or not candidates:
             return PositionRefiner._get_most_confident_ball(candidates)
         nearest = min(candidates, key=lambda b: math.hypot(b.x - last.p.x, b.y - last.p.y))
         return PositionRefiner._ball_from_vision(nearest)
-
-    def _in_field_or_goal(self, x: float, y: float) -> bool:
-        d = self._field_dims
-        if abs(y) <= d.full_field_half_width and abs(x) <= d.full_field_half_length:
-            return True
-        return abs(y) <= d.half_goal_width and abs(x) <= d.full_field_half_length + d.goal_depth
 
     @staticmethod
     def _get_most_confident_ball(balls: List[VisionBallData]) -> Ball:
@@ -418,7 +429,7 @@ class CameraCombiner:
     best-placed camera's is dropped, so a camera that disagrees (a poor calibration far from it)
     does not pull the robot away. Without camera positions every camera counts the same. A ball
     is fused by the same rule, its detections grouped by being within `BALL_MERGE_THRESHOLD`
-    of each other: fused one way and the robots another, a ball at a robot's dribbler came out
+    of every other member: fused one way and the robots another, a ball at a robot's dribbler came out
     inside the robot (2026-10-22). Each camera's ball is first moved by that camera's offset at
     the nearest robot it also sees (within `BALL_ROBOT_SHIFT_RANGE`): the fused robot minus its
     own detection of it. So a ball seen by one camera only (the robot hides it from the other)
@@ -428,10 +439,15 @@ class CameraCombiner:
     calibrations' disagreement, steady over that time. Without it the ball came out inside the
     robot (2.4% of one 2026-10-22 log)."""
 
-    def __init__(self):
+    def __init__(self, full_field_dims: Optional[FieldDimensions] = None):
+        self._field_dims = full_field_dims
         # (camera id, other camera id, (colour, robot id)) -> (camera's detection minus the other's
         # in x, y; frame time)
         self._gaps: Dict[tuple, Tuple[float, float, float]] = {}
+        # (colour, robot id) -> (fused robot, {camera id: (x, y)}, frame time)
+        self._remembered: Dict[Tuple[str, int], Tuple[VisionRobotData, Dict[int, Tuple[float, float]], float]] = {}
+        # (camera id, (colour, robot id)) -> (x, y, frame time, camera position)
+        self._last_seen: Dict[tuple, Tuple[float, float, float, Optional[Tuple[float, float, float]]]] = {}
 
     def combine_cameras(
         self,
@@ -448,6 +464,18 @@ class CameraCombiner:
             VisionData: A combined VisionData object containing averaged robot positions and the most confident ball position.
         """
 
+        frames = [
+            replace(
+                frame,
+                yellow_robots=self._nearby_robot_duplicates(
+                    [r for r in frame.yellow_robots if self._bounds_check(r.x, r.y, bounds)]
+                ),
+                blue_robots=self._nearby_robot_duplicates(
+                    [r for r in frame.blue_robots if self._bounds_check(r.x, r.y, bounds)]
+                ),
+            )
+            for frame in frames
+        ]
         ts = []
         # maps robot id to the (detection, its camera's position) of every camera that saw it
         yellow_captured = defaultdict(list)
@@ -464,6 +492,7 @@ class CameraCombiner:
                     blue_captured[br.id].append((br, frame.camera_position))
             ts.append(frame.ts)
 
+        frame_ts = sum(ts) / len(ts)
         avg_yellows = list(map(self._avg_robots, yellow_captured.values()))
         avg_blues = list(map(self._avg_robots, blue_captured.values()))
         fused = {("yellow", r.id): r for r in avg_yellows} | {("blue", r.id): r for r in avg_blues}
@@ -475,11 +504,46 @@ class CameraCombiner:
                 for r in robots:
                     if self._bounds_check(r.x, r.y, bounds):
                         seen_by[(colour, r.id)][frame.camera_id] = (r.x, r.y)
+
+        # Keep single-camera ticks in the fused frame using the last multi-camera bias.
+        for key, detections in seen_by.items():
+            f = fused[key]
+            if len(detections) >= 2:
+                self._remembered[key] = (f, dict(detections), frame_ts)
+            elif len(detections) == 1:
+                cam_id, (x, y) = next(iter(detections.items()))
+                rem = self._remembered.get(key)
+                if rem is None or frame_ts - rem[2] > BALL_ROBOT_OFFSET_MEMORY:
+                    for (other, last_key), (ox, oy, ot, o_pos) in list(self._last_seen.items()):
+                        if last_key == key and other != cam_id and abs(frame_ts - ot) <= 0.05:
+                            captured = yellow_captured[key[1]] if key[0] == "yellow" else blue_captured[key[1]]
+                            f = self._avg_robots(captured + [(RawRobotData(key[1], ox, oy, f.orientation, 1.0), o_pos)])
+                            self._remembered[key] = (f, {cam_id: (x, y), other: (ox, oy)}, frame_ts)
+                            self._gaps[(cam_id, other, key)] = (x - ox, y - oy, frame_ts)
+                            self._gaps[(other, cam_id, key)] = (ox - x, oy - y, frame_ts)
+                            rem = self._remembered[key]
+                            break
+                if rem is not None and frame_ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY and cam_id in rem[1]:
+                    rx, ry = rem[1][cam_id]
+                    fused[key] = VisionRobotData(f.id, x + rem[0].x - rx, y + rem[0].y - ry, f.orientation)
+
+        for frame in frames:
+            for colour, robots in (("yellow", frame.yellow_robots), ("blue", frame.blue_robots)):
+                for r in robots:
+                    self._last_seen[(frame.camera_id, (colour, r.id))] = (r.x, r.y, frame.ts, frame.camera_position)
+
+        avg_yellows = [fused[("yellow", r.id)] for r in avg_yellows]
+        avg_blues = [fused[("blue", r.id)] for r in avg_blues]
+
         shifted = []
+        all_keys = set(fused) | {
+            k for k, rem in self._remembered.items() if frame_ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY
+        }
         for frame in frames:
             own = []  # (where this camera puts a robot, the fused robot there)
-            for key, f in fused.items():
-                detections = seen_by[key]
+            for key in all_keys:
+                f = fused.get(key) or self._remembered[key][0]
+                detections = seen_by.get(key, {})
                 if frame.camera_id in detections:
                     x, y = detections[frame.camera_id]
                     for other, (ox, oy) in detections.items():
@@ -492,6 +556,11 @@ class CameraCombiner:
                     if gap is not None and frame.ts - gap[2] <= BALL_ROBOT_OFFSET_MEMORY:
                         own.append((ox + gap[0], oy + gap[1], f))
                         break
+                else:
+                    rem = self._remembered.get(key)
+                    if rem is not None and frame.ts - rem[2] <= BALL_ROBOT_OFFSET_MEMORY and frame.camera_id in rem[1]:
+                        rx, ry = rem[1][frame.camera_id]
+                        own.append((f.x - (rem[0].x - rx), f.y - (rem[0].y - ry), f))
             for b in frame.balls:
                 if not self._bounds_check(b.x, b.y, bounds):
                     continue
@@ -499,10 +568,33 @@ class CameraCombiner:
                 if near is not None and math.hypot(near[0] - b.x, near[1] - b.y) <= BALL_ROBOT_SHIFT_RANGE:
                     x, y, f = near
                     b = RawBallData(b.x + f.x - x, b.y + f.y - y, b.z, b.confidence)
-                shifted.append((b, frame.camera_position))
-        balls = self._combine_balls_by_proximity(shifted)
+                shifted.append((b, frame.camera_position, frame.camera_id))
+        balls = self._combine_balls_by_proximity(shifted, avg_yellows + avg_blues)
 
-        return VisionData(sum(ts) / len(ts), avg_yellows, avg_blues, balls)
+        return VisionData(frame_ts, avg_yellows, avg_blues, balls)
+
+    @staticmethod
+    def _nearby_robot_duplicates(robots: List[RawRobotData]) -> List[RawRobotData]:
+        """Nearby repeats of one ID in an image are one camera observation."""
+        by_id = defaultdict(list)
+        for robot in robots:
+            by_id[robot.id].append(robot)
+        result = []
+        for robot_id, seen in by_id.items():
+            if len(seen) < 2 or any(math.hypot(a.x - b.x, a.y - b.y) > CAMERA_AGREEMENT for a in seen for b in seen):
+                result.extend(seen)
+                continue
+            n = len(seen)
+            result.append(
+                RawRobotData(
+                    robot_id,
+                    sum(r.x for r in seen) / n,
+                    sum(r.y for r in seen) / n,
+                    math.atan2(sum(math.sin(r.orientation) for r in seen), sum(math.cos(r.orientation) for r in seen)),
+                    max(r.confidence for r in seen),
+                )
+            )
+        return result
 
     @staticmethod
     def _view_weight(x: float, y: float, camera: Optional[Tuple[float, float, float]]) -> float:
@@ -539,20 +631,39 @@ class CameraCombiner:
         )
         return VisionRobotData(base_id, x, y, avg_orientation)
 
-    def _combine_balls_by_proximity(self, seen: list) -> List[VisionBallData]:
-        """One ball per group of detections (`seen`: (detection, camera position)) within
-        `BALL_MERGE_THRESHOLD` of the group's first, fused like a robot."""
+    def _plausible_ball(self, ball: RawBallData, robots: Sequence[VisionRobotData]) -> bool:
+        in_field = self._field_dims is None or _in_field_or_goal(ball.x, ball.y, self._field_dims)
+        clear_of_robots = ball.z > BALL_RADIUS or all(
+            math.hypot(ball.x - robot.x, ball.y - robot.y) >= ROBOT_RADIUS for robot in robots
+        )
+        return in_field and clear_of_robots
+
+    def _combine_balls_by_proximity(
+        self,
+        seen: list[tuple[RawBallData, Optional[tuple[float, float, float]], int]],
+        robots: Sequence[VisionRobotData] = (),
+    ) -> List[VisionBallData]:
+        """Fuse close observations, using the strongest candidate per camera in each group."""
         groups: list = []
-        for b, camera in seen:
+        for detection in seen:
+            ball = detection[0]
             for group in groups:
-                if math.hypot(b.x - group[0][0].x, b.y - group[0][0].y) < BALL_MERGE_THRESHOLD:
-                    group.append((b, camera))
+                if all(math.hypot(ball.x - b.x, ball.y - b.y) < BALL_MERGE_THRESHOLD for b, _, _ in group):
+                    group.append(detection)
                     break
             else:
-                groups.append([(b, camera)])
+                groups.append([detection])
         balls = []
         for group in groups:
-            kept = self._fuse(group)
+            # Prefer a plausible nearby alternative before confidence can discard it.
+            # If every candidate is uncertain, retain the existing measurement path.
+            candidates = [observation for observation in group if self._plausible_ball(observation[0], robots)] or group
+            by_camera = {}
+            for ball, camera, camera_id in candidates:
+                previous = by_camera.get(camera_id)
+                if previous is None or ball.confidence > previous[0].confidence:
+                    by_camera[camera_id] = (ball, camera)
+            kept = self._fuse(list(by_camera.values()))
             total = sum(w for _, w in kept)
             balls.append(
                 RawBallData(
