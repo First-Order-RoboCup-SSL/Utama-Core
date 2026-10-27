@@ -4,6 +4,7 @@
 Run:
     pixi run python examples/real_score_goal.py            # real robot
     pixi run python examples/real_score_goal.py --mode rsim
+    pixi run python examples/real_score_goal.py --calibrate   # measure the robot: fixed moves
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
 The field and the camera's view are `FIELD` and `CAMERA_HALF` in `real_attacker_defender.py`,
@@ -12,6 +13,12 @@ one in ssl-vision's coordinates) with `LeadAndSupportTactic`: alone, it goes to 
 to the open corner and shoots. It starts in HALT, and the field check gates Force Start as in
 `real_attacker_defender.py`. Put the ball back and Force Start again for the next shot; Halt and
 Run in the Live tab's Strategy panel restarts the tactic.
+
+`--calibrate` measures the robot alone, as `real_attacker_defender.py --calibrate` does with two
+(that one halts on the second robot it never sees): it plays fixed moves
+(`tactics/scripted_moves.py`) instead of shooting. Put it near the middle of the camera's view
+facing +x, with 0.8 m clear ahead and 0.6 m to its left, and a ball at rest in view; Force Start.
+Then: pixi run python tools/robot_calibration.py replays/field/<run>_calibrate.log
 """
 
 import sys
@@ -40,6 +47,7 @@ from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
+from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 
 # ---------------------------------------------------------------------------
 # Test-day configuration
@@ -101,7 +109,12 @@ def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyR
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("real", "rsim", "grsim"), default="real")
-    build_runner(parser.parse_args().mode).run()
+    parser.add_argument("--calibrate", action="store_true", help="measure the robot: fixed moves")
+    args = parser.parse_args()
+    if args.calibrate:
+        build_runner(args.mode, {"calibrate": ScriptedMovesTactic}, name="calibrate").run()
+    else:
+        build_runner(args.mode).run()
 
 
 if __name__ == "__main__":
