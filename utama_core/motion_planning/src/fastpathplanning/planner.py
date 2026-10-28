@@ -375,6 +375,8 @@ class FastPathPlanner:
         check alone only covers the *retrieval* half of placement, not the
         *delivery* half.
         """
+        if not game.field.defense_area_rules:
+            return True  # the box is no obstacle at all
         referee = game.referee
         command = getattr(referee, "referee_command", None) if referee is not None else None
         if command in _ACTIVE_PLAY_COMMANDS:
@@ -385,6 +387,16 @@ class FastPathPlanner:
         min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=0.0)
         if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
             return True
+        # Our placement of a ball just outside the box: the placer's approach point, behind the
+        # ball, is inside the box or its keep-out (2026-10-27 field test: ball 1 cm outside, the
+        # placer parked behind the keep-out, 0.25 m short, for the whole placement).
+        ours = RefereeCommand.BALL_PLACEMENT_YELLOW if game.my_team_is_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
+        if command is ours:
+            k_min_x, k_max_x, k_min_y, k_max_y = self._enemy_defense_rect(
+                game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+            )
+            if k_min_x <= ball.p.x <= k_max_x and k_min_y <= ball.p.y <= k_max_y:
+                return True
         if robot_id is not None:
             robot = game.friendly_robots.get(robot_id)
             designated = getattr(referee, "designated_position", None) if referee is not None else None

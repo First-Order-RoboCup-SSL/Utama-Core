@@ -186,6 +186,7 @@ class CustomReferee:
         n_robots_blue: int = 3,
     ) -> None:
         self._profile_name = profile.profile_name
+        self._defense_area_enabled = profile.rules.defense_area.enabled
         self._geometry: RefereeGeometry = RefereeGeometry.from_field_dims(
             STANDARD_FIELD_DIMS
         )  # this is overrriden by StrategyRunner
@@ -470,3 +471,8 @@ class CustomReferee:
     @property
     def profile_name(self) -> str:
         return self._profile_name
+
+    @property
+    def defense_area_enabled(self) -> bool:
+        """The profile's `defense_area.enabled`: whether robots must keep out of the boxes."""
+        return self._defense_area_enabled

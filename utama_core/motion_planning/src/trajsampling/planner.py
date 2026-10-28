@@ -520,6 +520,8 @@ class TrajectorySamplingPlanner:
         sits inside it -- a formation/support target that merely happens to
         be computed near the box during a restart is still blocked as before.
         """
+        if not game.field.defense_area_rules:
+            return True  # the box is no obstacle at all
         referee = game.referee
         command = getattr(referee, "referee_command", None) if referee is not None else None
         if command in _ACTIVE_PLAY_COMMANDS:
@@ -533,6 +535,11 @@ class TrajectorySamplingPlanner:
         min_y = min(c[1] for c in corners)
         max_y = max(c[1] for c in corners)
         if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
+            return True
+        # Our placement of a ball within the box's keep-out: as `FastPathPlanner`'s.
+        ours = RefereeCommand.BALL_PLACEMENT_YELLOW if game.my_team_is_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
+        k = OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+        if command is ours and min_x - k <= ball.p.x <= max_x + k and min_y - k <= ball.p.y <= max_y + k:
             return True
         robot = game.friendly_robots.get(robot_id)
         designated = getattr(referee, "designated_position", None) if referee is not None else None
