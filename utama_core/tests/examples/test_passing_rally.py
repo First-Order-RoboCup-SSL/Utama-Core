@@ -23,7 +23,9 @@ finally:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_possession_state():
+def _fresh_possession_state(monkeypatch):
+    # The cases are drawn attacking +x, whichever goal the test-day setting attacks.
+    monkeypatch.setattr(ex, "ATTACK_GOAL", "right")
     reset_possession_state()
     yield
     reset_possession_state()

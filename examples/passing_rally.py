@@ -65,7 +65,7 @@ from utama_core.shared.pass_and_score_geometry import clamp_to_field
 # Test-day configuration (the robots and the pass distance are pass_receive.py's)
 # ---------------------------------------------------------------------------
 
-ATTACK_GOAL = "right"  # the goal both robots attack, as the field is drawn: "right" (+x) or "left"
+ATTACK_GOAL = "left"  # the goal both robots attack, as the field is drawn: "right" (+x) or "left"
 
 # How much nearer the goal than the ball the receiver gets open, in metres.
 ADVANCE_M = 0.6

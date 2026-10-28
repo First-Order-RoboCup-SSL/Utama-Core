@@ -85,7 +85,7 @@ def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyR
         game_log_path=game_log,
         strategy=_one_robot_strategy(shooter_id, tactics[first]),
         my_team_is_yellow=is_yellow,
-        my_team_is_right=False,  # own goal at -x: it attacks the goal at +x
+        my_team_is_right=True,  # own goal at -x: it attacks the goal at +x
         mode=mode,
         exp_friendly=1,
         exp_enemy=0,
