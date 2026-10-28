@@ -60,7 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 import dataclasses
 import time
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.custom_referee import CustomReferee
@@ -226,7 +226,12 @@ def _referee_profile() -> RefereeProfile:
     )
 
 
-def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
+def build_runner(
+    mode: str, calibrate: Optional[str] = None, *, attacker_tactics: Optional[dict[str, Callable]] = None
+) -> StrategyRunner:
+    """Use the test-day configuration, optionally with another attacker's tactic factories."""
+    attacker_name = ATTACKER_TACTIC if attacker_tactics is None else next(iter(attacker_tactics))
+    attacker_tactics = ATTACKER_TACTICS if attacker_tactics is None else attacker_tactics
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
     attacker_id = ATTACKER.vision_id if real else 0
@@ -250,7 +255,7 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)
 
-    attacker_tactic, defender_tactic = ATTACKER_TACTICS[ATTACKER_TACTIC], DEFENDER_TACTICS[DEFENDER_TACTIC]
+    attacker_tactic, defender_tactic = attacker_tactics[attacker_name], DEFENDER_TACTICS[DEFENDER_TACTIC]
     if calibrate is not None:
         moves, still = ScriptedMovesTactic, lambda: ScriptedMovesTactic(script=())
         attacker_tactic, defender_tactic = (moves, still) if calibrate == "attacker" else (still, moves)
@@ -286,10 +291,10 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
             server,
             runner,
             choices={
-                "my": {n: (lambda t=t: _one_robot_strategy(attacker_id, t)) for n, t in ATTACKER_TACTICS.items()},
+                "my": {n: (lambda t=t: _one_robot_strategy(attacker_id, t)) for n, t in attacker_tactics.items()},
                 "opp": {n: (lambda t=t: _one_robot_strategy(defender_id, t)) for n, t in DEFENDER_TACTICS.items()},
             },
-            running={"my": ATTACKER_TACTIC, "opp": DEFENDER_TACTIC},
+            running={"my": attacker_name, "opp": DEFENDER_TACTIC},
         )
     return runner
 

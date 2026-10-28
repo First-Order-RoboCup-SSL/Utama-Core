@@ -12,6 +12,7 @@ and the running goal rate per keeper, and writes them to --out at the end.
   pixi run python -m tools.striker_grsim --weights ... --field gerf         # 3 m x 2.25 m
 
 The same --seed gives the same starts whichever attacker plays, so the two are compared start by start.
+Real robots use examples/real_striker.py, with operator-controlled starts and the field check.
 """
 
 from __future__ import annotations

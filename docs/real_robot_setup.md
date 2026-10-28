@@ -133,6 +133,55 @@ the strategy saw, written when the run closes. Use the Live tab's Note box (Ente
 the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
 a test day is setting up, and notes make the useful minutes easy to find later.
 
+## Testing the RL striker
+
+The bundled striker weights can run on the GERF field, 3 m x 2.25 m, with a goal width of
+0.8 m and defense areas 1 m wide x 0.5 m deep. Match those dimensions in grSim or ssl-vision.
+For automatically sampled simulation episodes, from the repository root:
+
+```bash
+pixi run python -m tools.striker_grsim \
+  --weights assets/models/striker_rl2_w150.npz \
+  --field gerf --keepers default --episodes 50
+```
+
+On the laptop connected to the transmission board, check out the updated `jev-engine`
+branch and run `pixi install` in the repository root, then `pixi run build-planner` to build
+the compiled planner used in testing. The checkpoint and its training metadata are included
+under [`assets/models/`](../assets/models/README.md); no archive extraction, Torch or CUDA is
+needed. Complete the vision and radio setup above, including passing the USB board into WSL
+if applicable. The serial device is `PORT` in `utama_core/config/settings.py`, default
+`/dev/ttyACM0`.
+
+Then use the field-test runner:
+
+```bash
+pixi run python examples/real_striker.py
+```
+
+It shares `FIELD`, `CAMERA_HALF`, `ATTACKER`, `DEFENDER`, hardware profiles and recording
+settings with `examples/real_attacker_defender.py`. Set the vision and firmware IDs there
+for both robots on the field; their firmware IDs must differ because they share the board.
+The defaults are yellow attacker vision/radio 0/0, blue defender 1/1, with the camera covering
+the right half. Set `CAMERA_HALF = "full"` when both halves are visible. Both robots must be
+visible before the runner can finish starting. The default defender is the usual goalkeeper. Open the dashboard
+at http://localhost:8080, check the field-check rows, then Force Start. Halt and place the next
+start by hand. A failed real field check forces HALT, and the controller fences commands at
+the camera-half boundary. Real motion uses `REAL_PARAMS`, including the 1 m/s speed limit.
+Add `--mode grsim` or `--mode rsim` to rehearse that operator-controlled setup in simulation.
+Those simulation modes use their usual simulator parameters. Real mode is the default and
+starts in HALT. Ctrl+C closes the runner and sends stop commands to both real robots.
+Use `--weights PATH` to select a different checkpoint.
+
+The radio caps total translation speed at 1 m/s and angular speed at 4 rad/s. The normal
+planner ramps use 4 m/s² and 50 rad/s²; acceleration is not a hard radio limit, so stops and
+target changes can produce larger command jumps. Kick power is fixed rather than an enforced
+real ball-speed setting. The camera fence protects inner camera boundaries; the physical
+touchlines and goal lines remain open for out-of-play ball retrieval.
+
+The weights were trained on the standard field in rsim. Their goal rates on GERF and on real
+hardware still need measurement; changing the pitch does not retrain the policy.
+
 ## When something fails
 
 | Symptom | Cause |

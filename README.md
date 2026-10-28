@@ -34,7 +34,7 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | The referee | [docs/custom_referee.md](docs/custom_referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
-| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/setup_external.md](docs/setup_external.md) |
+| Real robots, vision, radio | [docs/real_robot_setup.md](docs/real_robot_setup.md), [utama_core/team_controller/README.md](utama_core/team_controller/README.md) |
 | Which script does what | [docs/tools.md](docs/tools.md) |
 | Everything else | [docs/README.md](docs/README.md), the index of every doc |
 
