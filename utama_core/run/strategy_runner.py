@@ -260,7 +260,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             ``NORMAL_START`` once the kicker is in the circle).
         enable_vision_stream (bool, optional): Start a browser stream that renders
             the current game frame using RSim-style graphics without opening RSim.
-            Defaults to True.
+            Defaults to False: the dashboard's Live tab draws the same field, and the
+            stream was one more port and URL at every start.
         yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
             Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
         blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
@@ -310,7 +311,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         referee: RefereeSource = None,
         referee_initial_command: Optional[RefereeCommand] = None,
         formation_type: Optional[FormationType] = None,
-        enable_vision_stream: bool = True,
+        enable_vision_stream: bool = False,
         vision_stream_http_port: int = 8765,
         yellow_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
