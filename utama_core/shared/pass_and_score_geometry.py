@@ -264,16 +264,33 @@ def oriented_towards(
     return abs(diff) <= tolerance
 
 
-def heading_on_target(game: Game, robot_id: int) -> bool:
+def kick_bend(game: Game, motion_controller, robot_id: int) -> float:
+    """How far (rad, anticlockwise) `robot_id`'s kick will leave its heading: towards the side
+    the ball sits on the dribbler, `motion_controller.kick_bend` per metre off-centre. A pass or
+    shot aims that much the other way. 98 real kicks (2026-10-27/28): yellow 1 bent 4.7 deg and
+    blue 0 2.1 deg per cm, the error dropping from ~8 deg to ~3 deg once counted. 0 in the sims."""
+    per_m = motion_controller.kick_bend.get(robot_id, 0.0)
+    if not per_m:
+        return 0.0
+    robot = game.friendly_robots[robot_id]
+    ball = game.ball.p.to_2d()
+    left = -(ball.x - robot.p.x) * math.sin(robot.orientation) + (ball.y - robot.p.y) * math.cos(robot.orientation)
+    # Off the dribbler's measured width the ball is not on it; don't aim for a wild guess.
+    left = max(-_ACQUIRE_LATERAL_MAX, min(_ACQUIRE_LATERAL_MAX, left))
+    return per_m * left
+
+
+def heading_on_target(game: Game, robot_id: int, bend: float = 0.0) -> bool:
     """Would a kick now score: the line along `robot_id`'s heading crosses the enemy goal line
     between the posts and passes every other robot, each with room for the ball and for
     `SHOT_AIM_ERROR_RAD` at its distance.
 
     The shot gate. Kicking within a fixed tolerance of the best-shot heading (2026-10-27 field
     runs) both waited for an aim the open goal didn't need and kicked at the keeper when the
-    robot's error lay towards it; this checks the line the ball will actually take."""
+    robot's error lay towards it; this checks the line the ball will actually take, `bend`
+    (`kick_bend`) off the heading."""
     robot = game.friendly_robots[robot_id]
-    return _shot_line_clear(game, robot_id, robot.orientation, SHOT_AIM_ERROR_RAD)
+    return _shot_line_clear(game, robot_id, robot.orientation + bend, SHOT_AIM_ERROR_RAD)
 
 
 def shot_heading_reachable(game: Game, robot_id: int, heading: float) -> bool:

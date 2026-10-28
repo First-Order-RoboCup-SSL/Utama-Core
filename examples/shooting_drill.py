@@ -164,9 +164,14 @@ class TestRobot(NamedTuple):
     profile: RobotProfile = RobotProfile(kicker=True, dribbler=True, ir=True)
 
 
+# Our robots. The kick bend (`RobotProfile.kick_bend_deg_per_cm`) is each one's own, measured
+# over 98 kicks on 2026-10-27/28; measure it again after any dribbler or kicker change.
+YELLOW_1 = TestRobot(vision_id=1, firmware_id=0, profile=RobotProfile(kick_bend_deg_per_cm=4.7))
+BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=RobotProfile(kick_bend_deg_per_cm=2.1))
+
 # Swapping a robot is a change here only.
-ATTACKER = TestRobot(vision_id=1, firmware_id=0)  # yellow 1
-DEFENDER = TestRobot(vision_id=0, firmware_id=1)  # blue 0
+ATTACKER = YELLOW_1
+DEFENDER = BLUE_0
 
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
 DEFENDER_TACTIC = "keeper_feed"  # see DEFENDER_TACTICS

@@ -44,11 +44,16 @@ class RobotProfile:
     `ir`: its ball sensor. Without it `has_ball` is judged from vision (within ~13 cm of
     the ball, whatever way it faces; `RobotInfoRefiner`) instead of the sensor. In a
     simulator this ignores the sim's contact sensor the same way.
+
+    `kick_bend_deg_per_cm`: how far its kick leaves the heading towards the side the ball
+    sits on the dribbler, per cm the ball is off-centre. Passes and shots aim against it
+    (`kick_bend`), on real robots only: the simulators kick along the heading.
     """
 
     kicker: bool = True
     dribbler: bool = True
     ir: bool = True
+    kick_bend_deg_per_cm: float = 0.0
 
 
 def _is_stop(c: RobotCommand) -> bool:

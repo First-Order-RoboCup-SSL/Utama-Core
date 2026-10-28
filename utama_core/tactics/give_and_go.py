@@ -59,6 +59,7 @@ from utama_core.shared.pass_and_score_geometry import (
     heading_on_target,
     in_own_defense_area,
     intercept_point,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
@@ -601,10 +602,13 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # `no_shot_reposition_target`'s docstring.
             commands[carrier_id] = move_for_a_shot(game, ctx, carrier_id)
         else:
-            target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
+            bend = kick_bend(game, ctx.motion_controller, carrier_id)
+            target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y)) - bend
             # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.
             aimed = (
-                oriented_towards(game, carrier_id, target_oren) if blind_shot else heading_on_target(game, carrier_id)
+                oriented_towards(game, carrier_id, target_oren)
+                if blind_shot
+                else heading_on_target(game, carrier_id, bend)
             )
             ctx.trace(
                 game,

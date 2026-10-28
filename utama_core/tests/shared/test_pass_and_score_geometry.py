@@ -8,6 +8,7 @@ for the end-to-end behavior these enable.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 
@@ -38,6 +39,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_goal_line,
     has_ball,
     heading_on_target,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
@@ -923,3 +925,42 @@ def test_a_reachable_shot_heading_kicks_from_anywhere_within_the_aim_error_of_it
     assert shot_heading_reachable(_shot(math.pi, (keeper,)), 1, math.pi)
     for off in (-SHOT_AIM_ERROR_RAD * 0.99, 0.0, SHOT_AIM_ERROR_RAD * 0.99):
         assert heading_on_target(_shot(math.pi + off, (keeper,)), 1)
+
+
+def _ball_on_dribbler(left: float) -> Game:
+    """The shooter at `_SHOOTER` facing the enemy goal (-x), the ball on its dribbler `left` m
+    to its left (towards -y, as it faces -x)."""
+    game = _shot(math.pi)
+    zv = Vector3D(0.0, 0.0, 0.0)
+    ball = Ball(p=Vector3D(_SHOOTER.x - 0.09, _SHOOTER.y - left, 0.0), v=zv, a=zv)
+    current = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=game.current.friendly_robots,
+        enemy_robots={},
+        ball=ball,
+    )
+    return Game(past=GameHistory(10), current=current, field=game.field)
+
+
+@pytest.mark.parametrize(
+    "left, bends, expected",
+    [
+        (0.01, {1: 8.0}, 0.08),  # 1 cm left: the kick leaves 0.08 rad to the left
+        (-0.01, {1: 8.0}, -0.08),
+        (0.0, {1: 8.0}, 0.0),  # centred: straight
+        (0.2, {1: 8.0}, 8.0 * 0.05),  # off the dribbler's width: no more than at its edge
+        (0.01, {}, 0.0),  # no bend for this robot (the sims)
+    ],
+)
+def test_kick_bend_is_the_robots_bend_per_metre_times_the_balls_offset(left, bends, expected):
+    controller = SimpleNamespace(kick_bend=bends)
+    assert kick_bend(_ball_on_dribbler(left), controller, 1) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("bend, scores", [(0.0, True), (0.35, False), (-0.15, True)])
+def test_the_shot_gate_checks_the_line_the_bent_kick_takes(bend, scores):
+    """0.15 rad off the goal's centre scores from 2 m; a kick bending 0.35 rad further misses
+    the goal, and one bending back 0.15 rad goes through its centre."""
+    assert heading_on_target(_shot(math.pi + 0.15), 1, bend) is scores

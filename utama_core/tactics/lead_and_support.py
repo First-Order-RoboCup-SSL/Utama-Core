@@ -41,6 +41,7 @@ from utama_core.shared.pass_and_score_geometry import (
     find_best_shot,
     has_ball,
     heading_on_target,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     segment_blocked,
@@ -222,8 +223,9 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                 # never resolves against a stationary blocker.
                 commands[leader_id] = move_for_a_shot(game, ctx, leader_id)
             else:
-                target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
-                if heading_on_target(game, leader_id):
+                bend = kick_bend(game, ctx.motion_controller, leader_id)
+                target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y)) - bend
+                if heading_on_target(game, leader_id, bend):
                     ctx.trace(game, f"shoot[{leader_id}]", "kick")
                     commands[leader_id] = kick()
                 else:

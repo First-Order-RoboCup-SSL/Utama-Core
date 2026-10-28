@@ -57,7 +57,9 @@ import time
 from typing import Optional
 
 from shooting_drill import (
+    BLUE_0,
     FIELD,
+    YELLOW_1,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -85,6 +87,7 @@ from utama_core.shared.pass_and_score_geometry import (
     clamp_outside_own_defense_area,
     clamp_to_field,
     has_ball,
+    kick_bend,
     oriented_towards,
 )
 from utama_core.skills.src.utils.move_utils import (
@@ -105,8 +108,8 @@ MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 CAMERA_HALF = "full"
 
 # Swapping a robot is a change here only. They must wear different colours (one per team).
-ROBOT_A = TestRobot(vision_id=1, firmware_id=0)  # yellow 1
-ROBOT_B = TestRobot(vision_id=0, firmware_id=1)  # blue 0
+ROBOT_A = YELLOW_1
+ROBOT_B = BLUE_0
 ROBOT_A_COLOUR = "yellow"  # robot B is the other colour
 
 # How far apart the receiver stands from the ball, in metres. The fixed-power kick (~2.1 m/s on
@@ -299,6 +302,7 @@ class PassReceiveTactic(BaseTactic[None]):
         target, wait_for_partner = self.target(game, robot_id)
         aim = ball.angle_to(target)
         if has_ball(game, robot_id):  # on the kicker (the ball sensor)
+            aim -= kick_bend(game, mc, robot_id)  # against the kick's bend off the heading
             if not oriented_towards(game, robot_id, aim, AIM_TOLERANCE_RAD):
                 return turn_on_spot(game, mc, robot_id, aim, dribbling=True)  # pivots round the ball
             if not wait_for_partner or self.partner_set(game, _partner(game)):

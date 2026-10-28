@@ -188,6 +188,20 @@ def test_passer_kicks_once_the_ball_line_meets_the_receiver(runner):
     assert commands[1].kick
 
 
+def test_a_real_passer_turns_against_its_kick_bend(runner):
+    """The same lined-up pass on a real robot whose kick bends 4.7 deg per cm towards the ball's
+    side (yellow 1, 2026-10-28): with the ball 4 cm left the kick would leave ~19 deg left of
+    the receiver, so it turns right first instead of kicking."""
+    game = _short_pass_with_ball_off_centre(runner, passer_orientation=math.atan2(-0.04, 0.71 - 0.09))
+    ctx = _ctx(runner)
+    ctx.motion_controller.kick_bend = {1: math.radians(4.7) * 100.0}
+
+    commands, _pass_complete, _lane_blocked = _pass_exec(game, ctx, passer_id=1, receiver_id=2)
+
+    assert not commands[1].kick
+    assert commands[1].angular_vel < 0.0
+
+
 def test_receiver_steps_onto_a_rolling_pass_it_would_meet_off_centre(runner):
     """Once the pass is rolling, the receiver must meet it on the ball's actual path.
     Here it stands 0.07 m beside that path, inside `at_target`'s 0.08 m of the receive

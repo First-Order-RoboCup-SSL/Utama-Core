@@ -35,6 +35,7 @@ from shooting_drill import (
     DASHBOARD_PORT,
     FIELD,
     RECORD,
+    YELLOW_1,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -55,7 +56,7 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 # ---------------------------------------------------------------------------
 
 SHOOTER_COLOUR = "yellow"
-SHOOTER = TestRobot(vision_id=1, firmware_id=0)  # yellow 1: what its pattern reads as
+SHOOTER = YELLOW_1
 
 # ---------------------------------------------------------------------------
 

@@ -2,6 +2,7 @@ import cProfile
 import dataclasses
 import json
 import logging
+import math
 import signal
 import sys
 import threading
@@ -48,6 +49,7 @@ from utama_core.global_utils.mapping_utils import (
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
@@ -1274,7 +1276,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         my_robot_controller = self._wrapped(my_robot_controller, my_profiles, lambda: self.my.game)
         self.my.strategy.load_robot_controller(my_robot_controller)
-        self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
+        self.my.strategy.load_motion_controller(self._motion_controller(self.my, my_profiles))
         if self.match_log is not None:
             # Reach into the kernel `Strategy` post-construction rather than
             # threading `match_log` through every `build_*_kernel_strategy`
@@ -1288,7 +1290,18 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp:
             opp_robot_controller = self._wrapped(opp_robot_controller, opp_profiles, lambda: self.opp.game)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
-            self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
+            self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
+
+    def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
+        """`team`'s motion controller, with its real robots' kick bends (`RobotProfile`)."""
+        controller = team.motion_controller(self.mode, self.rsim_env)
+        if self.mode == Mode.REAL:
+            controller.kick_bend = {
+                rid: math.radians(p.kick_bend_deg_per_cm) * 100.0
+                for rid, p in profiles.items()
+                if p.kick_bend_deg_per_cm
+            }
+        return controller
 
     def _driven_ids(self, is_yellow: bool) -> set[int]:
         """The IDs the strategy commands for one colour: the mapped vision IDs on real robots."""

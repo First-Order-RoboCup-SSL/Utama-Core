@@ -41,7 +41,9 @@ import time
 from typing import Optional
 
 from shooting_drill import (
+    BLUE_0,
     FIELD,
+    YELLOW_1,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -73,8 +75,8 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 
 # Swapping a robot is a change here only. They must wear different colours (one per team).
-ROBOT_A = TestRobot(vision_id=1, firmware_id=0)  # yellow 1
-ROBOT_B = TestRobot(vision_id=0, firmware_id=1)  # blue 0
+ROBOT_A = YELLOW_1
+ROBOT_B = BLUE_0
 ROBOT_A_COLOUR = "yellow"  # robot B is the other colour
 
 # The attacker carries the ball to this far from the goal line before it looks for a shot. The

@@ -37,6 +37,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     heading_on_target,
     intercept_point,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     score_pass_setup,
@@ -324,7 +325,8 @@ def _pass_exec(
     # from wherever it sits on the dribbler, often 2-4 cm off-centre. Aimed from the centre,
     # that offset and the heading tolerance added on the same side in 27 of 29 missed short
     # passes, which passed ~7 cm beside the receiver (tournament_20260928_221404).
-    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point)
+    # And against the kick's bend on a real robot (`kick_bend`).
+    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point) - kick_bend(game, ctx.motion_controller, passer_id)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can
     # stay False while the robot is visually on the ball, which would
@@ -508,8 +510,9 @@ def _score_goal(
         cmd = move_for_a_shot(game, ctx, robot_id)
         return cmd, False, prev_best_shot_y
 
-    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
-    if not heading_on_target(game, robot_id):
+    bend = kick_bend(game, ctx.motion_controller, robot_id)
+    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y)) - bend
+    if not heading_on_target(game, robot_id, bend):
         ctx.trace(game, f"shoot[{robot_id}]", "turning to shoot")
         return (
             turn_on_spot(

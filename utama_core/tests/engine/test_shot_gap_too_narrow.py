@@ -49,6 +49,7 @@ def _game(blocker_y: float) -> Game:
 
 def _ctx() -> TickContext:
     mc = MagicMock()
+    mc.kick_bend = {}  # the sims: kicks leave along the heading
     mc.calculate.return_value = (Vector2D(0.0, 0.0), 0.0)
     return TickContext(motion_controller=mc, match_log=None)
 

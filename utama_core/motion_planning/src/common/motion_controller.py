@@ -21,6 +21,9 @@ class MotionController(ABC):
         params = _PARAMS_BY_MODE[Mode(mode)]
         self.carry_speed: float | None = params.CARRY_SPEED
         self.carry_turn: float | None = params.CARRY_TURN
+        # Each robot's kick bend, rad per metre the ball sits left of centre on the dribbler
+        # (`RobotProfile.kick_bend_deg_per_cm`); set by `StrategyRunner` on real robots.
+        self.kick_bend: dict[int, float] = {}
 
     @abstractmethod
     def calculate(

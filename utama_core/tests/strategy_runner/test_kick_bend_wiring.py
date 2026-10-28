@@ -1,0 +1,26 @@
+"""`StrategyRunner` gives a team's motion controller its real robots' kick bends, in rad per
+metre off-centre (`RobotProfile.kick_bend_deg_per_cm`), and none in the simulators."""
+
+import math
+from types import SimpleNamespace
+
+import pytest
+
+from utama_core.config.enums import Mode
+from utama_core.motion_planning.src.controllers.fastpathplanning import (
+    FastPathPlanningController,
+)
+from utama_core.run.strategy_runner import StrategyRunner
+from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+
+_PROFILES = {1: RobotProfile(kick_bend_deg_per_cm=4.7), 2: RobotProfile()}
+
+
+@pytest.mark.parametrize("mode, expected", [(Mode.REAL, {1: math.radians(4.7) * 100.0}), (Mode.RSIM, {})])
+def test_real_robots_get_their_kick_bend_and_the_sims_none(mode, expected):
+    runner = SimpleNamespace(mode=mode, rsim_env=None)
+    team = SimpleNamespace(motion_controller=FastPathPlanningController)
+
+    controller = StrategyRunner._motion_controller(runner, team, _PROFILES)
+
+    assert controller.kick_bend == pytest.approx(expected)
