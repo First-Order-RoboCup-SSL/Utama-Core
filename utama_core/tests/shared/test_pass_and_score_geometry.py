@@ -43,6 +43,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     reset_possession_state,
     score_pass_setup,
+    shot_heading_reachable,
 )
 
 _FIELD = Field(
@@ -901,3 +902,24 @@ def test_a_robot_behind_the_shooter_or_past_the_goal_line_does_not_block():
     behind = (_SHOOTER.x + 0.5, 0.0)
     past_line = (-STANDARD_FIELD_DIMS.full_field_half_length - 0.1, 0.0)
     assert heading_on_target(_shot(math.pi, (behind, past_line)), 1)
+
+
+@pytest.mark.parametrize("clear", [0.001, -0.001])
+def test_a_shot_gap_is_reachable_only_with_room_for_twice_the_aim_error(clear):
+    """A gap `find_best_shot` returns but the gate never opens on: the robot turned to it and
+    held the ball, turning on the spot forever. Reachable means clear with twice the aim error,
+    so a robot within `SHOT_AIM_ERROR_RAD` of the heading still passes `heading_on_target`."""
+    along = 1.5
+    need = ROBOT_RADIUS + BALL_RADIUS + along * math.tan(2.0 * SHOT_AIM_ERROR_RAD)
+    keeper = (_SHOOTER.x - along, need + clear)
+    assert shot_heading_reachable(_shot(math.pi, (keeper,)), 1, math.pi) is (clear > 0)
+
+
+def test_a_reachable_shot_heading_kicks_from_anywhere_within_the_aim_error_of_it():
+    """The gap is judged by its heading; the gate by where the robot ends up. Just reachable,
+    the robot off by up to the aim error on either side must still kick."""
+    along = 1.5
+    keeper = (_SHOOTER.x - along, ROBOT_RADIUS + BALL_RADIUS + along * math.tan(2.0 * SHOT_AIM_ERROR_RAD) + 0.001)
+    assert shot_heading_reachable(_shot(math.pi, (keeper,)), 1, math.pi)
+    for off in (-SHOT_AIM_ERROR_RAD * 0.99, 0.0, SHOT_AIM_ERROR_RAD * 0.99):
+        assert heading_on_target(_shot(math.pi + off, (keeper,)), 1)

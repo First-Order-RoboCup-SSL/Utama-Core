@@ -41,6 +41,7 @@ from utama_core.shared.pass_and_score_geometry import (
     oriented_towards,
     score_pass_setup,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import (
@@ -451,6 +452,10 @@ def _score_goal(
         prev_best_shot_y=prev_best_shot_y,
         switch_margin=_SHOT_SWITCH_MARGIN,
     )
+    if best_shot_y is not None and not shot_heading_reachable(
+        game, robot_id, robot.p.angle_to(Vector2D(goal_x, best_shot_y))
+    ):
+        best_shot_y = None  # a gap too narrow for the shot gate: move for a better one
     if best_shot_y is None:
         # See `no_shot_reposition_target`'s docstring: freezing here never
         # resolves against a stationary blocker (e.g. a keeper at the goal
@@ -467,6 +472,7 @@ def _score_goal(
             target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
             dribbling=True,
         )
+        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
         return cmd, False, prev_best_shot_y
 
     target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
@@ -474,12 +480,14 @@ def _score_goal(
     # unreliability — without this the shooter can stall on the ball
     # forever if the IR/contact flag never fires.
     if not has_ball(game, robot_id, visual=True):
+        ctx.trace(game, f"shoot[{robot_id}]", "fetching the ball")
         return (
             go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx),
             False,
             best_shot_y,
         )
     if not heading_on_target(game, robot_id):
+        ctx.trace(game, f"shoot[{robot_id}]", "turning to shoot")
         return (
             turn_on_spot(
                 game=game,
@@ -491,4 +499,5 @@ def _score_goal(
             False,
             best_shot_y,
         )
+    ctx.trace(game, f"shoot[{robot_id}]", "kick")
     return kick(), True, best_shot_y

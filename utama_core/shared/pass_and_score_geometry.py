@@ -270,14 +270,31 @@ def heading_on_target(game: Game, robot_id: int) -> bool:
     runs) both waited for an aim the open goal didn't need and kicked at the keeper when the
     robot's error lay towards it; this checks the line the ball will actually take."""
     robot = game.friendly_robots[robot_id]
+    return _shot_line_clear(game, robot_id, robot.orientation, SHOT_AIM_ERROR_RAD)
+
+
+def shot_heading_reachable(game: Game, robot_id: int, heading: float) -> bool:
+    """Can turning to `heading` pass `heading_on_target`: its line is clear with twice the aim
+    error, so a robot anywhere within `SHOT_AIM_ERROR_RAD` of it still gets a clear line.
+
+    A gap `find_best_shot` returns can be narrower than that (it takes the widest, however
+    narrow): turning to it, the gate never opened and the robot held the ball, turning on the
+    spot forever. Such a gap counts as no shot, and the robot moves for a better one."""
+    return _shot_line_clear(game, robot_id, heading, 2.0 * SHOT_AIM_ERROR_RAD)
+
+
+def _shot_line_clear(game: Game, robot_id: int, heading: float, aim_error: float) -> bool:
+    """The line from `robot_id` along `heading` crosses the enemy goal line between the posts
+    and passes every other robot, each with room for the ball and for `aim_error` at its distance."""
+    robot = game.friendly_robots[robot_id]
     goal_line = game.field.enemy_goal_line
     goal_x = float(goal_line[0][0])
     post_y1, post_y2 = sorted((float(goal_line[0][1]), float(goal_line[1][1])))
-    ux, uy = math.cos(robot.orientation), math.sin(robot.orientation)
+    ux, uy = math.cos(heading), math.sin(heading)
     if (goal_x - robot.p.x) * ux <= 0:
         return False  # facing away from the goal line
     reach = (goal_x - robot.p.x) / ux  # along the heading to the goal line
-    slope = math.tan(SHOT_AIM_ERROR_RAD)
+    slope = math.tan(aim_error)
     cross_y = robot.p.y + reach * uy
     room = BALL_RADIUS + reach * slope
     if not post_y1 + room <= cross_y <= post_y2 - room:

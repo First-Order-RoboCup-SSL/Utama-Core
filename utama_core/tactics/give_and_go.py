@@ -64,6 +64,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     score_pass_setup,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
@@ -566,6 +567,10 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             prev_best_shot_y=mem.prev_best_shot_y,
             switch_margin=_SHOT_SWITCH_MARGIN,
         )
+        if best_shot_y is not None and not shot_heading_reachable(
+            game, carrier_id, carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
+        ):
+            best_shot_y = None  # a gap too narrow for the shot gate: strafe, or the blind shot
         mem.prev_best_shot_y = best_shot_y
 
         if ctx.match_log is not None:
@@ -605,11 +610,17 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
                 dribbling=True,
             )
+            ctx.trace(game, f"shoot[{carrier_id}]", "no clear shot · moving for one")
         else:
             target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
             # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.
             aimed = (
                 oriented_towards(game, carrier_id, target_oren) if blind_shot else heading_on_target(game, carrier_id)
+            )
+            ctx.trace(
+                game,
+                f"shoot[{carrier_id}]",
+                ("kick" if aimed else "turning to shoot") + (" · blind, carry spent" if blind_shot else ""),
             )
             if aimed:
                 commands[carrier_id] = kick()

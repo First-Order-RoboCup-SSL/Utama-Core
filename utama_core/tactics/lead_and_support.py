@@ -44,6 +44,7 @@ from utama_core.shared.pass_and_score_geometry import (
     no_shot_reposition_target,
     oriented_towards,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
@@ -191,6 +192,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
 
         leader_has_ball = has_ball(game, leader_id)
         if not leader_has_ball:
+            ctx.trace(game, f"shoot[{leader_id}]", "fetching the ball")
             mem.prev_best_shot_y = None
             # go_to_ball itself holds outside the enemy's box instead of
             # chasing an unreachable ball when the keeper is holding it
@@ -209,6 +211,10 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                 prev_best_shot_y=mem.prev_best_shot_y,
                 switch_margin=_SHOT_SWITCH_MARGIN,
             )
+            if best_shot_y is not None and not shot_heading_reachable(
+                game, leader_id, leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
+            ):
+                best_shot_y = None  # a gap too narrow for the shot gate: move for a better one
             mem.prev_best_shot_y = best_shot_y
             if best_shot_y is None:
                 # See `no_shot_reposition_target`'s docstring: freezing here
@@ -224,11 +230,14 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                     target_oren=leader_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
                     dribbling=True,
                 )
+                ctx.trace(game, f"shoot[{leader_id}]", "no clear shot · moving for one")
             else:
                 target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
                 if heading_on_target(game, leader_id):
+                    ctx.trace(game, f"shoot[{leader_id}]", "kick")
                     commands[leader_id] = kick()
                 else:
+                    ctx.trace(game, f"shoot[{leader_id}]", "turning to shoot")
                     commands[leader_id] = turn_on_spot(
                         game=game,
                         motion_controller=ctx.motion_controller,
