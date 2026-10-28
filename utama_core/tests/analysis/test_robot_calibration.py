@@ -8,7 +8,15 @@ import math
 import numpy as np
 import pytest
 
-from utama_core.analysis.robot_calibration import FieldLog, calibrate, decode_radio
+from utama_core.analysis.robot_calibration import (
+    BALL_LOST_M,
+    FieldLog,
+    calibrate,
+    decode_feedback,
+    decode_radio,
+    dribbling,
+    kick_direction_offset,
+)
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
@@ -135,8 +143,55 @@ def test_the_radio_decoder_reads_what_the_real_controller_sends():
     serial = _Serial()
     controller = RealRobotController(True, 1, vision_to_cmd_mapping={VISION_ID: FIRMWARE}, serial_port=serial)
     packet = _radio_packet(controller, serial, RobotCommand(0.5, -0.25, 2.0, kick=True, chip=False, dribble=False))
-    ((fw, fwd, left, turn, kicker),) = decode_radio(packet)
-    assert (fw, fwd, left, turn, kicker) == (FIRMWARE, 0.5, -0.25, 2.0, 0xF0)
+    ((fw, fwd, left, turn, kicker, dribbler),) = decode_radio(packet)
+    assert (fw, fwd, left, turn, kicker, dribbler) == (FIRMWARE, 0.5, -0.25, 2.0, 0xF0, False)
+    packet = _radio_packet(controller, serial, RobotCommand(0.0, 0.0, 0.0, kick=False, chip=False, dribble=True))
+    assert decode_radio(packet)[0][5] is True
+
+
+def test_the_feedback_decoder_reads_each_robots_ball_sensor():
+    """Frames 0xAA, firmware id, length, data, 0x55; the sensor is bit 0 of the first data byte."""
+    packet = bytes([0x00, 0xAA, 3, 2, 0x01, 0x7F, 0x55, 0xAA, 4, 1, 0x00, 0x55])
+    assert decode_feedback(packet) == [(3, True), (4, False)]
+
+
+@pytest.mark.parametrize("offset_deg", [7.0, -3.0])
+def test_a_kicks_direction_is_measured_against_the_robots_heading(offset_deg):
+    """2026-10-27: yellow's kicks left about 7 degrees off its heading."""
+    heading = 0.4
+    direction = heading + math.radians(offset_deg)
+    t = np.arange(0.0, 0.5, 1 / 60)
+    balls = np.column_stack([t, np.zeros_like(t), 2.0 * t * math.cos(direction), 2.0 * t * math.sin(direction)])
+    assert kick_direction_offset(balls, 0.0, heading) == pytest.approx(offset_deg, abs=0.1)
+
+
+def test_a_ball_that_barely_moved_gives_no_kick_direction():
+    t = np.arange(0.0, 0.5, 1 / 60)
+    balls = np.column_stack([t, np.zeros_like(t), 0.04 * t, np.zeros_like(t)])
+    assert kick_direction_offset(balls, 0.0, 0.0) is None
+
+
+@pytest.mark.parametrize("drift, kept", [(0.0, True), (BALL_LOST_M, False)])
+def test_dribbling_reports_where_the_ball_sat_the_sensor_and_whether_it_stayed(drift, kept):
+    """A robot facing +y turning 1 rad/s for 1 s with the dribbler on, the ball 0.09 m ahead and
+    0.01 m to its left, drifting `drift` further ahead by the end; the sensor on for 3 of 4 readings."""
+    t = np.arange(0.0, 1.0, 1 / 60)
+    th = math.pi / 2 + t
+    track = np.column_stack([t, np.zeros_like(t), np.zeros_like(t), np.zeros_like(t), th])
+    ahead = 0.09 + drift * t / t[-1]
+    balls = np.column_stack(
+        [t, np.zeros_like(t), ahead * np.cos(th) - 0.01 * np.sin(th), ahead * np.sin(th) + 0.01 * np.cos(th)]
+    )
+    commands = np.column_stack(
+        [t, np.zeros_like(t), np.zeros_like(t), np.ones_like(t), np.zeros_like(t), np.ones_like(t)]
+    )
+    sensor = np.column_stack([t[::4], (np.arange(len(t[::4])) % 4 != 0).astype(float)])
+    (row,) = dribbling(commands, track, balls, sensor)
+    assert row["move"] == "turn 1 rad/s" and row["kept"] is kept
+    assert row["ball_left_m"] == pytest.approx(0.01, abs=1e-3)
+    assert row["sensor_on"] == pytest.approx(0.75, abs=0.03)
+    if not drift:
+        assert row["ball_forward_m"] == pytest.approx(0.09, abs=1e-3)
 
 
 def test_calibration_recovers_the_synthetic_robots_numbers(synthetic_log):

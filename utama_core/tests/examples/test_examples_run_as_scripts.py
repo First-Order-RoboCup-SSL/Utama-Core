@@ -15,7 +15,14 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
 
 @pytest.mark.parametrize(
     "name",
-    ["real_attacker_defender.py", "real_score_goal.py", "real_dribble_and_shoot.py", "demo_referee_feedback_gui.py"],
+    [
+        "real_attacker_defender.py",
+        "real_score_goal.py",
+        "real_dribble_and_shoot.py",
+        "real_pass_receive.py",
+        "calibrate_robot.py",
+        "demo_referee_feedback_gui.py",
+    ],
 )
 def test_an_example_with_options_prints_its_help_run_by_path(name, tmp_path):
     done = subprocess.run(
