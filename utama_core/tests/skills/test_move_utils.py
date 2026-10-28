@@ -46,6 +46,7 @@ def _game(friendly: dict, enemy: dict, ball_xy: tuple) -> Game:
 
 def _motion_controller(angular_vel: float) -> MagicMock:
     mc = MagicMock()
+    mc.min_turn = None
     mc.calculate.return_value = (Vector2D(0.0, 0.0), angular_vel)
     return mc
 
@@ -183,6 +184,7 @@ def _carry_case(velocity, angular_vel, has_ball, dribbling, limits=(_CARRY_SPEED
     mc = MagicMock()
     mc.pose_ahead = PoseAhead(0.0)
     mc.carry_speed, mc.carry_turn = limits
+    mc.min_turn = None
     mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
     return dict(
         game=game,
@@ -227,3 +229,57 @@ def test_a_robot_that_loses_the_ball_ramps_from_the_carry_speed_it_was_sent(cont
     cmd = move(lost, mc, 1, Vector2D(1.0, 0.0), 0.0, dribbling=True)
 
     assert cmd.local_left_vel >= -0.3 - 1e-9  # no faster to the right than it was going
+
+
+# --- the slowest turn the real robots make ---
+
+_MIN_TURN = 0.3
+
+
+def _turn_case(orientation: float, target_oren: float, angular_vel: float, min_turn) -> dict:
+    game = _game({1: _robot(1, 0.0, 0.0, True, orientation=orientation)}, {}, (1.0, 1.0))
+    mc = MagicMock()
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed = mc.carry_turn = None
+    mc.min_turn = min_turn
+    mc.calculate.return_value = (Vector2D(0.0, 0.0), angular_vel)
+    return dict(game=game, motion_controller=mc, robot_id=1, target_coords=Vector2D(0.0, 0.0), target_oren=target_oren)
+
+
+@pytest.mark.parametrize(
+    "orientation, target_oren, angular_vel, expected",
+    [
+        (0.0, 0.05, 0.1, _MIN_TURN),  # 0.05 rad short, asked 0.1 rad/s: the slowest real turn
+        (0.0, -0.05, -0.1, -_MIN_TURN),  # the other way
+        (0.0, -0.05, 0.0, -_MIN_TURN),  # asked nothing: towards the target all the same
+        (3.1, -3.1, 0.0, _MIN_TURN),  # across +-pi: the short way round, anticlockwise
+        (0.0, 0.011, 0.0, _MIN_TURN),  # just past the 0.01 rad it may stop within
+        (0.0, 0.009, 0.05, 0.05),  # within it: as asked
+        (0.0, 0.5, 2.0, 2.0),  # asked faster: as asked
+    ],
+)
+def test_a_real_robot_off_its_orientation_turns_at_least_its_slowest_turn(
+    orientation, target_oren, angular_vel, expected
+):
+    """2026-10-28 passing rallies: asked 0.1 rad/s, a passer stood still 3-4 deg short of its
+    aim and kicked at the aim tolerance's edge."""
+    case = _turn_case(orientation, target_oren, angular_vel, _MIN_TURN)
+    assert move(**case).angular_vel == pytest.approx(expected)
+
+
+def test_the_raised_turn_is_what_the_controller_ramps_from():
+    case = _turn_case(0.0, 0.05, 0.1, _MIN_TURN)
+    move(**case)
+    case["motion_controller"].sent.assert_called_once()
+    assert case["motion_controller"].sent.call_args.args[2] == pytest.approx(_MIN_TURN)
+
+
+def test_the_sims_turn_as_asked():
+    assert move(**_turn_case(0.0, 0.05, 0.1, None)).angular_vel == pytest.approx(0.1)
+
+
+def test_only_real_robots_have_a_slowest_turn():
+    from utama_core.config.robot_params import GRSIM_PARAMS, REAL_PARAMS, RSIM_PARAMS
+
+    assert REAL_PARAMS.MIN_TURN == _MIN_TURN
+    assert RSIM_PARAMS.MIN_TURN is GRSIM_PARAMS.MIN_TURN is None

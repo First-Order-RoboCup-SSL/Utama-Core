@@ -150,7 +150,19 @@ def test_a_passer_beside_the_ball_orbits_it_facing_it_towards_the_line_up(monkey
     a = math.radians(start_deg)
     passer = make_robot(0, is_friendly=True, x=0.12 * math.cos(a), y=0.12 * math.sin(a))
     game = build_game({0: passer}, {0: _partner()}, make_ball(), field_dims=ex.FIELD)
-    ex.PassReceiveTactic().tick(game, MagicMock(match_log=None, **{"motion_controller.kick_bend": {}}), (0,), None)
+    ex.PassReceiveTactic().tick(
+        game,
+        MagicMock(
+            match_log=None,
+            **{
+                "motion_controller.kick_bend": {},
+                "motion_controller.kick_bias": {},
+                "motion_controller.min_turn": None,
+            },
+        ),
+        (0,),
+        None,
+    )
 
     target = captured["target"]
     at = math.atan2(target.y, target.x)
@@ -166,7 +178,19 @@ def test_a_passer_further_than_the_orbit_range_walks_round_instead(monkeypatch):
     monkeypatch.setattr(ex, "move", lambda game, mc, rid, target, oren, dribbling=False: captured.update(t=target))
     passer = make_robot(0, is_friendly=True, x=0.0, y=ex._ORBIT_RANGE_M + 0.01)
     game = build_game({0: passer}, {0: _partner()}, make_ball(), field_dims=ex.FIELD)
-    ex.PassReceiveTactic().tick(game, MagicMock(match_log=None, **{"motion_controller.kick_bend": {}}), (0,), None)
+    ex.PassReceiveTactic().tick(
+        game,
+        MagicMock(
+            match_log=None,
+            **{
+                "motion_controller.kick_bend": {},
+                "motion_controller.kick_bias": {},
+                "motion_controller.min_turn": None,
+            },
+        ),
+        (0,),
+        None,
+    )
     ball = make_ball().p.to_2d()
     assert captured["t"] != ex.orbit_point(ball, passer.p, 0.0)  # a detour waypoint, not an orbit point
 
@@ -197,7 +221,10 @@ def test_the_passer_kicks_only_once_the_partner_is_set(partner_moving, kicks):
     passer = make_robot(0, is_friendly=True, x=-0.1, orientation=0.0, has_ball=True)
     partner = _partner(vy=0.5 if partner_moving else 0.0)
     game = build_game({0: passer}, {0: partner}, make_ball(), field_dims=ex.FIELD)
-    ctx = MagicMock(match_log=None, **{"motion_controller.kick_bend": {}})
+    ctx = MagicMock(
+        match_log=None,
+        **{"motion_controller.kick_bend": {}, "motion_controller.kick_bias": {}, "motion_controller.min_turn": None},
+    )
     commands, _ = ex.PassReceiveTactic().tick(game, ctx, (0,), None)
     assert bool(commands[0].kick) is kicks
     if not kicks:

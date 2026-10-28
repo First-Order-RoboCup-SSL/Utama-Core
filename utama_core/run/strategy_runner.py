@@ -1293,13 +1293,16 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
 
     def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
-        """`team`'s motion controller, with its real robots' kick bends (`RobotProfile`)."""
+        """`team`'s motion controller, with its real robots' kick bends and biases (`RobotProfile`)."""
         controller = team.motion_controller(self.mode, self.rsim_env)
         if self.mode == Mode.REAL:
             controller.kick_bend = {
                 rid: math.radians(p.kick_bend_deg_per_cm) * 100.0
                 for rid, p in profiles.items()
                 if p.kick_bend_deg_per_cm
+            }
+            controller.kick_bias = {
+                rid: math.radians(p.kick_bias_deg) for rid, p in profiles.items() if p.kick_bias_deg
             }
         return controller
 

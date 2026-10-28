@@ -58,10 +58,10 @@ def _game(friendly: dict, enemy: dict, ball_xy: tuple) -> Game:
 
 def _ctx() -> TickContext:
     mc = MagicMock()
-    mc.kick_bend = {}  # the sims: kicks leave along the heading
+    mc.kick_bend = mc.kick_bias = {}  # the sims: kicks leave along the heading
     mc.calculate.return_value = (Vector2D(0.0, 0.0), 0.0)
     mc.pose_ahead = PoseAhead(0.0)
-    mc.carry_speed = mc.carry_turn = None
+    mc.carry_speed = mc.carry_turn = mc.min_turn = None
     return TickContext(motion_controller=mc, match_log=None)
 
 

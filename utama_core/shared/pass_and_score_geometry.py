@@ -30,14 +30,15 @@ from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
     is_goal_blocked,
 )
 
-# How far off its aim a robot may be and still pass, shoot or clear. Up from 0.05 (field day
-# 2026-10-28, 0.06 then 0.07): the real robots' motors can't turn slowly enough to close a
-# smaller error.
-ORIENTATION_TOLERANCE_RAD = 0.07
+# How far off its aim a robot may be and still pass, shoot or clear. Raised to 0.07 on the
+# 2026-10-28 field day because the real robots stalled short of their aim on a slow final turn;
+# they then kicked at the tolerance's edge, every time on the side they turned from (passing
+# rallies: +3.5-4.7 deg of the 6-17 deg by which passes missed). Back at 0.05 since `move()`
+# turns them at least `RobotParams.MIN_TURN`.
+ORIENTATION_TOLERANCE_RAD = 0.05
 # How far off the robot's heading a kick may leave: `heading_on_target`'s room for error at each
-# distance. The old orientation tolerance: at 0.06, `shot_heading_reachable`'s twice-the-error line
-# no longer fits a 1 m goal from beyond ~4 m. The shot still checks the robot's actual heading.
-SHOT_AIM_ERROR_RAD = 0.05
+# distance. The orientation tolerance, the error `oriented_towards` already accepts in a pass.
+SHOT_AIM_ERROR_RAD = ORIENTATION_TOLERANCE_RAD
 
 # `clamp_outside_own_defense_area`/`clamp_outside_enemy_defense_area` (and
 # their `*_hold_point` siblings) previously defaulted to `2*ROBOT_RADIUS+0.05
@@ -269,16 +270,18 @@ def kick_bend(game: Game, motion_controller, robot_id: int) -> float:
     """How far (rad, anticlockwise) `robot_id`'s kick will leave its heading: towards the side
     the ball sits on the dribbler, `motion_controller.kick_bend` per metre off-centre. A pass or
     shot aims that much the other way. 98 real kicks (2026-10-27/28): yellow 1 bent 4.7 deg and
-    blue 0 2.1 deg per cm, the error dropping from ~8 deg to ~3 deg once counted. 0 in the sims."""
+    blue 0 2.1 deg per cm, the error dropping from ~8 deg to ~3 deg once counted. Plus the robot's
+    `motion_controller.kick_bias` whatever the ball's offset. 0 in the sims."""
     per_m = motion_controller.kick_bend.get(robot_id, 0.0)
+    bias = motion_controller.kick_bias.get(robot_id, 0.0)
     if not per_m:
-        return 0.0
+        return bias
     robot = game.friendly_robots[robot_id]
     ball = game.ball.p.to_2d()
     left = -(ball.x - robot.p.x) * math.sin(robot.orientation) + (ball.y - robot.p.y) * math.cos(robot.orientation)
     # Off the dribbler's measured width the ball is not on it; don't aim for a wild guess.
     left = max(-_ACQUIRE_LATERAL_MAX, min(_ACQUIRE_LATERAL_MAX, left))
-    return per_m * left
+    return per_m * left + bias
 
 
 def heading_on_target(game: Game, robot_id: int, bend: float = 0.0) -> bool:

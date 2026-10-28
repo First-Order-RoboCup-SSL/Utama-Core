@@ -48,12 +48,16 @@ class RobotProfile:
     `kick_bend_deg_per_cm`: how far its kick leaves the heading towards the side the ball
     sits on the dribbler, per cm the ball is off-centre. Passes and shots aim against it
     (`kick_bend`), on real robots only: the simulators kick along the heading.
+
+    `kick_bias_deg`: how far its kick leaves the heading with the ball centred, anticlockwise +
+    (a kicker or a tag turned on the robot); aimed against with the bend.
     """
 
     kicker: bool = True
     dribbler: bool = True
     ir: bool = True
     kick_bend_deg_per_cm: float = 0.0
+    kick_bias_deg: float = 0.0
 
 
 def _is_stop(c: RobotCommand) -> bool:

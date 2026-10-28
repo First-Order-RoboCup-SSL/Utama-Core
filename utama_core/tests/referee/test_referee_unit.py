@@ -131,7 +131,7 @@ def _make_blackboard(game: Game, cmd_map=None):
     bb.game = game
     bb.cmd_map = cmd_map if cmd_map is not None else {}
     bb.motion_controller = SimpleNamespace(
-        calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0), pose_ahead=PoseAhead(0.0)
+        calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0), pose_ahead=PoseAhead(0.0), min_turn=None
     )
     return bb
 

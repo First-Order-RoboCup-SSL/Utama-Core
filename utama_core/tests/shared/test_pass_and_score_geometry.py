@@ -116,9 +116,9 @@ def test_a_tolerance_edge_kick_at_the_inset_post_stays_inside_the_true_goal():
 
     shooter_pos = Vector2D(3.141, 1.941)  # the traced shooter's position
     aimed_orientation = shooter_pos.angle_to(Vector2D(goal_x, goal_y2))  # aim at the inset (safe) post edge
-    # A kick fired at the very edge of the aim error around that aim — the worst
-    # case the shot gate (`heading_on_target`, SHOT_AIM_ERROR_RAD) still lets through.
-    kicked_orientation = aimed_orientation + SHOT_AIM_ERROR_RAD
+    # A kick fired at the very edge of the tolerance band around that aim —
+    # the worst case `oriented_towards` still lets through.
+    kicked_orientation = aimed_orientation + ORIENTATION_TOLERANCE_RAD
 
     # Where the ball actually crosses the goal line at that kicked angle.
     exit_y = shooter_pos.y + math.tan(kicked_orientation) * (goal_x - shooter_pos.x)
@@ -955,7 +955,22 @@ def _ball_on_dribbler(left: float) -> Game:
     ],
 )
 def test_kick_bend_is_the_robots_bend_per_metre_times_the_balls_offset(left, bends, expected):
-    controller = SimpleNamespace(kick_bend=bends)
+    controller = SimpleNamespace(kick_bend=bends, kick_bias={})
+    assert kick_bend(_ball_on_dribbler(left), controller, 1) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    "left, bends, expected",
+    [
+        (0.0, {1: 8.0}, 0.04),  # centred: the bias alone
+        (0.01, {1: 8.0}, 0.12),  # added to the bend
+        (0.01, {}, 0.04),  # a robot with a bias and no bend still gets it
+    ],
+)
+def test_kick_bend_adds_the_robots_bias(left, bends, expected):
+    """Yellow's passes left its heading 2.3 deg anticlockwise with the ball centred (51 kicks,
+    2026-10-28 rallies); a bias counted only with a bend would drop for a bend-less robot."""
+    controller = SimpleNamespace(kick_bend=bends, kick_bias={1: 0.04})
     assert kick_bend(_ball_on_dribbler(left), controller, 1) == pytest.approx(expected, abs=1e-9)
 
 

@@ -106,10 +106,10 @@ def _carry(x: float, orientation: float = 0.0, sensor: bool = True):
         defense_area_rules=False,
     )
     mc = MagicMock()
-    mc.kick_bend = {}  # the sims: kicks leave along the heading
+    mc.kick_bend = mc.kick_bias = {}  # the sims: kicks leave along the heading
     mc.calculate.return_value = (Vector2D(1.0, 0.0), 0.0)  # full speed: the carry caps it
     mc.pose_ahead = PoseAhead(0.0)
-    mc.carry_speed = mc.carry_turn = None  # as in the sims: the example's own carry cap is under test
+    mc.carry_speed = mc.carry_turn = mc.min_turn = None  # as in the sims: the example's own carry cap is under test
     targets = []
     real_move = ex.move
 

@@ -7,8 +7,11 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.math_utils import rotate_vector
+from utama_core.global_utils.math_utils import normalise_heading, rotate_vector
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+
+# Off its target orientation by more than this, a robot turns at least `MotionController.min_turn`.
+_MIN_TURN_FROM_RAD = 0.01
 
 ### TODO: IT IS CONTENTIOUS IF WE EVEN NEED THIS MOVE FUNCTION ANYMORE. POTENTIALLY JUST SEND DIRECTLY TO MOTION CONTROLLER ###
 
@@ -36,19 +39,29 @@ def move(
     )
 
     forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
+    adjusted = False
 
+    # A turn slower than the robot can make leaves it short of its target orientation for good.
+    min_turn = motion_controller.min_turn
+    off = normalise_heading(target_oren - robot.orientation)
+    if min_turn and abs(off) > _MIN_TURN_FROM_RAD and abs(angular_vel) < min_turn:
+        angular_vel = math.copysign(min_turn, off)
+        adjusted = True
+
+    scale = 1.0
     if dribbling and robot.has_ball:
         # Slowed together to what the robot can carry the ball at, so the path keeps its shape: at
         # full speed (1 m/s, 4 rad/s) the real robots lost the ball within 0.2 s (2026-10-28).
         speed = math.hypot(forward_vel, left_vel)
-        scale = 1.0
         if motion_controller.carry_speed is not None and speed > motion_controller.carry_speed:
             scale = motion_controller.carry_speed / speed
         if motion_controller.carry_turn is not None and abs(angular_vel) * scale > motion_controller.carry_turn:
             scale = motion_controller.carry_turn / abs(angular_vel)
         if scale < 1.0:
             forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
-            motion_controller.sent(robot_id, global_velocity * scale, angular_vel)
+            adjusted = True
+    if adjusted:
+        motion_controller.sent(robot_id, global_velocity * scale, angular_vel)
 
     return RobotCommand(
         local_forward_vel=forward_vel,

@@ -21,6 +21,9 @@ class RobotParams:
     # scales a dribbling command down to both while the robot has the ball. None: no limit.
     CARRY_SPEED: float | None = None
     CARRY_TURN: float | None = None
+    # The slowest turn (rad/s) that turns the robot at all: `move()` raises a slower one to it
+    # while the robot is off its target orientation. None: no floor.
+    MIN_TURN: float | None = None
 
 
 GRSIM_PARAMS = RobotParams(
@@ -60,4 +63,7 @@ REAL_PARAMS = RobotParams(
     # passing_rally) kept it; 0.5 m/s with 2 rad/s, reversing or sideways, lost it in 0.2 s.
     CARRY_SPEED=0.3,
     CARRY_TURN=1.0,
+    # Passing rallies 2026-10-28: commanded 0.1 rad/s, a robot with the ball stood still for
+    # 0.5 s; 0.2-0.28 rad/s turned it ~0.16 rad/s.
+    MIN_TURN=0.3,
 )
