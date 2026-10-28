@@ -62,8 +62,13 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import enemy_goal_line, has_ball
-from utama_core.skills.src.utils.move_utils import empty_command, move
+from utama_core.shared.pass_and_score_geometry import (
+    enemy_goal_line,
+    has_ball,
+    oriented_towards,
+)
+from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
+from utama_core.tactics._pass_and_score import FACE_GOAL_RAD
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
@@ -192,7 +197,11 @@ class KeepOrAttackTactic(BaseTactic[None]):
         Measured along the field, not straight to the goal: the shooter's move for a better shot
         is sideways, and with a straight-line range that move took the robot back out of range
         and the carry brought it back in, in turn. The target is `_CARRY_INTO_RANGE_M` inside the
-        range: aimed at the range itself, the robot stopped 1 mm short and stood there (rsim)."""
+        range: aimed at the range itself, the robot stopped 1 mm short and stood there (rsim).
+
+        A robot that took the ball facing elsewhere (a keeper's save) pivots on it to face the
+        goal first: turning while it drove off sideways lost the ball on the real robots
+        (2026-10-28), as in `move_for_a_shot`."""
         if not has_ball(game, rid, visual=True):
             return None
         goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
@@ -200,9 +209,13 @@ class KeepOrAttackTactic(BaseTactic[None]):
         me = game.friendly_robots[rid].p
         if abs(goal_x - me.x) <= SHOOT_RANGE_M:
             return None
+        goal_oren = me.angle_to(goal)
+        if not oriented_towards(game, rid, goal_oren, FACE_GOAL_RAD):
+            ctx.trace(game, f"shoot[{rid}]", "facing the goal")
+            return turn_on_spot(game, ctx.motion_controller, rid, goal_oren, dribbling=True)
         upfield = math.copysign(1.0, goal_x - me.x)
         target = Vector2D(goal_x - upfield * (SHOOT_RANGE_M - _CARRY_INTO_RANGE_M), me.y)
-        command = move(game, ctx.motion_controller, rid, target, me.angle_to(goal), dribbling=True)
+        command = move(game, ctx.motion_controller, rid, target, goal_oren, dribbling=True)
         ctx.trace(game, f"shoot[{rid}]", "carrying it up")
         return _capped(command, CARRY_SPEED_MPS)
 

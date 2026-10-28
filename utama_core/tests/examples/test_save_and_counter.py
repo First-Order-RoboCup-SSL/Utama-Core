@@ -92,13 +92,13 @@ def test_a_ball_out_of_the_field_holds_both():
     assert _roles({"x": -0.5}, {"x": 0.5}, ball) == ("hold", "hold")
 
 
-def _carry(x: float):
+def _carry(x: float, orientation: float = 0.0):
     """Yellow (attacking +x) holding the ball at (x, 0.3), blue in its goal."""
-    me = make_robot(0, is_friendly=True, x=x, y=0.3, has_ball=True)
+    me = make_robot(0, is_friendly=True, x=x, y=0.3, has_ball=True, orientation=orientation)
     game = build_game(
         {0: me},
         {0: make_robot(0, is_friendly=False, x=1.4, y=0.0)},
-        make_ball(x=x + 0.09, y=0.3),
+        make_ball(x=x + 0.09 * math.cos(orientation), y=0.3 + 0.09 * math.sin(orientation)),
         my_team_is_yellow=True,
         my_team_is_right=False,
         field_dims=ex.FIELD,
@@ -129,7 +129,8 @@ def test_the_carry_ends_inside_the_shooting_range_not_on_its_edge():
     the ball, the shooter never taking over. Measured along the field, as the shooter's sideways
     moves for a shot must not take it back out of range."""
     goal_x = ex.FIELD.full_field_half_length
-    command, targets = _carry(goal_x - ex.SHOOT_RANGE_M - 0.001)
+    # Facing the goal centre: one facing elsewhere pivots first (test below).
+    command, targets = _carry(goal_x - ex.SHOOT_RANGE_M - 0.001, math.atan2(-0.3, ex.SHOOT_RANGE_M + 0.001))
     assert command is not None
     (target,) = targets
     assert goal_x - target.x == pytest.approx(ex.SHOOT_RANGE_M - ex._CARRY_INTO_RANGE_M)
@@ -146,3 +147,18 @@ def test_no_carry_without_the_ball():
     tactic = ex.KeepOrAttackTactic()
     game, _ = _views({"x": -1.0}, {"x": 1.0})
     assert tactic._carry(game, MagicMock(), 0) is None
+
+
+@pytest.mark.parametrize("orientation, pivots", [(math.pi, True), (0.0, False)])
+def test_a_robot_that_took_the_ball_facing_away_pivots_to_the_goal_before_carrying(orientation, pivots):
+    """Real robots (2026-10-28): a keeper that saved the ball facing its own goal drove off
+    sideways towards the other one while turning, and lost the ball. Facing away, it pivots on
+    the ball (`turn_on_spot`) and drives nowhere yet; facing the goal, it carries."""
+    real_turn = ex.turn_on_spot
+    ex.turn_on_spot = MagicMock(return_value="pivot")
+    try:
+        command, targets = _carry(-1.0, orientation)
+    finally:
+        ex.turn_on_spot = real_turn
+    assert (command == "pivot") is pivots
+    assert (targets == []) is pivots

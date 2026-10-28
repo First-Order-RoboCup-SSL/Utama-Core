@@ -442,7 +442,7 @@ _SHOT_SWITCH_MARGIN = (
 
 # Facing the goal centre within this, a robot with the ball slides for a better shot; further off
 # it pivots on the ball first (`turn_on_spot`).
-_FACE_GOAL_RAD = 0.3
+FACE_GOAL_RAD = 0.3
 
 
 def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
@@ -453,7 +453,7 @@ def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
     robot = game.friendly_robots[robot_id]
     goal_oren = robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
-    if not oriented_towards(game, robot_id, goal_oren, _FACE_GOAL_RAD):
+    if not oriented_towards(game, robot_id, goal_oren, FACE_GOAL_RAD):
         ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · facing the goal")
         return turn_on_spot(
             game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, target_oren=goal_oren, dribbling=True
