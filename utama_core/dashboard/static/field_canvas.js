@@ -239,6 +239,20 @@ class FieldCanvas {
       drawTeam(robots.enemy, enemyFill, false);
       drawTeam(robots.friendly, friendlyFill, true);
       this._drawTagLegend(ctx, tacticTags);
+
+      // A real robot whose ball sensor is on ("friendly:3", from the radio's feedback): a ring
+      // in the ball's colour, so a sensor that never fires (or never stops) shows on the field.
+      const sensorOn = new Set(state.ball_sensor || []);
+      ctx.strokeStyle = FIELD_COLORS.ball;
+      ctx.lineWidth = 3;
+      for (const team of ["friendly", "enemy"]) {
+        for (const bot of robots[team] || []) {
+          if (!sensorOn.has(team + ":" + bot.id)) continue;
+          ctx.beginPath();
+          ctx.arc(toX(bot.x), toY(bot.y), r + 6, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+      }
     }
 
     if (state.field_check && robots) {

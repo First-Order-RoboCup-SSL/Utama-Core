@@ -58,9 +58,19 @@
     stage: "ref-stage",
   };
 
+  // When each robot's ball sensor was last on (performance.now(), by radio ID), from every
+  // state, not only the ones the panel draws.
+  const ballOnAt = {};
+
   function onEvent(d) {
     lastEventAt = performance.now();
     currentCmd = d.command;
+    d.ball_sensor = [];
+    for (const row of d.robot_feedback || []) {
+      if (!(row.connected && row.has_ball)) continue;
+      ballOnAt[row.port_id] = lastEventAt;
+      if (row.team) d.ball_sensor.push(row.team + ":" + row.vision_id);
+    }
     d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (timeline && d.ts != null) timeline.append(d.ts, d);
     latest = d;
@@ -111,9 +121,10 @@
     }
     panelDrawnAt = now;
     renderFieldCheck(d.field_check);
-    // With a field check, its rows already give each robot's position and radio.
-    if (d.field_check) document.getElementById("ref-status-entries").innerHTML = "";
-    else renderRobotStatusInto("ref-status-entries", d);
+    const ballLastOn = {};
+    for (const id in ballOnAt) ballLastOn[id] = (now - ballOnAt[id]) / 1000;
+    // With a field check, its rows already list each robot's position.
+    renderRobotStatusInto("ref-status-entries", d, { ballLastOn, hideFriendly: Boolean(d.field_check) });
     renderTacticStatusInto("ref-tactic-entries", d.tactic_status);
   }
 

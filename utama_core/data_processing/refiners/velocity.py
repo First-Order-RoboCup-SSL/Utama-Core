@@ -39,6 +39,19 @@ class VelocityRefiner(BaseRefiner):
     ACCELERATION_WINDOW_SIZE = 5
     ACCELERATION_N_WINDOWS = 3
 
+    # Velocity is differenced against the newest stored position at least this much older. Two
+    # cameras' frames interleave on real vision, some 0.01 ms apart: a 1 mm wobble over that gave
+    # 64 m/s, the Kalman filter predicted with it, and the robot jumped 0.77 m (2026-10-27 field
+    # run). Sim frames are 1/60 s apart, so this changes nothing there.
+    MIN_VELOCITY_DT_S = 0.01
+    _VELOCITY_LOOKBACK = 8  # stored positions searched for one old enough
+
+    # A robot's velocity is capped at this, above any robot's real speed (2 m/s in sim, 1 m/s on
+    # ours; a noisy 90 s sim match peaked at 2.05). After a dropout the Kalman filter snaps onto
+    # the next detection; differenced over one frame that snap read 20-380 m/s, the filter
+    # predicted with it and overshot further (2026-10-27 field runs, robots "teleporting").
+    MAX_ROBOT_SPEED_MPS = 3.0
+
     def __init__(self, compute_acceleration: bool = True):
         # False leaves every `a` zero: for a frame whose acceleration nothing reads.
         self.compute_acceleration = compute_acceleration
@@ -103,6 +116,9 @@ class VelocityRefiner(BaseRefiner):
                 continue
 
             new_v = self._calculate_object_velocity(game_history, robot_instance.p, robot_obj_key, current_ts, twod)
+            speed = new_v.mag()
+            if speed > self.MAX_ROBOT_SPEED_MPS:
+                new_v = new_v * (self.MAX_ROBOT_SPEED_MPS / speed)
 
             new_a = zero_vector(twod)  # Default to zero
             try:
@@ -170,13 +186,18 @@ class VelocityRefiner(BaseRefiner):
         entries = game_history.get_historical_attribute_entries(object_key, AttributeType.POSITION, 1)
         if not entries:
             return zero_vector(twod)
+        if current_ts - entries[0][0] < self.MIN_VELOCITY_DT_S:
+            entries = game_history.get_historical_attribute_entries(
+                object_key, AttributeType.POSITION, self._VELOCITY_LOOKBACK
+            )
+            entries = [e for e in entries if current_ts - e[0] >= self.MIN_VELOCITY_DT_S][-1:]
+            if not entries:
+                return zero_vector(twod)
 
         # The stored pair itself rather than a one-row array built from it: the same values.
         previous_time_received, previous_pos_floats = entries[0]
 
         dt_secs = current_ts - previous_time_received
-        if dt_secs <= 1e-9:
-            return zero_vector(twod)
 
         if twod:
             inv_dt = 1.0 / dt_secs

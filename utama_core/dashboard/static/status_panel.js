@@ -96,24 +96,51 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
   c.innerHTML = html;
 }
 
+// The radio's feedback rows (StrategyRunner's `_build_robot_feedback_snapshot`), one robot each:
+// its ball sensor (the IR bit the firmware sends back), how fresh that answer is, and where
+// vision has it. `ballLastOn` is {port_id: seconds since the sensor was last on}, kept by the
+// caller across every state, so a touch shorter than the panel's refresh still shows.
+function robotFeedbackHtml(d, ballLastOn) {
+  const feedback = d.robot_feedback || [];
+  if (feedback.length === 0) return "";
+  const robots = d.robots || {};
+  const lastOn = ballLastOn || {};
+  let html = '<div class="ref-section-title">Robots (radio)</div>';
+  for (const row of feedback) {
+    const label = row.team_color ? row.team_color + " " + row.vision_id : "radio " + row.port_id;
+    let sensor;
+    if (!row.connected) sensor = '<span class="muted">ball sensor ?</span>';
+    else if (row.has_ball) sensor = '<span class="ball-on">BALL</span>';
+    else if (lastOn[row.port_id] != null) sensor = '<span class="muted">no ball · last ' + lastOn[row.port_id].toFixed(1) + " s ago</span>";
+    else sensor = '<span class="muted">no ball</span>';
+
+    let radio;
+    if (row.connected) radio = "fw " + row.port_id + " · " + Math.round(row.age_seconds * 1000) + " ms";
+    else if (row.age_seconds != null) radio = '<span class="check-fail">fw ' + row.port_id + " silent " + row.age_seconds.toFixed(1) + " s</span>";
+    else radio = '<span class="check-warn">fw ' + row.port_id + " no feedback yet</span>";
+
+    const bot = (robots[row.team] || []).find((r) => r.id === row.vision_id);
+    const where = bot
+      ? "(" + bot.x.toFixed(2) + ", " + bot.y.toFixed(2) + ") · " + Math.hypot(bot.vx, bot.vy).toFixed(2) + " m/s"
+      : '<span class="check-warn">not seen</span>';
+
+    html +=
+      '<div class="ref-row"><span>' + label + "</span><span>" + sensor + "</span></div>" +
+      '<div class="ref-row muted" style="font-size:.68rem; padding-bottom:4px;"><span>' + radio + "</span><span>" + where + "</span></div>";
+  }
+  return html;
+}
+
 function renderRobotStatusInto(containerId, d, options) {
   const c = document.getElementById(containerId);
   if (!c) return;
   const opts = options || {};
   let html = "";
 
-  if (!opts.hideFeedback) {
-    const feedback = d.robot_feedback || [];
-    html += '<div class="ref-section-title">Controller feedback (' + feedback.length + ")</div>";
-    for (const row of feedback) {
-      const label = row.team_color ? row.team_color + " " + row.vision_id : "port " + row.port_id;
-      html +=
-        '<div class="ref-row"><span>' +
-        label +
-        "</span><span class=\"muted\">" +
-        (row.connected ? (row.has_ball ? "ball" : "connected") : "no data") +
-        "</span></div>";
-    }
+  if (!opts.hideFeedback) html += robotFeedbackHtml(d, opts.ballLastOn);
+  if (opts.hideFriendly) {
+    c.innerHTML = html;
+    return;
   }
 
   html += '<div class="ref-section-title">Friendly</div>';

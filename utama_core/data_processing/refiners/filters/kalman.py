@@ -9,6 +9,12 @@ from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball, Robot
 from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
 
+# An unseen robot is carried on its last velocity this long, then held where it is. Its
+# velocity is measured from the filtered positions, so without a limit a robot that vision
+# keeps losing coasts on whatever velocity its last snap back to a detection gave it: one
+# seen a few times a second on the 2026-10-27 field test ran off to 10^7 m at 7 m/s.
+ROBOT_COAST_S = 0.3
+
 
 def _weighted_circular_mean_numpy(weight: float, a: float, b: float) -> float:
     """Circular mean of angles `a` and `b` weighted `weight` and `1 - weight`."""
@@ -82,6 +88,7 @@ class KalmanFilter:
         # s; to be initialised by strategy runner with 1st GameFrame
         self.state_x = None
         self.state_y = None
+        self._unseen_s = 0.0  # since vision last saw the robot
 
         # sigma squared x, sigma squared y. x and y errors are assumed uncorrelated (the
         # measurement/process covariance matrices below are always diagonal), which means the
@@ -144,12 +151,19 @@ class KalmanFilter:
             self.state_y = last_robot.p.y
 
         new_x, new_y = (None, None) if new_data is None else new_data
+        if new_data is None:
+            # Only the part of this step still within ROBOT_COAST_S moves the robot.
+            moving_s = max(0.0, min(time_elapsed, ROBOT_COAST_S - self._unseen_s))
+            self._unseen_s += max(0.0, time_elapsed)
+        else:
+            moving_s = time_elapsed
+            self._unseen_s = 0.0
 
         self.state_x, self.covariance_x = self._step_scalar(
-            new_x, self.state_x, last_robot.v.x, time_elapsed, self.covariance_x, self.measurement_var_x
+            new_x, self.state_x, last_robot.v.x, moving_s, self.covariance_x, self.measurement_var_x
         )
         self.state_y, self.covariance_y = self._step_scalar(
-            new_y, self.state_y, last_robot.v.y, time_elapsed, self.covariance_y, self.measurement_var_y
+            new_y, self.state_y, last_robot.v.y, moving_s, self.covariance_y, self.measurement_var_y
         )
 
         return (self.state_x, self.state_y)

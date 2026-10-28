@@ -66,13 +66,13 @@ def test_velocity_calculation_correct_for_ball():
 def test_velocity_calculation_correct_for_one_robot(is_friendly):
     game_history = GameHistory(10)
     game_history.add_game_frame(create_one_robot_only_game(4, 15, 30, is_friendly))
-    game = create_one_robot_only_game(10, 15, 3, is_friendly)
+    game = create_one_robot_only_game(10, 15, 21, is_friendly)
     game = velocity_refiner.refine(game_history, game)
 
     target_robot = game.enemy_robots[1] if not is_friendly else game.friendly_robots[1]
 
     assert target_robot.v.x == 0
-    assert target_robot.v.y == -4.5
+    assert target_robot.v.y == -1.5
 
 
 def test_returns_not_moving_if_not_enough_information_for_velocity():
@@ -199,3 +199,62 @@ def test_robot_acceleration_fast_path_is_the_general_helper_bit_for_bit(dts, vel
     )
     fast = velocity_refiner._acceleration_from_entries(entries, True)
     assert (repr(fast.x), repr(fast.y)) == (repr(general.x), repr(general.y))
+
+
+def test_velocity_skips_a_stored_position_too_close_in_time():
+    """2026-10-27 field run: two cameras' frames 0.01 ms apart, 1 mm apart in position, gave
+    64 m/s. Differenced instead against the newest position at least MIN_VELOCITY_DT_S older."""
+    game_history = GameHistory(10)
+    game_history.add_game_frame(create_one_robot_only_game(1.0, 0.0, 0.0, is_friendly=True))
+    game_history.add_game_frame(create_one_robot_only_game(1.02 - 1e-5, 0.020, 0.0, is_friendly=True))
+
+    game = velocity_refiner.refine(game_history, create_one_robot_only_game(1.02, 0.021, 0.0, is_friendly=True))
+
+    assert game.friendly_robots[1].v.x == pytest.approx(0.021 / 0.02)
+
+
+@pytest.mark.parametrize(
+    "gap, uses_newest",
+    [(VelocityRefiner.MIN_VELOCITY_DT_S + 1e-9, True), (VelocityRefiner.MIN_VELOCITY_DT_S - 1e-4, False)],
+)
+def test_velocity_uses_the_newest_position_from_min_dt_old(gap, uses_newest):
+    game_history = GameHistory(10)
+    game_history.add_game_frame(create_one_robot_only_game(0.5, 0.0, 0.0, is_friendly=True))
+    game_history.add_game_frame(create_one_robot_only_game(1.0 - gap, 0.5, 0.0, is_friendly=True))
+
+    game = velocity_refiner.refine(game_history, create_one_robot_only_game(1.0, 0.5 + gap, 0.0, is_friendly=True))
+
+    expected = 1.0 if uses_newest else (0.5 + gap) / 0.5
+    assert game.friendly_robots[1].v.x == pytest.approx(expected)
+
+
+def test_velocity_is_zero_when_no_stored_position_is_old_enough():
+    game_history = GameHistory(10)
+    game_history.add_game_frame(create_one_robot_only_game(1.0, 0.0, 0.0, is_friendly=True))
+
+    game = velocity_refiner.refine(game_history, create_one_robot_only_game(1.0 + 1e-5, 0.001, 0.0, is_friendly=True))
+
+    assert game.friendly_robots[1].v.x == 0.0
+
+
+@pytest.mark.parametrize("step_m, expected", [(0.04, 2.0), (0.08, VelocityRefiner.MAX_ROBOT_SPEED_MPS)])
+def test_a_robot_velocity_is_capped_and_keeps_its_direction(step_m, expected):
+    """A Kalman snap after a dropout read 20-380 m/s on the field (2026-10-27); a robot's speed
+    is capped at MAX_ROBOT_SPEED_MPS, along the same direction. A ball's is not capped."""
+    game_history = GameHistory(10)
+    game_history.add_game_frame(create_one_robot_only_game(1.0, 0.0, 0.0, is_friendly=False))
+    frame = create_one_robot_only_game(1.02, 0.6 * step_m, 0.8 * step_m, is_friendly=False)
+
+    v = velocity_refiner.refine(game_history, frame).enemy_robots[1].v
+
+    assert v.mag() == pytest.approx(expected)
+    assert v.y / v.x == pytest.approx(0.8 / 0.6)
+
+
+def test_a_ball_velocity_is_not_capped():
+    game_history = GameHistory(10)
+    game_history.add_game_frame(create_ball_only_game(1.0, 0.0, 0.0, 0.0))
+
+    game = velocity_refiner.refine(game_history, create_ball_only_game(1.02, 0.12, 0.0, 0.0))
+
+    assert game.ball.v.x == pytest.approx(6.0)

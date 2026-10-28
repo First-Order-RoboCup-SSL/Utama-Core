@@ -184,6 +184,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .check-ok { color: #5fb87a; }
 .check-warn { color: #e0a14a; }
 .check-fail { color: #e06a60; font-weight: 600; }
+/* A robot's ball sensor on (live view's robot panel), in the field's ball colour. */
+.ball-on { background: #c98a3f; color: #1a1d24; font-weight: 600; padding: 0 6px; border-radius: 3px; }
 .auto-halt { background: var(--halt); color: #fff; padding: 6px 8px; border-radius: var(--radius); font-size: .75rem; }
 
 /* Replay timeline (timeline.js): swimlanes under the transport controls. */

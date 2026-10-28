@@ -20,10 +20,15 @@ from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.entities.data.raw_vision import RawVisionData
 
 # A configured robot missing from vision this long fails: a robot we cannot see is
-# driven on a stale position. Several frames at ssl-vision's 60-75 Hz.
-VISION_LOST_S = 0.5
+# driven on a stale position. On the 2026-10-27 field test (two cameras, 60-90 Hz) a
+# robot's gaps were p99.9 50-100 ms; every longer one was our own loop stalling (see
+# `StrategyRunner._tick_field_check`), not vision.
+VISION_LOST_S = 0.15
 # No vision packet at all for this long fails (camera or network down).
-CAMERA_SILENT_S = 0.5
+CAMERA_SILENT_S = 0.15
+# A gap between two ticks of the runner's loop longer than this is the loop stalling (it ticks
+# every 6-17 ms on real robots).
+LOOP_STALL_S = 0.1
 # A robot this far outside the field bounds fails: the camera half is wrong, or the
 # robot is leaving the area the planner keeps it in. Within it, a robot reaching
 # over the line (a defender at the half-way line) is fine.

@@ -223,3 +223,30 @@ def test_the_auto_halt_reason_is_kept_through_the_halt_and_cleared_once_play_res
     StrategyRunner._tick_field_check(runner, seen, now=0.2)
     assert runner._auto_halt is None
     assert runner.referee.set_field_check.call_args.args[0]["auto_halt"] is None
+
+
+def test_the_tick_after_a_loop_stall_does_not_halt_the_next_one_does():
+    """2026-10-27: the runner's loop stalled ~0.55 s every ~33 s, cameras and radio silent
+    together. The first tick after judges vision before the receiver thread caught up: that
+    tick must not halt on what our own stall hid, and a real loss halts on the next tick."""
+    from utama_core.run.field_check import LOOP_STALL_S
+
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    seen = _frame(yellow=[(1, 1.0, 0.0)])
+    StrategyRunner._tick_field_check(runner, [seen], now=0.0)
+    StrategyRunner._tick_field_check(runner, [None], now=LOOP_STALL_S + 0.1)  # after a stall, not seen
+    assert not runner.referee.force_command.called
+    StrategyRunner._tick_field_check(runner, [None], now=LOOP_STALL_S + 0.11)
+    assert runner.referee.force_command.called
+
+
+def test_ticks_just_under_the_stall_limit_still_halt_a_lost_robot():
+    from utama_core.run.field_check import LOOP_STALL_S
+
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    step = LOOP_STALL_S - 0.01
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    StrategyRunner._tick_field_check(runner, [None], now=step)
+    StrategyRunner._tick_field_check(runner, [None], now=2 * step)
+    assert 2 * step > VISION_LOST_S
+    assert runner.referee.force_command.called

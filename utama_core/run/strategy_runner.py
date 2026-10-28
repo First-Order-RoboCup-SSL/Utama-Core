@@ -58,7 +58,7 @@ from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
-from utama_core.run.field_check import FieldCheck
+from utama_core.run.field_check import LOOP_STALL_S, FieldCheck
 from utama_core.run.field_fence import FencedRobotController, inner_edges
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
@@ -695,6 +695,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
         return mode
 
+    def _defense_area_rules(self) -> bool:
+        """`Field.defense_area_rules`: our referee profile's `defense_area.enabled`; on with the
+        official referee or none, as the rulebook has it."""
+        return self.referee.defense_area_enabled if isinstance(self.referee, CustomReferee) else True
+
     @staticmethod
     def _validate_referee(mode: Mode, referee: RefereeSource) -> RefereeSource:
         """Validate the referee source against the current mode."""
@@ -1068,6 +1073,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         rows = self.field_check.rows(now, self._robot_feedback_snapshot if self.mode == Mode.REAL else None)
         self._field_check_rows = rows
         reason = self.field_check.halt_reason(rows)
+        # The first tick after this loop itself stalled (2026-10-27: ~0.55 s every ~33 s) can judge
+        # vision before the receiver thread has caught up: what it misses then is our stall, not
+        # the field. Judged again the next tick, a real loss halts ~17 ms later.
+        prev, self._field_check_at = getattr(self, "_field_check_at", None), now
+        if prev is not None and now - prev > LOOP_STALL_S:
+            self.logger.warning("Control loop stalled %.0f ms", 1000 * (now - prev))
+            if getattr(self, "game_log", None) is not None:
+                self.game_log.note(f"control loop stalled {1000 * (now - prev):.0f} ms")
+            reason = None
         if self._prev_custom_ref_command != RefereeCommand.HALT:
             self._auto_halt = None  # play resumed: the banner was for the HALT that ended
         if (
@@ -1395,13 +1409,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp:
             self.opp.position_refiner.start_filtering()
 
-        my_field = Field(self.my_team_is_right, self.full_field_dims, self.field_bounds)
+        my_field = Field(self.my_team_is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules())
         self.my.game_history = GameHistory(MAX_GAME_HISTORY)
         self.my.game = Game(self.my.game_history, my_current_game_frame, field=my_field)
         self.my.current_game_frame = my_current_game_frame
 
         if self.opp:
-            opp_field = Field(not self.my_team_is_right, self.full_field_dims, self.field_bounds)
+            opp_field = Field(
+                not self.my_team_is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules()
+            )
             self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
             self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
             self.opp.current_game_frame = opp_current_game_frame
@@ -1464,7 +1480,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 side.position_refiner.start_filtering()
             side.current_game_frame = frame
             side.game_history = GameHistory(MAX_GAME_HISTORY)
-            side.game = Game(side.game_history, frame, field=Field(is_right, self.full_field_dims, self.field_bounds))
+            side.game = Game(
+                side.game_history,
+                frame,
+                field=Field(is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules()),
+            )
             side.strategy.load_game(side.game)
 
     # Reset the game state and robot info in buffer

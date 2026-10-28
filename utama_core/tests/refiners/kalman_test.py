@@ -458,3 +458,52 @@ class TestKalmanFilterBallFilterData:
 
         assert kf.covariance_x < initial_cov_x
         assert kf.covariance_y < initial_cov_y
+
+
+# ---------------------------------------------------------------------------
+# KalmanFilter – a robot vision keeps losing
+# ---------------------------------------------------------------------------
+
+
+class TestKalmanFilterCoastLimit:
+    """2026-10-27 field test: blue 0, seen a few times a second, coasted on the velocity of its
+    last snap back to a detection and ran off to 10^7 m. An unseen robot moves for
+    ROBOT_COAST_S at most, then holds."""
+
+    def test_unseen_robot_moves_for_the_coast_limit_then_holds(self):
+        from utama_core.data_processing.refiners.filters.kalman import ROBOT_COAST_S
+
+        kf = KalmanFilter()
+        robot = make_robot(x=0.0, y=0.0, vx=7.0, vy=0.0)
+        kf._step_xy((0.0, 0.0), robot, time_elapsed=0.0)
+        start = kf.state_x
+
+        dt = 0.05
+        n_moving = round(ROBOT_COAST_S / dt)
+        for _ in range(n_moving):
+            x, _ = kf._step_xy(None, robot, time_elapsed=dt)
+        assert x - start == pytest.approx(7.0 * ROBOT_COAST_S)
+
+        for _ in range(200):  # 10 s more unseen, the velocity still 7 m/s
+            held, _ = kf._step_xy(None, robot, time_elapsed=dt)
+        assert held == pytest.approx(x)
+
+    def test_a_step_crossing_the_limit_moves_only_up_to_it(self):
+        from utama_core.data_processing.refiners.filters.kalman import ROBOT_COAST_S
+
+        kf = KalmanFilter()
+        robot = make_robot(vx=1.0)
+        kf._step_xy((0.0, 0.0), robot, time_elapsed=0.0)
+        x, _ = kf._step_xy(None, robot, time_elapsed=ROBOT_COAST_S + 1.0)
+        assert x == pytest.approx(ROBOT_COAST_S)
+
+    def test_a_detection_restarts_the_coast(self):
+        from utama_core.data_processing.refiners.filters.kalman import ROBOT_COAST_S
+
+        kf = KalmanFilter()
+        robot = make_robot(vx=1.0)
+        kf._step_xy((0.0, 0.0), robot, time_elapsed=0.0)
+        kf._step_xy(None, robot, time_elapsed=ROBOT_COAST_S + 1.0)  # used up
+        seen, _ = kf._step_xy((kf.state_x, 0.0), make_robot(x=kf.state_x, vx=1.0), time_elapsed=0.0)
+        x, _ = kf._step_xy(None, robot, time_elapsed=0.1)
+        assert x - seen == pytest.approx(0.1)
