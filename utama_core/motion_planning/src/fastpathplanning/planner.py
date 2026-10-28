@@ -1517,8 +1517,18 @@ class FastPathPlanner:
         if not self.is_point_in_field(raw_target, field_bounds):
             obstacles = [o for o in obstacles if _segment_key(o) not in boundary_segments]
         else:
+            # A wall the robot already stands within clearance of, too: a straight run to an
+            # in-field target never gets nearer the wall than its nearer end, and the wall
+            # otherwise sent the robot on a 0.7 m detour away from a ball 0.3 m from the
+            # touchline (2.25 m-wide lab field, 2026-10-28: it backed off the ball forever).
             near_boundary = {
-                _segment_key(b) for b in boundary_list if distance_point_to_segment(raw_target, b[0], b[1]) < clearance
+                _segment_key(b)
+                for b in boundary_list
+                if min(
+                    distance_point_to_segment(raw_target, b[0], b[1]),
+                    distance_point_to_segment(our_pos, b[0], b[1]),
+                )
+                < clearance
             }
             if near_boundary:
                 obstacles = [o for o in obstacles if _segment_key(o) not in near_boundary]
