@@ -160,19 +160,17 @@ class TestKalmanFilterStepXY:
         assert abs((result2[0] - result1[0]) - vx * dt) < 1e-6
         assert abs((result2[1] - result1[1]) - vy * dt) < 1e-6
 
-    def test_state_advances_with_velocity_over_multiple_vanished_steps(self):
+    def test_a_robot_seen_moving_coasts_on_through_a_gap(self):
+        """The velocity comes from the detections, not from the robot it is handed."""
         kf = KalmanFilter()
-        vx = 2.0
-        robot = make_robot(x=0.0, y=0.0, vx=vx, vy=0.0)
-        kf._step_xy((0.0, 0.0), robot, time_elapsed=0.1)
-
-        dt = 0.1
-        steps = 5
-        for _ in range(steps):
-            result = kf._step_xy(None, robot, time_elapsed=dt)
-
-        # After n vanished steps starting from 0 the position grows monotonically
-        assert result[0] > 0.0
+        still = make_robot(x=0.0, y=0.0)
+        dt = 1 / 60
+        for i in range(60):  # seen for 1 s moving at 1 m/s along x
+            kf._step_xy((i * dt, 0.0), still, time_elapsed=dt)
+        assert kf.velocity_x == pytest.approx(1.0, abs=0.05)
+        seen = kf.state_x
+        x, _ = kf._step_xy(None, still, time_elapsed=0.1)
+        assert x - seen == pytest.approx(0.1, abs=0.005)
 
 
 # ---------------------------------------------------------------------------
@@ -456,8 +454,8 @@ class TestKalmanFilterBallFilterData:
         for _ in range(50):
             kf._step_xy((1.0, 2.0), robot, time_elapsed=0.1)
 
-        assert kf.covariance_x < initial_cov_x
-        assert kf.covariance_y < initial_cov_y
+        assert kf.covariance_x[0] < initial_cov_x[0]
+        assert kf.covariance_y[0] < initial_cov_y[0]
 
 
 # ---------------------------------------------------------------------------
@@ -507,3 +505,26 @@ class TestKalmanFilterCoastLimit:
         seen, _ = kf._step_xy((kf.state_x, 0.0), make_robot(x=kf.state_x, vx=1.0), time_elapsed=0.0)
         x, _ = kf._step_xy(None, robot, time_elapsed=0.1)
         assert x - seen == pytest.approx(0.1)
+
+
+class TestKalmanFilterOwnVelocity:
+    """2026-10-28 field run: a still robot vision saw in one frame of five swung +-0.4 m round
+    it. The filter predicted with the velocity differenced from its own output; each snap back
+    onto a detection read as up to 3 m/s, which it coasted on through the next gap."""
+
+    def test_a_still_robot_vision_keeps_losing_stays_put(self):
+        kf = KalmanFilter()
+        dt = 1 / 60
+        robot = make_robot(x=1.37, y=-0.19)
+        xs, ys = [], []
+        for i in range(600):
+            seen = (1.37 + 0.003 * math.sin(i), -0.19 + 0.003 * math.cos(i)) if i % 5 == 0 else None
+            x, y = kf._step_xy(seen, robot, time_elapsed=dt)
+            # What VelocityRefiner hands back: differenced from the output, capped at 3 m/s.
+            vx, vy = (x - robot.p.x) / dt, (y - robot.p.y) / dt
+            scale = min(1.0, 3.0 / max(math.hypot(vx, vy), 1e-9))
+            robot = make_robot(x=x, y=y, vx=vx * scale, vy=vy * scale)
+            xs.append(x)
+            ys.append(y)
+        assert max(xs) - min(xs) < 0.02
+        assert max(ys) - min(ys) < 0.02

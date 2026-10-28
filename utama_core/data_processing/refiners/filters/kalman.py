@@ -9,11 +9,13 @@ from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball, Robot
 from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
 
-# An unseen robot is carried on its last velocity this long, then held where it is. Its
-# velocity is measured from the filtered positions, so without a limit a robot that vision
-# keeps losing coasts on whatever velocity its last snap back to a detection gave it: one
-# seen a few times a second on the 2026-10-27 field test ran off to 10^7 m at 7 m/s.
+# An unseen robot is carried on its velocity this long, then held where it is: one seen a few
+# times a second on the 2026-10-27 field test, carried on, ran off to 10^7 m at 7 m/s.
 ROBOT_COAST_S = 0.3
+# The filter's process noise: robots' acceleration as white noise of this standard deviation
+# (m/s^2). Well above the real robots' ~5 m/s^2 (2026-10-27 calibration), for starts, stops and
+# knocks: at 5 the filter lagged a defender braking at the keep-out 1.3 cm inside it.
+ROBOT_ACCEL_SD = 20.0
 
 
 def _weighted_circular_mean_numpy(weight: float, a: float, b: float) -> float:
@@ -84,11 +86,14 @@ class KalmanFilter:
 
         self.id = id
 
-        # For position
+        # For position: per axis a constant-velocity filter, state (position, velocity).
         # s; to be initialised by strategy runner with 1st GameFrame
         self.state_x = None
         self.state_y = None
+        self.velocity_x = 0.0
+        self.velocity_y = 0.0
         self._unseen_s = 0.0  # since vision last saw the robot
+        self.accel_var = ROBOT_ACCEL_SD**2
 
         # sigma squared x, sigma squared y. x and y errors are assumed uncorrelated (the
         # measurement/process covariance matrices below are always diagonal), which means the
@@ -99,11 +104,10 @@ class KalmanFilter:
         noise_xy_var = pow(noise_xy_sd, 2)
         self.measurement_var_x = noise_xy_var
         self.measurement_var_y = noise_xy_var
-        # P_n,n; initialised with uncertainty in 1st frame
-        self.covariance_x = noise_xy_var
-        self.covariance_y = noise_xy_var
-        # Q
-        self.process_noise_xy = 2 * noise_xy_var
+        # P_n,n per axis as (position var, position-velocity cov, velocity var); initialised with
+        # the measurement's uncertainty and a robot's speed unknown to ~1 m/s.
+        self.covariance_x = (noise_xy_var, 0.0, 1.0)
+        self.covariance_y = (noise_xy_var, 0.0, 1.0)
 
         # Observation matrix H and state transition matrix F are just the identity matrix.
         # Multiplications with them are omitted.
@@ -131,24 +135,26 @@ class KalmanFilter:
         """
         A single iteration of the filter for x and y coordinates.
 
+        Each axis is a constant-velocity Kalman filter: its own velocity is part of its state,
+        corrected by each detection with its own (small) gain. It used to predict with the
+        velocity differenced from its own output; a robot vision saw ~20 times a second then
+        swung +-0.4 m round where it stood: each snap back onto a detection read as up to
+        3 m/s, which it coasted on through the next gap (2026-10-28 field run).
+
         Args:
             new_data (tuple[float, float]): New vision data received (x coordinates in metres, y coordinates in metres),
                 passed by filter_data.
-            last_robot (Robot): An object storing the robot's last known position and velocity, among others.
-            time_elapsed (float): Time since last vision data was received.
+            last_robot (Robot): The robot's last known state; its position and velocity start the filter.
+            time_elapsed (float): Time since the previous step.
 
         Returns:
             tuple[float, float]: Filtered vision data (x coordinates, y coordinates),
                 returned to filter_data for packaging.
 
         """
-
-        # x and y are filtered as two independent scalar Kalman filters (see __init__ for why
-        # that's mathematically equivalent to the 2D matrix form here), using the same
-        # closed-form update as _step_th below.
         if self.state_x is None:
-            self.state_x = last_robot.p.x
-            self.state_y = last_robot.p.y
+            self.state_x, self.state_y = last_robot.p.x, last_robot.p.y
+            self.velocity_x, self.velocity_y = last_robot.v.x, last_robot.v.y
 
         new_x, new_y = (None, None) if new_data is None else new_data
         if new_data is None:
@@ -159,40 +165,47 @@ class KalmanFilter:
             moving_s = time_elapsed
             self._unseen_s = 0.0
 
-        self.state_x, self.covariance_x = self._step_scalar(
-            new_x, self.state_x, last_robot.v.x, moving_s, self.covariance_x, self.measurement_var_x
+        self.state_x, self.velocity_x, self.covariance_x = self._step_axis(
+            new_x, self.state_x, self.velocity_x, moving_s, time_elapsed, self.covariance_x, self.measurement_var_x
         )
-        self.state_y, self.covariance_y = self._step_scalar(
-            new_y, self.state_y, last_robot.v.y, moving_s, self.covariance_y, self.measurement_var_y
+        self.state_y, self.velocity_y, self.covariance_y = self._step_axis(
+            new_y, self.state_y, self.velocity_y, moving_s, time_elapsed, self.covariance_y, self.measurement_var_y
         )
-
         return (self.state_x, self.state_y)
 
-    def _step_scalar(
+    def _step_axis(
         self,
         new_data: Optional[float],
-        state: float,
+        position: float,
         velocity: float,
+        moving_s: float,
         time_elapsed: float,
-        covariance: float,
+        covariance: tuple[float, float, float],
         measurement_var: float,
-    ) -> tuple[float, float]:
-        """One prediction-update cycle of a scalar (1D) Kalman filter with constant-velocity
-        prediction. Shared by both axes of _step_xy."""
-        # Phase 1: Predicting the current state given the last state.
-        pred_state = state + velocity * time_elapsed
-        pred_cov = covariance + self.process_noise_xy
-
-        # Phase 2: Adjust this prediction based on new data
-        if new_data is not None:  # Received frame.
-            kalman_gain = pred_cov / (pred_cov + measurement_var)
-            new_state = pred_state + kalman_gain * (new_data - pred_state)
-            new_cov = (1 - kalman_gain) * pred_cov
-            return new_state, new_cov
-
-        # We can rely on the invariant that vanished frames have null x values
-        # as they are imputed with a null VisionRobotData in the Position Refiner.
-        return pred_state, pred_cov  # Vanished frame: use predicted values.
+    ) -> tuple[float, float, tuple[float, float, float]]:
+        """One prediction-update cycle of one axis's constant-velocity filter: (position,
+        velocity, covariance). It moves on its velocity for `moving_s` of the `time_elapsed`."""
+        p, c, v = covariance
+        dt = moving_s
+        # Phase 1: predict. F = [[1, dt], [0, 1]]; Q from white acceleration over the whole step.
+        position = position + velocity * dt
+        q = self.accel_var
+        t = max(0.0, time_elapsed)
+        p, c, v = (
+            p + 2 * dt * c + dt * dt * v + q * t**4 / 4,
+            c + dt * v + q * t**3 / 2,
+            v + q * t * t,
+        )
+        if new_data is None:  # Vanished frame: the prediction stands.
+            return position, velocity, (p, c, v)
+        # Phase 2: update with the measured position (H = [1, 0]).
+        s = p + measurement_var
+        k_p, k_v = p / s, c / s
+        residual = new_data - position
+        position += k_p * residual
+        velocity += k_v * residual
+        p, c, v = (1 - k_p) * p, (1 - k_p) * c, v - k_v * c
+        return position, velocity, (p, c, v)
 
     def _step_th(self, new_data: Optional[float], last_th: float) -> float:
         """
