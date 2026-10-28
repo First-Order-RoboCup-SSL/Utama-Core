@@ -3,6 +3,10 @@ from abc import ABC, abstractmethod
 from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.motion_planning.src.common.pose_ahead import (
+    PoseAhead,
+    control_latency_s,
+)
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 
 
@@ -10,6 +14,8 @@ class MotionController(ABC):
     def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
         self.mode = mode
         self.rsim_env: SSLStandardEnv | None = rsim_env
+        # `move()` plans from where our robots will be when its command takes effect.
+        self.pose_ahead = PoseAhead(control_latency_s(mode))
 
     @abstractmethod
     def calculate(

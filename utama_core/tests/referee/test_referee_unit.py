@@ -33,6 +33,7 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
 from utama_core.skills.src.utils.move_utils import empty_command
 
 # ---------------------------------------------------------------------------
@@ -129,7 +130,9 @@ def _make_blackboard(game: Game, cmd_map=None):
     bb = SimpleNamespace()
     bb.game = game
     bb.cmd_map = cmd_map if cmd_map is not None else {}
-    bb.motion_controller = SimpleNamespace(calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0))
+    bb.motion_controller = SimpleNamespace(
+        calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0), pose_ahead=PoseAhead(0.0)
+    )
     return bb
 
 

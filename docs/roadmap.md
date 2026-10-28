@@ -200,6 +200,13 @@ entry by its title, not its number.
          Robot-robot avoidance needs it most: on 2026-10-27 two robots met head-on at 1 m/s each
          (their placer running to the ball, ours clearing away from it along the same line) and
          touched; each planner saw the other, but 79 ms late and braking sideways at ~1.8 m/s².
+         *Delay prediction done 2026-10-28:* `move()` plans from our robots' pose
+         `RobotParams.CONTROL_LATENCY_S` (real: 0.079 s) ahead (`motion_planning/src/common/pose_ahead.py`).
+         Checked in rsim given the calibrated robot (delay, gains and per-axis acceleration
+         applied in the sim by a scratch harness): driving while turning, off-line drift 30 → 7 cm;
+         motion benchmark collisions with the delay alone 7 → 3 (24 → 26 of 29 pass). With the
+         sideways acceleration added it is still 24 of 29 with or without prediction: per-axis
+         acceleration in the planner is next.
     - *Calibration routine (the full plan):* per robot, at full battery on the
       competition carpet: commanded vs measured speed at a few speeds, acceleration and
       braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from

@@ -22,10 +22,13 @@ def move(
 ) -> RobotCommand:
     """Calculate the robot command to move towards a target point with a specified orientation."""
 
-    robot = game.friendly_robots[robot_id]
+    # From where our robots will be when this command takes effect (`PoseAhead`), and in the
+    # robot's frame as it will be turned by then.
+    ahead = motion_controller.pose_ahead.game(game)
+    robot = ahead.friendly_robots[robot_id]
 
     global_velocity, angular_vel = motion_controller.calculate(
-        game=game,
+        game=ahead,
         robot_id=robot_id,
         target_pos=target_coords,
         target_oren=target_oren,
