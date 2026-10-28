@@ -20,6 +20,7 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
         "score_goal.py",
         "dribble_and_shoot.py",
         "pass_receive.py",
+        "passing_rally.py",
         "save_and_counter.py",
         "calibrate_robot.py",
         "demo_referee_feedback_gui.py",

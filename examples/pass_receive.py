@@ -269,25 +269,39 @@ class PassReceiveTactic(BaseTactic[None]):
     ) -> tuple[dict[RobotId, RobotCommand], None]:
         return {rid: self._command(game, ctx, rid) for rid in robot_ids}, mem
 
+    def role(self, game: Game, robot_id: int) -> str:
+        return pass_role(game, robot_id)
+
+    def open_spot(self, game: Game, robot_id: int) -> Vector2D:
+        """Where the robot waits for the partner's pass."""
+        return get_open_spot(game, robot_id)
+
+    def target(self, game: Game, robot_id: int) -> tuple[Vector2D, bool]:
+        """What the passer kicks at, and whether it waits for the partner to be set first."""
+        return _partner(game).p, True
+
+    def partner_set(self, game: Game, partner: Robot) -> bool:
+        return partner_ready(game, partner)
+
     def _command(self, game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
-        role = pass_role(game, robot_id)
-        if ctx.match_log is not None:
-            ctx.match_log.trace_if_changed(tick=0, sim_time=game.ts, key=f"pass_receive[{robot_id}].role", value=role)
+        role = self.role(game, robot_id)
+        ctx.trace(game, f"pass_receive[{robot_id}].role", role)
         if role in ("hold", "wait"):
             return empty_command()
         me = game.friendly_robots[robot_id]
         ball = game.ball.p.to_2d()
         mc = ctx.motion_controller
         if role == "get_open":
-            return move(game, mc, robot_id, get_open_spot(game, robot_id), me.p.angle_to(ball))
+            return move(game, mc, robot_id, self.open_spot(game, robot_id), me.p.angle_to(ball))
         if role == "receive":
             return move(game, mc, robot_id, receive_spot(game, robot_id), me.p.angle_to(ball), dribbling=True)
-        # "pass": aimed at the partner from the ball (as `_pass_exec` aims).
-        aim = ball.angle_to(_partner(game).p)
+        # "pass": aimed at the target from the ball (as `_pass_exec` aims).
+        target, wait_for_partner = self.target(game, robot_id)
+        aim = ball.angle_to(target)
         if has_ball(game, robot_id):  # on the kicker (the ball sensor)
             if not oriented_towards(game, robot_id, aim, AIM_TOLERANCE_RAD):
                 return turn_on_spot(game, mc, robot_id, aim, dribbling=True)  # pivots round the ball
-            if partner_ready(game, _partner(game)):
+            if not wait_for_partner or self.partner_set(game, _partner(game)):
                 return kick()
             return empty_command(dribbler_on=True)
         # Not on it yet: line up behind the ball, facing the partner, then drive onto it (as
@@ -309,10 +323,10 @@ def _still():
     return ScriptedMovesTactic(script=())
 
 
-TACTICS = {"pass_receive": PassReceiveTactic, "still": _still}
-
-
-def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
+def build_runner(
+    mode: str, port: int = DASHBOARD_PORT, tactic=PassReceiveTactic, name: str = "pass_receive"
+) -> StrategyRunner:
+    """Both robots running `tactic` (a `PassReceiveTactic`), its log and Strategy-panel choice named `name`."""
     real = mode == "real"
     if ROBOT_A_COLOUR not in ("yellow", "blue"):
         raise ValueError(f"ROBOT_A_COLOUR must be 'yellow' or 'blue', got {ROBOT_A_COLOUR!r}")
@@ -330,14 +344,14 @@ def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
     referee_view.attach(server, referee, profile)
 
     game_log = (
-        f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_pass_receive.log" if RECORD and mode != "rsim" else None
+        f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_{name}.log" if RECORD and mode != "rsim" else None
     )
     if game_log:
         print(f"Recording to {game_log}")
     runner = StrategyRunner(
         game_log_path=game_log,
-        strategy=_one_robot_strategy(a_id, PassReceiveTactic),
-        opp_strategy=_one_robot_strategy(b_id, PassReceiveTactic),
+        strategy=_one_robot_strategy(a_id, tactic),
+        opp_strategy=_one_robot_strategy(b_id, tactic),
         my_team_is_yellow=a_is_yellow,
         my_team_is_right=False,  # either way: neither robot plays a goal
         mode=mode,
@@ -354,14 +368,15 @@ def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
         blue_robot_profiles=b_profiles if a_is_yellow else a_profiles,
     )
     # The Live tab's Strategy panel: stand either robot still, or restart it, while halted.
+    tactics = {name: tactic, "still": _still}
     strategy_view.attach(
         server,
         runner,
         choices={
-            "my": {n: (lambda t=t: _one_robot_strategy(a_id, t)) for n, t in TACTICS.items()},
-            "opp": {n: (lambda t=t: _one_robot_strategy(b_id, t)) for n, t in TACTICS.items()},
+            "my": {n: (lambda t=t: _one_robot_strategy(a_id, t)) for n, t in tactics.items()},
+            "opp": {n: (lambda t=t: _one_robot_strategy(b_id, t)) for n, t in tactics.items()},
         },
-        running={"my": "pass_receive", "opp": "pass_receive"},
+        running={"my": name, "opp": name},
     )
     return runner
 
