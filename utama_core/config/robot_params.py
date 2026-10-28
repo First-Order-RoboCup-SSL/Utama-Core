@@ -14,6 +14,9 @@ class RobotParams:
     # From a command being sent to vision seeing the robot respond (radio, motors and vision
     # together). `move()` plans from where our robots will be by then (`PoseAhead`).
     CONTROL_LATENCY_S: float = 0.0
+    # Acceleration along the robot's sideways axis, where it is weaker than forward; None is
+    # MAX_ACCELERATION. Only `trajsample` plans with it (`Trajectory2D.compute`).
+    MAX_SIDEWAYS_ACCELERATION: float | None = None
 
 
 GRSIM_PARAMS = RobotParams(
@@ -47,4 +50,6 @@ REAL_PARAMS = RobotParams(
     # Median loop delay of yellow 1's calibration, 2026-10-27 (58-112 ms per step):
     # replays/field/20261027_225327_real_calibrate.calibration.json. Re-measure with `pixi run calibrate`.
     CONTROL_LATENCY_S=0.079,
+    # The same calibration: sideways 1.6-1.9 m/s^2 (2 steps), forward 4.5-5.3 at 1 m/s.
+    MAX_SIDEWAYS_ACCELERATION=1.8,
 )

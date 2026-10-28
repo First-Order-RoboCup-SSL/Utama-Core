@@ -205,8 +205,14 @@ entry by its title, not its number.
          Checked in rsim given the calibrated robot (delay, gains and per-axis acceleration
          applied in the sim by a scratch harness): driving while turning, off-line drift 30 → 7 cm;
          motion benchmark collisions with the delay alone 7 → 3 (24 → 26 of 29 pass). With the
-         sideways acceleration added it is still 24 of 29 with or without prediction: per-axis
-         acceleration in the planner is next.
+         sideways acceleration added it is still 24 of 29 with or without prediction.
+         *Sideways acceleration, 2026-10-28:* `RobotParams.MAX_SIDEWAYS_ACCELERATION` (real 1.8),
+         used by `trajsample` only; `fpp` plans paths, not motions, so it cannot use it. With the
+         calibrated robot `trajsample` collides in 9 of 50 seeded close encounters against `fpp`'s
+         25, and passes 29 of 29, but takes ~30 % longer in crowds
+         ([motion_planning_comparison.md](motion_planning_comparison.md#on-the-calibrated-robot-2026-10-28)).
+         *Open:* run the real robots on `trajsample` (`control_scheme="trajsample"`) in a field
+         session and compare with `fpp` in the same drills; the sim evaluation stays on `fpp`.
     - *Calibration routine (the full plan):* per robot, at full battery on the
       competition carpet: commanded vs measured speed at a few speeds, acceleration and
       braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from

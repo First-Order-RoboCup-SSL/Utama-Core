@@ -195,3 +195,31 @@ stopped fraction = yielding, oscillation or local minima; p95 latency matters mo
 mean at 60 Hz. There is deliberately no weighted overall score: the speed/clearance/compute
 trade-off is a team decision, and one scalar would hide why a planner won. Archive the JSON
 (it records the git revision) and compare matching rows across revisions.
+
+## On the calibrated robot (2026-10-28)
+
+The benchmark's rsim robots respond at once and accelerate alike in every direction; yellow 1's
+calibration (`replays/field/20261027_225327_real_calibrate.calibration.json`) says a real robot
+acts 79 ms after a command and accelerates sideways at about 1.8 m/s² against 4–5 forward.
+Given those (delay through `SimNoise.latency_s`; gains and per-axis acceleration applied to the
+sim's commands by a harness that is not checked in), with `move()`'s delay prediction
+(`PoseAhead`) on:
+
+| | Collisions, 5 close scenarios × 10 vision-noise seeds | Full suite passed (one run) | Total time |
+|---|---:|---:|---:|
+| `fpp`, plain sim | 4 / 50 | 28 / 29 | 87 s |
+| `fpp`, calibrated | 25 / 50 | 24 / 29 | 85 s |
+| `trajsample`, calibrated | 10 / 50 | 26 / 29 | 101 s |
+| `trajsample`, calibrated, planning with the sideways limit | 9 / 50 | 29 / 29 | 112 s |
+| `dwa`, plain sim | 37 / 50 | | |
+
+The 5 scenarios are `mirror_swap`, `ball_scrum`, `head_on_swap`, `box_clearing_scrum` and
+`keeper_switchback`; one deterministic run flips on 1 cm grazes, so compare seeded runs.
+`fpp` plans a path, not a motion: in `box_clearing_scrum` its way past an attacker was a
+sidestep on the slow axis, made 3 cm in 0.4 s instead of 10, into the attacker. A per-axis cap on
+the commands cannot help where the robot caps itself the same way. `trajsample` plans
+acceleration-limited trajectories, and with `RobotParams.MAX_SIDEWAYS_ACCELERATION` (real
+robots: 1.8; `None` in the sims, so their results are unchanged) slows each candidate by its
+share across the robot's heading (`Trajectory2D.compute`). Its closest approaches roughly
+doubled (`box_clearing_scrum` 0.13 → 0.29 m median); the price is about 30 % more time in crowds.
+`mirror_swap` (6v6 all swapping) still grazes in 9 of 10 seeds.

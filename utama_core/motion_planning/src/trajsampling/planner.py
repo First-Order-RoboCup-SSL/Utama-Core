@@ -438,9 +438,11 @@ _STATIC_COLLISION_RANK = -1e18
 
 
 class TrajectorySamplingPlanner:
-    def __init__(self, v_max: float, a_max: float):
+    def __init__(self, v_max: float, a_max: float, a_sideways: float | None = None):
         self.v_max = v_max
         self.a_max = a_max
+        self.a_sideways = a_sideways  # see `Trajectory2D.compute`
+        self._heading = 0.0  # of the robot `plan()` is planning for
         self.config = config
         # Per-robot currently-committed (trajectory, ts planned, target it
         # was planned for). Read by two consumers: (1) `plan()` itself, to
@@ -560,6 +562,7 @@ class TrajectorySamplingPlanner:
         robot = game.friendly_robots[robot_id]
         p0 = (robot.p.x, robot.p.y)
         v0 = (robot.v.x, robot.v.y)
+        self._heading = robot.orientation
         priority_enabled = _priority_blocking_enabled(game)
 
         # `None` (the default for every current caller -- nothing passes
@@ -634,7 +637,7 @@ class TrajectorySamplingPlanner:
         if reused is not None:
             return self._with_current_clearance(reused, p0, obstacles)
 
-        direct = Trajectory2D.compute(p0, v0, target_pos, self.v_max, self.a_max)
+        direct = self._trajectory(p0, v0, target_pos, self.v_max)
         collision_time, direct_kind = self._check_collision(direct, obstacle_arrays)
         if collision_time is None:
             self._commit(robot_id, game.ts, direct, target_pos)
@@ -698,7 +701,7 @@ class TrajectorySamplingPlanner:
         # robot to yield to dynamic crossing obstacles along a straight line rather
         # than forcing an excessive spatial detour.
         for v_scale in (0.75, 0.55):
-            direct_mod = Trajectory2D.compute(p0, v0, target_pos, v_scale * self.v_max, self.a_max)
+            direct_mod = self._trajectory(p0, v0, target_pos, v_scale * self.v_max)
             t_col_mod, mod_kind = self._check_collision(direct_mod, obstacle_arrays)
             if t_col_mod is None:
                 best_accepted_duration = direct_mod.duration
@@ -971,14 +974,14 @@ class TrajectorySamplingPlanner:
         whatever obstacle blocked the direct path -- a materially smaller
         search than trying several switch points per sampled direction.
         """
-        first_leg = Trajectory2D.compute(p0, v0, intermediate, self.v_max, self.a_max)
+        first_leg = self._trajectory(p0, v0, intermediate, self.v_max)
         candidates = []
         for i in range(1, config.MAX_SWITCH_TIME_TRIES + 1):
             switch_t = config.INTERMEDIATE_SWITCH_TIME * i
             if switch_t >= first_leg.duration:
                 break
             (sp, sv) = first_leg.state_at(switch_t)
-            second_leg = Trajectory2D.compute(sp, sv, final_target, self.v_max, self.a_max)
+            second_leg = self._trajectory(sp, sv, final_target, self.v_max)
             candidates.append(TwoSegmentTrajectory(first_leg=first_leg, switch_t=switch_t, second_leg=second_leg))
         if not candidates:
             # First leg is too short for even one switch-time step (e.g. the
@@ -986,7 +989,7 @@ class TrajectorySamplingPlanner:
             # at the leg's own end, the earliest point that's still valid.
             switch_t = first_leg.duration
             (sp, sv) = first_leg.state_at(switch_t)
-            second_leg = Trajectory2D.compute(sp, sv, final_target, self.v_max, self.a_max)
+            second_leg = self._trajectory(sp, sv, final_target, self.v_max)
             candidates.append(TwoSegmentTrajectory(first_leg=first_leg, switch_t=switch_t, second_leg=second_leg))
         return candidates
 
@@ -1455,6 +1458,9 @@ class TrajectorySamplingPlanner:
                     trajectory=trajectory, radius=radius, time_offset=time_offset, owner_id=robot.id
                 )
         return ConstantVelocityObstacle(p0=(robot.p.x, robot.p.y), v=(robot.v.x, robot.v.y), radius=radius)
+
+    def _trajectory(self, p0, v0, p1, v_max: float) -> Trajectory2D:
+        return Trajectory2D.compute(p0, v0, p1, v_max, self.a_max, self.a_sideways, self._heading)
 
     def _commit(self, robot_id: int, ts: float, trajectory, target_pos: Tuple[float, float]) -> None:
         self._committed[robot_id] = (ts, trajectory, target_pos)
