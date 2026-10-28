@@ -7,6 +7,7 @@ and turned on the spot forever (review of #152). Now it moves for a better shot 
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from unittest.mock import MagicMock, patch
 
@@ -77,13 +78,14 @@ _TACTICS = {
 @pytest.mark.parametrize("blocker_y, turns", [(0.05, False), (0.6, True)])
 def test_a_shooter_moves_for_a_better_shot_when_the_best_gap_is_too_narrow(name, blocker_y, turns):
     """`find_best_shot` says aim at the goal centre. With the blocker 5 cm off that line the
-    gate can never open: the shooter repositions (`carry`), it does not turn to it forever. With
+    gate can never open: the shooter repositions (`move`), it does not turn to it forever. With
     the blocker 0.6 m off the line the gap is wide: it turns to shoot as before."""
     module, run = _TACTICS[name]
     with (
         patch(f"{module}.find_best_shot", return_value=(0.0, 1.0)),
         patch(f"{module}.turn_on_spot") as turn,
-        patch(f"{module}.carry") as carry,
+        patch(f"{_pass_and_score.__name__}.turn_on_spot") as pivot,
+        patch(f"{_pass_and_score.__name__}.move") as carry,
         patch(f"{module}.kick") as kick,
     ):
         run(_game(blocker_y))
@@ -92,7 +94,29 @@ def test_a_shooter_moves_for_a_better_shot_when_the_best_gap_is_too_narrow(name,
         assert not carry.called
     else:
         assert carry.called
-        assert not turn.called and not kick.called
+        assert not turn.called and not pivot.called and not kick.called
+
+
+@pytest.mark.parametrize("name", list(_TACTICS))
+def test_a_shooter_facing_away_pivots_to_the_goal_before_moving_for_a_shot(name):
+    """With the ball, no clear shot and facing away from the goal, the shooter pivots on the
+    ball (`turn_on_spot`) and does not slide yet. Sliding while turning lost the ball every
+    time on the real robots (shooting drill, 2026-10-28)."""
+    module, run = _TACTICS[name]
+    game = _game(0.05)
+    shooter = game.friendly_robots[1]
+    game = game.with_friendly_robots({1: dataclasses.replace(shooter, orientation=0.0)})  # the goal is at -x
+    with (
+        patch(f"{module}.find_best_shot", return_value=(0.0, 1.0)),
+        patch(f"{_pass_and_score.__name__}.has_ball", return_value=True),  # the ball turned with it
+        patch(f"{_pass_and_score.__name__}.turn_on_spot") as pivot,
+        patch(f"{_pass_and_score.__name__}.move") as carry,
+        patch(f"{module}.kick") as kick,
+    ):
+        run(game)
+    assert pivot.called
+    assert pivot.call_args.kwargs["dribbling"]
+    assert not carry.called and not kick.called
 
 
 def test_score_goal_fetches_the_ball_before_moving_for_a_shot():
@@ -104,7 +128,7 @@ def test_score_goal_fetches_the_ball_before_moving_for_a_shot():
         patch(f"{_pass_and_score.__name__}.find_best_shot", return_value=(0.0, 1.0)),
         patch(f"{_pass_and_score.__name__}.has_ball", return_value=False),
         patch(f"{_pass_and_score.__name__}.go_to_ball") as fetch,
-        patch(f"{_pass_and_score.__name__}.carry") as carry,
+        patch(f"{_pass_and_score.__name__}.move") as carry,
     ):
         _score_goal(game)
     assert fetch.called

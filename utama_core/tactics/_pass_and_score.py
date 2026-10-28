@@ -45,7 +45,6 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import (
-    carry,
     empty_command,
     kick,
     move,
@@ -439,6 +438,38 @@ _SHOT_SWITCH_MARGIN = (
 )
 
 
+# Facing the goal centre within this, a robot with the ball slides for a better shot; further off
+# it pivots on the ball first (`turn_on_spot`).
+_FACE_GOAL_RAD = 0.3
+
+
+def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
+    """No clear shot: with the ball, slide sideways for one (`no_shot_reposition_target`),
+    facing the goal. A robot that took the ball facing elsewhere pivots on it to face the goal
+    first: turning while sliding lost the ball every time on the real robots (shooting drill,
+    2026-10-28), while the pivot is what pass_receive turns with."""
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    robot = game.friendly_robots[robot_id]
+    goal_oren = robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
+    if not oriented_towards(game, robot_id, goal_oren, _FACE_GOAL_RAD):
+        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · facing the goal")
+        return turn_on_spot(
+            game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, target_oren=goal_oren, dribbling=True
+        )
+    ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
+    reposition = no_shot_reposition_target(
+        robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+    )
+    return move(
+        game=game,
+        motion_controller=ctx.motion_controller,
+        robot_id=robot_id,
+        target_coords=reposition,
+        target_oren=goal_oren,
+        dribbling=True,
+    )
+
+
 def _score_goal(
     game: Game, ctx: TickContext, robot_id: int, prev_best_shot_y: Optional[float] = None
 ) -> tuple[RobotCommand, bool, Optional[float]]:
@@ -474,17 +505,7 @@ def _score_goal(
         # resolves against a stationary blocker (e.g. a keeper at the goal
         # mouth) — nothing about a stationary position changes the shot
         # search's inputs, so it never comes back non-None on its own.
-        reposition = no_shot_reposition_target(
-            robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-        )
-        cmd = carry(
-            game=game,
-            motion_controller=ctx.motion_controller,
-            robot_id=robot_id,
-            target_coords=reposition,
-            target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-        )
-        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
+        cmd = move_for_a_shot(game, ctx, robot_id)
         return cmd, False, prev_best_shot_y
 
     target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))

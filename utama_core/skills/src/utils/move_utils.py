@@ -3,12 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-from utama_core.config.physical_constants import (
-    BALL_RADIUS,
-    CARRY_SPEED,
-    CARRY_TURN,
-    ROBOT_RADIUS,
-)
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -42,6 +37,17 @@ def move(
 
     forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
 
+    if dribbling and robot.has_ball:
+        # Slowed together to what the robot can carry the ball at, so the path keeps its shape: at
+        # full speed (1 m/s, 4 rad/s) the real robots lost the ball within 0.2 s (2026-10-28).
+        speed = math.hypot(forward_vel, left_vel)
+        scale = 1.0
+        if motion_controller.carry_speed is not None and speed > motion_controller.carry_speed:
+            scale = motion_controller.carry_speed / speed
+        if motion_controller.carry_turn is not None and abs(angular_vel) * scale > motion_controller.carry_turn:
+            scale = motion_controller.carry_turn / abs(angular_vel)
+        forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
+
     return RobotCommand(
         local_forward_vel=forward_vel,
         local_left_vel=left_vel,
@@ -49,26 +55,6 @@ def move(
         kick=0,
         chip=0,
         dribble=1 if dribbling else 0,
-    )
-
-
-def carry(
-    game: Game,
-    motion_controller: MotionController,
-    robot_id: int,
-    target_coords: Vector2D,
-    target_oren: float,
-) -> RobotCommand:
-    """`move` with the ball on the dribbler, no faster than `CARRY_SPEED` and `CARRY_TURN`
-    (scaled together, so the path keeps its shape). At full speed with a hard turn the real
-    robot flung the ball off within 0.2 s (shooting drill, 2026-10-28)."""
-    c = move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=True)
-    speed = math.hypot(c.local_forward_vel, c.local_left_vel)
-    scale = min(1.0, CARRY_SPEED / speed if speed else 1.0, CARRY_TURN / abs(c.angular_vel) if c.angular_vel else 1.0)
-    return c._replace(
-        local_forward_vel=c.local_forward_vel * scale,
-        local_left_vel=c.local_left_vel * scale,
-        angular_vel=c.angular_vel * scale,
     )
 
 

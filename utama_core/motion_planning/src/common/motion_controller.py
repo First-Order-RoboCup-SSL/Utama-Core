@@ -4,6 +4,7 @@ from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.pose_ahead import (
+    _PARAMS_BY_MODE,
     PoseAhead,
     control_latency_s,
 )
@@ -16,6 +17,10 @@ class MotionController(ABC):
         self.rsim_env: SSLStandardEnv | None = rsim_env
         # `move()` plans from where our robots will be when its command takes effect.
         self.pose_ahead = PoseAhead(control_latency_s(mode))
+        # `move()` holds a robot with the ball to these (`RobotParams.CARRY_SPEED`/`CARRY_TURN`).
+        params = _PARAMS_BY_MODE[Mode(mode)]
+        self.carry_speed: float | None = params.CARRY_SPEED
+        self.carry_turn: float | None = params.CARRY_TURN
 
     @abstractmethod
     def calculate(

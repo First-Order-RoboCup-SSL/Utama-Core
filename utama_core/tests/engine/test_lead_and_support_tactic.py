@@ -60,6 +60,7 @@ def _ctx() -> TickContext:
     mc = MagicMock()
     mc.calculate.return_value = (Vector2D(0.0, 0.0), 0.0)
     mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed = mc.carry_turn = None
     return TickContext(motion_controller=mc, match_log=None)
 
 

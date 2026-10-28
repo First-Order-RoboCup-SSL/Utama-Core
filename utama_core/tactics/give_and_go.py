@@ -68,8 +68,8 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import carry, kick, move, turn_on_spot
-from utama_core.tactics._pass_and_score import _pass_exec
+from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.tactics._pass_and_score import _pass_exec, move_for_a_shot
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
 _SUGGEST_HANDOFF_TIME = 2.0  # seconds — see suggest_next below
@@ -599,17 +599,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # goal mouth): nothing about the position changes, so the shot
             # search comes back empty forever. Strafe instead; see
             # `no_shot_reposition_target`'s docstring.
-            reposition = no_shot_reposition_target(
-                carrier_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-            )
-            commands[carrier_id] = carry(
-                game=game,
-                motion_controller=ctx.motion_controller,
-                robot_id=carrier_id,
-                target_coords=reposition,
-                target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-            )
-            ctx.trace(game, f"shoot[{carrier_id}]", "no clear shot · moving for one")
+            commands[carrier_id] = move_for_a_shot(game, ctx, carrier_id)
         else:
             target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
             # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.

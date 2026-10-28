@@ -17,6 +17,10 @@ class RobotParams:
     # Acceleration along the robot's sideways axis, where it is weaker than forward; None is
     # MAX_ACCELERATION. Only `trajsample` plans with it (`Trajectory2D.compute`).
     MAX_SIDEWAYS_ACCELERATION: float | None = None
+    # The fastest the robot drives (m/s) and turns (rad/s) with the ball and keeps it: `move()`
+    # scales a dribbling command down to both while the robot has the ball. None: no limit.
+    CARRY_SPEED: float | None = None
+    CARRY_TURN: float | None = None
 
 
 GRSIM_PARAMS = RobotParams(
@@ -52,4 +56,8 @@ REAL_PARAMS = RobotParams(
     CONTROL_LATENCY_S=0.079,
     # The same calibration: sideways 1.6-1.9 m/s^2 (2 steps), forward 4.5-5.3 at 1 m/s.
     MAX_SIDEWAYS_ACCELERATION=1.8,
+    # Field runs 2026-10-28: holding the ball at <= 0.1 m/s and <= 1 rad/s (pass_receive,
+    # passing_rally) kept it; 0.5 m/s with 2 rad/s, reversing or sideways, lost it in 0.2 s.
+    CARRY_SPEED=0.3,
+    CARRY_TURN=1.0,
 )

@@ -4,16 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.config.physical_constants import (
-    BALL_RADIUS,
-    CARRY_SPEED,
-    CARRY_TURN,
-    ROBOT_RADIUS,
-)
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.skills.src.utils.move_utils import carry, turn_on_spot
+from utama_core.skills.src.utils.move_utils import move, turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
 
@@ -143,28 +138,66 @@ def test_turn_on_spot_steers_away_from_a_wedged_teammate():
     assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
 
 
+_CARRY_SPEED, _CARRY_TURN = 0.3, 1.0  # REAL_PARAMS's
+
+
 @pytest.mark.parametrize(
     "velocity, angular_vel, scale",
     [
-        ((1.0, 0.0), 0.5, CARRY_SPEED / 1.0),  # too fast: the speed binds
-        ((0.3, 0.0), 3.9, CARRY_TURN / 3.9),  # turning too hard: the turn binds (2026-10-28: 3.9 rad/s lost the ball)
-        ((-0.6, 0.8), 3.0, min(CARRY_SPEED / 1.0, CARRY_TURN / 3.0)),  # both: the tighter one, for both
-        ((0.3, 0.1), 1.0, 1.0),  # within both: unchanged
+        ((1.0, 0.0), 0.2, _CARRY_SPEED / 1.0),  # too fast: the speed binds
+        ((0.1, 0.0), 4.0, _CARRY_TURN / 4.0),  # turning too hard: the turn binds (2026-10-28: 4 rad/s lost the ball)
+        ((-0.6, 0.8), 3.0, min(_CARRY_SPEED / 1.0, _CARRY_TURN / 3.0)),  # both: the tighter one, for both
+        ((0.1, 0.1), 0.5, 1.0),  # within both: unchanged
     ],
 )
-def test_carry_caps_speed_and_turn_together(velocity, angular_vel, scale):
-    """`carry` scales the whole command down by one factor, so the robot's path and turn keep
-    their shape and only slow down, with the dribbler on."""
-    game = _game({1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=True)}, {}, (ROBOT_RADIUS + BALL_RADIUS, 0.0))
-    mc = MagicMock()
-    mc.pose_ahead = PoseAhead(0.0)
-    mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
-
-    cmd = carry(game=game, motion_controller=mc, robot_id=1, target_coords=Vector2D(1.0, 0.0), target_oren=0.0)
-
+def test_move_holds_a_robot_with_the_ball_to_the_carry_limits(velocity, angular_vel, scale):
+    """Dribbling with the ball, `move` scales the whole command down by one factor, so the
+    robot's path and turn keep their shape and only slow down."""
+    cmd = move(**_carry_case(velocity, angular_vel, has_ball=True, dribbling=True))
     assert cmd.local_forward_vel == pytest.approx(velocity[0] * scale)
     assert cmd.local_left_vel == pytest.approx(velocity[1] * scale)
     assert cmd.angular_vel == pytest.approx(angular_vel * scale)
-    assert math.hypot(cmd.local_forward_vel, cmd.local_left_vel) <= CARRY_SPEED + 1e-9
-    assert abs(cmd.angular_vel) <= CARRY_TURN + 1e-9
-    assert cmd.dribble
+    assert math.hypot(cmd.local_forward_vel, cmd.local_left_vel) <= _CARRY_SPEED + 1e-9
+    assert abs(cmd.angular_vel) <= _CARRY_TURN + 1e-9
+
+
+@pytest.mark.parametrize(
+    "has_ball, dribbling, limits",
+    [
+        (False, True, (_CARRY_SPEED, _CARRY_TURN)),
+        (True, False, (_CARRY_SPEED, _CARRY_TURN)),
+        (True, True, (None, None)),
+    ],
+)
+def test_move_is_not_limited_without_the_ball_without_dribbling_or_in_the_sims(has_ball, dribbling, limits):
+    """Fetching the ball (no ball yet), moving without the dribbler, and every sim (no limits in
+    `RSIM_PARAMS`/`GRSIM_PARAMS`) keep the full command."""
+    cmd = move(**_carry_case((1.0, 0.0), 4.0, has_ball=has_ball, dribbling=dribbling, limits=limits))
+    assert (cmd.local_forward_vel, cmd.local_left_vel, cmd.angular_vel) == pytest.approx((1.0, 0.0, 4.0))
+
+
+def _carry_case(velocity, angular_vel, has_ball, dribbling, limits=(_CARRY_SPEED, _CARRY_TURN)) -> dict:
+    game = _game(
+        {1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=has_ball)}, {}, (ROBOT_RADIUS + BALL_RADIUS, 0.0)
+    )
+    mc = MagicMock()
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed, mc.carry_turn = limits
+    mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
+    return dict(
+        game=game,
+        motion_controller=mc,
+        robot_id=1,
+        target_coords=Vector2D(1.0, 0.0),
+        target_oren=0.0,
+        dribbling=dribbling,
+    )
+
+
+def test_real_robots_have_carry_limits_and_the_sims_do_not():
+    from utama_core.config.robot_params import GRSIM_PARAMS, REAL_PARAMS, RSIM_PARAMS
+
+    assert (REAL_PARAMS.CARRY_SPEED, REAL_PARAMS.CARRY_TURN) == (_CARRY_SPEED, _CARRY_TURN)
+    assert (
+        RSIM_PARAMS.CARRY_SPEED is RSIM_PARAMS.CARRY_TURN is GRSIM_PARAMS.CARRY_SPEED is GRSIM_PARAMS.CARRY_TURN is None
+    )

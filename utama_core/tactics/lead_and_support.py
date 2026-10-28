@@ -48,7 +48,8 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import carry, kick, move, turn_on_spot
+from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.tactics._pass_and_score import move_for_a_shot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
@@ -219,17 +220,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
             if best_shot_y is None:
                 # See `no_shot_reposition_target`'s docstring: freezing here
                 # never resolves against a stationary blocker.
-                reposition = no_shot_reposition_target(
-                    leader_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-                )
-                commands[leader_id] = carry(
-                    game=game,
-                    motion_controller=ctx.motion_controller,
-                    robot_id=leader_id,
-                    target_coords=reposition,
-                    target_oren=leader_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-                )
-                ctx.trace(game, f"shoot[{leader_id}]", "no clear shot · moving for one")
+                commands[leader_id] = move_for_a_shot(game, ctx, leader_id)
             else:
                 target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
                 if heading_on_target(game, leader_id):
