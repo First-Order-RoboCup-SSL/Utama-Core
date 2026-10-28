@@ -105,13 +105,9 @@ def _analyse(log_path: str) -> None:
     print(f"\nWritten {out}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--robot", type=_robot, required=True, help="colour:vision id, e.g. yellow:1")
-    parser.add_argument("--radio", type=int, required=True, help="the robot's radio (firmware) id")
-    parser.add_argument("--mode", choices=("real", "rsim"), default="real", help="rsim: rehearse, nothing recorded")
-    parser.add_argument("--yes", action="store_true", help="answer every question at once (a rehearsal)")
-    args = parser.parse_args()
+def build_runner(args, script, name: str):
+    """(runner, tactic, robot id, label, game log) playing `script` on the robot `args` names, recording
+    to `replays/field/<stamp>_real_<name>_<colour><id>.log` on real robots."""
     colour, vision_id = args.robot
     real = args.mode == "real"
     robot = TestRobot(vision_id=vision_id, firmware_id=args.radio)
@@ -121,8 +117,8 @@ def main() -> None:
     mapping = {robot.vision_id: robot.firmware_id} if real else None
 
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    game_log = f"replays/field/{stamp}_real_calibrate_{colour}{vision_id}.log" if real else None
-    tactic = ScriptedMovesTactic(FULL_SCRIPT)
+    game_log = f"replays/field/{stamp}_real_{name}_{colour}{vision_id}.log" if real else None
+    tactic = ScriptedMovesTactic(script)
     runner = StrategyRunner(
         game_log_path=game_log,
         strategy=_one_robot_strategy(robot_id, lambda: tactic),
@@ -139,34 +135,56 @@ def main() -> None:
         yellow_robot_profiles={robot_id: robot.profile} if is_yellow else None,
         blue_robot_profiles=None if is_yellow else {robot_id: robot.profile},
     )
-    print(f"Calibrating {label}; " + (f"recording to {game_log}" if game_log else "a rehearsal, nothing recorded"))
+    return runner, tactic, robot_id, label, game_log
+
+
+def play(runner, tactic, script, robot_id: int, label: str, yes: bool, on_tick=None) -> bool:
+    """Plays `script` to its end, asking in the terminal at each prompt (`yes`: answers them all).
+    `on_tick(step)` after every tick. False if stopped with Ctrl+C; the robot is halted either way."""
     prompt = _Prompt()
-    total = len(FULL_SCRIPT)
-    finished = False
+    total = len(script)
     try:
         _wait_until_seen(runner, robot_id, label)
         shown = -1
         while not tactic.done:
             runner.step_once()
+            if on_tick is not None and not tactic.done:
+                on_tick(tactic.step)
             if tactic.waiting_for is not None:
-                if args.yes:
+                if yes:
                     print(f">>> {tactic.waiting_for}: yes")
                     tactic.proceed()
                 elif prompt.answered.is_set():
                     prompt.answered.clear()
                     tactic.proceed()
                 elif not prompt.asking:
-                    prompt.ask(f"{FULL_SCRIPT[tactic.step].name}: {tactic.waiting_for}")
+                    prompt.ask(f"{script[tactic.step].name}: {tactic.waiting_for}")
             elif tactic.step != shown and not tactic.done:
-                m = FULL_SCRIPT[tactic.step]
+                m = script[tactic.step]
                 print(f"[{tactic.step + 1:>2}/{total}] {m.name} ({m.seconds:g} s)")
             shown = tactic.step
-        finished = True
+        return True
     except KeyboardInterrupt:
         print("\nStopped: the robot is halted. Nothing analysed.")
+        return False
     finally:
         runner.close()
-    if finished:
+
+
+def parse_args(description: str):
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--robot", type=_robot, required=True, help="colour:vision id, e.g. yellow:1")
+    parser.add_argument("--radio", type=int, required=True, help="the robot's radio (firmware) id")
+    parser.add_argument("--mode", choices=("real", "rsim"), default="real", help="rsim: rehearse, nothing recorded")
+    parser.add_argument("--yes", action="store_true", help="answer every question at once (a rehearsal)")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args(__doc__)
+    runner, tactic, robot_id, label, game_log = build_runner(args, FULL_SCRIPT, "calibrate")
+    print(f"Calibrating {label}; " + (f"recording to {game_log}" if game_log else "a rehearsal, nothing recorded"))
+    if play(runner, tactic, FULL_SCRIPT, robot_id, label, args.yes):
         print(f"\a\nDONE: {label} has played the whole calibration.")
         if game_log:
             print(f"Analysing {game_log} ...\n")

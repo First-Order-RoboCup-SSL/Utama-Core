@@ -61,6 +61,7 @@ replay = "python -m utama_core.replay.replay_player"
 runs = "python -m utama_core.analysis.list_runs"
 debug-robots = "python -m utama_core.team_controller.src.debug_utils.telop_gui"
 calibrate = "python examples/calibrate_robot.py"
+calibrate-tag = "python examples/calibrate_tag.py"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 
