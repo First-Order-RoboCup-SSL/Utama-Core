@@ -48,7 +48,7 @@ The LLM decision model as our team ([openjev.md](openjev.md)); needs a FOR-Engin
 | `tools/flat_net_rl.py` | Self-play reinforcement learning (PPO) for the policy network: against itself, earlier versions and the pool, CPU matches with sampled actions, GPU updates, a greedy check every few iterations |
 | `tools/striker_duel.py` | 1v1: one attacker against one keeper (`GoalkeeperTactic` or flat_rule's), a random start per episode until a goal, a save, a stoppage or 8 s; the attacker's shot or carry from a network or the rule (flat_rule's shot). `play` records the network's decisions, `eval` the goal rate per keeper on fixed starts |
 | `tools/striker_rl.py` | PPO for `striker_duel`'s attacker: CPU episodes with sampled actions, GPU updates (needs a CUDA torch, e.g. FOR-Engine's environment), a greedy check against the rule every few iterations |
-| `tools/striker_grsim.py` | `striker_duel` in an external grSim, in real time (`--mode rsim` without it): the trained attacker (`--weights`) or the rule against a keeper, outcome per episode |
+| `tools/striker_grsim.py` | `striker_duel` in an external grSim, in real time (`--mode rsim` without it): the trained attacker (`--weights`) or the rule against a keeper, outcome per episode. `--field gerf` uses the 3 m x 2.25 m pitch and samples starts within it; the default is the standard 9 m x 6 m field |
 | `tools/jev_full_round.sh` | The split engine against every catalog strategy, 600 s, 4 cells, in tmux workers |
 | `tools/jev_summary.py` | Aggregate a run directory's `*.result.json`, however many workers wrote it |
 | `tools/jev_replay_html.py` | Render a replay with its `.openjev.jsonl` decision log as HTML |

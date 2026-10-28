@@ -33,6 +33,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
@@ -303,17 +304,23 @@ def net_chooser(params: dict[str, np.ndarray], greedy: bool, rng: np.random.Gene
 # --- the duel --------------------------------------------------------------------------------------
 
 
-def sample_start(rng: random.Random) -> Scenario:
+def sample_start(rng: random.Random, field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> Scenario:
     """Ball anywhere from just inside our half to the edge of their area, at rest or rolling; the
-    attacker 0.25-2 m from it on any side; the keeper near its goal's centre."""
-    while True:
-        bx, by = rng.uniform(-0.5, 3.3), rng.uniform(-2.7, 2.7)
-        if bx > 3.2 and abs(by) < 1.25:
+    attacker 0.25-2 m from it, scaled down on smaller fields; the keeper near its goal's centre."""
+    length, width = field_dims.full_field_half_length, field_dims.full_field_half_width
+    front, area_width = length - 2 * field_dims.half_defense_area_depth, field_dims.half_defense_area_width
+    x_scale = length / STANDARD_FIELD_DIMS.full_field_half_length
+    scale = min(x_scale, width / STANDARD_FIELD_DIMS.full_field_half_width)
+    for _ in range(10000):
+        bx, by = rng.uniform(-0.5 * x_scale, front - 0.2), rng.uniform(-width + 0.3, width - 0.3)
+        if bx > front - 0.3 and abs(by) < area_width + 0.25:
             continue
-        d, a = rng.uniform(0.25, 2.0), rng.uniform(-math.pi, math.pi)
+        d, a = rng.uniform(0.25, max(0.25, min(2.0, 2.0 * scale))), rng.uniform(-math.pi, math.pi)
         rx, ry = bx + d * math.cos(a), by + d * math.sin(a)
-        if abs(rx) < 4.3 and abs(ry) < 2.8 and not (rx > 3.3 and abs(ry) < 1.3):
+        if abs(rx) < length - 0.2 and abs(ry) < width - 0.2 and not (rx > front - 0.2 and abs(ry) < area_width + 0.3):
             break
+    else:
+        raise ValueError("Field is too small to sample a striker start with the required clearances")
     speed, heading = (0.0 if rng.random() < 0.4 else rng.uniform(0.3, 1.5)), rng.uniform(-math.pi, math.pi)
     return Scenario(
         sim_time=0.0,
@@ -322,7 +329,16 @@ def sample_start(rng: random.Random) -> Scenario:
         ball_vx=speed * math.cos(heading),
         ball_vy=speed * math.sin(heading),
         friendly_robots=(RobotState(0, rx, ry, rng.uniform(-math.pi, math.pi), 0.0, 0.0),),
-        enemy_robots=(RobotState(0, rng.uniform(4.1, 4.4), rng.uniform(-0.5, 0.5), math.pi, 0.0, 0.0),),
+        enemy_robots=(
+            RobotState(
+                0,
+                rng.uniform(length - 0.4, length - 0.1),
+                rng.uniform(-field_dims.half_goal_width, field_dims.half_goal_width),
+                math.pi,
+                0.0,
+                0.0,
+            ),
+        ),
         referee_command=None,
         source_replay=Path("-"),
     )
@@ -332,7 +348,7 @@ class Duel:
     """One match, one robot a side, replayed from a fresh start every episode: in rsim, or in an
     external grSim (`mode="grsim"`, real time, `tools/striker_grsim.py`)."""
 
-    def __init__(self, mode: str = "rsim") -> None:
+    def __init__(self, mode: str = "rsim", field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> None:
         self.mode = mode
         enable_sim_reuse()
         self.attacker = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
@@ -347,6 +363,7 @@ class Duel:
             my_team_is_yellow=True,
             my_team_is_right=False,
             mode=mode,
+            full_field_dims=field_dims,
             exp_friendly=1,
             exp_enemy=1,
             exp_ball=True,
@@ -364,7 +381,7 @@ class Duel:
         # The last episode's stoppage left the runner re-pinning the ball at its restart spot.
         self.runner._teleport_settle_target = None
         self.runner._pending_placement_teleport = None
-        start = sample_start(rng)
+        start = sample_start(rng, self.runner.full_field_dims)
         if self.mode == "rsim":
             apply_scenario(self.runner, start, verify=True)
         else:
