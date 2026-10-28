@@ -40,6 +40,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
     no_shot_reposition_target,
     oriented_towards,
     segment_blocked,
@@ -225,7 +226,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                 )
             else:
                 target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
-                if oriented_towards(game, leader_id, target_oren):
+                if heading_on_target(game, leader_id):
                     commands[leader_id] = kick()
                 else:
                     commands[leader_id] = turn_on_spot(

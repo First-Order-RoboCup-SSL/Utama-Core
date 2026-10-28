@@ -56,6 +56,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
     in_own_defense_area,
     intercept_point,
     no_shot_reposition_target,
@@ -584,7 +585,8 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # round-robin). Once the carry is spent, shoot at the goal centre
         # instead: a blocked shot keeps the ball live, a foul hands it over.
         carry_spent = carry_exhausted(game, mem.carry_origin)
-        if carry_spent and best_shot_y is None:
+        blind_shot = carry_spent and best_shot_y is None
+        if blind_shot:
             best_shot_y = (goal_y1 + goal_y2) / 2.0
         if not carry_spent and (best_shot_y is None or (first_touch_stuck and not force_shot)):
             # No open lane at all — freezing here (the old behaviour) never
@@ -605,7 +607,11 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             )
         else:
             target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
-            if oriented_towards(game, carrier_id, target_oren):
+            # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.
+            aimed = (
+                oriented_towards(game, carrier_id, target_oren) if blind_shot else heading_on_target(game, carrier_id)
+            )
+            if aimed:
                 commands[carrier_id] = kick()
             else:
                 commands[carrier_id] = turn_on_spot(

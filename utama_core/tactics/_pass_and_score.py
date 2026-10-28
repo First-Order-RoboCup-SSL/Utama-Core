@@ -35,6 +35,7 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
     intercept_point,
     no_shot_reposition_target,
     oriented_towards,
@@ -478,7 +479,7 @@ def _score_goal(
             False,
             best_shot_y,
         )
-    if not oriented_towards(game, robot_id, target_oren):
+    if not heading_on_target(game, robot_id):
         return (
             turn_on_spot(
                 game=game,

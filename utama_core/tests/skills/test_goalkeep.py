@@ -183,7 +183,14 @@ def test_goalkeep_uses_predicted_intercept_inside_goal(monkeypatch):
     assert captured["target"] == Vector2D(_LEFT_KEEPER_X, 0.2)
 
 
-def test_goalkeep_single_keeper_no_prediction_tracks_ball_y(monkeypatch):
+def _angle_between(a: Vector2D, b: Vector2D) -> float:
+    return math.acos((a.x * b.x + a.y * b.y) / (a.mag() * b.mag()))
+
+
+def test_goalkeep_single_keeper_no_prediction_covers_the_shot_bisector(monkeypatch):
+    """No shot under way: the keeper stands where the bisector of the angle the goal mouth
+    subtends at the ball crosses its line, leaving equal angles to both posts. It used to copy
+    the ball's y (here 0.2), which left the far post open (2026-10-27 field runs)."""
     game = SimpleNamespace(
         my_team_is_yellow=True,
         my_team_is_right=False,
@@ -209,7 +216,12 @@ def test_goalkeep_single_keeper_no_prediction_tracks_ball_y(monkeypatch):
     result = gk.goalkeep(game, motion_controller=object(), robot_id=0)
 
     assert result == "sentinel-command"
-    assert captured["target"] == Vector2D(_LEFT_KEEPER_X, 0.2)
+    target, ball = captured["target"], Vector2D(-1.0, 0.2)
+    assert target.x == pytest.approx(_LEFT_KEEPER_X)
+    to_keeper = target - ball
+    to_upper, to_lower = Vector2D(-4.5, 0.5) - ball, Vector2D(-4.5, -0.5) - ball
+    assert _angle_between(to_keeper, to_upper) == pytest.approx(_angle_between(to_keeper, to_lower))
+    assert 0.0 < target.y < 0.2  # pulled towards the centre, off the ball's own y
 
 
 def test_goalkeep_single_keeper_no_prediction_clamps_to_upper_post(monkeypatch):
@@ -221,7 +233,7 @@ def test_goalkeep_single_keeper_no_prediction_clamps_to_upper_post(monkeypatch):
             0: SimpleNamespace(p=Vector2D(-1.35, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
-            p=Vector3D(-0.679, 0.623, 0.0),
+            p=Vector3D(-1.3, 1.0, 0.0),  # wide, level with the keeper: bisector beyond the post
             v=Vector3D(0.078, -2.35, 0.0),
         ),
     )
@@ -252,7 +264,7 @@ def test_goalkeep_single_keeper_no_prediction_clamps_to_lower_post(monkeypatch):
             0: SimpleNamespace(p=Vector2D(-1.35, 0.0), orientation=0.0),
         },
         ball=SimpleNamespace(
-            p=Vector3D(-0.626, -0.495, 0.0),
+            p=Vector3D(-1.3, -1.0, 0.0),
             v=Vector3D(0.002, 0.001, 0.0),
         ),
     )
@@ -608,3 +620,44 @@ def test_goalkeep_takes_off_axis_ball_onto_dribbler_before_turning(monkeypatch):
 
     assert result == "sentinel-onto-ball"
     assert (captured["target_coords"].x, captured["target_coords"].y) == pytest.approx((ball_p.x, ball_p.y))
+
+
+# ---------------------------------------------------------------------------
+# shot_bisector_y and the clearance tolerance
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("ball_y", [0.0, 0.3, -1.2, 2.0])
+def test_shot_bisector_leaves_equal_angles_to_both_posts(ball_y):
+    ball = Vector2D(-2.0, ball_y)
+    y = gk.shot_bisector_y(ball, goal_x=-4.5, goal_half_width=0.5, keeper_x=_LEFT_KEEPER_X)
+    to_keeper = Vector2D(_LEFT_KEEPER_X, y) - ball
+    left = _angle_between(to_keeper, Vector2D(-4.5, 0.5) - ball)
+    right = _angle_between(to_keeper, Vector2D(-4.5, -0.5) - ball)
+    assert left == pytest.approx(right)
+
+
+@pytest.mark.parametrize("ball_x", [_LEFT_KEEPER_X, _LEFT_KEEPER_X - 0.05])
+def test_shot_bisector_of_a_ball_at_or_behind_the_keepers_line_is_its_y(ball_x):
+    assert gk.shot_bisector_y(Vector2D(ball_x, 0.3), -4.5, 0.5, _LEFT_KEEPER_X) == 0.3
+
+
+@pytest.mark.parametrize(
+    "off_rad, kicks", [(ku.CLEARANCE_TOLERANCE_RAD - 0.01, True), (ku.CLEARANCE_TOLERANCE_RAD + 0.01, False)]
+)
+def test_clearance_kicks_within_its_tolerance_of_upfield(monkeypatch, off_rad, kicks):
+    """The real keeper settled ~0.07 rad off upfield and never reached the 0.05 rad shot
+    tolerance, so it never cleared (2026-10-27 field runs)."""
+    game = SimpleNamespace(
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        field=_std_field(False),
+        friendly_robots={0: SimpleNamespace(p=Vector2D(-4.0, 0.0), orientation=off_rad, has_ball=True)},
+        ball=SimpleNamespace(p=Vector3D(-3.9, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
+    )
+    monkeypatch.setattr(ku, "kick", lambda: "sentinel-kick")
+    monkeypatch.setattr(ku, "turn_on_spot", lambda **kw: "sentinel-turn")
+
+    assert ku.kick_upfield(game, motion_controller=object(), robot_id=0) == (
+        "sentinel-kick" if kicks else "sentinel-turn"
+    )

@@ -12,6 +12,7 @@ import math
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
@@ -27,6 +28,7 @@ from utama_core.shared.pass_and_score_geometry import (
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ORIENTATION_TOLERANCE_RAD,
+    SHOT_AIM_ERROR_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
     ball_line_receive_point,
@@ -35,7 +37,10 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_defense_area_hold_point,
     enemy_goal_line,
     has_ball,
+    heading_on_target,
     no_shot_reposition_target,
+    oriented_towards,
+    own_defense_area_exit_point,
     reset_possession_state,
     score_pass_setup,
 )
@@ -145,6 +150,20 @@ def test_enemy_defense_area_hold_point_clamps_y_inside_box_width():
     half_width = STANDARD_FIELD_DIMS.half_defense_area_width
     hold = enemy_defense_area_hold_point(game, at_y=half_width + 5.0)
     assert hold.y < half_width + 5.0
+
+
+@pytest.mark.parametrize("hold_point", [enemy_defense_area_hold_point, own_defense_area_exit_point])
+@pytest.mark.parametrize("extra", [-0.01, 0.01])
+def test_box_hold_point_keeps_the_balls_side_when_the_margin_is_about_the_box_width(hold_point, extra):
+    """2026-10-27 field run: a 1 m wide box and the 0.57 m margin made the limit negative, and the
+    attacker waiting for a ball the keeper held at y = -0.36 drove to y = +0.07 instead."""
+    game = _game((0.0, 0.0))
+    half_width = STANDARD_FIELD_DIMS.half_defense_area_width
+    margin = half_width + extra
+    hold = hold_point(game, at_y=-0.5 * half_width, margin=margin)
+    assert hold.y == pytest.approx(-0.5 * half_width if extra > 0 else -min(0.5 * half_width, -extra))
+    far = hold_point(game, at_y=-2 * half_width, margin=margin)
+    assert far.y == pytest.approx(-half_width if extra > 0 else -(half_width - margin))
 
 
 def test_clamp_outside_enemy_defense_area_clears_planners_obstacle_ring():
@@ -819,3 +838,66 @@ def test_both_clamps_still_apply_just_inside_the_band():
     assert (
         clamp_outside_own_defense_area(_game((0.0, 0.0)), Vector2D(_MY_BOX_FRONT_X + 0.3, -inside)).x < _MY_BOX_FRONT_X
     )
+
+
+# `heading_on_target`: our goal is at +x (`_game`'s my_team_is_right), the enemy goal at -x.
+_SHOOTER = Vector2D(-2.5, 0.0)
+_REACH = STANDARD_FIELD_DIMS.full_field_half_length + _SHOOTER.x  # 2.0 m to the goal line
+
+
+def _shot(orientation: float, others: tuple = ()) -> Game:
+    game = _game((_SHOOTER.x - 0.09, 0.0))
+    frame = game.current
+    enemies = {i: _robot(i, x, y, False) for i, (x, y) in enumerate(others)}
+    shooter = _robot(1, _SHOOTER.x, _SHOOTER.y, True, orientation=orientation)
+    current = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: shooter},
+        enemy_robots=enemies,
+        ball=frame.ball,
+    )
+    return Game(past=GameHistory(10), current=current, field=game.field)
+
+
+def _crossing_orientation(y: float) -> float:
+    return math.atan2(y - _SHOOTER.y, -_REACH)
+
+
+@pytest.mark.parametrize("inside", [0.001, -0.001])
+def test_a_shot_kicks_only_while_its_line_crosses_the_goal_room_inside_the_post(inside):
+    """The line may cross at most ball radius + aim error at its length inside the post."""
+    edge_y = STANDARD_FIELD_DIMS.half_goal_width
+    for _ in range(50):  # the room depends on the line's length, which depends on the crossing
+        edge_y = (
+            STANDARD_FIELD_DIMS.half_goal_width
+            - BALL_RADIUS
+            - math.hypot(_REACH, edge_y) * math.tan(SHOT_AIM_ERROR_RAD)
+        )
+    assert heading_on_target(_shot(_crossing_orientation(edge_y - inside)), 1) is (inside > 0)
+
+
+def test_a_shot_kicks_well_off_the_best_heading_while_its_line_is_in_the_open_goal():
+    """2026-10-27 field runs: the fixed 0.06 rad tolerance kept a robot turning at an open goal.
+    0.15 rad off the goal's centre still crosses 0.3 m inside a 1 m goal from 2 m."""
+    assert heading_on_target(_shot(math.pi + 0.15), 1)
+
+
+def test_a_shot_facing_away_from_the_goal_never_kicks():
+    assert not heading_on_target(_shot(0.0), 1)
+
+
+@pytest.mark.parametrize("clear", [0.001, -0.001])
+def test_a_shot_kicks_only_while_its_line_clears_the_keeper_by_robot_ball_and_aim_room(clear):
+    """2026-10-27 field run: a shot kicked within tolerance of the open corner went at the keeper."""
+    along = 1.5
+    need = ROBOT_RADIUS + BALL_RADIUS + along * math.tan(SHOT_AIM_ERROR_RAD)
+    keeper = (_SHOOTER.x - along, need + clear)
+    assert heading_on_target(_shot(math.pi, (keeper,)), 1) is (clear > 0)
+
+
+def test_a_robot_behind_the_shooter_or_past_the_goal_line_does_not_block():
+    behind = (_SHOOTER.x + 0.5, 0.0)
+    past_line = (-STANDARD_FIELD_DIMS.full_field_half_length - 0.1, 0.0)
+    assert heading_on_target(_shot(math.pi, (behind, past_line)), 1)

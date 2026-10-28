@@ -40,3 +40,23 @@ def test_once_done_the_robot_stands_still():
     tactic = ScriptedMovesTactic(SCRIPT)
     last = _run(tactic, 0.0, 1.2)
     assert tactic.done and last[4] == last[7] and last[4].local_forward_vel == 0.0 and last[4].angular_vel == 0.0
+
+
+def test_a_prompt_holds_the_robot_still_until_the_operator_proceeds():
+    script = (Move("go", 0.2, forward=0.3), Move("place ball", 0.0, prompt="ball on"), Move("kick", 0.2, kick=True))
+    tactic = ScriptedMovesTactic(script)
+    _run(tactic, 0.0, 0.3)
+    assert tactic.waiting_for == "ball on"
+    held = _run(tactic, 0.3, 5.0)  # however long it waits
+    assert held[4].local_forward_vel == 0.0 and not held[4].kick
+    tactic.proceed()
+    kicked = _tick(tactic, 5.3 + 1 / 60)
+    assert tactic.waiting_for is None and kicked[4].kick
+    # The wait counts for nothing: "kick" plays its whole 0.2 s.
+    assert _run(tactic, 5.3 + 2 / 60, 0.15)[4].kick
+
+
+def test_dribble_and_kick_moves_reach_the_robot():
+    tactic = ScriptedMovesTactic((Move("dribble", 0.5, turn=1.0, dribble=True),))
+    command = _tick(tactic, 0.0)[4]
+    assert command.dribble and command.angular_vel == 1.0 and not command.kick
