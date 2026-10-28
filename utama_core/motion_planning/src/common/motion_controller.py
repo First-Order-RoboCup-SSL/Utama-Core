@@ -36,6 +36,12 @@ class MotionController(ABC):
         """
         ...
 
+    def sent(self, robot_id: int, velocity: Vector2D, angular_vel: float) -> None:
+        """The command `move()` actually sent, when it slowed `calculate()`'s down (a robot with the
+        ball, `carry_speed`/`carry_turn`). A controller that ramps from its last output ramps from
+        this instead: ramping from the faster one lurched a real robot 0.9 m/s sideways when it
+        lost the ball mid-dribble (dribble_and_shoot, 2026-10-28)."""
+
     def reset(self, robot_id: int) -> None:
         """
         Reset the internal state of the motion controller for the specified robot.

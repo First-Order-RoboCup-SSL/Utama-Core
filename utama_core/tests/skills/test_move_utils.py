@@ -201,3 +201,29 @@ def test_real_robots_have_carry_limits_and_the_sims_do_not():
     assert (
         RSIM_PARAMS.CARRY_SPEED is RSIM_PARAMS.CARRY_TURN is GRSIM_PARAMS.CARRY_SPEED is GRSIM_PARAMS.CARRY_TURN is None
     )
+
+
+@pytest.mark.parametrize("controller", ["fpp", "pid"])
+def test_a_robot_that_loses_the_ball_ramps_from_the_carry_speed_it_was_sent(controller):
+    """Carrying the ball to its right, `move` sends 0.3 m/s although the controller asked for
+    ~1 m/s. When the ball is lost and the target swings ahead, the next command ramps from the
+    0.3 m/s sent: ramping from the 1 m/s never sent lurched the real robot 0.9 m/s sideways
+    (dribble_and_shoot, 2026-10-28)."""
+    from utama_core.config.enums import Mode
+    from utama_core.motion_planning.src.controllers.fastpathplanning import (
+        FastPathPlanningController,
+    )
+    from utama_core.motion_planning.src.controllers.pid_controller import PIDController
+
+    mc = {"fpp": FastPathPlanningController, "pid": PIDController}[controller](Mode.REAL)
+    mc.pose_ahead = PoseAhead(0.0)
+    ball = (ROBOT_RADIUS + BALL_RADIUS, 0.0)
+    with_ball = _game({1: _robot(1, 0.0, 0.0, True, has_ball=True)}, {}, ball)
+    for _ in range(30):  # long enough for the controller's own output to reach full speed
+        carried = move(with_ball, mc, 1, Vector2D(0.0, -2.0), 0.0, dribbling=True)
+    assert math.hypot(carried.local_forward_vel, carried.local_left_vel) == pytest.approx(0.3)
+
+    lost = _game({1: _robot(1, 0.0, 0.0, True, has_ball=False)}, {}, ball)
+    cmd = move(lost, mc, 1, Vector2D(1.0, 0.0), 0.0, dribbling=True)
+
+    assert cmd.local_left_vel >= -0.3 - 1e-9  # no faster to the right than it was going

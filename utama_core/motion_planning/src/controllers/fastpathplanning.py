@@ -37,6 +37,10 @@ class FastPathPlanningController(MotionController):
 
         return vel, oren
 
+    def sent(self, robot_id: int, velocity: Vector2D, angular_vel: float) -> None:
+        self.pid_trans.accel_limiter.set_last(robot_id, velocity)
+        self.pid_oren.accel_limiter.set_last(robot_id, angular_vel)
+
     def reset(self, robot_id):
         self.pid_oren.reset(robot_id)
         self.pid_trans.reset(robot_id)

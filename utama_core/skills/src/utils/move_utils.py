@@ -46,7 +46,9 @@ def move(
             scale = motion_controller.carry_speed / speed
         if motion_controller.carry_turn is not None and abs(angular_vel) * scale > motion_controller.carry_turn:
             scale = motion_controller.carry_turn / abs(angular_vel)
-        forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
+        if scale < 1.0:
+            forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
+            motion_controller.sent(robot_id, global_velocity * scale, angular_vel)
 
     return RobotCommand(
         local_forward_vel=forward_vel,
