@@ -116,9 +116,9 @@ def test_a_tolerance_edge_kick_at_the_inset_post_stays_inside_the_true_goal():
 
     shooter_pos = Vector2D(3.141, 1.941)  # the traced shooter's position
     aimed_orientation = shooter_pos.angle_to(Vector2D(goal_x, goal_y2))  # aim at the inset (safe) post edge
-    # A kick fired at the very edge of the tolerance band around that aim —
-    # the worst case `oriented_towards` still lets through.
-    kicked_orientation = aimed_orientation + ORIENTATION_TOLERANCE_RAD
+    # A kick fired at the very edge of the aim error around that aim — the worst
+    # case the shot gate (`heading_on_target`, SHOT_AIM_ERROR_RAD) still lets through.
+    kicked_orientation = aimed_orientation + SHOT_AIM_ERROR_RAD
 
     # Where the ball actually crosses the goal line at that kicked angle.
     exit_y = shooter_pos.y + math.tan(kicked_orientation) * (goal_x - shooter_pos.x)

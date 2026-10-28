@@ -336,15 +336,15 @@ def test_oriented_towards_exactly_at_tolerance_boundary_is_inside():
     assert oriented_towards(game, 1, 0.05 + 1e-9, tolerance=0.05) is False
 
 
-def test_a_robot_up_to_0_06_rad_off_its_aim_counts_as_aimed():
-    """The default tolerance is 0.06 rad, up from 0.05: the real robots' motors can't turn slowly
+def test_a_robot_up_to_0_07_rad_off_its_aim_counts_as_aimed():
+    """The default tolerance is 0.07 rad, up from 0.05: the real robots' motors can't turn slowly
     enough to close a smaller error, so a pass could wait on a tiny one (field day 2026-10-28)."""
     friendly = {1: make_robot(1, is_friendly=True, x=0.0, y=0.0, orientation=0.0)}
     game = build_game(friendly, {}, ball=make_ball())
 
-    assert oriented_towards(game, 1, 0.055) is True
-    assert oriented_towards(game, 1, -0.059) is True
-    assert oriented_towards(game, 1, 0.061) is False
+    assert oriented_towards(game, 1, 0.065) is True
+    assert oriented_towards(game, 1, -0.069) is True
+    assert oriented_towards(game, 1, 0.071) is False
 
 
 def test_oriented_towards_wraps_around_pi_boundary():
