@@ -48,7 +48,7 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.src.utils.move_utils import carry, kick, move, turn_on_spot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
@@ -222,13 +222,12 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                 reposition = no_shot_reposition_target(
                     leader_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
                 )
-                commands[leader_id] = move(
+                commands[leader_id] = carry(
                     game=game,
                     motion_controller=ctx.motion_controller,
                     robot_id=leader_id,
                     target_coords=reposition,
                     target_oren=leader_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-                    dribbling=True,
                 )
                 ctx.trace(game, f"shoot[{leader_id}]", "no clear shot · moving for one")
             else:

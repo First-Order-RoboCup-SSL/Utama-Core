@@ -4,10 +4,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+from utama_core.config.physical_constants import (
+    BALL_RADIUS,
+    CARRY_SPEED,
+    CARRY_TURN,
+    ROBOT_RADIUS,
+)
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.skills.src.utils.move_utils import turn_on_spot
+from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
+from utama_core.skills.src.utils.move_utils import carry, turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
 
@@ -135,3 +141,30 @@ def test_turn_on_spot_steers_away_from_a_wedged_teammate():
 
     final_call_kwargs = mc.calculate.call_args_list[-1].kwargs
     assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
+
+
+@pytest.mark.parametrize(
+    "velocity, angular_vel, scale",
+    [
+        ((1.0, 0.0), 0.5, CARRY_SPEED / 1.0),  # too fast: the speed binds
+        ((0.3, 0.0), 3.9, CARRY_TURN / 3.9),  # turning too hard: the turn binds (2026-10-28: 3.9 rad/s lost the ball)
+        ((-0.6, 0.8), 3.0, min(CARRY_SPEED / 1.0, CARRY_TURN / 3.0)),  # both: the tighter one, for both
+        ((0.3, 0.1), 1.0, 1.0),  # within both: unchanged
+    ],
+)
+def test_carry_caps_speed_and_turn_together(velocity, angular_vel, scale):
+    """`carry` scales the whole command down by one factor, so the robot's path and turn keep
+    their shape and only slow down, with the dribbler on."""
+    game = _game({1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=True)}, {}, (ROBOT_RADIUS + BALL_RADIUS, 0.0))
+    mc = MagicMock()
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
+
+    cmd = carry(game=game, motion_controller=mc, robot_id=1, target_coords=Vector2D(1.0, 0.0), target_oren=0.0)
+
+    assert cmd.local_forward_vel == pytest.approx(velocity[0] * scale)
+    assert cmd.local_left_vel == pytest.approx(velocity[1] * scale)
+    assert cmd.angular_vel == pytest.approx(angular_vel * scale)
+    assert math.hypot(cmd.local_forward_vel, cmd.local_left_vel) <= CARRY_SPEED + 1e-9
+    assert abs(cmd.angular_vel) <= CARRY_TURN + 1e-9
+    assert cmd.dribble

@@ -68,7 +68,7 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.src.utils.move_utils import carry, kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import _pass_exec
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
@@ -602,13 +602,12 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             reposition = no_shot_reposition_target(
                 carrier_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
             )
-            commands[carrier_id] = move(
+            commands[carrier_id] = carry(
                 game=game,
                 motion_controller=ctx.motion_controller,
                 robot_id=carrier_id,
                 target_coords=reposition,
                 target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-                dribbling=True,
             )
             ctx.trace(game, f"shoot[{carrier_id}]", "no clear shot · moving for one")
         else:

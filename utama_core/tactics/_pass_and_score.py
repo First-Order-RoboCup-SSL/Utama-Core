@@ -45,6 +45,7 @@ from utama_core.shared.pass_and_score_geometry import (
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import (
+    carry,
     empty_command,
     kick,
     move,
@@ -456,26 +457,8 @@ def _score_goal(
         game, robot_id, robot.p.angle_to(Vector2D(goal_x, best_shot_y))
     ):
         best_shot_y = None  # a gap too narrow for the shot gate: move for a better one
-    if best_shot_y is None:
-        # See `no_shot_reposition_target`'s docstring: freezing here never
-        # resolves against a stationary blocker (e.g. a keeper at the goal
-        # mouth) — nothing about a stationary position changes the shot
-        # search's inputs, so it never comes back non-None on its own.
-        reposition = no_shot_reposition_target(
-            robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-        )
-        cmd = move(
-            game=game,
-            motion_controller=ctx.motion_controller,
-            robot_id=robot_id,
-            target_coords=reposition,
-            target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-            dribbling=True,
-        )
-        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
-        return cmd, False, prev_best_shot_y
-
-    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
+    # The ball first: moving for a shot without it left the ball behind, and a robot that had
+    # just lost it strafed away from it (shooting drill, 2026-10-28).
     # visual=True: see run_setup_phase's comment on the strict sensor's
     # unreliability — without this the shooter can stall on the ball
     # forever if the IR/contact flag never fires.
@@ -484,8 +467,27 @@ def _score_goal(
         return (
             go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx),
             False,
-            best_shot_y,
+            best_shot_y if best_shot_y is not None else prev_best_shot_y,
         )
+    if best_shot_y is None:
+        # See `no_shot_reposition_target`'s docstring: freezing here never
+        # resolves against a stationary blocker (e.g. a keeper at the goal
+        # mouth) — nothing about a stationary position changes the shot
+        # search's inputs, so it never comes back non-None on its own.
+        reposition = no_shot_reposition_target(
+            robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+        )
+        cmd = carry(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=robot_id,
+            target_coords=reposition,
+            target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
+        )
+        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
+        return cmd, False, prev_best_shot_y
+
+    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
     if not heading_on_target(game, robot_id):
         ctx.trace(game, f"shoot[{robot_id}]", "turning to shoot")
         return (

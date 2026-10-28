@@ -77,19 +77,35 @@ _TACTICS = {
 @pytest.mark.parametrize("blocker_y, turns", [(0.05, False), (0.6, True)])
 def test_a_shooter_moves_for_a_better_shot_when_the_best_gap_is_too_narrow(name, blocker_y, turns):
     """`find_best_shot` says aim at the goal centre. With the blocker 5 cm off that line the
-    gate can never open: the shooter repositions (`move`), it does not turn to it forever. With
+    gate can never open: the shooter repositions (`carry`), it does not turn to it forever. With
     the blocker 0.6 m off the line the gap is wide: it turns to shoot as before."""
     module, run = _TACTICS[name]
     with (
         patch(f"{module}.find_best_shot", return_value=(0.0, 1.0)),
         patch(f"{module}.turn_on_spot") as turn,
-        patch(f"{module}.move") as move,
+        patch(f"{module}.carry") as carry,
         patch(f"{module}.kick") as kick,
     ):
         run(_game(blocker_y))
     if turns:
         assert turn.called or kick.called
-        assert not move.called
+        assert not carry.called
     else:
-        assert move.called
+        assert carry.called
         assert not turn.called and not kick.called
+
+
+def test_score_goal_fetches_the_ball_before_moving_for_a_shot():
+    """Without the ball and with no clear shot, `_score_goal` goes to the ball. It used to move
+    for a better shot first, leaving the ball behind; a robot that had just lost the ball
+    strafed away from it (shooting drill, 2026-10-28)."""
+    game = _game(0.05)
+    with (
+        patch(f"{_pass_and_score.__name__}.find_best_shot", return_value=(0.0, 1.0)),
+        patch(f"{_pass_and_score.__name__}.has_ball", return_value=False),
+        patch(f"{_pass_and_score.__name__}.go_to_ball") as fetch,
+        patch(f"{_pass_and_score.__name__}.carry") as carry,
+    ):
+        _score_goal(game)
+    assert fetch.called
+    assert not carry.called

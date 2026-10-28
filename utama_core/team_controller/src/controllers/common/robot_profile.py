@@ -23,6 +23,7 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
+from utama_core.config.physical_constants import CARRY_SPEED, CARRY_TURN
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.entities.data.command import RobotCommand
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
@@ -31,8 +32,6 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
 
 PUSH_SPEED = 1.0  # m/s forward for a kick's push; REAL_PARAMS.MAX_VEL, the real robots' cap
 PUSH_SECONDS = 0.3  # about 0.3 m of travel: the ball is struck, the robot does not chase it
-CARRY_SPEED = 0.5  # m/s, the fastest a dribbler-less robot carries the ball
-CARRY_TURN = 2.0  # rad/s, the fastest it turns with the ball
 
 _PUSH_TICKS = round(PUSH_SECONDS * CONTROL_FREQUENCY)
 
