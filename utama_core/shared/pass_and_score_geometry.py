@@ -30,10 +30,13 @@ from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
     is_goal_blocked,
 )
 
-ORIENTATION_TOLERANCE_RAD = 0.05
+# How far off its aim a robot may be and still pass, shoot or clear. Up from 0.05 (field day
+# 2026-10-28): the real robots' motors can't turn slowly enough to close a smaller error.
+ORIENTATION_TOLERANCE_RAD = 0.06
 # How far off the robot's heading a kick may leave: `heading_on_target`'s room for error at each
-# distance. The orientation tolerance, the error `oriented_towards` already accepts in a pass.
-SHOT_AIM_ERROR_RAD = ORIENTATION_TOLERANCE_RAD
+# distance. The old orientation tolerance: at 0.06, `shot_heading_reachable`'s twice-the-error line
+# no longer fits a 1 m goal from beyond ~4 m. The shot still checks the robot's actual heading.
+SHOT_AIM_ERROR_RAD = 0.05
 
 # `clamp_outside_own_defense_area`/`clamp_outside_enemy_defense_area` (and
 # their `*_hold_point` siblings) previously defaulted to `2*ROBOT_RADIUS+0.05

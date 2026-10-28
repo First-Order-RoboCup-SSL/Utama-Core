@@ -141,14 +141,15 @@ def test_passer_aims_at_a_receiver_in_place_not_at_the_receive_point(runner):
 
 
 def _short_pass_with_ball_off_centre(runner, passer_orientation):
-    """Passer at the origin, ball 0.036 m to its left on the dribbler, receiver in place
+    """Passer at the origin, ball 0.04 m to its left on the dribbler, receiver in place
     0.71 m straight ahead and facing the ball: counter_flow_vs_low_block t=26.3
     (tournament_20260928_221404), where the ball sat 0.036 m off-centre and the pass
-    passed 0.07 m beside the receiver's centre."""
+    passed 0.07 m beside the receiver's centre; 0.04 m keeps the miss outside the 0.06 rad
+    tolerance."""
     game = runner.my.game
     friendly = dict(game.current.friendly_robots)
     enemy = dict(game.current.enemy_robots)
-    ball_xy = (0.09, 0.036)
+    ball_xy = (0.09, 0.04)
     receiver_p = Vector2D(0.71, 0.0)
     friendly[1] = dataclasses.replace(friendly[1], has_ball=True, p=Vector2D(0.0, 0.0), orientation=passer_orientation)
     friendly[2] = dataclasses.replace(
@@ -163,8 +164,8 @@ def _short_pass_with_ball_off_centre(runner, passer_orientation):
 
 def test_passer_aims_the_ball_not_its_own_centre_at_the_receiver(runner):
     """The ball leaves from where it sits on the dribbler, along the passer's heading. A
-    passer whose centre points exactly at the receiver, with the ball 0.036 m to one side,
-    sends it 0.036 m beside the receiver plus whatever heading error the 0.05 rad
+    passer whose centre points exactly at the receiver, with the ball 0.04 m to one side,
+    sends it 0.04 m beside the receiver plus whatever heading error the 0.06 rad
     tolerance allows: short passes aimed from the passer's centre were missed with the
     heading error and the ball's offset on the same side in 27 of 29 cases
     (tournament_20260928_221404). Aim from the ball: 3.4 degrees off here, outside the
@@ -180,7 +181,7 @@ def test_passer_aims_the_ball_not_its_own_centre_at_the_receiver(runner):
 def test_passer_kicks_once_the_ball_line_meets_the_receiver(runner):
     """The same pass with the passer turned so the ball's own line runs through the
     receiver's centre: it kicks."""
-    game = _short_pass_with_ball_off_centre(runner, passer_orientation=math.atan2(-0.036, 0.71 - 0.09))
+    game = _short_pass_with_ball_off_centre(runner, passer_orientation=math.atan2(-0.04, 0.71 - 0.09))
 
     commands, _pass_complete, _lane_blocked = _pass_exec(game, _ctx(runner), passer_id=1, receiver_id=2)
 
