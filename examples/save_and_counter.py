@@ -67,6 +67,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     oriented_towards,
 )
+from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.tactics._pass_and_score import FACE_GOAL_RAD
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
@@ -201,7 +202,7 @@ class KeepOrAttackTactic(BaseTactic[None]):
 
         A robot that took the ball facing elsewhere (a keeper's save) pivots on it to face the
         goal first: turning while it drove off sideways lost the ball on the real robots
-        (2026-10-28), as in `move_for_a_shot`."""
+        (2026-10-28), as in `move_for_a_shot`; and as there, only with the ball on its sensor."""
         if not has_ball(game, rid, visual=True):
             return None
         goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
@@ -211,6 +212,11 @@ class KeepOrAttackTactic(BaseTactic[None]):
             return None
         goal_oren = me.angle_to(goal)
         if not oriented_towards(game, rid, goal_oren, FACE_GOAL_RAD):
+            if not has_ball(game, rid):
+                # Seen at the dribbler's edge, not on the sensor: the pivot turned away from the
+                # ball and pushed it into a corner, round after round (2026-10-28).
+                ctx.trace(game, f"shoot[{rid}]", "settling the ball before turning")
+                return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=rid, ctx=ctx)
             ctx.trace(game, f"shoot[{rid}]", "facing the goal")
             return turn_on_spot(game, ctx.motion_controller, rid, goal_oren, dribbling=True)
         upfield = math.copysign(1.0, goal_x - me.x)

@@ -449,11 +449,16 @@ def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand
     """No clear shot: with the ball, slide sideways for one (`no_shot_reposition_target`),
     facing the goal. A robot that took the ball facing elsewhere pivots on it to face the goal
     first: turning while sliding lost the ball every time on the real robots (shooting drill,
-    2026-10-28), while the pivot is what pass_receive turns with."""
+    2026-10-28), while the pivot is what pass_receive turns with. It pivots only with the ball
+    sensor on: seen on the dribbler's edge but not on the sensor, the pivot turned away from
+    the ball and pushed it off (save_and_counter, 2026-10-28), so it settles the ball first."""
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
     robot = game.friendly_robots[robot_id]
     goal_oren = robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
     if not oriented_towards(game, robot_id, goal_oren, FACE_GOAL_RAD):
+        if not has_ball(game, robot_id):
+            ctx.trace(game, f"shoot[{robot_id}]", "settling the ball before turning")
+            return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
         ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · facing the goal")
         return turn_on_spot(
             game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, target_oren=goal_oren, dribbling=True

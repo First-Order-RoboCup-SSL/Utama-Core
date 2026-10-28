@@ -92,9 +92,10 @@ def test_a_ball_out_of_the_field_holds_both():
     assert _roles({"x": -0.5}, {"x": 0.5}, ball) == ("hold", "hold")
 
 
-def _carry(x: float, orientation: float = 0.0):
-    """Yellow (attacking +x) holding the ball at (x, 0.3), blue in its goal."""
-    me = make_robot(0, is_friendly=True, x=x, y=0.3, has_ball=True, orientation=orientation)
+def _carry(x: float, orientation: float = 0.0, sensor: bool = True):
+    """Yellow (attacking +x) holding the ball at (x, 0.3), blue in its goal; `sensor`: its ball
+    sensor sees it (otherwise only vision does)."""
+    me = make_robot(0, is_friendly=True, x=x, y=0.3, has_ball=sensor, orientation=orientation)
     game = build_game(
         {0: me},
         {0: make_robot(0, is_friendly=False, x=1.4, y=0.0)},
@@ -162,3 +163,17 @@ def test_a_robot_that_took_the_ball_facing_away_pivots_to_the_goal_before_carryi
         ex.turn_on_spot = real_turn
     assert (command == "pivot") is pivots
     assert (targets == []) is pivots
+
+
+def test_a_robot_that_only_sees_the_ball_on_its_dribbler_settles_it_before_pivoting():
+    """Real robots (20261028_205505): the ball sat at the dribbler's edge, seen there but never
+    on the sensor. The pivot turned away from it and pushed it off, round after round, into a
+    corner. Without the sensor it goes on fetching the ball (`go_to_ball`) and does not turn."""
+    real_turn, real_fetch = ex.turn_on_spot, ex.go_to_ball
+    ex.turn_on_spot = MagicMock(return_value="pivot")
+    ex.go_to_ball = MagicMock(return_value="fetch")
+    try:
+        command, _ = _carry(-1.0, math.pi, sensor=False)
+    finally:
+        ex.turn_on_spot, ex.go_to_ball = real_turn, real_fetch
+    assert command == "fetch"

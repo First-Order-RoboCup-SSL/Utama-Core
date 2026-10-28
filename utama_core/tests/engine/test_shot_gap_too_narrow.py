@@ -134,3 +134,25 @@ def test_score_goal_fetches_the_ball_before_moving_for_a_shot():
         _score_goal(game)
     assert fetch.called
     assert not carry.called
+
+
+@pytest.mark.parametrize("name", list(_TACTICS))
+def test_a_shooter_that_only_sees_the_ball_settles_it_before_pivoting(name):
+    """Seen on the dribbler but not on the ball sensor, facing away from the goal with no clear
+    shot: the shooter goes on fetching the ball, it does not pivot. The pivot turned away from
+    a ball on the dribbler's edge and pushed it off (save_and_counter, 2026-10-28)."""
+    module, run = _TACTICS[name]
+    game = _game(0.05)
+    shooter = game.friendly_robots[1]
+    game = game.with_friendly_robots({1: dataclasses.replace(shooter, orientation=0.0, has_ball=False)})
+    with (
+        patch(f"{module}.find_best_shot", return_value=(0.0, 1.0)),
+        patch(f"{_pass_and_score.__name__}.has_ball", side_effect=lambda g, rid, visual=False, **kw: visual),
+        patch(f"{_pass_and_score.__name__}.turn_on_spot") as pivot,
+        patch(f"{_pass_and_score.__name__}.go_to_ball") as fetch,
+        patch(f"{module}.go_to_ball") as own_fetch,  # a tactic's own fetch, where it has one
+        patch(f"{module}.kick") as kick,
+    ):
+        run(game)
+    assert fetch.called or own_fetch.called
+    assert not pivot.called and not kick.called
