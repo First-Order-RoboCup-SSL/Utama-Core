@@ -135,18 +135,23 @@ a test day is setting up, and notes make the useful minutes easy to find later.
 
 ### 5. Measuring a robot
 
-With the robot set in `examples/real_score_goal.py` (its colour, vision and radio ID):
-
 ```
-pixi run calibrate
-pixi run python tools/robot_calibration.py replays/field/<time>_real_calibrate.log
+pixi run calibrate --robot yellow:1 --radio 0     # colour:vision id (its pattern), radio id
 ```
 
-Put it near the middle of the camera's view facing +x, with 0.8 m clear ahead and 0.6 m to its
-left, and a ball at rest in view; Force Start on the dashboard. It plays fixed moves for about
-50 s (`tactics/scripted_moves.py`) and stops; Ctrl+C. The second command prints its loop delay,
-speed gain and acceleration per axis and its vision noise at rest. Run it twice, early and late:
-how far the two disagree is how far to trust them.
+No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
+it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
+0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s,
+then asks you to put the ball against its dribbler: it holds, turns and drives with it, and asks
+again before each of 3 kicks (1.5 m clear ahead). Every move is printed as it starts; Ctrl+C halts
+the robot. At the end it prints DONE and the robot's numbers, written beside the log as
+`.calibration.json`: loop delay, speed gain and acceleration per axis, vision noise at rest, kick
+speed and direction off its heading, where the ball sits on the dribbler, how often the ball sensor
+reads it, and whether the robot kept it. `--mode rsim --yes` rehearses it in the simulator.
+
+Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
+far to trust them. An older log is measured again with
+`pixi run python tools/robot_calibration.py replays/field/<run>.log`.
 
 
 | Symptom | Cause |

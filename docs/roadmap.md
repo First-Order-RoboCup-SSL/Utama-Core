@@ -129,8 +129,8 @@ entry by its title, not its number.
 
 10. **Real-robot profiles and calibration.** Each physical robot differs (top speed,
     dribbler grip, kicker strength) in ways hardware can't fix soon; software should
-    correct what it can and use the rest. No measurements yet (2026-10-09), so nothing per
-    robot is built: this entry is the plan.
+    correct what it can and use the rest. One robot measured so far (2026-10-27); nothing per
+    robot is built yet: this entry is the plan, with the to-do list below.
     - *Known now:* the kicker is fixed power and will stay so for now (hardware team,
       2026-10-09), so the sim gets no variable-kick option. Real robots are capped at
       `MAX_VEL=1` m/s as a safety limit, not their top speed; rsim and grSim run at 2 m/s
@@ -167,7 +167,39 @@ entry by its title, not its number.
       Checked on a synthetic robot (delay within 10 ms, acceleration within 15 %; turn
       acceleration only roughly, its ramp lasts a few frames) and on grSim; not yet on a real robot.
       Not yet done: the numbers feed nothing (the sim's latency, the controller), and drift,
-      dribbling, passes and chips are not measured.
+      dribbling, passes and chips are not measured. First real robot 2026-10-27: delay 79 ms,
+      turn gain 1.09, sideways acceleration ~1.8 against ~5 m/s² forward. 2026-10-28:
+      `pixi run calibrate` (`examples/calibrate_robot.py`) runs it from the terminal, no
+      dashboard: prompts for each set-up, prints each move, DONE, then the analysis and a
+      `.calibration.json`; it now also holds, turns and drives with the ball and kicks 3 times
+      (kick speed and direction off the heading, where the ball sits, ball sensor share, kept or lost).
+    - *Calibration to-do (user, 2026-10-28; revisit in later sessions):*
+      1. **Full robot profile**: one checked-in file per robot (keyed by command ID), written by
+         `pixi run calibrate`, read by the controller, planner limits, kick aim, vision filter,
+         sim noise and offline replay. Covers everything below plus the setup errors in
+         [`field_log_replay.md`](field_log_replay.md) (tag yaw and centre offset, kicker offset).
+      2. **Driving**: speed gain and acceleration per axis *and diagonally* (forward, sideways,
+         45°): the top speed and acceleration a robot actually holds in each direction, not one
+         `MAX_ACCELERATION`; braking; drift over 3 m; turn rate and turn gain.
+      3. **Kicking**: ten kicks per robot: speed, direction offset and its spread, roll distance,
+         recharge time; chips once used.
+      4. **Dribbling**: hold while turning and driving at rising speed until the ball is lost:
+         the fastest turn and drive that keep it. Decides whether a placer may grab a ball
+         from any side and turn with it, instead of going round it first (step 5).
+      5. **Receiving and grabbing**: the approach speed at which a robot still traps a ball,
+         driving onto a still ball and receiving a rolling one (passes at a few speeds); whether
+         it can turn on the spot smoothly with the ball at the end of an approach.
+      6. **All robots at once**: several `--robot` in one run, the driving part in parallel lanes
+         0.8 m apart (same moves at the same time, so no collisions), the ball part one robot at
+         a time. The analysis already handles every robot in a log.
+      7. **Use the numbers** (each a small change): sideways and diagonal acceleration limits in
+         the planner, turn gain in the controller, delay prediction (plan from where the robot
+         will be 79 ms on), kick aim by the kicker offset, Kalman measurement noise from vision
+         noise, `contact_grace_s` from the sensor share. Sim-side use (latency, kick offsets,
+         motion limits in `sim_noise`) replays the evaluation ledger: batch with a forced rerun.
+         Robot-robot avoidance needs it most: on 2026-10-27 two robots met head-on at 1 m/s each
+         (their placer running to the ball, ours clearing away from it along the same line) and
+         touched; each planner saw the other, but 79 ms late and braking sideways at ~1.8 m/s².
     - *Calibration routine (the full plan):* per robot, at full battery on the
       competition carpet: commanded vs measured speed at a few speeds, acceleration and
       braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from
@@ -177,7 +209,8 @@ entry by its title, not its number.
     - *Before measurements:* code that assumes kick or speed numbers should derive them from
       `RobotParams` (e.g. `ClearBallTactic` assumes a 4.5 m clearance where a fixed-power kick
       rolls ~17 m), so measured values change one file. No per-robot profile type until
-      measurements show robots differ enough to matter.
+      measurements show robots differ enough to matter (to-do 1 above: build it once two
+      robots' calibrations disagree by more than two runs of one robot do).
 
 11. **Vision filter for real cameras.** Found 2026-10-09 reviewing `data_processing/`; rsim
      (noise off) never exercises any of it. Needs logged SSL-Vision data from the real field

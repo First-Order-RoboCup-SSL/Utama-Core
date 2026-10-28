@@ -17,7 +17,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [real_robot_setup.md](real_robot_setup.md)) |
-| `calibrate` | measure one real robot: it plays fixed moves (`real_score_goal.py --calibrate`), then `tools/robot_calibration.py <log>` gives its loop delay, speed gain, acceleration and vision noise ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
+| `calibrate` | measure one real robot from the terminal (`examples/calibrate_robot.py --robot yellow:1 --radio 0`): fixed moves, dribbling and 3 kicks, asking before each set-up, then DONE and its loop delay, speed gain, acceleration, vision noise, kick speed and direction, and ball holding ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
 
 ## Worktrees
 
@@ -113,6 +113,7 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
+| `examples/calibrate_robot.py` | `pixi run calibrate`: one real robot's profile from the terminal, no dashboard; `--mode rsim --yes` rehearses it |
 | `examples/real_attacker_defender.py` | One attacker against one defender on real robots (or `--mode rsim`/`grsim`): field, camera half, IDs and each robot's working hardware in one config block; the Live tab's field check gates the start. Records every camera run as an SSL game log in `replays/field/`; `--calibrate attacker\|defender` plays fixed moves for measuring that robot |
 | `tools/vision_check.py` | Does ssl-vision's multicast reach this machine: sender, packets per second per camera, detections and the field size, in 5 s with no radio or runner. The first check of a test day ([real_robot_setup.md](real_robot_setup.md)). `--guided ball` (or `"blue 2"`): each camera's error on 9 known spots, saved as a baseline |
 | `tools/ssl-vision-lab-field.patch` | Not a script: adds a **Lab Field** preset (our 3 m x 2.25 m field, two cameras) to an ssl-vision checkout; `git apply` it there and rebuild |
