@@ -109,6 +109,19 @@ _TEAM_RESTART_COMMANDS = {
 _PUSH_OUT_MARGIN = 0.05
 
 
+# How far inside the field lines a pushed-out robot's target stays: its body on the field (the
+# referee step's `_clamp_to_field` margin).
+_FIELD_INSET = 0.1
+
+
+def _inside_field(point: np.ndarray, field_bounds: FieldBounds) -> np.ndarray:
+    """`point` clamped to `_FIELD_INSET` inside `field_bounds`."""
+    (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+    lo = np.array([min(x0, x1), min(y0, y1)]) + _FIELD_INSET
+    hi = np.array([max(x0, x1), max(y0, y1)]) - _FIELD_INSET
+    return np.clip(point, lo, hi)
+
+
 def _keeps_off_ball(game: Game) -> bool:
     """True during STOP and the other team's restarts, when every robot of ours must
     stay out of the ball's keep-out circle."""
@@ -1762,7 +1775,13 @@ class FastPathPlanner:
                 new_target = np.array([waypoint.x, waypoint.y])
             elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
                 away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
-                new_target = ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN)
+                ray = _inside_field(ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN), field_bounds)
+                # The ray kept on the field. Where that brings the robot closer to the ball (a ball
+                # near the line, the robot between them), it follows the referee step's target, a
+                # point of the circle on the field: the ray alone drove a keeper 0.2 m out over
+                # its goal line at STOP (3 m lab field, 0.8 m keep-out, 2026-10-28).
+                if not _approaches(our_pos, ray, ball_np):
+                    new_target = ray
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")

@@ -12,8 +12,9 @@ carrot at the start brings the robot only 0.003 m closer, inside the tolerance.
 """
 
 import numpy as np
+import pytest
 
-from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import distance_point_to_segment
@@ -81,3 +82,39 @@ def test_a_robot_just_inside_the_ball_keep_out_is_sent_out_of_it_not_onto_its_ed
     )
     assert np.linalg.norm(carrot) > BALL_KEEP_OUT_DISTANCE + 0.02
     assert distance_point_to_segment(np.zeros(2), np.array(us), carrot) >= np.linalg.norm(us) - 1e-6
+
+
+# The 3 m x 2.25 m lab field (`examples/shooting_drill.py`'s FIELD).
+_LAB = FieldDimensions(
+    full_field_half_length=1.5,
+    full_field_half_width=1.125,
+    half_defense_area_depth=0.25,
+    half_defense_area_width=0.5,
+    half_goal_width=0.4,
+    center_circle_radius=0.3,
+)
+
+
+@pytest.mark.parametrize(
+    "us, ball, target",
+    [
+        ((1.45, 0.27), (1.16, 0.30), (1.35, -0.48)),  # inside the field, 0.29 m from the ball
+        ((1.56, 0.23), (1.11, 0.33), (1.35, -0.43)),  # already pushed over the goal line
+    ],
+)
+def test_a_robot_inside_the_keep_out_is_never_pushed_off_the_field(us, ball, target):
+    """Field day 2026-10-28 (20261028_205013_real_save_and_counter, blue 0 at STOP): the keeper
+    stood between the ball and its goal line, inside the 0.8 m keep-out. The push-out ray from
+    the ball through the robot ran 0.5 m past the goal line, and the robot drove 0.2 m out of
+    the field into its goal. It follows the referee step's target on the field instead."""
+    game = build_game(
+        {0: make_robot(0, is_friendly=True, x=us[0], y=us[1])},
+        {},
+        make_ball(*ball),
+        field_dims=_LAB,
+        my_team_is_right=True,
+        defense_area_rules=False,
+        referee_command=RefereeCommand.STOP,
+    )
+    carrot = FastPathPlanner(env=None)._path_to(game, 0, target, game.field.field_bounds)
+    assert abs(carrot[0]) <= _LAB.full_field_half_length and abs(carrot[1]) <= _LAB.full_field_half_width
