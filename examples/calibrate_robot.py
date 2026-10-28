@@ -19,7 +19,7 @@ kick speed and direction off its heading, and how it holds the ball. They are wr
 log as `<log>.calibration.json`. Calibrate every robot, twice (early and late in a session): how
 far two runs disagree is how far to trust them.
 
-The field and camera view are `FIELD` and `CAMERA_HALF` in `real_attacker_defender.py`.
+The field and camera view are `FIELD` and `CAMERA_HALF` in `shooting_drill.py`.
 """
 
 import sys
@@ -34,7 +34,7 @@ import threading
 import time
 from typing import Optional
 
-from real_attacker_defender import (
+from shooting_drill import (
     CAMERA_HALF,
     FIELD,
     TestRobot,

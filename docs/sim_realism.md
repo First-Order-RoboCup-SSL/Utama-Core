@@ -417,7 +417,7 @@ league ranges.
 #### First measurements of our robot (field test 2026-10-22)
 
 From the logs in `replays/field/20261022_*_real_*.log`, one robot (blue 2, firmware 0), mostly
-`real_score_goal` runs. Of 33 recorded minutes, the robot moved for under 3, dribbled for 3.5
+`score_goal` runs. Of 33 recorded minutes, the robot moved for under 3, dribbled for 3.5
 and kicked 9 times, so these are small samples. The radio log (`RADIO_OUT`) says when the
 dribbler and kicker were commanded. Kicks and ball slow-down come from one camera's raw ball
 detections, because the two cameras disagreed by several cm. Vision noise comes from

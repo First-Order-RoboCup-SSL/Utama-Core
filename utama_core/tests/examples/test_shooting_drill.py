@@ -1,4 +1,4 @@
-"""`examples/real_attacker_defender.py`'s demo keeper: it keeps goal, and a ball it holds goes back
+"""`examples/shooting_drill.py`'s demo keeper: it keeps goal, and a ball it holds goes back
 to the attacker, so the demo loops."""
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_r
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
 sys.path.insert(0, str(EXAMPLES))
 try:
-    import real_attacker_defender as ex
+    import shooting_drill as ex
 finally:
     sys.path.remove(str(EXAMPLES))
 

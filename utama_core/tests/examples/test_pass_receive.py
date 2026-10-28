@@ -1,4 +1,4 @@
-"""`examples/real_pass_receive.py`: two robots, one per team, pass to each other. Each side reads
+"""`examples/pass_receive.py`: two robots, one per team, pass to each other. Each side reads
 its role from the same world, so the two sides must always agree: one passer, one receiver."""
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_r
 EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
 sys.path.insert(0, str(EXAMPLES))
 try:
-    import real_pass_receive as ex
+    import pass_receive as ex
 finally:
     sys.path.remove(str(EXAMPLES))
 

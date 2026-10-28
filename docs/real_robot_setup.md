@@ -3,7 +3,7 @@
 The procedure for a test day with real robots: ssl-vision on its own Linux laptop sending vision
 over the network, and our stack on a Windows laptop in WSL with the radio dongle. Each part is
 checked on its own before anything drives a robot: vision with `tools/vision_check.py`, the radio
-with teleop, then both together in the field check of `examples/real_attacker_defender.py`.
+with teleop, then both together in the field check of `examples/shooting_drill.py`.
 
 ```
 vision laptop (Linux)                      robot laptop (Windows + WSL)
@@ -118,9 +118,9 @@ radio IDs must differ across all robots on it.
 
 ### 4. Both together
 
-Set the "Test-day configuration" block of `examples/real_attacker_defender.py`: `FIELD`,
+Set the "Test-day configuration" block of `examples/shooting_drill.py`: `FIELD`,
 `CAMERA_HALF` (`"full"` when the cameras cover the whole field), each robot's vision and radio
-ID and working hardware. Then `pixi run python examples/real_attacker_defender.py`, open
+ID and working hardware. Then `pixi run python examples/shooting_drill.py`, open
 http://localhost:8080 and go through the Live tab's field check
 ([custom_referee_gui.md](custom_referee_gui.md#field-check-camera-runs)): every row green or
 amber, each robot under its own ID and colour, a ball in each corner inside the area in play,
@@ -131,7 +131,10 @@ Each run records `replays/field/<time>_<mode>_<name>.log`, a game log of every v
 the radio both ways, the referee and which code ran. Beside it is a `.npz` replay of the world
 the strategy saw, written when the run closes. Use the Live tab's Note box (Enter writes it into
 the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
-a test day is setting up, and notes make the useful minutes easy to find later.
+a test day is setting up, and notes make the useful minutes easy to find later. The runner adds
+a note whenever a robot's row in the Tactics panel changes (its tactic and step, or
+`referee · ball placement · placer` while a restart drives it), so the log also says what each
+robot was trying to do.
 
 ### 5. Measuring a robot
 

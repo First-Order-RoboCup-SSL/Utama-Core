@@ -1,7 +1,7 @@
 """Keeps our robots inside the area in play (`field_bounds`, what the camera sees) on camera runs.
 
 A tactic chasing a ball that left the camera's half drove its robot after it, out of sight,
-where nothing tracks it (a 2026-10-22 grSim test of `examples/real_attacker_defender.py`: the
+where nothing tracks it (a 2026-10-22 grSim test of `examples/shooting_drill.py`: the
 attacker 0.9 m past the half-way line). The field check only halts once a robot is already
 0.3 m out. `FencedRobotController` sits under the strategy, like `ProfiledRobotController`, and
 caps each robot's speed towards each edge of the area to what it can still stop from before the

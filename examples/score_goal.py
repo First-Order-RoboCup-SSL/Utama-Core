@@ -1,21 +1,21 @@
 # ruff: noqa: E402
-"""examples/real_score_goal.py — one robot, no opponent: it takes the ball and scores.
+"""examples/score_goal.py — one robot, no opponent: it takes the ball and scores.
 
 Run:
-    pixi run python examples/real_score_goal.py            # real robot
-    pixi run python examples/real_score_goal.py --mode rsim
-    pixi run python examples/real_score_goal.py --calibrate   # fixed moves from the dashboard;
+    pixi run python examples/score_goal.py            # real robot
+    pixi run python examples/score_goal.py --mode rsim
+    pixi run python examples/score_goal.py --calibrate   # fixed moves from the dashboard;
     # pixi run calibrate (examples/calibrate_robot.py) does it from the terminal, with the ball
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
-The field and the camera's view are `FIELD` and `CAMERA_HALF` in `real_attacker_defender.py`,
+The field and the camera's view are `FIELD` and `CAMERA_HALF` in `shooting_drill.py`,
 so the two examples always agree; the robot is set below. It attacks the goal at +x (the right
 one in ssl-vision's coordinates) with `LeadAndSupportTactic`: alone, it goes to the ball, turns
 to the open corner and shoots. It starts in HALT, and the field check gates Force Start as in
-`real_attacker_defender.py`. Put the ball back and Force Start again for the next shot; Halt and
+`shooting_drill.py`. Put the ball back and Force Start again for the next shot; Halt and
 Run in the Live tab's Strategy panel restarts the tactic.
 
-`--calibrate` measures the robot alone, as `real_attacker_defender.py --calibrate` does with two
+`--calibrate` measures the robot alone, as `shooting_drill.py --calibrate` does with two
 (that one halts on the second robot it never sees): it plays fixed moves
 (`tactics/scripted_moves.py`) instead of shooting. Put it near the middle of the camera's view
 facing +x, with 0.8 m clear ahead and 0.6 m to its left, and a ball at rest in view; Force Start.
@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 import time
 
-from real_attacker_defender import (
+from shooting_drill import (
     CAMERA_HALF,
     DASHBOARD_PORT,
     FIELD,

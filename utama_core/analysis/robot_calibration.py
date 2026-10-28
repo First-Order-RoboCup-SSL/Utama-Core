@@ -2,7 +2,7 @@
 
 Reads an SSL game log written by `GameLogWriter` (`StrategyRunner(game_log_path=...)`) on real
 robots: the radio packets as sent and the camera's raw detections, on one clock. Best from a
-`--calibrate` run of `examples/real_attacker_defender.py` (fixed moves, `ScriptedMovesTactic`);
+`--calibrate` run of `examples/shooting_drill.py` (fixed moves, `ScriptedMovesTactic`);
 any run works, with fewer clean steps.
 
 Per robot that was sent commands:

@@ -1,10 +1,10 @@
 # ruff: noqa: E402
-"""examples/real_pass_receive.py — our two robots pass the ball to each other, back and forth.
+"""examples/pass_receive.py — our two robots pass the ball to each other, back and forth.
 
 Run:
-    pixi run python examples/real_pass_receive.py            # real robots (MODE below)
-    pixi run python examples/real_pass_receive.py --mode rsim
-    pixi run python examples/real_pass_receive.py --mode grsim   # grSim must be running
+    pixi run python examples/pass_receive.py            # real robots (MODE below)
+    pixi run python examples/pass_receive.py --mode rsim
+    pixi run python examples/pass_receive.py --mode grsim   # grSim must be running
     # the dashboard is at http://localhost:8080 (--port to change): Force Start to play, Halt to freeze
 
 What it does:
@@ -15,17 +15,17 @@ What it does:
     collects it and passes again. A ball outside the field (or unseen) holds both robots until
     the operator puts it back.
   - Everything to edit for a test day is in the "Test-day configuration" block. The field, the
-    ball-sensor/kicker profile type and the referee rules are `real_attacker_defender.py`'s
+    ball-sensor/kicker profile type and the referee rules are `shooting_drill.py`'s
     (`FIELD`, `TestRobot`, `RULES`), so the examples agree.
   - Nothing advances on its own: every mode starts in HALT, play starts and stops from the
     dashboard. Ctrl+C sends stop commands to the robots before exiting. The Live tab's Strategy
     panel can stand either robot still ("still") or restart it ("pass_receive"), while halted.
   - The field check on the Live tab must be all green or amber before Force Start, as in
-    `real_attacker_defender.py` (docs/real_robot_setup.md, "Each test day").
+    `shooting_drill.py` (docs/real_robot_setup.md, "Each test day").
 
 Why two teams: the robots wear different pattern colours (yellow 1, blue 0), and a runner team
 is one colour: there is no way to map a blue pattern into the yellow team. So each robot is its
-own team (`strategy` and `opp_strategy`, as in `real_attacker_defender.py`), and each runs the
+own team (`strategy` and `opp_strategy`, as in `shooting_drill.py`), and each runs the
 same `PassReceiveTactic`, which reads the other robot (its only "enemy") as its partner. The
 two never share state: each decides its role from the same world they both see (who is nearer
 the ball, where the ball is rolling, whether the partner is set), so the pass needs no new
@@ -56,7 +56,7 @@ import math
 import time
 from typing import Optional
 
-from real_attacker_defender import (
+from shooting_drill import (
     FIELD,
     TestRobot,
     _field_bounds,
@@ -101,7 +101,7 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 
 MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 
-# The part of the field the cameras see (see `real_attacker_defender.py`); both cameras: "full".
+# The part of the field the cameras see (see `shooting_drill.py`); both cameras: "full".
 CAMERA_HALF = "full"
 
 # Swapping a robot is a change here only. They must wear different colours (one per team).

@@ -1,12 +1,15 @@
 # ruff: noqa: E402
-"""examples/real_attacker_defender.py — one attacker against one defender on a small field.
+"""examples/shooting_drill.py — one robot shoots at a goal the other defends, on a small field.
+
+The keeper feeds a ball it holds back to the attacker, so the drill loops; it is also where a
+test day's field, camera half and robot hardware are set (the other examples import them).
 
 Run:
-    pixi run python examples/real_attacker_defender.py            # real robots (MODE below)
-    pixi run python examples/real_attacker_defender.py --mode rsim
-    pixi run python examples/real_attacker_defender.py --mode grsim   # grSim must be running
+    pixi run python examples/shooting_drill.py            # real robots (MODE below)
+    pixi run python examples/shooting_drill.py --mode rsim
+    pixi run python examples/shooting_drill.py --mode grsim   # grSim must be running
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
-    pixi run python examples/real_attacker_defender.py --calibrate attacker   # or defender
+    pixi run python examples/shooting_drill.py --calibrate attacker   # or defender
 
 What it does:
   - Two robots, one per team, both ours on one radio: the attacker attacks the goal in
@@ -239,7 +242,7 @@ def _referee_profile() -> RefereeProfile:
     if RULES == "on":
         human = load_profile("human")
         game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=ATTACKER_COLOUR)
-        return dataclasses.replace(human, profile_name="attacker_defender_test (rules on)", game=game)
+        return dataclasses.replace(human, profile_name="shooting_drill_test (rules on)", game=game)
     if RULES != "off":
         raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
     defaults = RulesConfig()
@@ -250,7 +253,7 @@ def _referee_profile() -> RefereeProfile:
         }
     )
     return RefereeProfile(
-        profile_name="attacker_defender_test",
+        profile_name="shooting_drill_test",
         rules=rules,
         game=GameConfig(
             half_duration_seconds=3600.0,

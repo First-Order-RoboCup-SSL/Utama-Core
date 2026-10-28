@@ -161,7 +161,7 @@ entry by its title, not its number.
     - *Open, not yet:* one profile per match day vs updated while playing; kick-to-kick
       spread in the sim (more realistic, but noisier round-robins).
     - *Measuring, built 2026-10-21:* every camera run records an SSL game log (raw vision,
-      referee, radio bytes both ways: `GameLogWriter`); `examples/real_attacker_defender.py
+      referee, radio bytes both ways: `GameLogWriter`); `examples/shooting_drill.py
       --calibrate` plays fixed moves (`tactics/scripted_moves.py`), and `tools/robot_calibration.py`
       measures loop delay, speed gain, acceleration, vision noise and kick speed from any such log.
       Checked on a synthetic robot (delay within 10 ms, acceleration within 15 %; turn
