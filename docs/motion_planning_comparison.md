@@ -203,23 +203,32 @@ calibration (`replays/field/20261027_225327_real_calibrate.calibration.json`) sa
 acts 79 ms after a command and accelerates sideways at about 1.8 m/s² against 4–5 forward.
 Given those (delay through `SimNoise.latency_s`; gains and per-axis acceleration applied to the
 sim's commands by a harness that is not checked in), with `move()`'s delay prediction
-(`PoseAhead`) on:
+(`PoseAhead`) on, every scenario under 5 vision-noise seeds (145 runs per row):
 
-| | Collisions, 5 close scenarios × 10 vision-noise seeds | Full suite passed (one run) | Total time |
-|---|---:|---:|---:|
-| `fpp`, plain sim | 4 / 50 | 28 / 29 | 87 s |
-| `fpp`, calibrated | 25 / 50 | 24 / 29 | 85 s |
-| `trajsample`, calibrated | 10 / 50 | 26 / 29 | 101 s |
-| `trajsample`, calibrated, planning with the sideways limit | 9 / 50 | 29 / 29 | 112 s |
-| `dwa`, plain sim | 37 / 50 | | |
+| | Failed | of which collisions | Scenarios with a collision | Median scenario time |
+|---|---:|---:|---:|---:|
+| `trajsample`, plain sim | 5 | 5 | 2 | |
+| `fpp`, calibrated | 27 | 27 | 7 | 3.1 s |
+| `trajsample`, calibrated | 13 | 10 | 2 | |
+| `trajsample`, calibrated, planning with the sideways limit | 12 | 12 | 4 | 3.6 s |
 
-The 5 scenarios are `mirror_swap`, `ball_scrum`, `head_on_swap`, `box_clearing_scrum` and
-`keeper_switchback`; one deterministic run flips on 1 cm grazes, so compare seeded runs.
-`fpp` plans a path, not a motion: in `box_clearing_scrum` its way past an attacker was a
-sidestep on the slow axis, made 3 cm in 0.4 s instead of 10, into the attacker. A per-axis cap on
-the commands cannot help where the robot caps itself the same way. `trajsample` plans
-acceleration-limited trajectories, and with `RobotParams.MAX_SIDEWAYS_ACCELERATION` (real
-robots: 1.8; `None` in the sims, so their results are unchanged) slows each candidate by its
-share across the robot's heading (`Trajectory2D.compute`). Its closest approaches roughly
-doubled (`box_clearing_scrum` 0.13 → 0.29 m median); the price is about 30 % more time in crowds.
-`mirror_swap` (6v6 all swapping) still grazes in 9 of 10 seeds.
+`fpp` fails 5 of 5 in `recovery_run`, `box_clearing_scrum`, `mirror_swap` and `kickoff_reset`,
+4 in `grid_intersection`; `trajsample` 5 in `mirror_swap` and 4–5 in `kickoff_reset` (both also
+fail in the plain sim), and with the sideways limit 2 in `stop_transition`. One deterministic run
+flips on 1 cm grazes: compare seeded runs.
+
+Why: `fpp` picks a collision-free *path* against obstacles projected at constant velocity, and a
+PID follows it; nothing checks that the robot can get onto that path in time. A swerve on the
+robot's slow sideways axis, after 79 ms of dead time, comes out a fraction of the planned one
+(`box_clearing_scrum`: 3 cm in 0.4 s instead of 10), and the robot meets the obstacle it planned
+to clear. `trajsample` checks candidate *trajectories* (position over time, acceleration-limited)
+against the obstacles' predicted motion, so it prefers early, wide detours, which tolerate a
+robot slower than planned. A per-axis cap on `fpp`'s commands cannot help where the robot caps
+itself the same way.
+
+`RobotParams.MAX_SIDEWAYS_ACCELERATION` (real robots 1.8, `None` in the sims, so their results
+are unchanged) makes `trajsample` slow each candidate by its share across the robot's heading
+(`Trajectory2D.compute`). Measured here it changes little: 13 failures to 12, timeouts traded
+for collisions elsewhere; median closest approaches grow in the close scenarios
+(`box_clearing_scrum` 0.13 → 0.29 m). Nearly all of `trajsample`'s advantage is the planner
+itself. Its price is time: slower than `fpp` in 16 of 29 scenarios, up to ~4 s in crowds.
