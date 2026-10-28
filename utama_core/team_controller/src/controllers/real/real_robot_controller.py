@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+import math
 import time
 import warnings
 from typing import Dict, List, Optional, Union
@@ -415,16 +416,23 @@ class RealRobotController(AbstractRobotController):
                 f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
             angular_vel = MAX_ANGULAR_VEL if angular_vel > 0 else -MAX_ANGULAR_VEL
-        if abs(local_forward_vel) > MAX_VEL:
+        speed = math.hypot(local_forward_vel, local_left_vel)
+        if speed > MAX_VEL:
             warnings.warn(
-                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+                f"Translation speed for robot {robot_id} is greater than the maximum velocity. Scaling to {MAX_VEL}."
             )
-            local_forward_vel = MAX_VEL if local_forward_vel > 0 else -MAX_VEL
-        if abs(local_left_vel) > MAX_VEL:
-            warnings.warn(
-                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
-            )
-            local_left_vel = MAX_VEL if local_left_vel > 0 else -MAX_VEL
+            scale = MAX_VEL / speed
+            local_forward_vel *= scale
+            local_left_vel *= scale
+
+        # Binary16 rounding can push an otherwise capped diagonal just over MAX_VEL.
+        # Move the larger component towards zero until the encoded speed is within it.
+        local_forward_vel, local_left_vel = np.float16(local_forward_vel), np.float16(local_left_vel)
+        while math.hypot(float(local_forward_vel), float(local_left_vel)) > MAX_VEL:
+            if abs(local_forward_vel) >= abs(local_left_vel):
+                local_forward_vel = np.nextafter(local_forward_vel, np.float16(0))
+            else:
+                local_left_vel = np.nextafter(local_left_vel, np.float16(0))
 
         command = RobotCommand(
             local_forward_vel=self._float16_rep(local_forward_vel),

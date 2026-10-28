@@ -16,6 +16,13 @@ The robots' feedback comes back the same way and reaches `RobotInfoRefiner`.
 
 Drawn by `docs/img/team_controller/make_real_robot_path.py`; rerun it when a name in it changes.
 
+The real controller sanitizes nonfinite velocities, caps angular speed, and scales the total
+translation speed to `REAL_PARAMS.MAX_VEL`, preserving its direction. The speed cap also holds
+after float16 packet rounding. Acceleration limits come from the motion controller rather than
+the radio encoder. Kick and chip packets request fixed full power; `KICK_SPD` is not a measured
+or enforced real ball-speed limit. The controller also applies kicker cooldown and the dribbler
+thermal limiter before transmission.
+
 ## Controllers
 
 This folder contains controller classes for communication with both simulated and real components, including:
