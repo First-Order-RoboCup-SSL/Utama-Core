@@ -172,6 +172,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .ref-row > span:first-child { min-width: 20px; font-weight: 600; }
 .ref-row > span:nth-child(2) { flex: 1; }
+.ref-row.tactic-steps { font-size: .68rem; padding: 0 0 4px 28px; }
 .ref-row[style*="cursor:pointer"]:hover { color: var(--accent); }
 
 .conn-dot {

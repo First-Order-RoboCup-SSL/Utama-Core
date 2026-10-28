@@ -369,6 +369,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if game_log_path is not None and self.mode == Mode.RSIM:
             raise ValueError("game_log_path needs vision packets: grsim or real mode, not rsim")
         self.game_log = GameLogWriter(game_log_path) if game_log_path is not None else None
+        self._noted_status: dict[int, list[str]] = {}  # each robot's status as last noted in the game log
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(
@@ -473,7 +474,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # Set before `_load_robot_controllers()`, which wires `self.match_log`
         # into the kernel `Strategy` right after `load_motion_controller`.
         self.match_log_path = match_log_path
-        self.match_log = MatchLog() if match_log_path else None
+        # Kept in memory with a dashboard attached or a game log recorded, and no file to write,
+        # too: what each robot's tactic is doing (`MatchLog.current_traces`) is what the Live tab
+        # shows under its tactic and the game log notes (`_push_debug_status_to_referee`).
+        watched = isinstance(self.referee, CustomReferee) and self.referee.has_dashboard
+        self.match_log = MatchLog() if match_log_path or watched or self.game_log is not None else None
         if self.match_log is not None and isinstance(self.referee, CustomReferee):
             self.referee.attach_match_log(self.match_log)
         self.stats_path = stats_path
@@ -1987,11 +1992,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
         Every strategy is kernel-based now and exposes
         `debug_status() -> dict[int, list[str]]` to report "what is this
-        robot's tactic doing right now" for the debug GUI panel.
+        robot's tactic doing right now" for the debug GUI panel. A game log
+        gets a note whenever a robot's status changes, so a field log says
+        what each robot was doing, not only where it went.
         """
-        if not isinstance(self.referee, CustomReferee):
+        recording = getattr(self, "game_log", None) is not None
+        if not isinstance(self.referee, CustomReferee) and not recording:
             return
-        self.referee.set_debug_status(self.my.strategy.debug_status())
+        status = self.my.strategy.debug_status()
+        if recording:
+            for robot_id, row in sorted(status.items()):
+                if self._noted_status.get(robot_id) != row:
+                    label, steps = row[0], row[2] if len(row) > 2 else ""
+                    self.game_log.note(f"robot {robot_id}: {label}" + (f" | {steps}" if steps else ""))
+            self._noted_status = status
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_debug_status(status)
 
     def _robot_tactics(self) -> dict[str, dict[int, str]]:
         """`{"friendly"|"enemy": {robot_id: tactic}}` for `MatchStats`' foul log: the

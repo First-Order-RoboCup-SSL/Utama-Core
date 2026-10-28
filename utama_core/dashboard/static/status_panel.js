@@ -51,10 +51,11 @@ function renderRefereeHeaderInto(ids, state) {
   }
 }
 
-// `tacticStatus` rows are `[label, tag?]` (see `AbstractStrategy.debug_status`):
-// label is the tactic id, suffixed " (committed)" while its slot is committed;
-// tag is its `TacticTag` value. Returns {robotId: tag} for FieldCanvas's
-// `tactic_tags`.
+// `tacticStatus` rows are `[label, tag?, steps?]` (see `AbstractStrategy.debug_status`):
+// label is the tactic id, suffixed " (committed)" while its slot is committed, or
+// "referee · <job>" while a restart drives the robot; tag is its `TacticTag` value, or
+// "referee"; steps is what its tactic and skills traced this tick. Returns {robotId: tag}
+// for FieldCanvas's `tactic_tags`.
 function tacticTagsFromStatus(tacticStatus) {
   const tags = {};
   for (const robotId in tacticStatus || {}) {
@@ -62,6 +63,10 @@ function tacticTagsFromStatus(tacticStatus) {
     if (tag) tags[robotId] = tag;
   }
   return tags;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 }
 
 function renderTacticStatusInto(containerId, tacticStatus, options) {
@@ -78,7 +83,7 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
 
   let html = "";
   for (const robotId of robotIds) {
-    const [label = "", tag] = status[robotId] || [];
+    const [label = "", tag, steps] = status[robotId] || [];
     const committed = label.includes("committed");
     const tagColor = TACTIC_TAG_COLORS[tag];
     html +=
@@ -91,7 +96,8 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
       (tagColor ? ' <span style="color:' + tagColor + '; font-size:.65rem;">' + tag + "</span>" : "") +
       "</span>" +
       (committed ? '<span class="muted" style="font-size:.65rem;">committed</span>' : "") +
-      "</div>";
+      "</div>" +
+      (steps ? '<div class="ref-row muted tactic-steps">' + escapeHtml(steps) + "</div>" : "");
   }
   c.innerHTML = html;
 }

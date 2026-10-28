@@ -367,7 +367,11 @@ whoever runs it.
   value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
   `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
   `tactics/give_and_go.py`. Enable with `match_log_path=` or `match.run_match(...,
-  run_dir=...)`; read back with `load_jsonl(path)`.
+  run_dir=...)`; read back with `load_jsonl(path)`. A run with a dashboard or a game log keeps one
+  in memory too: a plain value traced under a key naming a robot (`ctx.trace(game, f"shoot[{rid}]",
+  "turning to shoot")`) shows under that robot in the Live tab's Tactics panel and is noted in the
+  game log, so name the step a robot is on in words a tester reads (`AbstractStrategy.debug_status`).
+  While a restart or HALT drives a robot, the panel shows `referee · <its job>` instead of its tactic.
 - **`render_window()` / `render_around_event()`** (`analysis/render_window.py`) — PNG of
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
   over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread

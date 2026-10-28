@@ -28,6 +28,7 @@ const TACTIC_TAG_COLORS = {
   attack: "#d9694f",
   defense: "#4fb3a9",
   mixed: "#a68fd6",
+  referee: "#c8c8c8", // a restart or HALT drives the robot, not its tactic
 };
 
 // Robot body radius, world meters -> px is ROBOT_RADIUS * scale so the drawn

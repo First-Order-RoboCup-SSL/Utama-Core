@@ -241,7 +241,7 @@ class AbstractStrategy:
         self.robot_controller.send_robot_commands()
 
     def debug_status(self) -> dict[int, list[str]]:
-        """Per-robot `["<tactic_id>[ (committed)]", "<tag>"]` for GUI display.
+        """Per-robot `["<tactic_id>[ (committed)]", "<tag>", "<steps>"]` for GUI display.
 
         Reports which tactic slot each robot currently belongs to, whether
         that slot is `is_committed()` (the actual "why won't this reassign"
@@ -250,13 +250,37 @@ class AbstractStrategy:
         for the debug GUI panel. The goalkeeper is just `["goalkeeper"]`: it is
         pinned outside the scheduler, so a scheduling role tag would say nothing,
         and is left out when its robot is not on the field (as it is not ticked then).
+
+        A robot a restart or HALT drives is `["referee · <its job>", "referee"]` instead
+        (`Strategy.referee_control`): its slot keeps it, but no tactic is running it.
+        `<steps>` is what the robot's tactic and skills traced this tick, keyed by robot
+        (`go_to_ball[3].approach: direct`, `shoot[3]: turning to shoot`); empty without a match log.
         """
         game = self.game
+        kernel = self._kernel_strategy
         status: dict[int, list[str]] = {}
         if self._goalkeeper_id in game.friendly_robots:
-            status[self._goalkeeper_id] = ["goalkeeper"]
-        for tactic_id, info in self._kernel_strategy.slot_status(game).items():
+            status[self._goalkeeper_id] = ["goalkeeper", ""]
+        for tactic_id, info in kernel.slot_status(game).items():
             label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
             for robot_id in info["robots"]:
                 status[robot_id] = [label, info["tag"].value]
+        for robot_id, job in kernel.referee_control.items():
+            status[robot_id] = ["halted" if job == "halted" else f"referee · {job}", "referee"]
+        traces = kernel.match_log.current_traces() if kernel.match_log is not None else {}
+        for robot_id, row in status.items():
+            row.append(robot_steps(traces, robot_id))
         return status
+
+
+def robot_steps(traces: dict, robot_id: int) -> str:
+    """The traces naming `robot_id` (`key[<id>]...`) as `name: value`, joined; plain values only
+    (dicts and lists are drawing data for replays, not words)."""
+    tag = f"[{robot_id}]"
+    steps = []
+    for key, value in traces.items():
+        if tag not in key or isinstance(value, (dict, list, tuple)):
+            continue
+        name = key.replace(tag, "").rstrip(".")
+        steps.append(f"{name}: {value}" if name else str(value))
+    return " · ".join(steps)

@@ -473,6 +473,11 @@ class CustomReferee:
         return self._profile_name
 
     @property
+    def has_dashboard(self) -> bool:
+        """A dashboard is attached (`attach_dashboard_notifier`): someone is watching live."""
+        return self._dashboard_notifier is not None
+
+    @property
     def defense_area_enabled(self) -> bool:
         """The profile's `defense_area.enabled`: whether robots must keep out of the boxes."""
         return self._defense_area_enabled
