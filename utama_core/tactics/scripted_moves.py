@@ -82,8 +82,12 @@ def _dribble(name: str, seconds: float, **axis: float) -> list[Move]:
 
 
 # About 45 s plus the operator's set-ups: how the ball sits on the dribbler and how the sensor reads
-# it at rest, turning and driving with it, then 3 kicks for the ball's speed and direction.
+# it at rest, turning and driving with it, then 3 kicks for the ball's speed and direction. It
+# first fires the kicker with no ball on it: left unused, the kicker's capacitor had run flat and
+# the first measured kick barely moved the ball (field day 2026-10-28); the shot charges it again.
 BALL_SCRIPT: tuple[Move, ...] = (
+    Move("charge the kicker (no ball)", 0.3, kick=True),
+    Move("rest", _REST),
     Move("place ball", 0.0, prompt=_BALL_ON),
     Move("dribble still", 3.0, dribble=True),
     *_dribble("dribble turn 1 rad/s", 3.0, turn=1.0),

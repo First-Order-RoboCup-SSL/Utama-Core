@@ -9,9 +9,10 @@ It waits until vision sees the robot, then asks before each part that needs you,
 terminal: put the robot near the middle of the camera's view facing +x (0.8 m clear ahead, 0.6 m
 to its left) with a ball at rest in view; later put the ball against its dribbler, once to dribble
 and once per kick (1.5 m clear ahead). Between those it plays fixed moves
-(`tactics/scripted_moves.py`, `FULL_SCRIPT`): about 65 s of driving and turning, then holding,
-turning and driving with the ball, then 3 kicks. Each move is printed as it starts. Ctrl+C stops
-the robot and exits at any time.
+(`tactics/scripted_moves.py`, `FULL_SCRIPT`): about 65 s of driving and turning, one kick with
+no ball (a kicker left unused runs flat; this charges it), then holding, turning and driving with
+the ball, then 3 kicks. Each move is printed as it starts. Ctrl+C stops the robot and exits at
+any time.
 
 When the script ends it says DONE, analyses the recorded log (`analysis/robot_calibration.py`)
 and prints the robot's numbers: loop delay, speed gain and acceleration per axis, vision noise,
