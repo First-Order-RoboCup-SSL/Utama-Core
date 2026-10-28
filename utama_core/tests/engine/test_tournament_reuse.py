@@ -48,6 +48,7 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(tournament, "run_match", fake_run_match)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(tournament, "CodeGraph", lambda: None)
+    monkeypatch.setattr(tournament, "_append_to_ledger", lambda *a: None)  # needs real fingerprints
     monkeypatch.setattr(tournament, "match_key", lambda _g, a, b, **_kw: f"{a}{rig.version[a]}{b}{rig.version[b]}")
     monkeypatch.setattr(tournament.match_cache, "MatchCache", lambda: rig.cache)
     monkeypatch.setattr(tournament.restart_outcomes, "analyse_match", lambda path: [])

@@ -1,7 +1,8 @@
 """Official RoboCup SSL game logs as replays in our format (`utama_core/replay/ssl_log.py`).
 
-    pixi run python tools/convert_ssl_log.py LOG_OR_DIR ... --out DIR
+    pixi run python tools/convert_ssl_log.py LOG_OR_DIR ... --out DIR [--raw-vision]
     pixi run python tools/convert_ssl_log.py --corpus 2022-2026 --out DIR [--division div-b] [--jobs 4]
+        [--raw-vision] [--backfill-extras]
 
 The first form converts game logs (`*.log.gz`; a directory: every log under it). The second
 lists the logs the league publishes (https://ssl.robocup.org/game-logs/, the public share
@@ -13,12 +14,26 @@ so an interrupted run resumes; `DIR/corpus.json` lists every log with its outcom
 Each replay is `<stem>.npz` + `<stem>.sparse_referee.pkl` + `<stem>.source.json` (teams, score,
 tracker source, field geometry), `<stem>` the log's name without `.log.gz`. Yellow is the
 friendly team. Downloads are parsed as data only. Do not write them into `replays/`.
+
+Sidecars for measuring physics (see `ssl_log`): `<stem>.kicks.json` (the tracker's kicks) and
+`<stem>.tracker.zip` (visibility, angular velocity) always, `<stem>.vision.zip` (every raw
+camera detection, about the replay's size again) with `--raw-vision`. `--backfill-extras`
+downloads a log whose replay exists but lacks a sidecar asked for, and adds the sidecars
+without rewriting the replay; without it such a log is skipped. `--keep-raw` keeps each
+download in `--raw-dir/<year>/` instead of deleting it (about 15–20 GB for 2022–2026 Division
+B), reuses a kept download instead of fetching it again, and downloads the raw log of a match
+that is otherwise complete.
+
+Each conversion may use at most `--max-memory-gb` of address space (default 7): a 350 MB log peaks
+near 4 GB resident. A log that needs more fails with `MemoryError` (listed in `corpus.json`)
+instead of exhausting the machine's memory.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import resource
 import shutil
 import sys
 import time
@@ -59,18 +74,29 @@ def list_logs(year: int, division: str) -> list[dict]:
     return sorted(logs, key=lambda log: log["name"])
 
 
-def _download(url: str, path: Path, attempts: int = 3) -> None:
+def _download(url: str, path: Path, expected_bytes: int = 0, attempts: int = 5) -> None:
+    """Fetch `url` into `path` via `path.part`, resuming a partial `.part`. The share sometimes
+    closes a connection early without an error, so a download shorter than `expected_bytes`
+    (when known) is resumed too, not taken as complete."""
     part = path.with_name(path.name + ".part")
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=120) as response:
-                with open(part, "wb") as f:
+            have = part.stat().st_size if part.exists() else 0
+            headers = {**HEADERS, **({"Range": f"bytes={have}-"} if have else {})}
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as response:
+                resumed = have and response.status == 206
+                with open(part, "ab" if resumed else "wb") as f:
                     shutil.copyfileobj(response, f, length=1 << 20)
+            size = part.stat().st_size
+            if expected_bytes and size != expected_bytes:
+                if size > expected_bytes:
+                    part.unlink()
+                raise OSError(f"{path.name}: got {size} of {expected_bytes} bytes")
             part.replace(path)
             return
         except OSError:
-            part.unlink(missing_ok=True)
             if attempt == attempts - 1:
+                part.unlink(missing_ok=True)
                 raise
             time.sleep(5 * (attempt + 1))
 
@@ -83,40 +109,85 @@ def _summary_line(stem: str, summary: dict) -> str:
     )
 
 
+def has_extras(out_dir: Path, stem: str, raw_vision: bool) -> bool:
+    """Whether a converted replay has the sidecars asked for (per its `source.json`)."""
+    extras = json.loads((out_dir / f"{stem}.source.json").read_text()).get("extras")
+    return extras is not None and (extras["raw_vision"] or not raw_vision)
+
+
+def limit_memory(gigabytes: float) -> None:
+    """Cap this process's address space, so an allocation past it raises `MemoryError`."""
+    limit = int(gigabytes * 2**30)
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+
+
 def _corpus_job(job: dict) -> dict:
-    """Download, convert and delete one published log."""
+    """Download, convert (or only add sidecars to) and delete (unless kept) one published log."""
     stem = log_stem(job["name"])
-    out_dir, raw = Path(job["out"]) / str(job["year"]), Path(job["raw_dir"]) / f"{stem}.log.gz"
+    keep_raw = job.get("keep_raw", False)
+    out_dir = Path(job["out"]) / str(job["year"])
+    raw_dir = Path(job["raw_dir"]) / str(job["year"]) if keep_raw else Path(job["raw_dir"])
+    raw = raw_dir / f"{stem}.log.gz"
     row = {"year": job["year"], "log": job["name"], "stem": stem, "bytes": job["bytes"]}
-    if (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists():
+    exists = (out_dir / f"{stem}.npz").exists() and (out_dir / f"{stem}.source.json").exists()
+    complete = exists and (not job["backfill_extras"] or has_extras(out_dir, stem, job["raw_vision"]))
+    raw_ok = raw.exists() and (not job["bytes"] or raw.stat().st_size == job["bytes"])
+    if complete and (not keep_raw or raw_ok):
         return {**row, "status": "exists"}
     started = time.time()
     try:
-        _download(job["url"], raw)
-        summary = convert_log(raw, out_dir, stem=stem)
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        if raw.exists() and not raw_ok:
+            raw.replace(raw.with_name(raw.name + ".part"))  # a cut-short download: resume it
+        if not raw.exists():  # `_download` writes `.part` and renames it once complete
+            _download(job["url"], raw, job["bytes"])
+        if complete:
+            return {**row, "status": "raw kept", "seconds": round(time.time() - started)}
+        summary = convert_log(raw, out_dir, stem=stem, raw_vision=job["raw_vision"], write_replay=not exists)
         return {
             **row,
-            "status": "converted",
+            "status": "extras added" if exists else "converted",
             "seconds": round(time.time() - started),
             "line": _summary_line(stem, summary),
         }
     except Exception as exc:  # one bad log must not stop the corpus
         return {**row, "status": "failed", "error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()}
     finally:
-        raw.unlink(missing_ok=True)
+        if not keep_raw:
+            raw.unlink(missing_ok=True)
         raw.with_name(raw.name + ".part").unlink(missing_ok=True)
 
 
-def run_corpus(years: list[int], division: str, out: Path, raw_dir: Path, jobs: int) -> list[dict]:
+def run_corpus(
+    years: list[int],
+    division: str,
+    out: Path,
+    raw_dir: Path,
+    jobs: int,
+    raw_vision: bool = False,
+    backfill_extras: bool = False,
+    keep_raw: bool = False,
+    max_memory_gb: float = 7.0,
+) -> list[dict]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     work = []
     for year in years:
         logs = list_logs(year, division)
         print(f"{year}/{division}: {len(logs)} logs, {sum(log['bytes'] for log in logs) / 1e9:.1f} GB", flush=True)
-        work += [{**log, "out": str(out), "raw_dir": str(raw_dir)} for log in logs]
+        work += [
+            {
+                **log,
+                "out": str(out),
+                "raw_dir": str(raw_dir),
+                "raw_vision": raw_vision,
+                "backfill_extras": backfill_extras,
+                "keep_raw": keep_raw,
+            }
+            for log in logs
+        ]
     rows = []
-    with ProcessPoolExecutor(max_workers=jobs) as pool:
+    with ProcessPoolExecutor(max_workers=jobs, initializer=limit_memory, initargs=(max_memory_gb,)) as pool:
         for row in pool.map(_corpus_job, work):
             rows.append(row)
             print(
@@ -140,10 +211,32 @@ def main() -> None:
     parser.add_argument("--division", default="div-b", help="share directory per year (default div-b)")
     parser.add_argument("--raw-dir", type=Path, help="where downloads go while converted (default OUT/raw)")
     parser.add_argument("--jobs", type=int, default=1, help="logs downloaded and converted at once")
+    parser.add_argument("--raw-vision", action="store_true", help="also keep every raw camera detection")
+    parser.add_argument(
+        "--backfill-extras",
+        action="store_true",
+        help="add missing sidecars to replays already converted, without rewriting them",
+    )
+    parser.add_argument(
+        "--keep-raw", action="store_true", help="keep each download in RAW_DIR/<year>/ instead of deleting it"
+    )
+    parser.add_argument(
+        "--max-memory-gb", type=float, default=7.0, help="address space one conversion may use (default 7)"
+    )
     args = parser.parse_args()
 
     if args.corpus:
-        rows = run_corpus(_years(args.corpus), args.division, args.out, args.raw_dir or args.out / "raw", args.jobs)
+        rows = run_corpus(
+            _years(args.corpus),
+            args.division,
+            args.out,
+            args.raw_dir or args.out / "raw",
+            args.jobs,
+            raw_vision=args.raw_vision,
+            backfill_extras=args.backfill_extras,
+            keep_raw=args.keep_raw,
+            max_memory_gb=args.max_memory_gb,
+        )
         failed = [row for row in rows if row["status"] == "failed"]
         print(f"{len(rows) - len(failed)}/{len(rows)} logs converted or already there; failed: {len(failed)}")
         sys.exit(1 if failed else 0)
@@ -153,9 +246,16 @@ def main() -> None:
         logs += sorted([*path.rglob("*.log.gz"), *path.rglob("*.log")]) if path.is_dir() else [path]
     if not logs:
         parser.error("no game logs given")
+    limit_memory(args.max_memory_gb)
     for log in logs:
-        summary = convert_log(log, args.out)
-        print(_summary_line(log_stem(log.name), summary), flush=True)
+        stem = log_stem(log.name)
+        exists = (args.out / f"{stem}.npz").exists() and (args.out / f"{stem}.source.json").exists()
+        if exists and args.backfill_extras and has_extras(args.out, stem, args.raw_vision):
+            print(f"{stem}: sidecars already there", flush=True)
+            continue
+        replay = not (exists and args.backfill_extras)
+        summary = convert_log(log, args.out, raw_vision=args.raw_vision, write_replay=replay)
+        print(_summary_line(stem, summary) + ("" if replay else " (sidecars added)"), flush=True)
 
 
 if __name__ == "__main__":

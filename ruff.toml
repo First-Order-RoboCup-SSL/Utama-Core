@@ -1,3 +1,11 @@
+# Exclusions apply to all of ruff.
+exclude = [
+    "*_pb2.py",
+    "build/",
+    "dist/",
+]
+
+[lint]
 ignore = [
     "F401",  # Module imported but unused
     "E402",  # Module level import not at top of file
@@ -6,10 +14,3 @@ ignore = [
 
 # Enable auto-fix for fixable errors
 fixable = ["E"]  # Fix all fixable E codes (like E402)
-
-# Optionally, exclude certain files or directories
-exclude = [
-    "*_pb2.py",
-    "build/",
-    "dist/",
-]

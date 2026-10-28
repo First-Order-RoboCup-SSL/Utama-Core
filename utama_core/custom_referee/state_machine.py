@@ -57,6 +57,10 @@ _BALL_PLACEMENT_TIMEOUT_SECONDS = 10.0
 # SSL rulebook §5.4: the ball is in play 10 s (Division B) after a free kick
 # even if nobody kicked it. A Defender Too Close foul (§8.4.3) restarts the clock.
 _FREE_KICK_TIMEOUT_SECONDS = 10.0
+# SSL rulebook §5.3.3 / §5.4: a free kick is taken, and the ball in play, once the ball has moved this
+# far from where it was when the free kick's command began (or, for a kick-off, when it moved from
+# NORMAL_START's spot).
+_BALL_MOVED_M = 0.05
 
 
 _PLAYING_STAGES = frozenset({Stage.NORMAL_FIRST_HALF, Stage.NORMAL_SECOND_HALF})
@@ -188,6 +192,10 @@ class GameStateMachine:
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
         # First Defender Too Close foul of the current free kick; restarts its clock.
         self._defender_too_close_at: float = -math.inf
+        # Where the ball was when the current DIRECT_FREE_* command began, and the command_counter
+        # it began at: a kick that moves the ball from here ends the free kick (§5.4).
+        self._free_kick_ball_origin: Optional[tuple[float, float]] = None
+        self._free_kick_origin_counter: int = -1
 
         # Cooldown: don't process a new violation within this window.
         self._last_transition_time: float = -math.inf
@@ -252,6 +260,10 @@ class GameStateMachine:
 
         if self.stage == Stage.POST_GAME:
             return self._generate_referee_data(current_time)
+
+        if self.command in self._DIRECT_FREE_COMMANDS and self._free_kick_origin_counter != self.command_counter:
+            self._free_kick_origin_counter = self.command_counter
+            self._free_kick_ball_origin = self._ball_xy(game_frame)
 
         if violation is not None and self._can_transition(current_time):
             self._apply_violation(violation, current_time)
@@ -385,7 +397,12 @@ class GameStateMachine:
         elif self._auto_advance.direct_free_to_normal and self.command in self._DIRECT_FREE_COMMANDS:
             ready = game_frame is not None and self._free_kick_ready(self.command, game_frame)
             kick_clock_start = max(self.command_timestamp, self._defender_too_close_at)
-            if current_time - kick_clock_start >= _FREE_KICK_TIMEOUT_SECONDS:
+            if self._free_kick_taken(game_frame):
+                # The kicker has kicked: the ball is in play, as after the kick of a ready free kick
+                # (so KeepOutRule stops applying, and DoubleTouchRule sees DIRECT_FREE_* → NORMAL_START).
+                logger.info("Free kick taken (ball moved) — %s → NORMAL_START", self.command.name)
+                self._start_normal_play(current_time, game_frame)
+            elif current_time - kick_clock_start >= _FREE_KICK_TIMEOUT_SECONDS:
                 logger.info("Free kick not taken in time — auto-advancing %s → FORCE_START", self.command.name)
                 self.command = RefereeCommand.FORCE_START
                 self.command_counter += 1
@@ -400,17 +417,7 @@ class GameStateMachine:
                     logger.debug("Advance 3 countdown started (%s)", self.command.name)
                 elif (current_time - self._advance3_ready_since) >= _AUTO_ADVANCE_DELAY:
                     logger.info("Free kick ready — auto-advancing %s → NORMAL_START", self.command.name)
-                    self.command = RefereeCommand.NORMAL_START
-                    self.command_counter += 1
-                    self.command_timestamp = current_time
-                    self.next_command = None
-                    self.status_message = None
-                    self._normal_start_time = current_time
-                    self._ball_pos_at_normal_start = (
-                        (game_frame.ball.p.x, game_frame.ball.p.y) if game_frame.ball is not None else None
-                    )
-                    self._advance3_ready_since = math.inf
-                    self._last_transition_time = current_time
+                    self._start_normal_play(current_time, game_frame)
             else:
                 self._advance3_ready_since = math.inf
 
@@ -643,7 +650,33 @@ class GameStateMachine:
         if self._ball_pos_at_normal_start is None or game_frame.ball is None:
             return False
         ox, oy = self._ball_pos_at_normal_start
-        return math.hypot(game_frame.ball.p.x - ox, game_frame.ball.p.y - oy) >= 0.05
+        return math.hypot(game_frame.ball.p.x - ox, game_frame.ball.p.y - oy) >= _BALL_MOVED_M
+
+    def _free_kick_taken(self, game_frame: Optional["GameFrame"]) -> bool:
+        """Return True if the ball has moved ≥ 0.05 m from where it was when this DIRECT_FREE_* began."""
+        if self._free_kick_ball_origin is None or game_frame is None or game_frame.ball is None:
+            return False
+        ox, oy = self._free_kick_ball_origin
+        return math.hypot(game_frame.ball.p.x - ox, game_frame.ball.p.y - oy) >= _BALL_MOVED_M
+
+    @staticmethod
+    def _ball_xy(game_frame: Optional["GameFrame"]) -> Optional[tuple[float, float]]:
+        if game_frame is None or game_frame.ball is None:
+            return None
+        return (game_frame.ball.p.x, game_frame.ball.p.y)
+
+    def _start_normal_play(self, current_time: float, game_frame: "GameFrame") -> None:
+        """DIRECT_FREE_* → NORMAL_START (the kicker was ready, or the ball has been kicked): the ball
+        is in play, and NORMAL_START's own timeout measures from here."""
+        self.command = RefereeCommand.NORMAL_START
+        self.command_counter += 1
+        self.command_timestamp = current_time
+        self.next_command = None
+        self.status_message = None
+        self._normal_start_time = current_time
+        self._ball_pos_at_normal_start = self._ball_xy(game_frame)
+        self._advance3_ready_since = math.inf
+        self._last_transition_time = current_time
 
     def _ball_placement_done(self, game_frame: "GameFrame") -> bool:
         """Return True when the ball is within _PLACEMENT_DONE_DIST of the placement target."""

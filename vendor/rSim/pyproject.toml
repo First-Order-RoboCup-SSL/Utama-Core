@@ -1,5 +1,4 @@
 [build-system]
-requires = ["setuptools", "wheel", "scikit-build", "cmake", "ninja", "setuptools_scm>=6.2"]
+requires = ["setuptools", "wheel", "scikit-build", "cmake", "ninja"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]

@@ -65,10 +65,12 @@ from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
 # (2*half_length/3 ≈ 3.0 m): the last metre of buildup in front of the box is
 # normal possession play, not yet an emergency.
 _DANGER_DEPTH = 2.6
+_DANGER_EXIT_DEPTH = 3.0
 # An enemy within this range of the ball makes the danger "contested" — without
 # this gate the tactic would fire on every harmless back-pass to a free keeper
 # situation even with no opponent anywhere near.
 _PRESSURE_RANGE = 1.2
+_PRESSURE_EXIT_RANGE = 1.5
 # Clearance-lane openness beyond 1.0 m is all equally "clear"; capping keeps a
 # fully-open lane from dominating the score via raw distance.
 _LANE_OPENNESS_CAP = 1.0
@@ -103,14 +105,23 @@ def _nearest_enemy_distance_to_ball(game: Game) -> Optional[float]:
     return best
 
 
-def in_danger(game: Game) -> bool:
-    """The tactic's danger read: ball deep in our own third, contested by an enemy."""
+def in_danger(game: Game, was_in_danger: bool = False) -> bool:
+    """The tactic's danger read: ball deep in our own third, contested by an enemy.
+
+    Includes spatial hysteresis on pressure range (enter <= 1.2 m, exit > 1.5 m)
+    and danger depth (enter <= 2.6 m, exit > 3.0 m) to prevent tactic flip-backs
+    when an opponent hovers around the contest boundary.
+    """
     if game.ball is None:
         return False
-    if _progress_from_own_goal(game, game.ball.p.to_2d().x) > _DANGER_DEPTH:
+
+    depth_limit = _DANGER_EXIT_DEPTH if was_in_danger else _DANGER_DEPTH
+    pressure_limit = _PRESSURE_EXIT_RANGE if was_in_danger else _PRESSURE_RANGE
+
+    if _progress_from_own_goal(game, game.ball.p.to_2d().x) > depth_limit:
         return False
     enemy_dist = _nearest_enemy_distance_to_ball(game)
-    return enemy_dist is not None and enemy_dist <= _PRESSURE_RANGE
+    return enemy_dist is not None and enemy_dist <= pressure_limit
 
 
 def _clearance_candidates(game: Game, ball_p: Vector2D) -> list[Vector2D]:
@@ -161,11 +172,18 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
 
     tag = TacticTag.DEFENSE
 
+    def __init__(self) -> None:
+        self._was_in_danger: bool = False
+
+    def reset_applicable(self) -> None:
+        self._was_in_danger = False
+
     def initial_mem(self) -> ClearBallMem:
         return ClearBallMem()
 
     def applicable(self, game: Game) -> bool:
-        return in_danger(game)
+        self._was_in_danger = in_danger(game, was_in_danger=self._was_in_danger)
+        return self._was_in_danger
 
     def highlights(self, mem: ClearBallMem) -> dict[RobotId, str]:
         return {mem.clearer_id: "clearer"} if mem.clearer_id is not None else {}

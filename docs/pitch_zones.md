@@ -36,8 +36,7 @@ The centre is |y| ≤ 1 m (the box's half width). Left and right turn with the t
 attacking toward +x, its left wing is y > 1 m; for a team attacking toward −x (`my_team_is_right`),
 its left wing is y < −1 m. So the two teams' left wings are on opposite touch lines.
 
-The scenario bench tags each start with its third and lane (`start.start_tags`, `--where`);
-no tactic uses the lanes yet, and one that needs them should use these boundaries.
+No tactic uses the lanes yet; one that needs them should use these boundaries.
 
 **Ball side / far side**: the wing the ball is on, and the wing opposite it. When the ball is in
 the centre, neither applies. **Weak side** is not the same thing: in `SwitchOfPlayTactic`

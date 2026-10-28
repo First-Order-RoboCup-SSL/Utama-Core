@@ -191,11 +191,13 @@ class DoubleTouchRule(BaseRule):
             if ball is not None
             else None
         )
+        kicker_is_yellow = kicker_is_friendly == my_team_is_yellow
         return RuleViolation(
             rule_name="double_touch",
             suggested_command=RefereeCommand.STOP,
             next_command=next_cmd,
             status_message="Double touch",
             designated_position=placement,
-            offending_robots=((kicker_is_friendly == my_team_is_yellow, kicker_id),),
+            offending_teams=(kicker_is_yellow,),
+            offending_robots=((kicker_is_yellow, kicker_id),),
         )

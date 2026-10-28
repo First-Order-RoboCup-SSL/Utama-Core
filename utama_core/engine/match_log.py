@@ -75,6 +75,7 @@ class MatchLog:
     def __init__(self) -> None:
         self._events: list[Union[IntentionEvent, TraceEvent, RefereeEvent]] = []
         self._last_trace_value: dict[str, Any] = {}
+        self._traced_since_sweep: set[str] = set()
 
     def intention(
         self,
@@ -102,9 +103,19 @@ class MatchLog:
 
     def trace_if_changed(self, tick: int, sim_time: float, key: str, value: Any) -> None:
         """Like `trace()`, but only records when `value` differs from the last value logged for `key`."""
+        self._traced_since_sweep.add(key)
         if self._last_trace_value.get(key, _UNSET) != value:
             self._last_trace_value[key] = value
             self.trace(tick, sim_time, key, value)
+
+    def clear_untraced(self, tick: int, sim_time: float) -> None:
+        """Record `None` for every key not passed to `trace_if_changed` since the last call, so a
+        replay stops drawing a tactic's overlay once the tactic stops tracing it (it stopped
+        ticking, or the phase that traced it ended). `Strategy.tick` calls it once per tick."""
+        for key, value in list(self._last_trace_value.items()):
+            if value is not None and key not in self._traced_since_sweep:
+                self.trace_if_changed(tick, sim_time, key, None)
+        self._traced_since_sweep.clear()
 
     def referee(
         self,

@@ -45,8 +45,19 @@ REPLAY_BASE_PATH = Path.cwd() / "replays"
 FPS_PRINT_INTERVAL = 1.0  # seconds
 
 ### Refiners ###
-BALL_MERGE_THRESHOLD = 0.05  # CameraCombiner: distance threshold to merge balls (m)
+BALL_MERGE_THRESHOLD = (
+    0.2  # CameraCombiner: ball detections this close are one ball (m); two cameras can disagree by ~0.1
+)
+# CameraCombiner: a robot's detection further than this from the best-placed camera's is dropped (m)
+CAMERA_AGREEMENT = 0.1
+# CameraCombiner: a ball this close to a robot its camera sees takes that camera's offset at the robot (m)
+BALL_ROBOT_SHIFT_RANGE = 0.3
+# CameraCombiner: a camera that just lost a robot still places it from its gap to another camera this long (s)
+BALL_ROBOT_OFFSET_MEMORY = 0.5
 VISION_BOUNDS_BUFFER = 1.0  # CameraCombiner: buffer around field bounds to include in vision (m)
+# An unseen ball is assumed to roll on at this deceleration (m/s^2): official Div B logs, 1 s or
+# more after a kick (docs/sim_realism.md). A field's own value comes from its free-rolling balls.
+BALL_ROLL_DECEL = 0.29
 
 OFF_PITCH_OFFSET = VISION_BOUNDS_BUFFER * 5  # distance outside field bounds to consider as off-pitch (m)
 

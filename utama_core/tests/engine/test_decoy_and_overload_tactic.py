@@ -290,3 +290,53 @@ def test_tactic_releases_its_robots_once_the_enemy_has_held_the_ball_1s(held_tic
     for _ in range(held_ticks):
         _commands, mem = tactic.tick(game, ctx, (1, 3), mem)
     assert tactic.is_committed(game, mem) is not released
+
+
+def test_lure_phase_deadlock_times_out_when_decoy_lacks_ball():
+    """When lure phase exceeds _LURE_MAX_TICKS * 2 and the decoy does not have the ball,
+    it must time out and return an empty command dict and reset memory, releasing commitment."""
+    friendly = {1: _robot(1, 0.0, 0.0, True, has_ball=False), 3: _robot(3, -1.5, 1.5, True, has_ball=False)}
+    zv = Vector3D(0, 0, 0)
+    frame = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=friendly,
+        enemy_robots={},
+        ball=Ball(p=Vector3D(2.0, 0.0, 0.0), v=zv, a=zv),
+    )
+    field = Field(
+        my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
+    )
+    game = Game(past=GameHistory(max_history=20), current=frame, field=field)
+    tactic = DecoyOverloadTactic()
+    ctx = TickContext(motion_controller=_NullMotionController())
+
+    # 1) Below 2x max ticks: does not time out yet
+    mem = DecoyOverloadMem(
+        decoy_id=1,
+        overloader_id=3,
+        marker_id=None,
+        marker_start_y=0.0,
+        phase="lure",
+        lure_ticks=_LURE_MAX_TICKS * 2 - 1,
+    )
+    _commands, new_mem = tactic.tick(game, ctx, (1, 3), mem)
+    assert new_mem.phase == "lure"
+    assert tactic.is_committed(game, new_mem) is True
+
+    # 2) At 2x max ticks: this tick increments lure_ticks to _LURE_MAX_TICKS * 2 + 1 (> 2 * _LURE_MAX_TICKS)
+    # Since decoy does not have ball, it times out and resets!
+    mem_at_limit = DecoyOverloadMem(
+        decoy_id=1,
+        overloader_id=3,
+        marker_id=None,
+        marker_start_y=0.0,
+        phase="lure",
+        lure_ticks=_LURE_MAX_TICKS * 2,
+    )
+    commands, reset_mem = tactic.tick(game, ctx, (1, 3), mem_at_limit)
+    assert commands == {}
+    assert reset_mem.decoy_id is None
+    assert reset_mem.lure_ticks == 0
+    assert tactic.is_committed(game, reset_mem) is False

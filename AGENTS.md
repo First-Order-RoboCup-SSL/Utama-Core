@@ -17,48 +17,55 @@ exists yet: say so in your change rather than guessing.
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/evaluation/`, `tools/scenario_bench.py`, `utama_core/scenario_bench/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
-| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `data_processing/` | `TODO` (see `team_controller/README.md`) | |
+| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
 
 ## Glossary
 
 One term per thing; reuse these instead of coining new ones.
 
 - **Round-robin / tournament run** — every strategy config plays every other once
-  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json`. The ground truth for
-  "which strategy is better". Slow in full; with `--reuse` only matches whose code changed rerun.
-- **Standings** — a round-robin's ranking. `round_robin.py` prints wins and draws;
-  `metric_correlation.py` uses points per match (3 a win, 1 a draw) and goal difference.
-- **Start** — one situation (see below) the scenario bench replays for 10 s, tagged with its
-  type from the candidate's view. In code: `BenchScenario` (`scenario_bench/start.py`), and
-  "scenario" in flags and enums.
-- **Bank** — a versioned list of starts (`utama_core/scenario_bench/banks/bank_vN.json`),
-  harvested from one round-robin's replays, up to 40 of each situation type.
-- **Scenario bench** — `tools/scenario_bench.py`: a fast paired A/B screen of a candidate
-  against a baseline on a bank, each start against the opponent it came from; it estimates the
-  change in goals per match as Σ situations per match (real or sim weights) × the change in
-  P(goal within 10 s). A diagnostic, not a ranking: it cannot see a candidate change how often
-  situations happen or score from build-up longer than 10 s, so rank with matches.
-- **Bench validators** — `tools/bench_vs_standings.py` and `tools/metric_correlation.py` check
-  how far the bench and cheap proxy metrics agree with round-robin results.
+  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the evaluation ledger.
+  The check for stalls and the occasional health check of the whole catalog; a single
+  strategy is judged with `evaluate.py` (below). With `--reuse` only matches whose code changed rerun.
+- **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
+  or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
+  verdict on a strategy; see Evaluation.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
-  fixed scenarios. Unrelated to the scenario bench or any strategy.
+  fixed scenarios. Unrelated to any strategy.
+- **Moment / regression moment** — a field state (from a replay or by hand) that reproduced a
+  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/moments.py`).
+  A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
+  the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
+  the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
-- **Catch rate** — a diagnostic reported from the bank, never a gate (±4–8 pts between runs).
+- **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
+- **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
+  `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always
+  turned so the strategy attacks right. Position map: a heatmap of where the outfield robots stand in
+  live play, with the ball and without it, plus each robot's mean position. Shot map: every shot at
+  the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
+- **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a
+  candidate stronger than the champion of a fixed, versioned reference pool
+  (`tools/evaluation/pools/pool_vN.json`)? Rounds of matches against the pool's opponents under
+  seeded sim noise, decided on paired results (candidate and champion against the same opponent
+  under the same noise) and stopping once the answer is clear; ratings (strength ± SD in goals
+  per match, `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
+  Goals only: shots, xG and the other signals were tested as rankers and rejected
+  (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
 - **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
   P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
   kickoff or penalty, force start. See `docs/signals.md`.
 - **Situation rates** — how often each situation type happens per team per live minute, from
-  real Division B matches or our round-robin (`banks/situation_rates_{real,sim}.json`,
-  `goal_ledger --rates`): the scenario bench's weights.
+  real Division B matches or our round-robin (`goal_ledger --rates PATH`).
 
 ## Repo map
 
@@ -111,6 +118,8 @@ declarations) — check there before reintroducing one of them.
 - **Always pass `--headless`** when running any simulator/integration test:
   `pixi run pytest utama_core/tests/ --headless`. Much faster; there is no reason to run
   with graphics in an agent loop.
+- A git worktree for a parallel agent: run `tools/setup_worktree.sh` inside it (links `.pixi`,
+  copies the compiled planner/simulator `.so` files; without them tests differ).
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.
 - `--level quick|full` (defined in the root `conftest.py`, not `utama_core/tests/

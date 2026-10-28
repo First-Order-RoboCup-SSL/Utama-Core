@@ -59,6 +59,22 @@ public:
     const std::unordered_map<std::string, double> getFieldParams();
     const std::vector<double> &getState();
     void setActions(std::vector<std::vector<double>> actions);
+
+    // Tunable physics (Utama fork, see FORK_NOTES.md). The defaults reproduce upstream rSim:
+    // 5 substeps per step, and the ball slowed by a constant friction force
+    // (ballFriction * g, about 0.65 m/s^2 in practice).
+    // With ballRollDecel >= 0 the ball instead loses exactly ballSlideDecel m/s^2 after a kick
+    // until its speed falls to ballSlideFraction of the kick speed, then ballRollDecel m/s^2.
+    void setPhysicsParams(int substeps, double ballSlideDecel, double ballRollDecel, double ballSlideFraction);
+
+private:
+    int substeps = 5;
+    double ballSlideDecel = -1;
+    double ballRollDecel = -1;
+    double ballSlideFraction = 5.0 / 7.0;
+    bool ballSliding = false;
+    double ballSlideEndSpeed = 0;
+    void applyBallFriction(dReal dt);
 };
 
 #endif // SSLWorld_H

@@ -451,13 +451,18 @@ class TestBallPlacementOursStep:
             ball_pos.y - offset * math.sin(oren),
         )
         expected = referee_actions._clamp_to_field_or_ball(approach, game, ball_pos)
+        # The placer starts on the designated side, so it routes round the ball to the
+        # (clamped) approach point rather than straight at it.
+        from utama_core.global_utils.math_utils import detour_around_circle
+
+        expected = detour_around_circle(Vector2D(4.0, 0.0), expected, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
         assert captured[0][1].x == pytest.approx(expected.x)
         assert captured[0][1].y == pytest.approx(expected.y)
         assert captured[0][2] is True
 
     def test_placer_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
         """Regression for the same bug shape as `DirectFreeOursStep`'s kicker
-        thrashing (roadmap item 15): a bare `min(..., key=distance)`
+        thrashing (roadmap "trajsample liveness fixes"): a bare `min(..., key=distance)`
         recomputed fresh every tick flips identity on ordinary sim noise
         whenever two-plus robots are near-tied, resetting whoever newly
         "wins" to a standing start. `BallPlacementOursStep` must hold its
@@ -840,6 +845,78 @@ class TestBallPlacementOursStep:
         assert support_move[2] is False
 
 
+class TestBallPlacementOursApproachAroundBall:
+    """Our placer approaches the ball's behind-point round the ball, not through it.
+
+    A hand-made moment (since dropped): the placer starts on the designated side, and its straight run
+    to the approach point passed 0.03 m from the ball, so it drove into the ball and pushed it
+    off the spot.
+    """
+
+    CLEARANCE = ROBOT_RADIUS + BALL_RADIUS
+    BALL = (-2.0, -3.0)
+    DESIGNATED = (2.0, -3.0)
+    APPROACH = (-2.0 - 0.10, -3.0)  # 0.10 m behind the ball, on the carry axis
+
+    def _placer_target(self, monkeypatch, robot_xy):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_YELLOW)
+        referee.designated_position = self.DESIGNATED
+        game = _make_game(
+            friendly_robots={4: _robot(4, *robot_xy)},
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(*self.BALL),
+        )
+        node = referee_actions.BallPlacementOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+        return captured[4]
+
+    @staticmethod
+    def _min_distance_to_ball(start, end, ball):
+        seg = Vector2D(end.x - start.x, end.y - start.y)
+        rel = Vector2D(ball[0] - start.x, ball[1] - start.y)
+        t = max(0.0, min(1.0, (rel.x * seg.x + rel.y * seg.y) / (seg.x**2 + seg.y**2)))
+        closest = Vector2D(start.x + seg.x * t, start.y + seg.y * t)
+        return math.hypot(closest.x - ball[0], closest.y - ball[1])
+
+    def test_placer_on_designated_side_routes_round_the_ball(self, monkeypatch):
+        """Straight run from (1,-2) to the approach point passes 0.03 m from the ball: the
+        target handed to the planner must be a waypoint whose leg keeps a robot radius plus a
+        ball radius from the ball, on the placer's own side."""
+        start = Vector2D(1.0, -2.0)
+        target = self._placer_target(monkeypatch, (start.x, start.y))
+
+        assert (target.x, target.y) != pytest.approx(self.APPROACH)
+        assert self._min_distance_to_ball(start, target, self.BALL) >= self.CLEARANCE - 1e-9
+        assert target.y > self.BALL[1]  # round the side the placer is on
+
+    def test_placer_level_with_the_ball_goes_straight_to_the_approach_point(self, monkeypatch):
+        """Boundary of 'behind': a placer level with the ball (zero component along the carry
+        direction) is not on the designated side, so its run to the approach point is not
+        detoured."""
+        target = self._placer_target(monkeypatch, (-2.0, -1.0))
+
+        assert (target.x, target.y) == pytest.approx(self.APPROACH)
+
+    def test_placer_already_behind_the_ball_heads_straight_to_the_approach_point(self, monkeypatch):
+        """Behind the ball (on the far side from the designated position), the run to the approach
+        point is the final approach and goes straight there, not round the ball."""
+        target = self._placer_target(monkeypatch, (-2.5, -3.0))
+
+        assert (target.x, target.y) == pytest.approx(self.APPROACH)
+
+
 # ---------------------------------------------------------------------------
 # Keep-out retreat and penalty positioning
 # ---------------------------------------------------------------------------
@@ -909,6 +986,138 @@ class TestRefereeKeepOutRetreat:
         )
         cmd_map = _make_cmd_map(game)
         node = referee_actions.StopStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][0] == 0
+        assert captured[0][1] == Vector2D(-3.25, 0.0)
+
+    def test_direct_free_theirs_clears_robot_from_opponent_defense_area(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, -4.3, 0.0),
+            1: _robot(1, 1.0, 0.0),
+        }
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(2.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][0] == 0
+        assert captured[0][1] == Vector2D(-3.25, 0.0)
+
+    def test_direct_free_theirs_evicts_excess_defenders_from_own_defense_area(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, 4.0, 0.0),
+            1: _robot(1, 4.1, 0.2),
+        }
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(0.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][0] == 1
+        assert captured[0][1] == Vector2D(3.27, 0.2)
+
+    def test_ball_placement_theirs_clears_robot_from_opponent_defense_area(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {
+            0: _robot(0, -4.3, 0.0),
+            1: _robot(1, 1.0, 0.0),
+        }
+        referee = _make_referee_data(command=RefereeCommand.BALL_PLACEMENT_BLUE)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(2.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.BallPlacementTheirsStep()
         node.blackboard = _make_blackboard(game, cmd_map)
 
         node.update()
@@ -1113,7 +1322,7 @@ class TestPenaltyPositioning:
         keeper_target = next(target for robot_id, target in captured if robot_id == 1)
         support_targets = [target for robot_id, target in captured if robot_id != 1]
 
-        assert keeper_target.x == pytest.approx(4.5)
+        assert keeper_target.x == pytest.approx(4.5 - ROBOT_RADIUS)
         assert all(target.x > 0.0 for target in support_targets)
 
     def test_prepare_penalty_theirs_support_robots_stand_outside_the_keep_out_circle(self, monkeypatch):
@@ -1210,6 +1419,155 @@ class TestPenaltyPositioning:
         seg = target - start
         t = min(1.0, max(0.0, (mark - start).dot(seg) / seg.dot(seg)))
         assert (start + seg * t - mark).mag() >= 0.5
+
+    def test_prepare_penalty_ours_goalkeeper_stays_on_own_goal_line(self, monkeypatch):
+        # PreparePenaltyOursStep must keep the friendly goalkeeper on our own goal line,
+        # not displace it into the opponent's half behind the penalty mark.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {0: _robot(0, -4.4, 0.0), 1: _robot(1, 0.0, 0.0), 2: _robot(2, 1.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=False,  # defends left (-4.5), attacks right (+4.5)
+            ball=_ball(2.25, 0.0),
+        )
+        node = referee_actions.PreparePenaltyOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+
+        assert 0 in captured, "Goalkeeper was not given a command"
+        keeper_target = captured[0]
+        # Own goal line is at -4.5; keeper sits at -4.5 + ROBOT_RADIUS (-4.41)
+        assert keeper_target.x == pytest.approx(-4.5 + ROBOT_RADIUS)
+        assert keeper_target.y == pytest.approx(0.0)
+
+    def test_prepare_penalty_line_formation_centered_symmetrically(self, monkeypatch):
+        # Penalty support robots on the line behind the mark must be centered
+        # symmetrically around y=0.
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        robots = {0: _robot(0, 4.4, 0.0)}
+        for rid in range(1, 6):
+            robots[rid] = _robot(rid, 0.0, (rid - 3) * 0.5)
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_BLUE)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(2.25, 0.0),
+        )
+        node = referee_actions.PreparePenaltyTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+
+        line_targets = [captured[rid] for rid in range(1, 6)]
+        mean_y = sum(t.y for t in line_targets) / len(line_targets)
+        assert mean_y == pytest.approx(0.0, abs=1e-6)
+
+    def test_prepare_penalty_theirs_clears_extra_defender_from_own_defense_area(self, monkeypatch):
+        # PreparePenaltyTheirsStep must clear any outfield defender beyond the keeper
+        # out of own defense area (clear_own_defense_area=True).
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Robot 0 is keeper; robot 1 is inside own defense area (x=4.0, y=0.0 when goal is at 4.5)
+        robots = {0: _robot(0, 4.4, 0.0), 1: _robot(1, 4.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_BLUE)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            ball=_ball(2.25, 0.0),
+        )
+        node = referee_actions.PreparePenaltyTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+
+        assert not referee_actions._is_in_own_defense_area(game, captured[1].x, captured[1].y)
+
+    def test_prepare_penalty_ours_clears_teammate_from_opp_defense_area(self, monkeypatch):
+        # PreparePenaltyOursStep must clear teammates from opponent defense area
+        # (clear_opp_defense_area=True).
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = {}
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured[robot_id] = target_coords
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Attacking right goal (+4.5). Opp defense area is at x >= 3.5.
+        # Robot 1 is kicker, robot 2 starts inside opp defense area at x=4.0, y=0.0
+        robots = {0: _robot(0, -4.4, 0.0), 1: _robot(1, 1.0, 0.0), 2: _robot(2, 4.0, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.PREPARE_PENALTY_YELLOW)
+        referee.yellow_team.goalkeeper = 0
+        game = _make_game(
+            friendly_robots=robots,
+            referee=referee,
+            my_team_is_yellow=True,
+            my_team_is_right=False,  # attacks right
+            ball=_ball(2.25, 0.0),
+        )
+        node = referee_actions.PreparePenaltyOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        node.update()
+
+        # Robot 2's commanded target must be clear of opp defense area (x <= 3.5 - keep_dist)
+        opp_inner_x = 4.5 - 2.0 * game.field.half_defense_area_depth
+        assert captured[2].x <= opp_inner_x - referee_actions.OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+
+
+class TestReachableOnCircle:
+    def test_point_inside_circle_near_boundary_is_projected_onto_circle(self):
+        # A robot clamped to the pitch boundary by _clamp_to_field may end up
+        # inside the keep-out circle. _reachable_on_circle must not return the
+        # unprojected inside-the-circle point; it must return a point at radius
+        # distance from center that is inside the pitch boundaries.
+        from utama_core.custom_referee import actions as referee_actions
+
+        game = _make_game(my_team_is_yellow=True, my_team_is_right=False)
+        center = Vector2D(1.79, 2.75)  # ball near top sideline (y = 3.0)
+        radius = 0.80
+        # Point clamped to sideline margin (y = 2.90), distance to center is ~0.68m (< 0.80m)
+        inside_point = Vector2D(2.45697, 2.90)
+        assert (inside_point - center).mag() < radius
+
+        result = referee_actions._reachable_on_circle(game, inside_point, center, radius)
+        assert abs((result - center).mag() - radius) <= 1e-3
+        assert referee_actions._clamp_to_field(result, game) == result
 
 
 class TestVariableFieldScaling:
@@ -1723,7 +2081,7 @@ class TestDirectFreeOursStep:
 
     def test_kicker_choice_is_sticky_across_near_tied_distances(self, monkeypatch):
         """Regression for the DIRECT_FREE congestion stall root-caused via
-        `clear_danger_vs_clear_press_plus` (roadmap item 15): three robots
+        `clear_danger_vs_clear_press_plus` (roadmap "trajsample liveness fixes"): three robots
         within a couple cm of each other's distance to the ball flipped
         which one `min(..., key=distance)` called "closest" on ordinary
         rsim position noise, ~9 times/second, so no robot ever held the
@@ -1798,6 +2156,91 @@ class TestDirectFreeOursStep:
         node.blackboard = _make_blackboard(game, cmd_map)
         node.update()
         assert captured_kicker_ids[-1] == 3
+
+    def test_direct_free_ours_clears_non_kicker_from_opponent_defense_area(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Robot 1 is kicker near ball at (1.0, 0.0); Robot 0 is inside opp defense area at (-4.3, 0.0)
+        robots = {0: _robot(0, -4.3, 0.0), 1: _robot(1, 1.2, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(1.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        # Non-kicker robot 0 should be moved outside opponent defense area
+        r0_moves = [c for c in captured if c[0] == 0]
+        assert len(r0_moves) == 1
+        assert r0_moves[0][1] == Vector2D(-3.25, 0.0)
+
+    def test_direct_free_ours_clears_non_kicker_from_ball_keep_out(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Ball at (1.0, 0.0). Robot 1 is kicker at (1.1, 0.0). Robot 0 is non-kicker at (1.3, 0.0) inside 0.8m keep-out.
+        robots = {0: _robot(0, 1.3, 0.0), 1: _robot(1, 1.1, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW)
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=robots,
+            enemy_robots={},
+            ball=_ball(1.0, 0.0),
+            referee=referee,
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeOursStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        r0_moves = [c for c in captured if c[0] == 0]
+        assert len(r0_moves) == 1
+        assert (r0_moves[0][1] - Vector2D(1.0, 0.0)).mag() == pytest.approx(0.8)
 
 
 # ---------------------------------------------------------------------------
@@ -1878,6 +2321,35 @@ class TestDirectFreeTheirsStep:
         assert len(captured) == 1
         assert captured[0][1] == pytest.approx(Vector2D(0.8, 0.0))
 
+    def test_robot_one_centimetre_short_of_keep_out_boundary_is_commanded_to_boundary(self, monkeypatch):
+        """A robot at 0.795 m (within 1 cm of the 0.8 m keep-out) must be commanded to 0.8 m.
+
+        Before the fix, dx * dx + dy * dy < 1e-4 treated it as already at target and
+        issued empty_command(False), leaving it stranded at 0.795 m inside the keep-out.
+        """
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append((robot_id, target_coords))
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        # Robot at (0.795, 0.0), 5 mm inside the 0.80 m keep-out circle:
+        robots = {0: _robot(0, 0.795, 0.0)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee)
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        assert captured[0][1] == pytest.approx(Vector2D(0.8, 0.0))
+
     def test_robot_between_ball_and_opponent_box_clears_round_the_ball(self, monkeypatch):
         """A free kick 1 m in front of the opponent box (inner edge x = -3.5 here):
         straight out from the ball is (-3.3, 0), where the planner's box margin
@@ -1901,6 +2373,29 @@ class TestDirectFreeTheirsStep:
         assert (target - Vector2D(-2.5, 0.0)).mag() == pytest.approx(0.8)
         assert target.x >= -3.5 + 0.25 + 0.28  # outside the planner's margin round the box
 
+    def test_robot_by_a_ball_in_the_corner_clears_round_the_ball_onto_the_pitch(self, monkeypatch):
+        """Ball at (4.0, 2.5): straight out from it the robot's spot is off the pitch, and
+        clamped back on (x <= 4.4) it was 0.48 m from the ball, so the robot never left
+        (moment placement_in_corner_traps_defender)."""
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+        monkeypatch.setattr(
+            referee_actions, "move", lambda game, mc, rid, target, oren, dribbling=False: captured.append(target)
+        )
+
+        robots = {0: _robot(0, 4.28, 2.36)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, my_team_is_right=True, ball=_ball(4.0, 2.5))
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+
+        node.update()
+
+        (target,) = captured
+        assert (target - Vector2D(4.0, 2.5)).mag() == pytest.approx(0.8)
+        assert referee_actions._clamp_to_field(target, game) == target
+
     def test_all_robots_get_commands(self, monkeypatch):
         from utama_core.custom_referee import actions as referee_actions
 
@@ -1918,6 +2413,34 @@ class TestDirectFreeTheirsStep:
         assert set(cmd_map.keys()) == set(robots.keys())
         for v in cmd_map.values():
             assert v is not None
+
+    def test_clear_to_legal_positions_touchline_clamping_preserves_keep_out(self, monkeypatch):
+        from utama_core.custom_referee import actions as referee_actions
+
+        captured = []
+
+        def fake_move(game, motion_controller, robot_id, target_coords, target_oren, dribbling=False):
+            captured.append(target_coords)
+            return ("move", robot_id)
+
+        monkeypatch.setattr(referee_actions, "move", fake_move)
+
+        ball_pos = Vector2D(0.0, 2.9)
+        robots = {0: _robot(0, 0.0, 2.8)}
+        referee = _make_referee_data(command=RefereeCommand.DIRECT_FREE_BLUE)
+        game = _make_game(friendly_robots=robots, referee=referee, ball=_ball(ball_pos.x, ball_pos.y))
+        cmd_map = _make_cmd_map(game)
+        node = referee_actions.DirectFreeTheirsStep()
+        node.blackboard = _make_blackboard(game, cmd_map)
+
+        node.update()
+
+        assert len(captured) == 1
+        target = captured[0]
+        # Target must be on the field
+        assert referee_actions._clamp_to_field(target, game) == target
+        # Target must strictly satisfy keep-out distance
+        assert (target - ball_pos).mag() >= 0.8 - 1e-6
 
 
 class TestDetourAroundCircle:

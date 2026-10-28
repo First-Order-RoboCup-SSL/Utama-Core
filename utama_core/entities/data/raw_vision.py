@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Tuple
 
 # Unit: m
 
@@ -28,3 +28,6 @@ class RawVisionData:
     blue_robots: List[RawRobotData]
     balls: List[RawBallData]
     camera_id: int
+    # Where that camera is (x, y, height), from the geometry's calibration (ssl-vision, grSim); None when
+    # not sent (rsim) or not calibrated yet (height 0).
+    camera_position: Optional[Tuple[float, float, float]] = None

@@ -28,6 +28,7 @@ def test_vector2d_operations():
     # Test dot product
     dot_product = np.dot(v1, v2)
     assert dot_product == 11
+    assert v1.dot(v2) == 11
 
     # Test distance
     distance = v1.distance_to(v2)

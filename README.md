@@ -1,5 +1,6 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 # Utama Core
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/First-Order-RoboCup-SSL/Utama-Core)
 
 First Order Robotics' software stack for [RoboCup SSL](https://ssl.robocup.org/) (Small Size
 League), where teams of six autonomous robots play football. It covers vision and referee
@@ -28,6 +29,7 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | Task | Start here |
 |---|---|
 | Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
+| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/triage.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
 | The referee | [docs/custom_referee.md](docs/custom_referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
@@ -50,7 +52,6 @@ Everything lives under `utama_core/`:
 - `run/`: the main loop (`StrategyRunner`)
 - `replay/`: replay files, the match-result cache and code fingerprints
 - `analysis/`: offline analyses of tournament runs and replays (ball losses, chances, restarts, stalls)
-- `scenario_bench/`: the scenario bench's starts, banks, harvester and scorer
 - `rsoccer_simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
 - `team_controller/`, `data_processing/`: vision, robot radio and referee input
 - `dashboard/`: the browser dashboard
@@ -71,9 +72,12 @@ Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; s
 
 ## System design
 
-![Dataflow Diagram](assets/images/pipeline_new.drawio.png)
+One tick of `StrategyRunner`, from vision, robot and referee data to robot commands:
 
-How vision, robot and referee data become one `Game` state: [docs/pipeline_method.md](docs/pipeline_method.md).
+![One tick of StrategyRunner](docs/img/pipeline/one_tick.png)
+
+The same tick as a diagram, with every module: [docs/architecture.md](docs/architecture.md). How
+vision, robot and referee data become one `Game`: [docs/pipeline_method.md](docs/pipeline_method.md).
 
 ## Contributing
 
@@ -87,7 +91,3 @@ Work on a branch and open a pull request into `main`. A pull request needs:
 5. an approval from an assigned reviewer.
 
 Editor setup, pre-commit troubleshooting and the pixi environments: [docs/contributing.md](docs/contributing.md).
-
-## Milestones
-
-- 2024 November 20 - First goal in grSim (featuring ray casting)

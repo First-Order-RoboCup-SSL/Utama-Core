@@ -104,3 +104,46 @@ def test_leader_chases_ball_directly_when_ball_is_not_in_enemy_defense_area():
     # go_to_ball targets at (or an overshoot past) the ball itself, not a
     # defense-area hold point far from it.
     assert target.distance_to(Vector2D(1.0, 0.0)) < 0.5
+
+
+def _leader_with_ball_facing_keeper(keeper_y: float) -> Game:
+    """my_team_is_right=True: the enemy goal is at x = -4.5. Leader 2 m out with the
+    ball, facing away from the goal, the keeper on the goal line near its centre."""
+    leader = Robot(
+        id=1,
+        is_friendly=True,
+        has_ball=True,
+        p=Vector2D(-2.5, 0.0),
+        v=Vector2D(0, 0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+    keeper = _robot(0, -4.4, keeper_y, False)
+    return _game({1: leader}, {0: keeper}, (-2.41, 0.0))
+
+
+def _aimed_side(keeper_ys) -> list[bool]:
+    """Tick the leader against each keeper y in turn; per tick, whether the heading it
+    turns to aims below the goal's centre (y < 0: the aim is near ±pi, so its sign gives the side)."""
+    tactic = LeadAndSupportTactic()
+    mem = tactic.initial_mem()
+    ctx = _ctx()
+    sides = []
+    for keeper_y in keeper_ys:
+        _, mem = tactic.tick(_leader_with_ball_facing_keeper(keeper_y), ctx, robot_ids=(1,), mem=mem)
+        sides.append(ctx.motion_controller.calculate.call_args.kwargs["target_oren"] < 0)
+    return sides
+
+
+def test_leader_keeps_its_aim_while_a_centred_keeper_jitters():
+    """Against a centred keeper both corners are near-equal; ±1 cm of keeper jitter
+    flipped the aim between them every tick, so the leader turned back and forth
+    instead of shooting (found in a 1v1 on a small field)."""
+    assert len(set(_aimed_side([0.01, -0.01, 0.01, -0.01]))) == 1
+
+
+def test_leader_switches_aim_when_the_keeper_clearly_opens_the_other_side():
+    aims_low = _aimed_side([0.01])[0]
+    # The keeper steps 0.3 m toward the aimed-at corner: the other side is now far wider.
+    first, after_step = _aimed_side([0.01, -0.3 if aims_low else 0.3])
+    assert first != after_step

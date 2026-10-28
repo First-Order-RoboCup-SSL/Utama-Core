@@ -6,6 +6,7 @@ Run from the repository root, for example:
 
     pixi run python tools/motion_planning_benchmark.py
     pixi run python tools/motion_planning_benchmark.py --scenarios direct static_slalom
+    pixi run python tools/motion_planning_benchmark.py --scenarios direct --figures docs/img/motion_planning
 
 The tool deliberately exercises every controller through StrategyRunner and the
 normal ``move()`` path.  It writes a raw JSON artifact and a Markdown comparison
@@ -19,8 +20,8 @@ import json
 import math
 import random
 import statistics
-import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -45,6 +46,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
+from utama_core.global_utils.git_utils import git_revision
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.run import StrategyRunner
 from utama_core.skills.src.utils.move_utils import move
@@ -61,6 +63,7 @@ SCHEMES = ("fpp", "dwa", "trajsample")
 COLLISION_DISTANCE = 2.0 * ROBOT_RADIUS
 STOPPED_SPEED = 0.05
 SPEED_LIMIT_TOLERANCE = 0.15
+NEAR_MISS_CLEARANCE_M = 0.15
 # Command-velocity jump between consecutive `calculate()` calls beyond which a
 # tick counts as a "discontinuity" in the reported diagnostic. Chosen well
 # above ordinary frame-to-frame acceleration-limited change (RSIM_PARAMS.
@@ -746,9 +749,11 @@ class _ControllerTimer:
 class BenchmarkManager(AbstractTestManager):
     n_episodes = 1
 
-    def __init__(self, scenario: Scenario):
+    def __init__(self, scenario: Scenario, record_trace: bool = False):
         super().__init__()
         self.scenario = scenario
+        # Per-tick robot state for `--figures` only; `None` keeps the default run unchanged.
+        self.trace: dict | None = {"t": [], "robots": {}, "clearance": []} if record_trace else None
         self.start_ts: float | None = None
         self.last_ts: float | None = None
         self.last_positions: dict[RobotKey, Point] = {}
@@ -764,6 +769,8 @@ class BenchmarkManager(AbstractTestManager):
         self.reached: set[RobotKey] = set()
         self.final_errors: dict[RobotKey, float] = {}
         self.ticks = 0
+        self.moving_ticks = 0
+        self.near_miss_ticks = 0
         self.termination_reason = "not_started"
         self._sim_controller: AbstractSimController | None = None
         self._is_team_yellow: bool | None = None
@@ -888,13 +895,26 @@ class BenchmarkManager(AbstractTestManager):
         new_colliding_pairs: set[tuple[RobotKey, RobotKey]] = set()
         robot_items = sorted(robots.items())
         collision_distance = self.scenario.effective_collision_distance_m
+        tick_min_distance: float | None = None
         for index, (key_a, robot_a) in enumerate(robot_items):
             for key_b, robot_b in robot_items[index + 1 :]:
                 distance = robot_a.p.distance_to(robot_b.p)
                 if self.min_center_distance_m is None or distance < self.min_center_distance_m:
                     self.min_center_distance_m = distance
+                if tick_min_distance is None or distance < tick_min_distance:
+                    tick_min_distance = distance
                 if distance < collision_distance:
                     new_colliding_pairs.add((key_a, key_b))
+        any_moving = any(math.hypot(robot.v.x, robot.v.y) > STOPPED_SPEED for robot in robots.values())
+        if any_moving:
+            self.moving_ticks += 1
+            if tick_min_distance is not None:
+                clearance = tick_min_distance - collision_distance
+                if clearance < NEAR_MISS_CLEARANCE_M:
+                    self.near_miss_ticks += 1
+
+        if self.trace is not None:
+            self._record_tick(elapsed, robots, tick_min_distance)
 
         self.collision_events += len(new_colliding_pairs - self.colliding_pairs)
         self.colliding_pairs = new_colliding_pairs
@@ -911,6 +931,16 @@ class BenchmarkManager(AbstractTestManager):
             return TestingStatus.FAILURE
         return TestingStatus.IN_PROGRESS
 
+    def _record_tick(self, elapsed: float, robots: dict[RobotKey, object], min_distance: float | None) -> None:
+        assert self.trace is not None
+        self.trace["t"].append(elapsed)
+        for key, robot in robots.items():
+            entry = self.trace["robots"].setdefault(f"{key[0]}:{key[1]}", {"xy": [], "speed": []})
+            entry["xy"].append((robot.p.x, robot.p.y))
+            entry["speed"].append(math.hypot(robot.v.x, robot.v.y))
+        # Same definition as `min_clearance_m` in `result()`: nearest centre pair minus both radii.
+        self.trace["clearance"].append(None if min_distance is None else min_distance - COLLISION_DISTANCE)
+
     def result(self) -> dict:
         targets = self._targets()
         direct_distance = 0.0
@@ -926,6 +956,8 @@ class BenchmarkManager(AbstractTestManager):
             0.0 if self.unreached_robot_seconds <= 0.0 else self.stopped_robot_seconds / self.unreached_robot_seconds
         )
         max_error = max(self.final_errors.values(), default=None)
+        excess_distance_m = max(0.0, self.path_length_m - direct_distance) if direct_distance > 0.0 else 0.0
+        near_miss_ratio = 0.0 if self.moving_ticks == 0 else self.near_miss_ticks / self.moving_ticks
         # A real physical limit (RSIM_PARAMS.MAX_VEL, plus measurement
         # tolerance) is a hard pass/fail gate, unlike acceleration: observed
         # acceleration is reconstructed from filtered simulator velocity and
@@ -944,8 +976,10 @@ class BenchmarkManager(AbstractTestManager):
             "final_error_max_m": max_error,
             "path_length_total_m": self.path_length_m,
             "path_length_ratio": self.path_length_m / direct_distance if direct_distance > 0.0 else None,
+            "excess_distance_m": excess_distance_m,
             "min_center_distance_m": self.min_center_distance_m,
             "min_clearance_m": min_clearance,
+            "near_miss_ratio": near_miss_ratio,
             "collision_events": self.collision_events,
             "max_speed_mps": self.max_speed_mps,
             "speed_limit_exceeded": speed_limit_exceeded,
@@ -971,21 +1005,10 @@ def _percentile(values: list[float], fraction: float) -> float | None:
     return ordered[math.ceil(fraction * len(ordered)) - 1]
 
 
-def _git_revision() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip() or None
-
-
-def run_case(scheme: str, scenario: Scenario, repeat: int, timing_warmup_calls: int) -> dict:
-    manager = BenchmarkManager(scenario)
+def run_case(
+    scheme: str, scenario: Scenario, repeat: int, timing_warmup_calls: int, record_trace: bool = False
+) -> dict:
+    manager = BenchmarkManager(scenario, record_trace=record_trace)
     my_strategy = _go_to_targets_strategy(scenario.friendly_targets, scenario.friendly_target_trajectories)
     opp_strategy = (
         _go_to_targets_strategy(scenario.enemy_targets, scenario.enemy_target_trajectories)
@@ -1049,6 +1072,8 @@ def run_case(scheme: str, scenario: Scenario, repeat: int, timing_warmup_calls: 
         command_direction_changes=timer.command_direction_changes,
         brake_events_proxy=timer.brake_events,
     )
+    if manager.trace is not None:
+        result["_trace"] = manager.trace  # popped by main() before the JSON is written
     return result
 
 
@@ -1073,10 +1098,12 @@ def aggregate_results(results: list[dict]) -> list[dict]:
                 "termination_reasons": sorted({run["termination_reason"] for run in runs}),
                 "sim_time_mean_s": _mean(runs, "sim_time_s"),
                 "path_length_ratio_mean": _mean(runs, "path_length_ratio"),
+                "excess_distance_mean_m": _mean(runs, "excess_distance_m"),
                 "min_clearance_worst_m": min(
                     (run["min_clearance_m"] for run in runs if run["min_clearance_m"] is not None),
                     default=None,
                 ),
+                "near_miss_ratio_mean": _mean(runs, "near_miss_ratio"),
                 "collision_events_total": sum(run["collision_events"] for run in runs),
                 "final_error_max_worst_m": max(
                     (run["final_error_max_m"] for run in runs if run["final_error_max_m"] is not None),
@@ -1116,9 +1143,9 @@ def markdown_report(payload: dict) -> str:
         "measure -- none of them is a true replan count, since that is planner-internal state this tool "
         "cannot observe through the public controller interface.",
         "",
-        "| Scenario | Scheme | Result | Pass rate | Time (s) | Path/direct | Worst clearance (m) | "
-        "Stopped ratio | Mean / p95 controller (ms) | Cmd jumps / dir changes / brakes |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Scenario | Scheme | Result | Pass rate | Time (s) | Path/direct | Excess (m) | Worst clearance (m) | "
+        "Near miss ratio | Stopped ratio | Mean / p95 controller (ms) | Cmd jumps / dir changes / brakes |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     order = {
         (scenario, scheme): index
@@ -1137,7 +1164,9 @@ def markdown_report(payload: dict) -> str:
         lines.append(
             f"| {row['scenario']} | {row['scheme']} | {result} | {row['pass_rate']:.0%} | "
             f"{_format(row['sim_time_mean_s'])} | {_format(row['path_length_ratio_mean'])} | "
+            f"{_format(row.get('excess_distance_mean_m'))} | "
             f"{_format(row['min_clearance_worst_m'], 3)} | "
+            f"{_format(row.get('near_miss_ratio_mean'), 3)} | "
             f"{_format(row['stopped_while_unreached_ratio_mean'], 3)} | {controller} | {black_box_events} |"
         )
 
@@ -1168,6 +1197,272 @@ def markdown_report(payload: dict) -> str:
     return "\n".join(lines)
 
 
+# --- Figures (`--figures DIR`) -------------------------------------------------------------
+# Style copied from tools/signal_report.py. matplotlib is imported only when figures are written,
+# so a default run neither loads it nor changes its output.
+INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
+# Categorical slots in fixed order. A scheme keeps the same slot in every figure; slots are never cycled.
+# There are only three schemes, so no figure needs more than the first three slots.
+SLOTS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6")
+FIGURE_DPI = 130
+MOVING_MIN_DISPLACEMENT_M = 0.05  # a robot that never leaves this radius of its start is an obstacle
+TRAJECTORY_MIN_SPAN_M = 2.0  # the pitch panel never shows less than this in either direction
+# (metric key in the aggregates, panel title, number format)
+SUMMARY_METRICS = (
+    ("sim_time_mean_s", "completion time (s)", "{:.1f}"),
+    ("path_length_ratio_mean", "path / straight-line length", "{:.2f}"),
+    ("min_clearance_worst_m", "worst clearance (m)", "{:.2f}"),
+    ("collision_events_total", "collisions (total)", "{:.0f}"),
+    ("final_error_max_worst_m", "largest final error (m)", "{:.2f}"),
+    ("stopped_while_unreached_ratio_mean", "stopped while unreached", "{:.3f}"),
+    ("controller_mean_ms", "controller mean (ms)", "{:.2f}"),
+    ("controller_p95_ms_mean", "controller p95 (ms)", "{:.2f}"),
+    ("max_speed_worst_mps", "max speed (m/s)", "{:.2f}"),
+)
+
+
+def _pyplot():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update(
+        {
+            "figure.facecolor": SURFACE,
+            "axes.facecolor": SURFACE,
+            "axes.edgecolor": INK_3,
+            "axes.labelcolor": INK_2,
+            "axes.titlesize": 10,
+            "axes.titlecolor": INK,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "xtick.color": INK_2,
+            "ytick.color": INK,
+            "font.size": 9,
+        }
+    )
+    return plt
+
+
+def _colour(scheme: str) -> str:
+    return SLOTS[SCHEMES.index(scheme)]
+
+
+def _moving_labels(trace: dict) -> set[str]:
+    moving = set()
+    for label, data in trace["robots"].items():
+        xy = data["xy"]
+        if xy and max(math.dist(xy[0], point) for point in xy) > MOVING_MIN_DISPLACEMENT_M:
+            moving.add(label)
+    return moving
+
+
+def _friendly_index(label: str) -> int:
+    return int(label.split(":", 1)[1]) if label.startswith("friendly:") else -1
+
+
+def _trajectory_bounds(scenario: Scenario, traces: dict[str, dict]) -> tuple[tuple[float, float], tuple[float, float]]:
+    points = list(scenario.friendly_starts) + list(scenario.friendly_targets) + list(scenario.enemy_starts)
+    for trace in traces.values():
+        for data in trace["robots"].values():
+            points.extend(data["xy"])
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    spans = []
+    for low, high in ((min(xs), max(xs)), (min(ys), max(ys))):
+        centre, span = (low + high) / 2.0, max(high - low + 0.8, TRAJECTORY_MIN_SPAN_M)
+        spans.append((centre - span / 2.0, centre + span / 2.0))
+    return spans[0], spans[1]
+
+
+def _trajectory_figure(plt, scenario: Scenario, traces: dict[str, dict], schemes: list[str], path: Path) -> None:
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Circle
+
+    # Sizes in inches from the top: the pitch takes its real aspect ratio, so no panel is left with a gap.
+    width, pitch_width = 7.5, 6.45
+    (x0, x1), (y0, y1) = _trajectory_bounds(scenario, traces)
+    pitch_height = min(4.4, max(1.8, pitch_width * (y1 - y0) / (x1 - x0)))
+    panel_height, top_block, gap, bottom_block = 1.5, 1.15, 0.55, 0.6
+    height = top_block + pitch_height + 2 * (gap + panel_height) + bottom_block
+
+    def rect(top: float, box_height: float) -> list[float]:
+        return [0.11, 1.0 - (top + box_height) / height, pitch_width / width, box_height / height]
+
+    fig = plt.figure(figsize=(width, height))
+    pitch = fig.add_axes(rect(top_block, pitch_height))
+    speed_ax = fig.add_axes(rect(top_block + pitch_height + gap, panel_height))
+    clear_ax = fig.add_axes(rect(top_block + pitch_height + 2 * gap + panel_height, panel_height), sharex=speed_ax)
+    pitch.set_xlim(x0, x1)
+    pitch.set_ylim(y0, y1)
+    pitch.set_aspect("equal", adjustable="box")
+    pitch.set_xlabel("x (m)")
+    pitch.set_ylabel("y (m)")
+    pitch.grid(color=GRID, lw=0.8)
+    pitch.set_axisbelow(True)
+
+    # Stationary robots are obstacles at their real radius. Their positions are the same in every scheme.
+    first = next(iter(traces.values()))
+    moving = _moving_labels(first)
+    for label, data in first["robots"].items():
+        if label not in moving:
+            pitch.add_patch(Circle(data["xy"][0], ROBOT_RADIUS, facecolor=INK_3, alpha=0.35, edgecolor=INK_3, lw=0.8))
+
+    # Start and target of each of our robots (a moving target is a trajectory, so it is not marked).
+    for label, data in first["robots"].items():
+        index = _friendly_index(label)
+        if index < 0:
+            continue
+        pitch.scatter([data["xy"][0][0]], [data["xy"][0][1]], s=34, facecolor=SURFACE, edgecolor=INK, lw=1.3, zorder=5)
+        if index < len(scenario.friendly_targets) and index not in scenario.friendly_target_trajectories:
+            tx, ty = scenario.friendly_targets[index]
+            pitch.scatter([tx], [ty], s=40, marker="x", color=INK, lw=1.4, zorder=5)
+
+    for scheme in schemes:
+        colour = _colour(scheme)
+        trace = traces[scheme]
+        for label, data in trace["robots"].items():
+            xs = [p[0] for p in data["xy"]]
+            ys = [p[1] for p in data["xy"]]
+            if _friendly_index(label) >= 0:
+                pitch.plot(xs, ys, color=colour, lw=1.5, solid_capstyle="round", zorder=3)
+            elif label in moving:  # opponents that move are fainter and dashed
+                pitch.plot(xs, ys, color=colour, lw=1.2, ls=(0, (3, 2)), alpha=0.55, zorder=2)
+            else:
+                continue
+            pitch.scatter([xs[-1]], [ys[-1]], s=12, color=colour, zorder=4)
+
+    # Speed and clearance over time, one axis each. Speed is the fastest of our robots at each tick.
+    for scheme in schemes:
+        colour = _colour(scheme)
+        trace = traces[scheme]
+        ours = [label for label in trace["robots"] if _friendly_index(label) >= 0]
+        speeds = []
+        for k in range(len(trace["t"])):
+            values = [trace["robots"][label]["speed"][k] for label in ours if k < len(trace["robots"][label]["speed"])]
+            speeds.append(max(values, default=0.0))
+        speed_ax.plot(trace["t"], speeds, color=colour, lw=1.2)
+        pairs = [(t, c) for t, c in zip(trace["t"], trace["clearance"]) if c is not None]
+        if pairs:
+            clear_ax.plot([t for t, _ in pairs], [c for _, c in pairs], color=colour, lw=1.2)
+    speed_ax.axhline(RSIM_PARAMS.MAX_VEL, color=INK_3, lw=0.8, ls="--")
+    speed_ax.set_ylabel("speed (m/s)")
+    speed_ax.set_title(f"our fastest robot; dashed: speed limit {RSIM_PARAMS.MAX_VEL:g} m/s", loc="left", fontsize=9)
+    speed_ax.set_ylim(bottom=0.0)
+    speed_ax.tick_params(labelbottom=False)
+    clear_ax.axhline(0.0, color=INK_3, lw=0.8, ls="--")
+    clear_ax.set_ylabel("clearance (m)")
+    clear_ax.set_xlabel("time (s)")
+    clear_ax.set_title("nearest pair of robots, minus both radii; dashed: touching (0 m)", loc="left", fontsize=9)
+    if all(c is None for trace in traces.values() for c in trace["clearance"]):
+        clear_ax.text(
+            0.5, 0.5, "one robot in this scenario: no obstacles", transform=clear_ax.transAxes, ha="center", va="center"
+        )
+    for ax in (speed_ax, clear_ax):
+        ax.grid(color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+
+    handles = [Line2D([], [], color=_colour(s), lw=1.5, label=s) for s in schemes]
+    handles += [
+        Line2D([], [], color=INK_2, lw=1.5, label="our robot"),
+        Line2D([], [], color=INK_2, lw=1.2, ls=(0, (3, 2)), alpha=0.55, label="opponent (moving)"),
+        Line2D([], [], marker="o", ls="", markerfacecolor=INK_3, markeredgecolor=INK_3, alpha=0.5, label="obstacle"),
+        Line2D([], [], marker="o", ls="", markerfacecolor=SURFACE, markeredgecolor=INK, label="start"),
+        Line2D([], [], marker="x", ls="", color=INK, label="target"),
+    ]
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.0, 0.94), ncol=4, frameon=False, fontsize=8)
+    description = textwrap.fill(scenario.description, 110)
+    fig.text(0.0, 0.995, f"{scenario.name}: {description}", ha="left", va="top", fontsize=10, color=INK)
+    fig.savefig(path, dpi=FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _summary_figure(plt, payload: dict, path: Path) -> None:
+    from matplotlib.lines import Line2D
+
+    names = list(payload["scenarios"])
+    schemes = list(payload["schemes"])
+    cells = {(row["scenario"], row["scheme"]): row for row in payload["aggregates"]}
+    cols = 3
+    grows = -(-len(SUMMARY_METRICS) // cols)
+    fig, axes = plt.subplots(
+        grows,
+        cols,
+        figsize=(10.5, 0.9 + grows * (0.36 * len(names) + 0.9)),
+        sharey=True,
+        squeeze=False,
+    )
+    spread = 0.22
+    for k, ax in enumerate(axes.flat):
+        if k >= len(SUMMARY_METRICS):
+            ax.set_visible(False)
+            continue
+        key, title, fmt = SUMMARY_METRICS[k]
+        for i, scenario in enumerate(names):
+            for j, scheme in enumerate(schemes):
+                row = cells.get((scenario, scheme))
+                if row is None or row.get(key) is None:
+                    continue
+                y = i + (j - (len(schemes) - 1) / 2.0) * spread
+                colour = _colour(scheme)
+                ax.scatter(
+                    [row[key]],
+                    [y],
+                    s=36,
+                    color=colour,
+                    facecolor=colour if row["passed"] else SURFACE,
+                    lw=1.5,
+                    zorder=3,
+                )
+        ax.set_ylim(len(names) - 0.5, -0.5)
+        ax.set_yticks(range(len(names)))
+        ax.set_yticklabels(names)  # shared y: hide the labels per panel rather than clearing them
+        ax.tick_params(axis="y", length=0, labelleft=k % cols == 0)
+        ax.spines["left"].set_visible(False)
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _, f=fmt: f.format(v)))
+        ax.xaxis.set_major_locator(plt.MaxNLocator(4, integer=fmt == "{:.0f}"))
+        ax.grid(axis="x", color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+        ax.set_title(title, loc="left", fontsize=9)
+    handles = [Line2D([], [], marker="o", ls="", color=_colour(s), label=s) for s in schemes]
+    handles.append(
+        Line2D([], [], marker="o", ls="", markerfacecolor=SURFACE, markeredgecolor=INK_2, label="cell failed (hollow)")
+    )
+    fig.suptitle(
+        "Motion-planning benchmark: one dot per scheme and scenario, each metric on its own scale",
+        x=0.0,
+        ha="left",
+        fontsize=10,
+        color=INK,
+    )
+    fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False, fontsize=8)
+    fig.tight_layout(rect=(0, 0.04, 1, 0.97))
+    fig.savefig(path, dpi=FIGURE_DPI, bbox_inches="tight")
+    plt.close(fig)
+
+
+def write_figures(payload: dict, traces: dict[tuple[str, str], dict], out_dir: Path, scenarios: dict) -> list[Path]:
+    """Writes `trajectories_<scenario>.png` per scenario and `summary.png` to `out_dir`.
+
+    `traces` maps (scenario, scheme) to the per-tick record of one run (see `BenchmarkManager`).
+    A scenario with no recorded traces is skipped."""
+    plt = _pyplot()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name in payload["scenarios"]:
+        scheme_traces = {s: traces[(name, s)] for s in payload["schemes"] if (name, s) in traces}
+        if not scheme_traces:
+            continue
+        path = out_dir / f"trajectories_{name}.png"
+        _trajectory_figure(plt, scenarios[name], scheme_traces, list(scheme_traces), path)
+        written.append(path)
+    summary = out_dir / "summary.png"
+    _summary_figure(plt, payload, summary)
+    written.append(summary)
+    return written
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--schemes", nargs="+", choices=SCHEMES, default=list(SCHEMES))
@@ -1186,6 +1481,14 @@ def parse_args() -> argparse.Namespace:
         help="Controller calls excluded from latency metrics in each cell (default: 5).",
     )
     parser.add_argument("--list-scenarios", action="store_true", help="Print scenario descriptions and exit.")
+    parser.add_argument(
+        "--figures",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Also write trajectories_<scenario>.png and summary.png to DIR. Off by default; turning it on "
+        "records per-tick robot state during the runs. Figures show the first repeat of each cell.",
+    )
     parser.add_argument(
         "--allow-failures",
         action="store_true",
@@ -1207,6 +1510,7 @@ def main() -> int:
         return 0
 
     results = []
+    traces: dict[tuple[str, str], dict] = {}
     total = len(args.schemes) * len(args.scenarios) * args.repeats
     case_number = 0
     for scenario_name in args.scenarios:
@@ -1214,11 +1518,27 @@ def main() -> int:
             for repeat in range(1, args.repeats + 1):
                 case_number += 1
                 print(f"[{case_number}/{total}] {scenario_name} / {scheme} / repeat {repeat}", flush=True)
-                result = run_case(scheme, SCENARIOS[scenario_name], repeat, args.timing_warmup_calls)
+                result = run_case(
+                    scheme,
+                    SCENARIOS[scenario_name],
+                    repeat,
+                    args.timing_warmup_calls,
+                    record_trace=args.figures is not None,
+                )
+                trace = result.pop("_trace", None)
+                if trace is not None:
+                    traces.setdefault((scenario_name, scheme), trace)
                 results.append(result)
+                path_ratio = result.get("path_length_ratio")
+                excess_d = result.get("excess_distance_m")
+                path_str = (
+                    f", path={path_ratio:.2f}x (+{excess_d:.2f}m)"
+                    if path_ratio is not None and excess_d is not None
+                    else ""
+                )
                 print(
                     f"  {'PASS' if result['passed'] else 'FAIL'} ({result['termination_reason']}), "
-                    f"sim={result['sim_time_s']:.2f}s, controller={_format(result['controller_mean_ms'])}ms",
+                    f"sim={result['sim_time_s']:.2f}s{path_str}, controller={_format(result['controller_mean_ms'])}ms",
                     flush=True,
                 )
 
@@ -1226,7 +1546,7 @@ def main() -> int:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": generated_at.isoformat(),
-        "git_revision": _git_revision(),
+        "git_revision": git_revision(),
         "mode": "rsim",
         "headless": True,
         "schemes": list(args.schemes),
@@ -1252,6 +1572,9 @@ def main() -> int:
     markdown_path.write_text(markdown_report(payload), encoding="utf-8")
     print(f"\nJSON: {json_path}")
     print(f"Markdown: {markdown_path}")
+    if args.figures is not None:
+        for figure_path in write_figures(payload, traces, args.figures, SCENARIOS):
+            print(f"Figure: {figure_path}")
 
     any_failures = any(not row["passed"] for row in payload["aggregates"])
     return 0 if args.allow_failures or not any_failures else 1

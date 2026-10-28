@@ -727,6 +727,27 @@ def test_carry_exhausted_counts_the_distance_needed_to_stop():
     assert not carry_exhausted(moving, origin)
 
 
+def test_carry_exhausted_counts_the_reaction_time_before_braking():
+    """At 1.2m/s, 0.5m carried: braking alone needs 1.2^2 / (2*2.5) = 0.29m (0.79m in
+    all, under the 0.8m cap), but the carrier keeps going for the 0.15s reaction time
+    first (another 0.18m), so the carry is spent. Traced in tournament_20261017_002337:
+    DecoyOverload's lure kept accelerating ~0.1s after the cap fired at ~1.2m/s, carried
+    0.5m more and fouled at 1.0m (93 excessive-dribbling fouls)."""
+    from types import SimpleNamespace
+
+    from utama_core.entities.data.vector import Vector2D, Vector3D
+    from utama_core.shared.pass_and_score_geometry import carry_exhausted
+
+    origin = Vector2D(0.0, 0.0)
+    lure = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(1.2, 0.0, 0.0)))
+    slower = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(0.7, 0.0, 0.0)))
+
+    assert carry_exhausted(lure, origin, stops_after=True)
+    # 0.5 + 0.7*0.15 + 0.7^2/5 = 0.70m: still room to carry.
+    assert not carry_exhausted(slower, origin, stops_after=True)
+    assert not carry_exhausted(lure, origin)  # a kick-while-moving carrier is unchanged
+
+
 def _rolling_game(receiver_xy: tuple, ball_xy: tuple, ball_v: tuple) -> Game:
     frame = GameFrame(
         ts=0.0,
@@ -754,6 +775,17 @@ def test_ball_line_receive_point_follows_a_diagonal_path():
 def test_ball_line_receive_point_none_just_below_rolling_speed():
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS - 0.01, 0.0)), 2) is None
     assert ball_line_receive_point(_rolling_game((1.5, 0.0), (0.4, 0.0), (_PASS_ROLLING_MPS, 0.0)), 2) is not None
+
+
+def test_ball_line_receive_point_stays_on_the_field_when_the_ball_rolls_past_the_goal_line():
+    # The ball's path runs out past the enemy goal line (x = half length) beside the corner, and
+    # the receiver projects onto it past the line. Clamped to the field, with clamp_to_field's margin.
+    half_length = STANDARD_FIELD_DIMS.full_field_half_length
+    half_width = STANDARD_FIELD_DIMS.full_field_half_width
+    spot = ball_line_receive_point(_rolling_game((4.4, 2.6), (3.0, 0.0), (1.0, 1.0)), 2)
+    assert spot is not None
+    assert abs(spot.x) <= half_length
+    assert abs(spot.y) <= half_width
 
 
 def test_ball_line_receive_point_none_once_the_ball_has_passed_the_receiver():

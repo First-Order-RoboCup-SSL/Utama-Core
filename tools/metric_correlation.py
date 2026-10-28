@@ -157,7 +157,7 @@ _SUPPORT_RADIUS_M = 1.0  # metric 7: "teammate near the ball at shot time"
 _RESTART_LIVE_COMMANDS = {"NORMAL_START", "FORCE_START"}
 
 # --- Metrics 8-12 (2026-09-04 debugging-signal expansion): each mined from a
-# real, already-traced bug mechanism in docs/roadmap.md item 15, rather than
+# real, already-traced bug mechanism in docs/roadmap.md's "trajsample liveness fixes", rather than
 # invented speculatively -- the point is a cheap counter that would have
 # flagged that exact mechanism automatically instead of needing a human to
 # live-trace a match. See each metric's own comment below for which bug it

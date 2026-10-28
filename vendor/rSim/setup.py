@@ -12,6 +12,7 @@ except ImportError:
 
 setup(
     name="rc-robosim",
+    version="1.2.0+utama",  # this fork; setuptools_scm cannot read a version from a vendored subtree
     url="https://github.com/robocin/rSim",
     description="SSL and VSS robot soccer simulator",
     author="Felipe Martins",

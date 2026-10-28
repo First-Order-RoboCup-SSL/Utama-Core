@@ -26,8 +26,8 @@ from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 #
 # Every existing picker reads possession/ball-zone but none reads the
 # scoreline itself, even though `game.referee.{yellow,blue}_team.score` is
-# already populated in any refereed match (`full_match_tournament.py`/
-# `round_robin.py` already read the same fields to report a match's result).
+# already populated in any refereed match (`round_robin.py` reads the same fields to report a
+# match's result).
 # This variant is `_zone_flow_picker`'s allocation with one added axis: late
 # in a half, shift the *size* of the attack/defense split based on whether
 # we're ahead or behind, instead of holding the same 3/2-ish split regardless

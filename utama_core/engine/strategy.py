@@ -49,6 +49,7 @@ from utama_core.engine.tactic import RobotId, Tactic, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.strategy.pickers import reset_closer_to_ball_state
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ _TWO_STAGE_RESTARTS = frozenset(
         RefereeCommand.PREPARE_PENALTY_BLUE,
         RefereeCommand.DIRECT_FREE_YELLOW,
         RefereeCommand.DIRECT_FREE_BLUE,
+        RefereeCommand.INDIRECT_FREE_YELLOW,
+        RefereeCommand.INDIRECT_FREE_BLUE,
     }
 )
 
@@ -344,6 +347,12 @@ class Strategy:
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
+        commands = self._tick(game)
+        if self.match_log is not None:
+            self.match_log.clear_untraced(self._tick_count, getattr(game, "ts", 0.0))
+        return commands
+
+    def _tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         referee = getattr(game, "referee", None)
         current_command = getattr(referee, "referee_command", None) if referee is not None else None
 
@@ -493,7 +502,15 @@ class Strategy:
         Never touches `_slots`/`_prev_partition`/`_pending_barrier_reset` —
         the pinned slot has no partition membership to reconcile, it simply
         runs every tick it's called.
+
+        Skipped while the pinned robot is not on the field: a team need not
+        field robot `goalkeeper_id` (real robots keep their vision IDs, so a
+        two-robot test rarely includes ID 0), and the goalkeeper skills index
+        `game.friendly_robots` by that ID.
         """
+        robots = getattr(game, "friendly_robots", None)
+        if robots is not None and self._pinned_robot_id not in robots:
+            return {}
         slot = self._pinned_slot
         commands, slot.mem = slot.tactic.tick(game, self._ctx, (self._pinned_robot_id,), slot.mem)
         if self.match_log is not None:
@@ -720,8 +737,12 @@ class Strategy:
             raise ValueError(f"picker assigned robot(s) {sorted(extra)} outside the outfield pool")
 
     def _barrier_reset(self, game: Game) -> None:
+        team_is_yellow = getattr(game, "my_team_is_yellow", None)
+        reset_closer_to_ball_state(team_is_yellow)
         pre_reset = {tid: slot.assigned_robots for tid, slot in self._slots.items() if slot.assigned_robots}
         for slot in self._slots.values():
+            if hasattr(slot.tactic, "reset_applicable"):
+                slot.tactic.reset_applicable()
             slot.mem = None
             slot.assigned_robots = frozenset()
             slot.committed_ticks = 0

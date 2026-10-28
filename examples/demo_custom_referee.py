@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """examples/demo_custom_referee.py — visual demonstration of the CustomReferee system.
 
 Runs entirely in-process (no network, no RSim binary needed). A scripted
@@ -22,6 +23,12 @@ Controls:
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import dataclasses
 import math

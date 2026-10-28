@@ -1,0 +1,159 @@
+{
+  "name": "free_kick_robot_drives_in_at_start",
+  "note": "Round-robin tournament_20261017_002337, decoy_and_overload vs overload_press, from t=155.3 s, the start of the DIRECT_FREE_BLUE that their kicker took at about 156.85 s (the source's keep_out foul by robot 3 came at 157.72 s). The moment starts before the kick: at 156.9 s the kick had already happened, so the restart was over before the moment began. Their kicker pushes the ball off during the free kick, and it rolls onto robot 3, which stands 0.79 m away. Robot 3 must not drive in (keeps_clear), and the referee must not charge it with keep_out once the ball has moved 0.05 m: the kick was taken and the ball is in play.",
+  "source": {
+    "replay": "replays/tournament_20261017_002337/decoy_and_overload_vs_overload_press.npz",
+    "t": 155.3
+  },
+  "strategy": "all",
+  "opponent": "build_overload_press_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "keep_out",
+    "keeps_clear"
+  ],
+  "known_failure": null,
+  "designated_position": null,
+  "sim_noise": {
+    "seed": 2,
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ]
+  },
+  "scenario": {
+    "referee_command": "DIRECT_FREE_BLUE",
+    "ball": [
+      2.536470890045166,
+      2.750206232070923,
+      -0.017454709857702255,
+      -0.024647576734423637
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.395570278167725,
+        "y": 0.2623056173324585,
+        "orientation": 2.205690860748291,
+        "vx": -0.04277755692601204,
+        "vy": 0.046198222786188126
+      },
+      {
+        "id": 1,
+        "x": -2.934321403503418,
+        "y": -1.1155835390090942,
+        "orientation": 0.759769082069397,
+        "vx": -0.02258961834013462,
+        "vy": -0.0004753725079353899
+      },
+      {
+        "id": 2,
+        "x": -1.647862195968628,
+        "y": 0.7498007416725159,
+        "orientation": 0.4906955063343048,
+        "vx": 0.0026092727202922106,
+        "vy": -0.020033113658428192
+      },
+      {
+        "id": 3,
+        "x": 3.317260980606079,
+        "y": 2.6062958240509033,
+        "orientation": -0.1795390099287033,
+        "vx": 0.010497135110199451,
+        "vy": 0.014908869750797749
+      },
+      {
+        "id": 4,
+        "x": 2.836455821990967,
+        "y": 0.9419028162956238,
+        "orientation": 1.6644355058670044,
+        "vx": 0.04859288036823273,
+        "vy": 0.009664556942880154
+      },
+      {
+        "id": 5,
+        "x": 3.4410338401794434,
+        "y": 1.0231825113296509,
+        "orientation": 1.997361660003662,
+        "vx": 0.007438821252435446,
+        "vy": 0.010257917456328869
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.406434059143066,
+        "y": -0.23964542150497437,
+        "orientation": 0.4114653170108795,
+        "vx": -0.02397257462143898,
+        "vy": 0.0030586537905037403
+      },
+      {
+        "id": 1,
+        "x": 2.012925624847412,
+        "y": 0.7591932415962219,
+        "orientation": 1.3095483779907227,
+        "vx": 0.03543104976415634,
+        "vy": -0.0006866941694170237
+      },
+      {
+        "id": 2,
+        "x": 2.217620611190796,
+        "y": 0.01867786794900894,
+        "orientation": 1.4449868202209473,
+        "vx": 0.03139911964535713,
+        "vy": 0.012284408323466778
+      },
+      {
+        "id": 3,
+        "x": 1.7827485799789429,
+        "y": -0.7556700110435486,
+        "orientation": 1.3505078554153442,
+        "vx": -0.016163356602191925,
+        "vy": 0.00692970072850585
+      },
+      {
+        "id": 4,
+        "x": 1.7530889511108398,
+        "y": 0.7376781105995178,
+        "orientation": 1.2018553018569946,
+        "vx": 0.0074382200837135315,
+        "vy": -0.024446330964565277
+      },
+      {
+        "id": 5,
+        "x": 1.743301510810852,
+        "y": 1.749427318572998,
+        "orientation": 1.1451590061187744,
+        "vx": 0.06030035391449928,
+        "vy": 0.09924978017807007
+      }
+    ]
+  },
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ]
+}

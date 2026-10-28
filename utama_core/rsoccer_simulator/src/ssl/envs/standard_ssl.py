@@ -25,6 +25,13 @@ from utama_core.rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.rsoccer_simulator.src.Utils import KDTree
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.sim_noise import (
+    CommandDelay,
+    KickAngleNoise,
+    KickSpeedNoise,
+    MotionLimits,
+    SimNoise,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +64,9 @@ class SSLStandardEnv(SSLBaseEnv):
         Type: float
         Description:
             When running in rsim, cause robots and ball to vanish with the given probability. Defaults to 0.
+        sim_noise
+            Seeded latency, kick speed noise and vision noise (`SimNoise`). Replaces `gaussian_noise`
+            and `vanishing`, which draw from the unseeded global RNG. Defaults to None (off).
 
     Observation:
         Type: Tuple[FrameData, List[RobotInfo], List[RobotInfo]]
@@ -88,6 +98,7 @@ class SSLStandardEnv(SSLBaseEnv):
         ball_starting_position: Optional[Tuple[float, float]] = None,
         gaussian_noise: RsimGaussianNoise = RsimGaussianNoise(),
         vanishing: float = 0,
+        sim_noise: Optional[SimNoise] = None,
     ):
         render_field_overrides = None
         if full_field_dims is not None:
@@ -152,6 +163,45 @@ class SSLStandardEnv(SSLBaseEnv):
         assert vanishing >= 0, "Negative vanishing probability not allowed"
         self.vanishing = vanishing
 
+        # Seeded variation (`SimNoise`); None keeps the sim exactly as without it.
+        self.sim_noise = sim_noise
+        self.sim_draw = None
+        self._command_delay: Optional[CommandDelay] = None
+        self._kick_noise: Optional[KickSpeedNoise] = None
+        self._kick_angle: Optional[KickAngleNoise] = None
+        self._motion_limits: Optional[MotionLimits] = None
+        self._noise_rng = None  # None: `gaussian_noise`/`vanishing` use the global RNG, as before
+        if sim_noise is not None:
+            assert gaussian_noise == RsimGaussianNoise() and not vanishing, "pass vision noise in sim_noise only"
+            n_robots = {"team_blue": self.n_robots_blue, "team_yellow": self.n_robots_yellow}
+            self.sim_draw = sim_noise.draw(n_robots, self.time_step)
+            self.gaussian_noise = sim_noise.vision
+            self.vanishing = sim_noise.vanishing
+            self._noise_rng = (
+                sim_noise.vision_rng if sim_noise.vision != RsimGaussianNoise() or sim_noise.vanishing else None
+            )
+            if any(t for ticks in self.sim_draw.latency_ticks.values() for t in ticks):
+                self._command_delay = CommandDelay(self.sim_draw.latency_ticks)
+            if sim_noise.kick_speed_offset_sd or sim_noise.kick_speed_sd:
+                self._kick_noise = KickSpeedNoise(
+                    self.sim_draw.kick_offset, sim_noise.kick_speed_sd, sim_noise.kick_rngs(n_robots)
+                )
+            if sim_noise.kick_angle_offset_sd_deg or sim_noise.kick_angle_sd_deg:
+                self._kick_angle = KickAngleNoise(
+                    self.sim_draw.kick_angle_offset, sim_noise.kick_angle_sd_deg, sim_noise.kick_angle_rngs(n_robots)
+                )
+            if sim_noise.motion_limits:
+                self._motion_limits = MotionLimits(self.sim_draw, self.time_step)
+            if sim_noise.native_physics:
+                roll = self.sim_draw.ball_roll_decel
+                slide = self.sim_draw.ball_slide_decel
+                self.rsim.set_physics_params(
+                    substeps=sim_noise.substeps,
+                    ball_slide_decel=(slide if slide is not None else roll) if roll is not None else -1.0,
+                    ball_roll_decel=roll if roll is not None else -1.0,
+                    ball_slide_fraction=sim_noise.ball_slide_fraction,
+                )
+
     def reset(self, *, seed=None, options=None):
         self.reward_shaping_total = None
         # Reset dribbler tracking state
@@ -165,6 +215,12 @@ class SSLStandardEnv(SSLBaseEnv):
             self.kick_persist_yellow[i] = (0.0, 0)
 
         self.latest_observation = (-1, None)
+        if self._command_delay is not None:
+            self._command_delay.reset()
+        if self._kick_noise is not None:
+            self._kick_noise.reset()
+        if self._kick_angle is not None:
+            self._kick_angle.reset()
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -175,10 +231,14 @@ class SSLStandardEnv(SSLBaseEnv):
         """
         # Increment step counter and build low-level simulator commands
         self.steps += 1
+        if self._command_delay is not None:
+            action = self._command_delay.push(action)
         commands = self._get_commands(action)
 
         # Apply any implicit kicks caused by dribbler state transitions.
         self._apply_dribbler_release_kicks(commands)
+        if self._motion_limits is not None:
+            self._apply_motion_limits(commands)
 
         # Send command to simulator
         self.rsim.send_commands(commands)
@@ -213,12 +273,17 @@ class SSLStandardEnv(SSLBaseEnv):
         if self.latest_observation[0] == self.steps:
             return self.latest_observation[1]
 
+        # Seeded noise: a fresh stream per tick, so the same tick gets the same noise whatever
+        # happened earlier in the match.
+        self._frame_rng = self._noise_rng(self.steps) if self._noise_rng is not None else None
+
         # Ball observation shared by all robots
         if self._vanishing():
             ball_obs = []
         else:
-            SSLStandardEnv._add_gaussian_noise_ball(self.frame.ball, self.gaussian_noise)
-            ball_obs = [RawBallData(self.frame.ball.x, -self.frame.ball.y, self.frame.ball.z, 1.0)]
+            dx, dy, _ = self._noise_offsets(with_heading=False)
+            ball = self.frame.ball  # noise goes on the observation only, never on the sim's own frame
+            ball_obs = [RawBallData(ball.x + dx, -(ball.y + dy), ball.z, 1.0)]
 
         # Robots observation (Blue + Yellow)
         blue_obs = []
@@ -260,9 +325,9 @@ class SSLStandardEnv(SSLBaseEnv):
         return result
 
     def _get_robot_observation(self, robot):
-        SSLStandardEnv._add_gaussian_noise_robot(robot, self.gaussian_noise)
-
-        robot_pos = RawRobotData(robot.id, robot.x, -robot.y, -float(deg_to_rad(robot.theta)), 1)
+        dx, dy, dth = self._noise_offsets(with_heading=True)
+        theta = normalise_heading_deg(robot.theta + dth) if dth else robot.theta
+        robot_pos = RawRobotData(robot.id, robot.x + dx, -(robot.y + dy), -float(deg_to_rad(theta)), 1)
         robot_info = RobotResponse(robot.id, robot.infrared)
         return robot_pos, robot_info
 
@@ -276,7 +341,8 @@ class SSLStandardEnv(SSLBaseEnv):
             v_theta = actions["team_blue"][i][2]
 
             dribbler = actions["team_blue"][i][4] > 0
-            kick_v_x = RSIM_PARAMS.KICK_SPD if actions["team_blue"][i][3] > 0 else 0.0
+            kick_v_x = self._kick_speed("team_blue", i, actions["team_blue"][i][3] > 0)
+            kick_angle = self._kick_direction("team_blue", i, actions["team_blue"][i][3] > 0)
 
             cmd = Robot(
                 yellow=False,  # Blue team
@@ -285,6 +351,7 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_y=v_y,
                 v_theta=v_theta,
                 kick_v_x=kick_v_x,
+                kick_angle=kick_angle,
                 dribbler=dribbler,
             )
             commands.append(cmd)
@@ -296,7 +363,8 @@ class SSLStandardEnv(SSLBaseEnv):
             v_theta = actions["team_yellow"][i][2]
 
             dribbler = actions["team_yellow"][i][4] > 0
-            kick_v_x = RSIM_PARAMS.KICK_SPD if actions["team_yellow"][i][3] > 0 else 0.0
+            kick_v_x = self._kick_speed("team_yellow", i, actions["team_yellow"][i][3] > 0)
+            kick_angle = self._kick_direction("team_yellow", i, actions["team_yellow"][i][3] > 0)
 
             cmd = Robot(
                 yellow=True,  # Yellow team
@@ -305,11 +373,29 @@ class SSLStandardEnv(SSLBaseEnv):
                 v_y=v_y,
                 v_theta=v_theta,
                 kick_v_x=kick_v_x,
+                kick_angle=kick_angle,
                 dribbler=dribbler,
             )
             commands.append(cmd)
 
         return commands
+
+    def _kick_direction(self, colour: str, robot_id: int, kicking: bool) -> float:
+        if self._kick_angle is not None:
+            return self._kick_angle.angle(colour, robot_id, kicking)
+        return 0.0
+
+    def _apply_motion_limits(self, commands: list[Robot]) -> None:
+        for cmd in commands:
+            colour, robots = (
+                ("team_yellow", self.frame.robots_yellow) if cmd.yellow else ("team_blue", self.frame.robots_blue)
+            )
+            self._motion_limits.apply(colour, cmd.id, cmd, robots[cmd.id])
+
+    def _kick_speed(self, colour: str, robot_id: int, kicking: bool) -> float:
+        if self._kick_noise is not None:
+            return self._kick_noise.speed(colour, robot_id, kicking, RSIM_PARAMS.KICK_SPD)
+        return RSIM_PARAMS.KICK_SPD if kicking else 0.0
 
     def _apply_dribbler_release_kicks(self, commands: list[Robot]) -> None:
         """Approximate kicks when dribblers turn off for robots that had possession.
@@ -465,43 +551,20 @@ class SSLStandardEnv(SSLBaseEnv):
 
     def _vanishing(self) -> bool:
         """Determines whether a frame should vanish. Only runs after Game Gater is passed"""
-        return self.steps > 0 and self.vanishing and (random.random() < self.vanishing)
+        if not (self.steps > 0 and self.vanishing):
+            return False
+        u = self._frame_rng.random() if self._frame_rng is not None else random.random()
+        return u < self.vanishing
 
-    @staticmethod
-    def _add_gaussian_noise_ball(ball: Ball, noise: RsimGaussianNoise):
-        """
-        When running in rsim, add Gaussian noise to ball with the given standard deviations.
-        Mutates the Robot object in place.
-
-        Args:
-            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
-                Defaults to 0 for each.
-        """
-
-        if noise.x_stddev:
-            ball.x += normal(scale=noise.x_stddev)
-
-        if noise.y_stddev:
-            ball.y += normal(scale=noise.y_stddev)
-
-        # No noise addition for z, since rSim is 2-D
-
-    @staticmethod
-    def _add_gaussian_noise_robot(robot: Robot, noise: RsimGaussianNoise):
-        """
-        When running in rsim, add Gaussian noise to robot with the given standard deviations.
-        Mutates the Robot object in place.
-
-        Args:
-            noise (RsimGaussianNoise): The 3 parameters are for x (in m), y (in m), and orientation (in degrees) respectively.
-                Defaults to 0 for each.
-        """
-
-        if noise.x_stddev:
-            robot.x += normal(scale=noise.x_stddev)
-
-        if noise.y_stddev:
-            robot.y += normal(scale=noise.y_stddev)
-
-        if noise.th_stddev_deg:
-            robot.theta = normalise_heading_deg(robot.theta + normal(scale=noise.th_stddev_deg))
+    def _noise_offsets(self, with_heading: bool) -> Tuple[float, float, float]:
+        """Gaussian vision noise for one detection: x and y in m (sim frame), heading in degrees.
+        Returned rather than added to the sim's frame: the frame is the sim's truth, which
+        teleports write back into the physics. No noise for z, since rSim is 2-D."""
+        noise = self.gaussian_noise
+        if self._frame_rng is not None:  # a fixed number of draws per detection
+            z = self._frame_rng.normal(size=3 if with_heading else 2)
+            return z[0] * noise.x_stddev, z[1] * noise.y_stddev, (z[2] * noise.th_stddev_deg if with_heading else 0.0)
+        dx = normal(scale=noise.x_stddev) if noise.x_stddev else 0.0
+        dy = normal(scale=noise.y_stddev) if noise.y_stddev else 0.0
+        dth = normal(scale=noise.th_stddev_deg) if with_heading and noise.th_stddev_deg else 0.0
+        return dx, dy, dth

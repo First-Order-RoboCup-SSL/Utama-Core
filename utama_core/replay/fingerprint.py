@@ -10,12 +10,11 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   the other configs' fingerprints alone; editing `pickers.py` moves every config that
   imports it.
 - `base_fingerprint(entry)`: everything both sides share, from the module that plays the
-  match (`tools.evaluation.match` for round-robins, `utama_core.scenario_bench.scenario_scorer` for the
-  bench): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
+  match (`tools.evaluation.match`): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
   next to that code (referee profiles), both pixi environments (every installed package's
   name, version and build), the installed robosim binary, the CPU model and the
   environment variables that change numerics.
-- `match_key(...)` / `bench_key(...)`: those fingerprints plus every run setting.
+- `match_key(...)`: those fingerprints plus every run setting.
 
 `kernel_strategy.py` imports every strategy module, and they run in every match whichever
 config is playing, so a module only one config uses still runs its import-time code in every
@@ -25,6 +24,9 @@ into the base. `audit()` lists every place the code reaches outside the import g
 (environment, files, subprocesses, dynamic imports, module-level state);
 `tests/replay/test_fingerprint.py` pins that list, so a new one fails a test until someone
 decides how it enters the fingerprint.
+
+A repo module counts by its syntax tree without docstrings (`_code_sha`): editing a comment, a
+docstring or the formatting changes no fingerprint.
 
 Standard library only. Nothing here imports the code it fingerprints: the repo's `.py`
 files are parsed, not run.
@@ -46,9 +48,6 @@ from typing import Iterable, Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
 ROUND_ROBIN_ENTRY = "tools.evaluation.match"
-BENCH_ENTRY = "utama_core.scenario_bench.scenario_scorer"
-# `scenario_bench._runs` plays a start through these two; the bench CLI itself only reports.
-BENCH_ENTRIES = (BENCH_ENTRY, "utama_core.scenario_bench.start")
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.
@@ -88,6 +87,19 @@ _MUTATING_BUILTINS = frozenset({"setattr", "delattr", "exec", "eval", "__import_
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _code_sha(code: bytes) -> str:
+    """Hash of a module's syntax tree without docstrings, so comments, docstrings and formatting
+    don't move a fingerprint."""
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                if isinstance(body[0].value.value, str):
+                    node.body = body[1:] or [ast.Pass()]
+    return _sha(ast.dump(tree).encode())
 
 
 def _digest(parts: Iterable[str]) -> str:
@@ -201,7 +213,7 @@ class CodeGraph:
             mod = self.module(name)
             if mod is not None and mod.path is not None:
                 code = _VERSION_LINE.sub(b"", mod.source)
-                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_sha(code)}")
+                rows.append(f"{mod.path.relative_to(self.root).as_posix()}  {_code_sha(code)}")
         return sorted(rows)
 
     def data_files(self, names: Iterable[str]) -> list[str]:
@@ -490,9 +502,12 @@ def match_key(
     fuzz_seed: Optional[int] = None,
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     recorded: bool = True,
+    sim_noise: Optional[dict] = None,
 ) -> str:
     """Key of one `match.run_match` call: same key, same result. `recorded` is
-    whether it ran with a `run_dir` (the match log and stats recorder are then live)."""
+    whether it ran with a `run_dir` (the match log and stats recorder are then live).
+    `sim_noise` (`SimNoise.to_dict()`) enters the key only when set, so matches without it
+    keep their keys."""
     settings = {
         "duration_seconds": duration_seconds,
         "a_is_right": a_is_right,
@@ -502,6 +517,8 @@ def match_key(
         "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
         "recorded": recorded,
     }
+    if sim_noise is not None:
+        settings["sim_noise"] = sim_noise
     return _digest(
         [
             "round-robin match",
@@ -511,23 +528,6 @@ def match_key(
             config_b,
             graph.strategy_fingerprint(config_b),
             json.dumps(settings, sort_keys=True),
-        ]
-    )
-
-
-def bench_key(graph: CodeGraph, start: dict, candidate: str, opponent: str, *, horizon_s: float) -> str:
-    """Key of one bench start played by `score_scenario`: `start` is the jittered
-    `BenchScenario.to_dict()`, so the bank, the start and the jitter seed are all in it."""
-    return _digest(
-        [
-            "bench start",
-            graph.base_fingerprint(BENCH_ENTRIES),
-            json.dumps(start, sort_keys=True),
-            candidate,
-            graph.strategy_fingerprint(candidate),
-            opponent,
-            graph.strategy_fingerprint(opponent),
-            json.dumps({"horizon_s": horizon_s}),
         ]
     )
 

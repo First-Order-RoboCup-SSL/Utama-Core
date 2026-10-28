@@ -9,13 +9,13 @@ with a simple kinematic robot (moves at most 3 m/s toward the returned carrot ea
 
 - safety, every scenario: the carrot is always finite and the robot never enters
   the real enemy defense area;
-- arrival: the robot gets within 0.1 m of the target within 10 s. Scenarios that
-  currently fail are pinned as strict xfails. They are FPP's known local minimum
-  (roadmap item 5): the detour side flips every tick between two positions when
-  the gap between a blocker and the inflated box is narrower than the clearance,
-  because the side memory is keyed on the obstacle hit point, which changes
-  between the two. A planner fix turns them into XPASS, which fails the run so
-  this list gets updated.
+- arrival: the robot gets within 0.1 m of the target within 10 s. A scenario that
+  fails is pinned as a strict xfail in `_KNOWN_STUCK`, empty since #147 fixed FPP's
+  detour-side flip: the detour side flipped every tick between two positions when
+  the gap between a blocker and the inflated box was narrower than the clearance,
+  because the side memory was keyed on the obstacle hit point, which changes
+  between the two. A planner fix turns a pinned seed into XPASS, which fails the
+  run so this list gets updated.
 
 Every blocker keeps the route around the outside open, so all targets are reachable.
 """
@@ -38,7 +38,9 @@ _ARRIVED_M = 0.1
 # Real enemy defense area with my_team_is_right=False (enemy goal at +x).
 _BOX = (3.5, 4.5, -1.0, 1.0)
 _SEEDS = range(40)
-_KNOWN_STUCK = {0, 19, 26, 30}
+# All 40 seeds arrive cleanly after keying detour side memory on obstacle segments.
+_KNOWN_STUCK: set[int] = set()
+_HOST_DEPENDENT: set[int] = set()
 
 
 def _in_box(x: float, y: float) -> bool:
@@ -105,9 +107,13 @@ def test_corner_route_is_safe(seed):
     "seed",
     [
         (
-            pytest.param(s, marks=pytest.mark.xfail(strict=True, reason="FPP detour-side flip (roadmap item 5)"))
+            pytest.param(s, marks=pytest.mark.xfail(strict=True, reason="FPP detour-side flip"))
             if s in _KNOWN_STUCK
-            else s
+            else (
+                pytest.param(s, marks=pytest.mark.xfail(strict=False, reason="on the edge of the flip; differs by CPU"))
+                if s in _HOST_DEPENDENT
+                else s
+            )
         )
         for s in _SEEDS
     ],
