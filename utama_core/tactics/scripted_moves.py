@@ -4,8 +4,8 @@
 one robot it is given, then stands still. Run with a game log being recorded
 (`StrategyRunner(game_log_path=...)`), the log holds each command as sent and the robot's
 motion as the camera saw it; `tools/robot_calibration.py` turns that into the robot's
-numbers (vision noise, delay, speed and turn tracking, acceleration, and with `BALL_SCRIPT` the
-dribbler and kicker).
+numbers (vision noise, delay, speed and turn tracking, acceleration). The ball part of a
+calibration fetches the ball itself instead (`examples/ball_trials.py`).
 
 Each move goes and comes back (forward then backward, left then right), so the robot
 ends near where it started; the longest is 0.8 m forward. Pauses (HALT, STOP) do not
@@ -53,7 +53,7 @@ def _turns(rate: float, seconds: float) -> list[Move]:
     return [Move(name, seconds, turn=rate), Move("rest", _REST), Move(name, seconds, turn=-rate), Move("rest", _REST)]
 
 
-# About 70 s. Speeds stay within the real robots' caps (REAL_PARAMS: 1 m/s, 4 rad/s).
+# About 70 s. Speeds stay within the real robots' caps (REAL_PARAMS: 1.5 m/s, 6 rad/s).
 CALIBRATION_SCRIPT: tuple[Move, ...] = (
     Move("still", 10.0),  # vision noise: robot (and a ball placed in view) at rest
     *_there_and_back("forward 0.3 m/s", 0.3, 0.6),
@@ -64,42 +64,6 @@ CALIBRATION_SCRIPT: tuple[Move, ...] = (
     *_turns(4.0, 1.6),
     Move("still", 3.0),
 )
-
-_BALL_ON = "Put the ball against the dribbler, robot facing +x with 1.5 m clear ahead"
-
-
-def _kick(i: int, n: int) -> list[Move]:
-    return [
-        Move(f"place ball for kick {i}/{n}", 0.0, prompt=_BALL_ON),
-        Move("dribble still", 1.0, dribble=True),
-        Move(f"kick {i}/{n}", 0.3, dribble=True, kick=True),  # one kick: the kicker's cooldown is 1 s
-        Move("rest", 2.0),
-    ]
-
-
-def _dribble(name: str, seconds: float, **axis: float) -> list[Move]:
-    return [Move(name, seconds, dribble=True, **axis), Move("dribble still", 1.0, dribble=True)]
-
-
-# About 45 s plus the operator's set-ups: how the ball sits on the dribbler and how the sensor reads
-# it at rest, turning and driving with it, then 3 kicks for the ball's speed and direction. It
-# first fires the kicker with no ball on it: left unused, the kicker's capacitor had run flat and
-# the first measured kick barely moved the ball (field day 2026-10-28); the shot charges it again.
-BALL_SCRIPT: tuple[Move, ...] = (
-    Move("charge the kicker (no ball)", 0.3, kick=True),
-    Move("rest", _REST),
-    Move("place ball", 0.0, prompt=_BALL_ON),
-    Move("dribble still", 3.0, dribble=True),
-    *_dribble("dribble turn 1 rad/s", 3.0, turn=1.0),
-    *_dribble("dribble turn -1 rad/s", 3.0, turn=-1.0),
-    *_dribble("dribble forward 0.3 m/s", 1.5, forward=0.3),
-    *_dribble("dribble backward 0.3 m/s", 1.5, forward=-0.3),
-    *(m for i in range(1, 4) for m in _kick(i, 3)),
-)
-
-_START = "Robot near the middle of the camera's view facing +x, 0.8 m clear ahead and 0.6 m to its left, a ball at rest in view"
-# Motion, then the ball: the whole profile of one robot, run by `examples/calibrate_robot.py`.
-FULL_SCRIPT: tuple[Move, ...] = (Move("start", 0.0, prompt=_START), *CALIBRATION_SCRIPT, *BALL_SCRIPT)
 
 
 class ScriptedMovesTactic(BaseTactic[None]):
@@ -134,6 +98,14 @@ class ScriptedMovesTactic(BaseTactic[None]):
     def proceed(self) -> None:
         """The operator has done what the current prompt asked: carry on next tick."""
         self._proceed = True
+
+    @property
+    def status(self) -> str:
+        """The current move, for the operator; changes only when the move does."""
+        if self.done:
+            return "done"
+        m = self.script[self._step]
+        return f"[{self._step + 1:>2}/{len(self.script)}] {m.name} ({m.seconds:g} s)"
 
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: None

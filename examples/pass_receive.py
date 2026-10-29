@@ -311,19 +311,25 @@ class PassReceiveTactic(BaseTactic[None]):
             if not wait_for_partner or self.partner_set(game, _partner(game)):
                 return kick()
             return empty_command(dribbler_on=True)
-        # Not on it yet: line up behind the ball, facing the partner, then drive onto it (as
-        # `DirectFreeOursStep` approaches a free kick). Fetching it face-on and pivoting with a
-        # ball not yet on the dribbler pushed it round the field in rsim.
-        behind = ball - Vector2D(math.cos(aim), math.sin(aim)) * _APPROACH_M
-        if me.p.distance_to(behind) > _LINED_UP_M and me.p.distance_to(ball) <= _ORBIT_RANGE_M:
-            point = orbit_point(ball, me.p, aim)
-            return move(game, mc, robot_id, point, point.angle_to(ball))
-        if me.p.distance_to(behind) > _LINED_UP_M:
-            waypoint = detour_around_circle(me.p, behind, ball, ROBOT_RADIUS + BALL_RADIUS)
-            return move(game, mc, robot_id, waypoint, aim)
-        if not oriented_towards(game, robot_id, aim, _LINE_UP_FACING_RAD):
-            return turn_on_spot(game, mc, robot_id, aim)
-        return move(game, mc, robot_id, ball, aim, dribbling=True)
+        return take_ball_facing(game, mc, robot_id, aim)
+
+
+def take_ball_facing(game: Game, mc, robot_id: int, aim: float) -> RobotCommand:
+    """Gets the ball onto `robot_id`'s dribbler with the robot facing `aim`: lines up behind the
+    ball, then drives onto it (as `DirectFreeOursStep` approaches a free kick). Fetching it
+    face-on and pivoting with a ball not yet on the dribbler pushed it round the field in rsim."""
+    me = game.friendly_robots[robot_id]
+    ball = game.ball.p.to_2d()
+    behind = ball - Vector2D(math.cos(aim), math.sin(aim)) * _APPROACH_M
+    if me.p.distance_to(behind) > _LINED_UP_M and me.p.distance_to(ball) <= _ORBIT_RANGE_M:
+        point = orbit_point(ball, me.p, aim)
+        return move(game, mc, robot_id, point, point.angle_to(ball))
+    if me.p.distance_to(behind) > _LINED_UP_M:
+        waypoint = detour_around_circle(me.p, behind, ball, ROBOT_RADIUS + BALL_RADIUS)
+        return move(game, mc, robot_id, waypoint, aim)
+    if not oriented_towards(game, robot_id, aim, _LINE_UP_FACING_RAD):
+        return turn_on_spot(game, mc, robot_id, aim)
+    return move(game, mc, robot_id, ball, aim, dribbling=True)
 
 
 def _still():

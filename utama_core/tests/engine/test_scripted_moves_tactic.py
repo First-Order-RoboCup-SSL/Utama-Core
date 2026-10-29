@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from utama_core.tactics.scripted_moves import FULL_SCRIPT, Move, ScriptedMovesTactic
+from utama_core.tactics.scripted_moves import Move, ScriptedMovesTactic
 
 SCRIPT = (Move("go", 0.5, forward=0.3), Move("turn", 0.5, turn=1.0))
 
@@ -60,11 +60,3 @@ def test_dribble_and_kick_moves_reach_the_robot():
     tactic = ScriptedMovesTactic((Move("dribble", 0.5, turn=1.0, dribble=True),))
     command = _tick(tactic, 0.0)[4]
     assert command.dribble and command.angular_vel == 1.0 and not command.kick
-
-
-def test_the_full_script_fires_the_kicker_before_the_ball_goes_on():
-    """A kicker left unused runs flat (field day 2026-10-28): one kick with no ball charges it,
-    before the operator is first asked to put the ball on the dribbler."""
-    first_kick = next(i for i, m in enumerate(FULL_SCRIPT) if m.kick)
-    first_ball = next(i for i, m in enumerate(FULL_SCRIPT) if m.prompt is not None and "dribbler" in m.prompt)
-    assert first_kick < first_ball

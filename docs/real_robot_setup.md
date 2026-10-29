@@ -138,23 +138,40 @@ robot was trying to do.
 
 ### 5. Measuring a robot
 
+Measure where its tag sits first (below), once per lid. Then:
+
 ```
-pixi run calibrate --robot yellow:1 --radio 0     # colour:vision id (its pattern), radio id
+pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
+pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
 ```
 
 No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
 it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
-0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s,
-then asks you to put the ball against its dribbler: it holds, turns and drives with it, and asks
-again before each of 3 kicks (1.5 m clear ahead). Every move is printed as it starts; Ctrl+C halts
-the robot. At the end it prints DONE and the robot's numbers, written beside the log as
-`.calibration.json`: loop delay, speed gain and acceleration per axis, vision noise at rest, kick
-speed and direction off its heading, where the ball sits on the dribbler, how often the ball sensor
-reads it, and whether the robot kept it. `--mode rsim --yes` rehearses it in the simulator.
+0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s.
+Then the ball part (`examples/ball_trials.py`), where **the robot fetches the ball itself**:
+
+- **Carry ladder**: it carries the ball 0.5 m forward, backward, left and right, and half a turn
+  each way, at rising speeds (0.2 to 1 m/s, 0.5 to 4 rad/s), twice each (`--repeats`), from
+  standing, then stands 0.5 s with it. A direction stops at the first speed that loses the ball
+  (off the robot by 15 cm, or its ball sensor off 0.3 s). The carry runs towards the middle of
+  the field, and the robot lets go and fetches the ball again before each trial.
+- **Kicks**: one with no ball to charge the kicker, then 10 (`--kicks`) along the field.
+
+It asks only when the ball is out of view or within 25 cm of the edge, as after most kicks:
+roll the ball back towards the middle and press Enter. Every step is printed as it starts; Ctrl+C
+halts the robot. At the end it prints DONE and the **carry ladder**, the fastest speed each way
+that kept the ball every time: what `RobotParams.CARRY_SPEED` and `CARRY_TURN`
+(`config/robot_params.py`) may be raised to, by the slowest direction the tactics use. Then the
+robot's numbers from the log, written beside it as `.calibration.json`: loop delay, speed gain and
+acceleration per axis, vision noise at rest, kick speed, and the **kick bend**, degrees per cm the
+ball sat off-centre: the robot's `kick_bend_deg_per_cm`. The robot's profile (`ROBOTS` in
+`shooting_drill.py`, found by radio ID) corrects the log by its tag first. `--mode rsim --yes`
+rehearses it in the simulator (its dribbler holds at every speed).
 
 Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
 far to trust them. An older log is measured again with
-`pixi run python tools/robot_calibration.py replays/field/<run>.log`.
+`pixi run python tools/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002 -3.5`
+(`--tag` per robot: its `tag_forward_m`, `tag_left_m`, `tag_heading_deg`).
 
 **Where the tag sits.** A lid's tag is a sticker, rarely centred or square on the robot. Measure
 it once per lid:

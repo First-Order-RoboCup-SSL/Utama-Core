@@ -17,8 +17,11 @@ Per robot that was sent commands:
   standard deviation of a single detection, from second differences / sqrt(6) (as
   `physics_ranges` measures the league's), and the share of the camera's frames missing it.
   The same for a ball at rest.
-- **Kicks**: per kick sent, the ball's top speed within 0.6 s, when the ball was at the robot, and
-  the direction it left in against the robot's heading (`direction_offset_deg`, anticlockwise +).
+- **Kicks**: per kick sent, the ball's top speed within 0.6 s, when the ball was at the robot, the
+  direction it left in against the robot's heading (`direction_offset_deg`, anticlockwise +) and
+  where the ball sat across the dribbler (`ball_left_cm`). Over 5 or more: the kick's bend per cm
+  off-centre (`kick_bend`), `RobotProfile.kick_bend_deg_per_cm`. Correct the log by the robot's
+  tag first (`FieldLog.correct_tags`), or the tag's heading offset shows as kick direction.
 - **Dribbling**: per constant command held at least `DRIBBLE_MIN_S` with the dribbler on, where
   the ball sat in the robot's frame (forward of its centre, to its left), how much of the time the
   ball sensor read on, and whether the ball was still on at the end (`BALL_LOST_M`). A
@@ -55,6 +58,8 @@ AXES = ("forward", "left", "turn")
 DRIBBLE_MIN_S = 0.5
 BALL_LOST_M = 0.15  # ball centre this far from the robot's: off the dribbler (held, ~0.09 m)
 KICK_DIRECTION_S = (0.05, 0.4)  # the ball's travel after a kick, for its direction
+BEND_BALL_LEFT_CM = 3.0  # a kick with the ball further off the centre line than this was not on the dribbler
+BEND_MIN_KICKS = 5
 
 
 def decode_radio(packet: bytes) -> list[tuple[int, float, float, float, int, bool]]:
@@ -123,6 +128,19 @@ class FieldLog:
         self.sensor = {fw: np.array(rows, dtype=float) for fw, rows in sensor.items()}
         self.robots = {key: np.array(rows) for key, rows in robots.items()}
         self.balls = np.array(balls).reshape(-1, 4)
+
+    def correct_tags(self, offsets: dict[tuple[str, int], tuple[float, float, float]]) -> None:
+        """Each robot's detections moved from its tag to the robot itself, as on real robots
+        (`PositionRefiner`): `offsets` by (colour, vision id), each the tag's (forward m, left m,
+        heading rad) on the robot, `RobotProfile.tag_*`. A log holds what the camera saw, the tag."""
+        for key, (forward, left, heading) in offsets.items():
+            rows = self.robots.get(key)
+            if rows is None:
+                continue
+            th = rows[:, 4].astype(float)
+            rows[:, 2] -= np.cos(th) * forward - np.sin(th) * left
+            rows[:, 3] -= np.sin(th) * forward + np.cos(th) * left
+            rows[:, 4] = np.arctan2(np.sin(th - heading), np.cos(th - heading))
 
     def robot_of(self, firmware_id: int) -> Optional[tuple[str, int]]:
         """(colour, vision id) driven through `firmware_id`, from the run info."""
@@ -333,7 +351,8 @@ def kicks(commands: np.ndarray, track: np.ndarray, balls: np.ndarray) -> list[di
         i_b = np.searchsorted(b[:, 0], t_kick)
         if i_r >= len(track) or i_b >= len(b):
             continue
-        gap = math.hypot(track[i_r, 2] - b[i_b, 2], track[i_r, 3] - b[i_b, 3])
+        dx, dy = b[i_b, 2] - track[i_r, 2], b[i_b, 3] - track[i_r, 3]
+        gap = math.hypot(dx, dy)
         after = (bt >= t_kick) & (bt <= t_kick + KICK_WINDOW_S) & (speed < 15.0)
         if gap > KICK_REACH_M or not np.any(after):
             continue
@@ -343,6 +362,8 @@ def kicks(commands: np.ndarray, track: np.ndarray, balls: np.ndarray) -> list[di
                 "chip": bool(commands[e, 4] == 0x0F),
                 "ball_speed": round(float(speed[after].max()), 2),
                 "direction_offset_deg": kick_direction_offset(b, t_kick, float(track[i_r, 4])),
+                # Where the ball sat on the dribbler, left of the robot's centre line: a kick bends towards it.
+                "ball_left_cm": round(100 * (-dx * math.sin(track[i_r, 4]) + dy * math.cos(track[i_r, 4])), 2),
             }
         )
     return out
@@ -362,6 +383,30 @@ def kick_direction_offset(balls: np.ndarray, t_kick: float, heading: float) -> O
         return None  # the ball barely moved: no kick reached it
     off = math.atan2(dy, dx) - heading
     return round(math.degrees(math.atan2(math.sin(off), math.cos(off))), 1)
+
+
+def kick_bend(robot_kicks: list[dict]) -> Optional[dict]:
+    """The kick's bend towards the side the ball sits on the dribbler, degrees per cm through
+    zero (`RobotProfile.kick_bend_deg_per_cm`), over full kicks with the ball on the dribbler
+    (within `BEND_BALL_LEFT_CM`); with the fit's rms and the median left over at the centre."""
+    rows = [
+        (k["ball_left_cm"], k["direction_offset_deg"])
+        for k in robot_kicks
+        if not k["chip"] and k["direction_offset_deg"] is not None and abs(k["ball_left_cm"]) <= BEND_BALL_LEFT_CM
+    ]
+    if len(rows) < BEND_MIN_KICKS:
+        return None
+    left, off = np.array(rows).T
+    if not np.any(left):
+        return None
+    k = float(left @ off / (left @ left))
+    residual = off - k * left
+    return {
+        "deg_per_cm": round(k, 2),
+        "rms_deg": round(float(np.sqrt(np.mean(residual**2))), 1),
+        "residual_median_deg": round(float(np.median(residual)), 1),
+        "kicks": len(rows),
+    }
 
 
 def _move_name(fwd: float, left: float, turn: float) -> str:
@@ -450,6 +495,7 @@ def calibrate(log: FieldLog) -> list[dict]:
                 "steps": step_rows,
                 "kicks": robot_kicks,
                 "kick_direction_offset_median_deg": round(float(np.median(offsets)), 1) if offsets else None,
+                "kick_bend": kick_bend(robot_kicks),
                 "dribbling": dribbling(commands, track, log.balls, log.sensor.get(fw)),
                 "kick_speed_median": (
                     round(float(np.median([k["ball_speed"] for k in robot_kicks if not k["chip"]])), 2)
@@ -484,8 +530,18 @@ def report(results: list[dict], ball: dict) -> str:
                 f"  kicks             {len(r['kicks'])}, median ball speed {r['kick_speed_median']} m/s, "
                 f"direction {r['kick_direction_offset_median_deg']}° off the heading (+ anticlockwise)"
             )
+            bend = r.get("kick_bend")
+            if bend is not None:
+                lines.append(
+                    f"  kick bend         {bend['deg_per_cm']}°/cm off-centre (kick_bend_deg_per_cm), "
+                    f"rms {bend['rms_deg']}°, {bend['residual_median_deg']}° left over at the centre "
+                    f"({bend['kicks']} kicks)"
+                )
             for k in r["kicks"]:
-                lines.append(f"    t {k['t']:>7} s  {k['ball_speed']} m/s  {k['direction_offset_deg']}°")
+                lines.append(
+                    f"    t {k['t']:>7} s  {k['ball_speed']} m/s  {k['direction_offset_deg']}°, "
+                    f"ball {k['ball_left_cm']} cm left"
+                )
         for d in r["dribbling"]:
             lines.append(
                 f"  dribble {d['move']:<20} ball {d['ball_forward_m']} m ahead, {d['ball_left_m']} m left, "
@@ -506,8 +562,21 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("log", type=Path)
     parser.add_argument("--json", type=Path, help="default: <log>.calibration.json beside the log")
+    parser.add_argument(
+        "--tag",
+        nargs=4,
+        action="append",
+        default=[],
+        metavar=("COLOUR:ID", "FORWARD_M", "LEFT_M", "HEADING_DEG"),
+        help="where a robot's tag sits on it (RobotProfile.tag_*), e.g. --tag yellow:0 0 -0.002 -3.5; repeatable",
+    )
     args = parser.parse_args(argv)
     log = FieldLog(args.log)
+    offsets = {}
+    for robot, forward, left, heading in args.tag:
+        colour, _, vision_id = robot.partition(":")
+        offsets[(colour, int(vision_id))] = (float(forward), float(left), math.radians(float(heading)))
+    log.correct_tags(offsets)
     results = calibrate(log)
     ball = ball_noise(log.balls)
     print(report(results, ball))

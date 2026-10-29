@@ -183,10 +183,13 @@ entry by its title, not its number.
          45°): the top speed and acceleration a robot actually holds in each direction, not one
          `MAX_ACCELERATION`; braking; drift over 3 m; turn rate and turn gain.
       3. **Kicking**: ten kicks per robot: speed, direction offset and its spread, roll distance,
-         recharge time; chips once used.
+         recharge time; chips once used. Built 2026-10-29: `pixi run calibrate` fetches the ball
+         and kicks 10 times, and fits the kick bend (`robot_calibration.kick_bend`).
       4. **Dribbling**: hold while turning and driving at rising speed until the ball is lost:
          the fastest turn and drive that keep it. Decides whether a placer may grab a ball
-         from any side and turn with it, instead of going round it first (step 5).
+         from any side and turn with it, instead of going round it first (step 5). Built
+         2026-10-29: the carry ladder in `pixi run calibrate` (`examples/ball_trials.py`); not yet
+         run on a real robot, so `CARRY_SPEED` 0.3 / `CARRY_TURN` 1.0 stand.
       5. **Receiving and grabbing**: the approach speed at which a robot still traps a ball,
          driving onto a still ball and receiving a rolling one (passes at a few speeds); whether
          it can turn on the spot smoothly with the ball at the end of an approach.

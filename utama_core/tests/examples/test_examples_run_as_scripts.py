@@ -23,6 +23,7 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
         "passing_rally.py",
         "save_and_counter.py",
         "calibrate_robot.py",
+        "calibrate_tag.py",
         "demo_referee_feedback_gui.py",
     ],
 )

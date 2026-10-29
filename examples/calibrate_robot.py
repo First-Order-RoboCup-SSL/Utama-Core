@@ -2,25 +2,31 @@
 """examples/calibrate_robot.py — measure one real robot from the terminal: no dashboard.
 
 Run:
-    pixi run calibrate --robot yellow:1 --radio 0     # colour:vision id (its pattern), radio id
-    pixi run calibrate --robot yellow:1 --radio 0 --mode rsim --yes   # rehearse it in the simulator
+    pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
+    pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
+    pixi run calibrate --robot yellow:0 --radio 0 --mode rsim --yes   # rehearse it in the simulator
 
-It waits until vision sees the robot, then asks before each part that needs you, in this
-terminal: put the robot near the middle of the camera's view facing +x (0.8 m clear ahead, 0.6 m
-to its left) with a ball at rest in view; later put the ball against its dribbler, once to dribble
-and once per kick (1.5 m clear ahead). Between those it plays fixed moves
-(`tactics/scripted_moves.py`, `FULL_SCRIPT`): about 65 s of driving and turning, one kick with
-no ball (a kicker left unused runs flat; this charges it), then holding, turning and driving with
-the ball, then 3 kicks. Each move is printed as it starts. Ctrl+C stops the robot and exits at
-any time.
+It waits until vision sees the robot, then asks you once to put it near the middle of the
+camera's view facing +x (0.8 m clear ahead, 0.6 m to its left) with a ball at rest in view.
+It plays fixed moves first (`tactics/scripted_moves.py`, `CALIBRATION_SCRIPT`): about 65 s of
+driving and turning. Then the ball part (`ball_trials.py`), where it fetches the ball itself:
+- a carry ladder: forward, backward, sideways and turning with the ball at rising speeds,
+  `--repeats` times each, a direction ending at the first speed that loses the ball;
+- `--kicks` kicks along the field, after one with no ball (a kicker left unused runs flat).
+It asks only when the ball is out of view or near the edge, as after most kicks: roll it back
+towards the middle and press Enter. Each step is printed as it starts. Ctrl+C stops the robot
+and exits at any time.
 
-When the script ends it says DONE, analyses the recorded log (`analysis/robot_calibration.py`)
-and prints the robot's numbers: loop delay, speed gain and acceleration per axis, vision noise,
-kick speed and direction off its heading, and how it holds the ball. They are written beside the
-log as `<log>.calibration.json`. Calibrate every robot, twice (early and late in a session): how
-far two runs disagree is how far to trust them.
+When it ends it says DONE, prints the carry ladder (the fastest speed each way that kept the
+ball: what `RobotParams.CARRY_SPEED`/`CARRY_TURN` may be) and analyses the recorded log
+(`analysis/robot_calibration.py`): loop delay, speed gain and acceleration per axis, vision noise,
+kick speed, the kick's bend per cm the ball sits off-centre, and how it holds the ball. They are
+written beside the log as `<log>.calibration.json`. Calibrate every robot, twice (early and late
+in a session): how far two runs disagree is how far to trust them.
 
-The field and camera view are `FIELD` and `CAMERA_HALF` in `shooting_drill.py`.
+The robot's profile (`ROBOTS` in `shooting_drill.py`, by radio ID) corrects vision by where its
+tag sits; measure that first (`pixi run calibrate-tag`). The field and camera view are `FIELD`
+and `CAMERA_HALF` there.
 """
 
 import sys
@@ -35,9 +41,11 @@ import threading
 import time
 from typing import Optional
 
+from ball_trials import BallTrialsTactic
 from shooting_drill import (
     CAMERA_HALF,
     FIELD,
+    ROBOTS,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -49,8 +57,53 @@ from utama_core.analysis.robot_calibration import (
     calibrate,
     report,
 )
+from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.run import StrategyRunner
-from utama_core.tactics.scripted_moves import FULL_SCRIPT, ScriptedMovesTactic
+from utama_core.tactics.scripted_moves import (
+    CALIBRATION_SCRIPT,
+    Move,
+    ScriptedMovesTactic,
+)
+from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+
+_START = (
+    "Robot near the middle of the camera's view facing +x, 0.8 m clear ahead and 0.6 m to its left, "
+    "a ball at rest in view"
+)
+
+
+class _InTurn(BaseTactic[None]):
+    """`tactics` one after the other, each played to its end."""
+
+    tag = TacticTag.MIXED
+
+    def __init__(self, *tactics):
+        self.tactics = tactics
+
+    @property
+    def current(self):
+        return next((t for t in self.tactics if not t.done), self.tactics[-1])
+
+    def initial_mem(self) -> None:
+        return None
+
+    @property
+    def done(self) -> bool:
+        return all(t.done for t in self.tactics)
+
+    @property
+    def waiting_for(self) -> Optional[str]:
+        return self.current.waiting_for
+
+    def proceed(self) -> None:
+        self.current.proceed()
+
+    @property
+    def status(self) -> str:
+        return self.current.status
+
+    def tick(self, game, ctx, robot_ids, mem):
+        return self.current.tick(game, ctx, robot_ids, mem)
 
 
 def _robot(text: str) -> tuple[str, int]:
@@ -96,21 +149,18 @@ def _wait_until_seen(runner: StrategyRunner, robot_id: int, label: str) -> None:
             return
 
 
-def _analyse(log_path: str) -> None:
-    log = FieldLog(log_path)
-    results, ball = calibrate(log), ball_noise(log.balls)
-    print(report(results, ball))
-    out = Path(log_path).with_suffix(".calibration.json")
-    out.write_text(json.dumps({"log": log_path, "run_info": log.info, "robots": results, "ball": ball}, indent=1))
-    print(f"\nWritten {out}")
+def profile_of(radio: int) -> RobotProfile:
+    """The profile of our robot on `radio` (`ROBOTS` in `shooting_drill.py`); a blank one if none is."""
+    return next((r.profile for r in ROBOTS if r.firmware_id == radio), RobotProfile())
 
 
-def build_runner(args, script, name: str):
-    """(runner, tactic, robot id, label, game log) playing `script` on the robot `args` names, recording
-    to `replays/field/<stamp>_real_<name>_<colour><id>.log` on real robots."""
+def build_runner(args, tactic, name: str, profile: RobotProfile = RobotProfile()):
+    """(runner, robot id, label, game log) playing `tactic` on the robot `args` names, its vision
+    corrected by `profile`, recording to `replays/field/<stamp>_real_<name>_<colour><id>.log` on
+    real robots."""
     colour, vision_id = args.robot
     real = args.mode == "real"
-    robot = TestRobot(vision_id=vision_id, firmware_id=args.radio)
+    robot = TestRobot(vision_id=vision_id, firmware_id=args.radio, profile=profile)
     label = f"{colour} {vision_id} (radio {args.radio})"
     is_yellow = colour == "yellow"
     robot_id = vision_id if real else 0  # the simulator numbers robots from 0
@@ -118,7 +168,6 @@ def build_runner(args, script, name: str):
 
     stamp = time.strftime("%Y%m%d_%H%M%S")
     game_log = f"replays/field/{stamp}_real_{name}_{colour}{vision_id}.log" if real else None
-    tactic = ScriptedMovesTactic(script)
     runner = StrategyRunner(
         game_log_path=game_log,
         strategy=_one_robot_strategy(robot_id, lambda: tactic),
@@ -135,34 +184,43 @@ def build_runner(args, script, name: str):
         yellow_robot_profiles={robot_id: robot.profile} if is_yellow else None,
         blue_robot_profiles=None if is_yellow else {robot_id: robot.profile},
     )
-    return runner, tactic, robot_id, label, game_log
+    return runner, robot_id, label, game_log
 
 
-def play(runner, tactic, script, robot_id: int, label: str, yes: bool, on_tick=None) -> bool:
-    """Plays `script` to its end, asking in the terminal at each prompt (`yes`: answers them all).
-    `on_tick(step)` after every tick. False if stopped with Ctrl+C; the robot is halted either way."""
+def _ball_back(runner) -> None:
+    """A rehearsal's stand-in for the operator rolling the ball back: put it near the middle."""
+    if runner.sim_controller is not None:
+        (x0, y0), (x1, y1) = runner.field_bounds.top_left, runner.field_bounds.bottom_right
+        runner.sim_controller.teleport_ball((x0 + x1) / 2 + 0.3, (y0 + y1) / 2 + 0.2)
+
+
+def play(runner, tactic, robot_id: int, label: str, yes: bool, on_tick=None) -> bool:
+    """Plays `tactic` (a `ScriptedMovesTactic`, `BallTrialsTactic` or both `_InTurn`) to its end,
+    asking in the terminal at each prompt (`yes`: answers them all, and in a simulator puts the
+    ball back itself). `on_tick(tactic)` after every tick. False if stopped with Ctrl+C; the robot
+    is halted either way."""
     prompt = _Prompt()
-    total = len(script)
     try:
         _wait_until_seen(runner, robot_id, label)
-        shown = -1
+        shown = None
         while not tactic.done:
             runner.step_once()
             if on_tick is not None and not tactic.done:
-                on_tick(tactic.step)
+                on_tick(tactic)
             if tactic.waiting_for is not None:
                 if yes:
                     print(f">>> {tactic.waiting_for}: yes")
+                    _ball_back(runner)
+                    runner.step_once()  # the ball where it was put, seen, before carrying on
                     tactic.proceed()
                 elif prompt.answered.is_set():
                     prompt.answered.clear()
                     tactic.proceed()
                 elif not prompt.asking:
-                    prompt.ask(f"{script[tactic.step].name}: {tactic.waiting_for}")
-            elif tactic.step != shown and not tactic.done:
-                m = script[tactic.step]
-                print(f"[{tactic.step + 1:>2}/{total}] {m.name} ({m.seconds:g} s)")
-            shown = tactic.step
+                    prompt.ask(f"{tactic.status}: {tactic.waiting_for}")
+            elif tactic.status != shown and not tactic.done:
+                shown = tactic.status
+                print(shown)
         return True
     except KeyboardInterrupt:
         print("\nStopped: the robot is halted. Nothing analysed.")
@@ -171,24 +229,65 @@ def play(runner, tactic, script, robot_id: int, label: str, yes: bool, on_tick=N
         runner.close()
 
 
-def parse_args(description: str):
+def parse_args(description: str, ball: bool = False):
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--robot", type=_robot, required=True, help="colour:vision id, e.g. yellow:1")
+    parser.add_argument("--robot", type=_robot, required=True, help="colour:vision id, e.g. yellow:0")
     parser.add_argument("--radio", type=int, required=True, help="the robot's radio (firmware) id")
     parser.add_argument("--mode", choices=("real", "rsim"), default="real", help="rsim: rehearse, nothing recorded")
     parser.add_argument("--yes", action="store_true", help="answer every question at once (a rehearsal)")
+    if ball:
+        parser.add_argument("--ball-only", action="store_true", help="skip the driving: the ball part alone")
+        parser.add_argument("--repeats", type=int, default=2, help="carry trials per speed (default 2)")
+        parser.add_argument("--kicks", type=int, default=10, help="kicks (default 10)")
     return parser.parse_args()
 
 
+def carry_report(trials: BallTrialsTactic) -> str:
+    lines = ["carry ladder (the fastest each way that kept the ball every time, and each trial)"]
+    for name, kept in trials.ladder.summary().items():
+        rows = [r for r in trials.ladder.results if r["direction"] == name]
+        unit = "rad/s" if name.startswith("turn") else "m/s"
+        tried = ", ".join(f"{r['speed']:g}{'' if r['held'] else ' LOST'}" for r in rows)
+        lines.append(f"  {name:<19} {'-' if kept is None else f'{kept:g} {unit}':<10} ({tried})")
+    return "\n".join(lines)
+
+
+def _analyse(log_path: str, robot: tuple[str, int], profile: RobotProfile, trials: BallTrialsTactic) -> None:
+    log = FieldLog(log_path)
+    log.correct_tags({robot: (profile.tag_forward_m, profile.tag_left_m, math.radians(profile.tag_heading_deg))})
+    results, ball = calibrate(log), ball_noise(log.balls)
+    print(report(results, ball))
+    out = Path(log_path).with_suffix(".calibration.json")
+    out.write_text(
+        json.dumps(
+            {
+                "log": log_path,
+                "run_info": log.info,
+                "robots": results,
+                "ball": ball,
+                "carry_ladder": {"kept": trials.ladder.summary(), "trials": trials.ladder.results},
+            },
+            indent=1,
+        )
+    )
+    print(f"\nWritten {out}")
+
+
 def main() -> None:
-    args = parse_args(__doc__)
-    runner, tactic, robot_id, label, game_log = build_runner(args, FULL_SCRIPT, "calibrate")
+    args = parse_args(__doc__, ball=True)
+    profile = profile_of(args.radio)
+    trials = BallTrialsTactic(_field_bounds(FIELD, CAMERA_HALF), repeats=args.repeats, kicks=args.kicks)
+    script = (Move("start", 0.0, prompt=_START),) + (() if args.ball_only else CALIBRATION_SCRIPT)
+    tactic = _InTurn(ScriptedMovesTactic(script), trials)
+    runner, robot_id, label, game_log = build_runner(args, tactic, "calibrate", profile)
     print(f"Calibrating {label}; " + (f"recording to {game_log}" if game_log else "a rehearsal, nothing recorded"))
-    if play(runner, tactic, FULL_SCRIPT, robot_id, label, args.yes):
-        print(f"\a\nDONE: {label} has played the whole calibration.")
+    print(f"Its profile: {profile}")
+    if play(runner, tactic, robot_id, label, args.yes):
+        print(f"\a\nDONE: {label} has played the whole calibration.\n")
+        print(carry_report(trials))
         if game_log:
-            print(f"Analysing {game_log} ...\n")
-            _analyse(game_log)
+            print(f"\nAnalysing {game_log} ...\n")
+            _analyse(game_log, args.robot, profile, trials)
 
 
 if __name__ == "__main__":

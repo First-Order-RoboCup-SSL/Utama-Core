@@ -169,15 +169,19 @@ class TestRobot(NamedTuple):
 # from `pixi run calibrate-tag`; measure it again for a new lid.
 # YELLOW_1 is the robot on radio 0, measured as yellow 1; since 2026-10-28 its lid reads as yellow 0.
 # That lid's tag reads 3.5 deg clockwise of the robot (calibrate-tag 2026-10-28 22:33). With the
-# heading corrected, its 63 full kicks of 2026-10-28 fit 4.2 deg/cm +1.2 deg, rms 5.8; through zero
-# 4.4 deg/cm, rms 5.9: no bias (the +2.3 deg fitted before was mostly the tag).
+# tag corrected, `robot_calibration`'s fit over its 57 full kicks of 2026-10-28 is 4.8 deg/cm
+# through zero, rms 6.2, 1.3 deg left over at the centre: no bias (the +2.3 deg fitted before
+# was mostly the tag).
 # BLUE_0: 2026-10-28 rallies 1.9 deg/cm +0.5 (27 kicks, rms 5.8: kept at 2.1, no bias); tag not measured.
 YELLOW_1 = TestRobot(
     vision_id=0,
     firmware_id=0,
-    profile=RobotProfile(kick_bend_deg_per_cm=4.4, tag_left_m=-0.002, tag_heading_deg=-3.5),
+    profile=RobotProfile(kick_bend_deg_per_cm=4.8, tag_left_m=-0.002, tag_heading_deg=-3.5),
 )
 BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=RobotProfile(kick_bend_deg_per_cm=2.1))
+
+# Every robot we have, for scripts that pick one by its radio ID (`pixi run calibrate`).
+ROBOTS = (YELLOW_1, BLUE_0)
 
 # Swapping a robot is a change here only.
 ATTACKER = YELLOW_1

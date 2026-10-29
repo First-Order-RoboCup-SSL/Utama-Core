@@ -36,7 +36,7 @@ from calibrate_robot import build_runner, parse_args, play
 
 from utama_core.analysis.robot_calibration import FieldLog
 from utama_core.analysis.tag_calibration import report, tag_calibration
-from utama_core.tactics.scripted_moves import Move
+from utama_core.tactics.scripted_moves import Move, ScriptedMovesTactic
 
 _REST = 1.5
 _ALIGN = (
@@ -88,18 +88,20 @@ def profile_fields(result: dict, heading_offset) -> str:
 
 def main() -> None:
     args = parse_args(__doc__)
-    runner, tactic, robot_id, label, game_log = build_runner(args, TAG_SCRIPT, "calibrate_tag")
+    tactic = ScriptedMovesTactic(TAG_SCRIPT)
+    # No profile: the tag is measured as vision reads it.
+    runner, robot_id, label, game_log = build_runner(args, tactic, "calibrate_tag")
     print(
         f"Calibrating {label}'s tag; " + (f"recording to {game_log}" if game_log else "a rehearsal, nothing recorded")
     )
     headings: list[float] = []
 
-    def on_tick(step: int) -> None:
-        robot = runner.my.game.friendly_robots.get(robot_id) if step == _ALIGNED else None
+    def on_tick(t: ScriptedMovesTactic) -> None:
+        robot = runner.my.game.friendly_robots.get(robot_id) if t.step == _ALIGNED else None
         if robot is not None:
             headings.append(robot.orientation)
 
-    if not play(runner, tactic, TAG_SCRIPT, robot_id, label, args.yes, on_tick):
+    if not play(runner, tactic, robot_id, label, args.yes, on_tick):
         return
     print(f"\a\nDONE: {label} has played the whole tag calibration.\n")
     heading_offset = None

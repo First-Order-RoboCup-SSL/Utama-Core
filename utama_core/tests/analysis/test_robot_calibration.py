@@ -15,6 +15,7 @@ from utama_core.analysis.robot_calibration import (
     decode_feedback,
     decode_radio,
     dribbling,
+    kick_bend,
     kick_direction_offset,
 )
 from utama_core.entities.data.command import RobotCommand
@@ -241,3 +242,39 @@ def test_the_referee_record_reads_back_as_the_same_referee_data(tmp_path):
     assert (back.yellow_team.score, back.blue_team.score) == (2, 1)
     assert back.designated_position == pytest.approx(data.designated_position)
     assert back.blue_team_on_positive_half is True and back.next_command == RefereeCommand.FORCE_START
+
+
+def _kick(left_cm: float, offset_deg: float) -> dict:
+    return {"chip": False, "ball_left_cm": left_cm, "direction_offset_deg": offset_deg}
+
+
+def test_the_kick_bend_is_fitted_through_zero_per_cm_off_centre():
+    kicks = [_kick(x, 4.5 * x) for x in (-2.0, -1.0, -0.5, 0.5, 1.0, 2.0)]
+    kicks += [
+        _kick(5.0, 90.0),
+        _kick(1.0, None),
+        {**_kick(1.0, 40.0), "chip": True},
+    ]  # not on the dribbler, unmeasured, a chip
+
+    bend = kick_bend(kicks)
+
+    assert bend["deg_per_cm"] == pytest.approx(4.5)
+    assert bend["kicks"] == 6 and bend["rms_deg"] == 0.0
+
+
+def test_too_few_kicks_give_no_bend():
+    assert kick_bend([_kick(1.0, 4.0)] * 4) is None
+
+
+def test_correcting_a_tag_moves_that_robots_detections_onto_the_robot():
+    log = FieldLog.__new__(FieldLog)
+    # (t, camera, x, y, heading): facing +y, the tag read 3.5 deg clockwise and 1 cm ahead.
+    log.robots = {
+        ("yellow", 0): np.array([[0.0, 0, 1.0, 1.0, math.pi / 2]]),
+        ("blue", 0): np.array([[0.0, 0, 0.0, 0.0, 0.0]]),
+    }
+
+    log.correct_tags({("yellow", 0): (0.01, 0.0, math.radians(-3.5))})
+
+    assert log.robots[("yellow", 0)][0, 2:] == pytest.approx([1.0, 0.99, math.pi / 2 + math.radians(3.5)])
+    assert log.robots[("blue", 0)][0, 2:].tolist() == [0.0, 0.0, 0.0]
