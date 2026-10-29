@@ -159,6 +159,9 @@ def main():
                 elif "get_field_params" in cmd:
                     fp = sim.get_field_params()
                     _emit({"field_params": fp})
+                elif "set_physics_params" in cmd:
+                    sim.sim.set_physics_params(**cmd["set_physics_params"])
+                    _emit({"ack": True})
                 elif "get_state" in cmd:
                     state = sim.get_state()
                     _emit({"state": state})

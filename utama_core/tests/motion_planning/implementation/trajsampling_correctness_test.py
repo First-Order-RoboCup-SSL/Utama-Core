@@ -509,7 +509,7 @@ def test_try_reuse_notices_a_priority_obstacle_only_encroaching_later_in_the_tra
 
 def test_try_reuse_does_not_invalidate_on_a_priority_conflict_beyond_the_recheck_window():
     """Regression for the 231/231 full-catalog stall this session traced to
-    `_try_reuse`'s priority re-check (see roadmap item 15/16): when it scanned
+    `_try_reuse`'s priority re-check (see roadmap "trajsample liveness fixes"): when it scanned
     the WHOLE remaining trajectory (up to the old `MAX_LOOKAHEAD_TIME`, 1.5s)
     instead of the current, much shorter `_PRIORITY_RECHECK_LOOKAHEAD_TIME`
     (0.5s), every `PREPARE_KICKOFF_YELLOW` restart stalled forever: all 5
@@ -561,7 +561,7 @@ def test_try_reuse_does_not_invalidate_on_a_priority_conflict_beyond_the_recheck
 
 
 def test_try_reuse_ignores_priority_conflict_when_priority_blocking_disabled():
-    """Pins the restart-formation fix (roadmap item 15/16, session following
+    """Pins the restart-formation fix (roadmap "trajsample liveness fixes", session following
     the recheck-window fix above): even after shrinking the recheck window to
     0.5s, a real kickoff still stalled 100% of the time in a live
     `debug_match.py` run, traced to a DIFFERENT mechanism than the recheck
@@ -703,7 +703,7 @@ def _own_obstacle_after(planner, robot_xy, ts):
 
 
 def test_own_robot_obstacle_falls_back_to_real_state_once_robot_leaves_its_stale_plan():
-    """Pins the DIRECT_FREE ghost-obstacle deadlock (roadmap item 15).
+    """Pins the DIRECT_FREE ghost-obstacle deadlock (roadmap "trajsample liveness fixes").
 
     Robot 4 committed a plan ending next to the ball, then stopped being
     planned (`empty_command()` during a restart) and was later found 2m
@@ -745,7 +745,7 @@ def test_own_robot_obstacle_keeps_priority_for_robot_resting_on_its_completed_pl
 
 def test_intermediate_targets_drops_a_stale_backward_pointing_last_target():
     """Regression for the DIRECT_FREE_BLUE congestion stall live-traced on
-    `clear_danger_vs_shadow_switch` (roadmap item 15). `_intermediate_targets`
+    `clear_danger_vs_shadow_switch` (roadmap "trajsample liveness fixes"). `_intermediate_targets`
     always retried the previous tick's winning detour target FIRST, and
     `plan()` commits to the first collision-free candidate it finds without
     ever comparing it against the freshly-sorted, toward-target candidates
@@ -834,7 +834,7 @@ def test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_det
 
 def test_intermediate_targets_inserts_same_side_jitter_around_a_kept_last_target():
     """Regression for the PREPARE_KICKOFF_YELLOW side-flip stall live-traced
-    on `clear_danger_vs_overload_flow` (roadmap item 15/16): when `last`
+    on `clear_danger_vs_overload_flow` (roadmap "trajsample liveness fixes"): when `last`
     itself is re-tried and turns out to still be blocked (a narrow, near-
     static obstacle collision that doesn't clear from one tick to the next),
     falling straight through to `config.N_INTERMEDIATE_TARGETS` fully
@@ -885,7 +885,7 @@ def test_intermediate_targets_inserts_same_side_jitter_around_a_kept_last_target
 
 def test_collision_leniency_accepts_a_far_collision_when_priority_blocking_disabled():
     """Regression for the PREPARE_KICKOFF_BLUE stall live-traced on
-    `counter_press_vs_overload_flow` (roadmap item 15/16): during a restart
+    `counter_press_vs_overload_flow` (roadmap "trajsample liveness fixes"): during a restart
     (`priority_enabled=False`, mass-simultaneous replans, see
     `_priority_blocking_enabled`), a slow non-priority graze against a
     teammate who is itself still moving to its own formation spot was
@@ -1020,7 +1020,7 @@ def test_plan_accepts_direct_trajectory_through_a_slow_obstacle_parked_on_target
 
 def test_with_current_clearance_excludes_an_obstacle_the_robot_is_still_escaping():
     """Regression for the escaping-grace / clearance-report mismatch
-    (roadmap item 15): `_first_collision`'s numba scan grants a one-time
+    (roadmap "trajsample liveness fixes"): `_first_collision`'s numba scan grants a one-time
     "still escaping" grace to any obstacle already penetrated at t == the
     query start (see its own docstring -- built for GiveAndGoTactic's
     abandoned-receiver robot, replanning a fresh route the instant the ball

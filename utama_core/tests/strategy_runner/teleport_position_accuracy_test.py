@@ -107,7 +107,7 @@ def _run_teleport_accuracy_test(robot_id: int, x: float, y: float, theta: float)
     )
     # A teleported heading must read back unchanged: rsim stores y negated, and a
     # heading passed through without the matching flip came back mirrored (-theta),
-    # so every bench scenario rebuilt from a replay started with its robots facing
+    # so every scenario rebuilt from a replay started with its robots facing
     # the wrong way.
     heading_error = math.atan2(
         math.sin(test_manager.first_frame_orientation - theta), math.cos(test_manager.first_frame_orientation - theta)

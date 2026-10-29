@@ -1,0 +1,117 @@
+diff --git a/src/shared/util/field.cpp b/src/shared/util/field.cpp
+index 7eff4d0..8d59b8f 100644
+--- a/src/shared/util/field.cpp
++++ b/src/shared/util/field.cpp
+@@ -371,6 +371,7 @@ RoboCupField::RoboCupField() {
+   updateShapes = new VarTrigger("Field Lines/Arcs","Update");
+   applyDivisionA = new VarTrigger("Division A", "Apply");
+   applyDivisionB = new VarTrigger("Division B", "Apply");
++  applyLab = new VarTrigger("Lab Field", "Apply");
+   var_num_lines = new VarInt("Number of Line Segments", 0);
+   var_num_arcs = new VarInt("Number of Arcs", 0);
+   field_lines_list = new VarList("Field Lines");
+@@ -381,6 +382,7 @@ RoboCupField::RoboCupField() {
+   settings->addChild(field_models->settings);
+   settings->addChild(applyDivisionA);
+   settings->addChild(applyDivisionB);
++  settings->addChild(applyLab);
+   settings->addChild(field_length);
+   settings->addChild(field_width);
+   settings->addChild(goal_width);
+@@ -409,6 +411,7 @@ RoboCupField::RoboCupField() {
+   connect(updateShapes,SIGNAL(wasEdited(VarType*)),this,SLOT(updateFieldLinesAndArcs()));
+   connect(applyDivisionA,SIGNAL(wasEdited(VarType*)),this,SLOT(applyGeometryDivisionA()));
+   connect(applyDivisionB,SIGNAL(wasEdited(VarType*)),this,SLOT(applyGeometryDivisionB()));
++  connect(applyLab,SIGNAL(wasEdited(VarType*)),this,SLOT(applyGeometryLab()));
+   connect(var_num_lines, SIGNAL(wasEdited(VarType*)),
+           this, SLOT(ResizeFieldLines()));
+   connect(var_num_arcs, SIGNAL(wasEdited(VarType*)),
+@@ -469,6 +472,7 @@ RoboCupField::~RoboCupField() {
+     delete field_arcs[i];
+   }
+   delete updateShapes;
++  delete applyLab;
+   delete settings;
+ }
+ 
+@@ -512,6 +516,27 @@ void RoboCupField::applyGeometryDivisionB() {
+     num_cameras_local->setDouble(FieldConstantsRoboCup2018B::kNumCamerasLocal);
+ }
+ 
++void RoboCupField::applyGeometryLab() {
++    field_length->setDouble(FieldConstantsLab::kFieldLength);
++    field_width->setDouble(FieldConstantsLab::kFieldWidth);
++    goal_width->setDouble(FieldConstantsLab::kGoalWidth);
++    goal_depth->setDouble(FieldConstantsLab::kGoalDepth);
++    goal_height->setDouble(FieldConstantsLab::kGoalHeight);
++    boundary_width->setDouble(FieldConstantsLab::kBoundaryWidth);
++    boundary_width_goal_line->setDouble(FieldConstantsLab::kBoundaryWidthGoalLine);
++    line_thickness->setDouble(FieldConstantsLab::kLineThickness);
++    penalty_area_depth->setDouble(FieldConstantsLab::kPenaltyAreaDepth);
++    penalty_area_width->setDouble(FieldConstantsLab::kPenaltyAreaWidth);
++    goal_center_to_penalty_mark->setDouble(FieldConstantsLab::kGoalLineToPenaltyMark);
++    center_circle_radius->setDouble(FieldConstantsLab::kCenterCircleRadius);
++    ball_radius->setDouble(FieldConstantsLab::kBallRadius);
++    max_robot_radius->setDouble(FieldConstantsLab::kMaxRobotRadius);
++    goal_substitution_area_width->setDouble(FieldConstantsLab::kGoalSubstitutionAreaWidth);
++    num_cameras_total->setDouble(FieldConstantsLab::kNumCamerasTotal);
++    num_cameras_local->setDouble(FieldConstantsLab::kNumCamerasLocal);
++    updateFieldLinesAndArcs();
++}
++
+ SSL_FieldShapeType RoboCupField::parseShapeType(const VarStringEnum* value) const {
+   std::string type = value->getString();
+   if(shapeTypeMap.find(type) != shapeTypeMap.end()) {
+diff --git a/src/shared/util/field.h b/src/shared/util/field.h
+index e60066a..b9b6657 100644
+--- a/src/shared/util/field.h
++++ b/src/shared/util/field.h
+@@ -167,6 +167,7 @@ protected:
+   VarTrigger* updateShapes;
+   VarTrigger* applyDivisionA;
+   VarTrigger* applyDivisionB;
++  VarTrigger* applyLab;
+ public:
+   VarList* getSettings() const {
+     return settings;
+@@ -224,6 +225,7 @@ protected slots:
+   void updateFieldLinesAndArcs();
+   void applyGeometryDivisionA();
+   void applyGeometryDivisionB();
++  void applyGeometryLab();
+ };
+ 
+ 
+diff --git a/src/shared/util/field_default_constants.h b/src/shared/util/field_default_constants.h
+index bcf52e5..095282a 100644
+--- a/src/shared/util/field_default_constants.h
++++ b/src/shared/util/field_default_constants.h
+@@ -49,6 +49,28 @@ namespace FieldConstantsRoboCup2018A {
+     const int kNumCamerasLocal = 1;
+ }
+ 
++// Our lab field (Utama): 3 m x 2.25 m, two cameras. Not a league field; the penalty
++// mark and centre circle are not marked on it.
++namespace FieldConstantsLab {
++    const double kFieldLength = 3000.0;
++    const double kFieldWidth = 2250.0;
++    const double kGoalWidth = 800.0;
++    const double kGoalDepth = 180.0;
++    const double kGoalHeight = 155.0;
++    const double kBoundaryWidth = 300.0;
++    const double kBoundaryWidthGoalLine = 300.0;
++    const double kGoalSubstitutionAreaWidth = 0.0;
++    const double kLineThickness = 10.0;
++    const double kPenaltyAreaDepth = 500.0;
++    const double kPenaltyAreaWidth = 1000.0;
++    const double kCenterCircleRadius = 300.0;
++    const double kGoalLineToPenaltyMark = 1000.0;
++    const double kBallRadius = 21.5;
++    const double kMaxRobotRadius = 90.0;
++    const int kNumCamerasTotal = 2;
++    const int kNumCamerasLocal = 2;
++}
++
+ namespace FieldConstantsRoboCup2018B {
+     const double kFieldLength = 9000.0;
+     const double kFieldWidth = 6000.0;

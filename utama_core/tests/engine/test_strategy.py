@@ -17,7 +17,7 @@ from typing import Optional
 import pytest
 
 from utama_core.engine.context import TickContext
-from utama_core.engine.match_log import IntentionEvent, MatchLog
+from utama_core.engine.match_log import IntentionEvent, MatchLog, TraceEvent
 from utama_core.engine.strategy import Strategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -735,6 +735,32 @@ def test_match_log_records_reassignment_when_active_tactic_switches():
     ]
 
 
+class _OverlayTactic(RecordingTactic):
+    """Traces one overlay key every tick it runs, as tactics do for the replay canvas."""
+
+    def tick(self, game, ctx, robot_ids, mem):
+        ctx.match_log.trace_if_changed(tick=0, sim_time=0.0, key="a.overlay", value=list(robot_ids))
+        return super().tick(game, ctx, robot_ids, mem)
+
+
+def test_an_overlay_is_cleared_once_its_tactic_stops_tracing_it():
+    picks = iter(["a", "a", "b"])
+    strategy = Strategy(
+        tactics={"a": _OverlayTactic(), "b": RecordingTactic()},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: next(picks)),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    strategy.match_log = MatchLog()
+
+    for _ in range(3):
+        strategy.tick(_FakeGame())
+
+    overlay = [e.value for e in strategy.match_log.events() if isinstance(e, TraceEvent) and e.key == "a.overlay"]
+    # unchanged on the second tick, so logged once; cleared on the third, when "b" runs instead
+    assert overlay == [[1, 2], None]
+
+
 def test_match_log_records_tactic_release_without_commitment():
     """A slot dropped before ever committing is distinguishable from one that was."""
     tactic_a, tactic_b = RecordingTactic(), RecordingTactic()
@@ -858,6 +884,7 @@ def _held_restart_strategy():
         ctx=_ctx(),
         referee_overrides={
             RefereeCommand.DIRECT_FREE_BLUE: lambda game, mc: {1: "keep-out", 2: "keep-out"},
+            RefereeCommand.INDIRECT_FREE_BLUE: lambda game, mc: {1: "keep-out", 2: "keep-out"},
             RefereeCommand.PREPARE_KICKOFF_BLUE: lambda game, mc: {1: "own-half", 2: "own-half"},
             RefereeCommand.DIRECT_FREE_YELLOW: lambda game, mc: {1: "kicker", 2: "wait"},
         },
@@ -866,7 +893,12 @@ def _held_restart_strategy():
 
 
 @pytest.mark.parametrize(
-    "restart, held", [(RefereeCommand.DIRECT_FREE_BLUE, "keep-out"), (RefereeCommand.PREPARE_KICKOFF_BLUE, "own-half")]
+    "restart, held",
+    [
+        (RefereeCommand.DIRECT_FREE_BLUE, "keep-out"),
+        (RefereeCommand.INDIRECT_FREE_BLUE, "keep-out"),
+        (RefereeCommand.PREPARE_KICKOFF_BLUE, "own-half"),
+    ],
 )
 def test_their_restart_positioning_holds_after_normal_start_until_the_ball_is_in_play(restart, held):
     # decoy_and_overload_vs_tiki_taka / _vs_give_and_go_solo (2026-09-28): the
@@ -887,3 +919,61 @@ def test_our_own_restart_hands_over_at_normal_start():
     strategy, _ = _held_restart_strategy()
     strategy.tick(_RestartGame(RefereeCommand.DIRECT_FREE_YELLOW))
     assert strategy.tick(_RestartGame(RefereeCommand.NORMAL_START)) == {1: "cmd-1", 2: "cmd-2"}
+
+
+def test_barrier_reset_clears_closer_to_ball_hysteresis_state():
+    from utama_core.strategy.pickers import _CLOSER_TO_BALL_STATE, _CloserToBallState
+
+    _CLOSER_TO_BALL_STATE[True] = _CloserToBallState(state=True, pending_state=False, pending_ticks=10)
+    tactic = RecordingTactic()
+    strategy = Strategy(
+        tactics={"a": tactic},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1, 2),
+        ctx=_ctx(),
+    )
+    game1 = _FakeGame(RefereeCommand.NORMAL_START)
+    game1.my_team_is_yellow = True
+    strategy.tick(game1)
+
+    game2 = _FakeGame(RefereeCommand.GOAL_YELLOW)
+    game2.my_team_is_yellow = True
+    strategy.tick(game2)
+
+    assert True not in _CLOSER_TO_BALL_STATE
+
+
+# --- pinned goalkeeper slot ---
+
+
+class _GameWithRobots(_FakeGame):
+    def __init__(self, friendly_ids):
+        super().__init__()
+        self.friendly_robots = {rid: object() for rid in friendly_ids}
+
+
+def _strategy_with_pinned_keeper(keeper: RecordingTactic) -> Strategy:
+    strategy = Strategy(
+        tactics={"a": RecordingTactic()},
+        partitioner=Strategy.single_tactic_picker(lambda game, active: "a"),
+        outfield_robot_ids=(1,),
+        ctx=_ctx(),
+    )
+    strategy.set_goalkeeper(0, tactic=keeper)
+    return strategy
+
+
+def test_pinned_goalkeeper_is_skipped_when_its_robot_is_not_on_the_field():
+    # A real two-robot test fields vision IDs 1 and 3, say, with no robot 0: the
+    # goalkeeper skills index friendly_robots[0] and raised KeyError.
+    keeper = RecordingTactic()
+    strategy = _strategy_with_pinned_keeper(keeper)
+    assert strategy.tick(_GameWithRobots({1})) == {1: "cmd-1"}
+    assert keeper.last_robot_ids == ()
+
+
+def test_pinned_goalkeeper_ticks_when_its_robot_is_on_the_field():
+    keeper = RecordingTactic()
+    strategy = _strategy_with_pinned_keeper(keeper)
+    assert strategy.tick(_GameWithRobots({0, 1})) == {1: "cmd-1", 0: "cmd-0"}
+    assert keeper.last_robot_ids == (0,)

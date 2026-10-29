@@ -15,16 +15,30 @@
 </div>
 
 <div class="view" id="view-live" style="gap:8px; padding:8px;">
-  <div class="panel" style="flex:2">
+  <div class="panel stack" style="flex:2">
     <div class="panel-title" id="ref-profile-name">Field</div>
-    <div class="field-wrap"><canvas id="ref-field-canvas"></canvas></div>
+    <div class="field-wrap" style="flex:1;"><canvas id="ref-field-canvas"></canvas></div>
+    <div class="stack" style="padding:6px 10px 10px; gap:4px;">
+      <div class="timeline-wrap"><canvas id="live-timeline"></canvas></div>
+      <div class="row" style="align-items:center; justify-content:space-between;">
+        <div id="live-timeline-legend" class="timeline-legend"></div>
+        <select id="live-timeline-window" title="Timeline window">
+          <option value="30">30 s</option>
+          <option value="60" selected>60 s</option>
+          <option value="180">3 min</option>
+          <option value="0">5 min</option>
+        </select>
+      </div>
+    </div>
   </div>
   <div class="panel stack" style="flex:1; padding:12px; overflow-y:auto;">
     <div class="row" style="justify-content:space-between; align-items:baseline;">
       <div><span class="muted">Yellow</span> <span id="ref-yellow-score">—</span></div>
       <div><span class="muted">Blue</span> <span id="ref-blue-score">—</span></div>
     </div>
-    <div><span class="muted">Command</span> <span id="ref-command">—</span></div>
+    <div id="ref-auto-halt" class="auto-halt" style="display:none;"></div>
+    <div id="ref-field-check" style="font-size:.75rem;"></div>
+    <div><span class="muted">Command</span> <span id="ref-command">—</span> <span id="ref-stale" class="check-fail"></span></div>
     <div><span class="muted">Stage</span> <span id="ref-stage">—</span></div>
     <div class="row">
       <button class="btn-halt" data-cmd="HALT">Halt</button>
@@ -32,21 +46,35 @@
       <button class="btn-accent" data-cmd="NORMAL_START">Normal Start</button>
       <button data-cmd="FORCE_START">Force Start</button>
     </div>
-    <div class="row">
+    <div id="ref-send-error" class="check-fail" style="font-size:.75rem;"></div>
+    <div class="row restart-row">
       <button data-cmd="PREPARE_KICKOFF_YELLOW">Kickoff Yellow</button>
       <button data-cmd="PREPARE_KICKOFF_BLUE">Kickoff Blue</button>
     </div>
-    <div class="row">
+    <div class="row restart-row">
       <button data-cmd="DIRECT_FREE_YELLOW">Free Kick Yellow</button>
       <button data-cmd="DIRECT_FREE_BLUE">Free Kick Blue</button>
+    </div>
+    <div id="strategy-run" style="display:none;">
+      <div class="ref-section-title">Strategy <span class="muted" style="font-size:.65rem;">changed only while halted; Run on the one running restarts it</span></div>
+      <div id="strategy-rows" class="stack" style="gap:4px;"></div>
+    </div>
+    <div id="log-note-row" style="display:none;">
+      <div class="ref-section-title">Note <span class="muted" style="font-size:.65rem;">Enter writes it into the game log</span></div>
+      <input id="log-note" type="text" placeholder="ball placed by hand, start dribble test, ignore..." style="width:100%;">
     </div>
     <div class="ref-section-title">Tactics</div>
     <div id="ref-tactic-entries" style="font-size:.75rem;"></div>
     <div id="ref-status-entries" style="font-size:.75rem;"></div>
     <div class="row" style="margin-top:auto; align-items:center;">
       <span class="conn-dot" id="ref-conn-dot"></span>
-      <span class="muted" style="font-size:.65rem;">space = halt / resume</span>
+      <span class="muted" style="font-size:.65rem;">space = halt · right-click (long-press) the field = ball placement</span>
     </div>
+  </div>
+  <div id="ref-place-menu" class="place-menu">
+    <div class="muted place-at"></div>
+    <button data-place="YELLOW">by Yellow</button>
+    <button data-place="BLUE">by Blue</button>
   </div>
 </div>
 
@@ -73,6 +101,7 @@
           <button class="btn-accent" id="replay-play" style="min-width:70px;">Play</button>
           <button id="replay-step-fwd" title="Next frame (→)">⏭</button>
           <span class="muted" id="replay-frame-label" style="min-width:100px; font-variant-numeric:tabular-nums;">0:00 / 0:00</span>
+          <span class="muted" id="replay-match-clock" style="font-variant-numeric:tabular-nums;" title="The referee's match clock: it stops in STOP, HALT, kickoff and penalty preparation and ball placement, so it runs behind the replay time on the left (which every list and the timeline use)."></span>
         </div>
         <select id="replay-speed" title="Playback speed">
           <option value="0.25">0.25x</option>
@@ -80,6 +109,16 @@
           <option value="1" selected>1x</option>
           <option value="2">2x</option>
           <option value="4">4x</option>
+        </select>
+      </div>
+      <div class="timeline-wrap"><canvas id="replay-timeline"></canvas></div>
+      <div class="row" style="align-items:center; justify-content:space-between;">
+        <div id="replay-timeline-legend" class="timeline-legend"></div>
+        <select id="replay-timeline-window" title="Timeline window">
+          <option value="30">30 s</option>
+          <option value="60" selected>60 s</option>
+          <option value="180">3 min</option>
+          <option value="0">whole match</option>
         </select>
       </div>
     </div>
@@ -95,10 +134,12 @@
     <div class="ref-section-title">Tactics</div>
     <div id="replay-tactic-entries" style="font-size:.75rem;"></div>
     <div id="replay-status-entries" style="font-size:.75rem;"></div>
-    <div class="ref-section-title">Events <span class="muted" style="font-size:.65rem;">[ and ] step through them</span></div>
-    <div id="replay-marker-list" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
-    <div class="ref-section-title">Intention log</div>
-    <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
+    <div class="ref-section-title">Play <span class="muted" style="font-size:.65rem;">one row per restart or ball won; [ and ] step through events</span></div>
+    <div id="replay-play-list" style="font-size:.72rem; flex:1; min-height:120px; overflow-y:auto;"></div>
+    <details class="raw-log">
+      <summary class="muted">Intention log (raw: every slot change)</summary>
+      <div id="replay-intention-log" style="font-size:.72rem; max-height:180px; overflow-y:auto;"></div>
+    </details>
   </div>
 </div>
 
@@ -110,6 +151,7 @@
 <script>__STATUS_PANEL_JS__</script>
 <script>__APP_JS__</script>
 <script>__LIVE_JS__</script>
+<script>__TIMELINE_JS__</script>
 <script>__REPLAY_JS__</script>
 <script>__TOURNAMENT_JS__</script>
 <script>Dashboard.init("replay");</script>

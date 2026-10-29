@@ -19,6 +19,50 @@ pixi run python examples/demo_referee_gui_rsim.py   # then open http://localhost
 The page shows the score, current/next command, stage and time left, `designated_position`, the
 field, the active profile and an event log; a button issues each command.
 
+## Field check (camera runs)
+
+With vision from a camera (real robots or grSim) the Live tab also shows the field check
+(`utama_core/run/field_check.py`), one row per question, red / amber / green:
+
+| Row | Fails (red) when | Warns (amber) when |
+|---|---|---|
+| Camera | no vision packet for 0.5 s | |
+| Field size | ssl-vision's geometry differs from `full_field_dims` | no geometry packet yet |
+| `<colour> <id>` (each robot we drive) | never seen, lost by vision 0.5 s, or more than 0.3 m outside `field_bounds` | |
+| `<colour> <id> radio` (real only) | it answered on the radio, then stopped | it has not answered yet (the firmware may send no feedback) |
+| `<colour> <id>` (any other) | | seen inside `field_bounds` but not configured: our planners cannot see it, often a wrong ID |
+| Ball | | not seen, or outside `field_bounds` |
+
+Before it gets that far, the runner keeps our robots inside `field_bounds` on camera runs
+(`utama_core/run/field_fence.py`): each robot's speed towards an edge is capped to what it can
+stop from before the line, whatever tactic sent the command, so a robot chasing a ball out of the
+camera's area stops at the line. The planners' walls at `field_bounds` are only obstacles to plan
+around, and did not stop it (0.5–0.9 m out in grSim before the fence).
+
+Only the red and amber rows are listed; the green ones fold into an "N ok" line that opens on
+click. On real robots any red row forces `HALT`, whatever the command and whether or not the page is
+open; the red banner says why. Pressing Force Start while a row is red halts again at once, so
+the check is also the pre-start gate. The field is drawn as ssl-vision sees it (+x to the right),
+with everything outside `field_bounds` dimmed, so a half-field test shows which half the runner
+expects. Space halts; nothing on the keyboard starts the robots. The Kickoff and Free Kick
+buttons are hidden when the profile has no rule that sets up a restart (goal detection only).
+
+## Strategy panel
+
+A script can let the page change what each side plays, or restart it, without restarting the
+run (`utama_core/dashboard/views/strategy.py`):
+
+```python
+strategy_view.attach(server, runner,
+    choices={"my": {"lead": make_lead, "press": make_press}},  # name -> builds a fresh AbstractStrategy
+    running={"my": "lead"})
+```
+
+The Live tab then lists the choices per side with a Run button; Run on the one running restarts
+it. `StrategyRunner.replace_strategy` takes the new strategy at the next tick and only while
+halted, so the page refuses otherwise. `examples/real_attacker_defender.py` offers its attacker
+and defender tactics this way.
+
 ## Commands and what robots do
 
 | Button | Command | Use | Robots |

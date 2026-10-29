@@ -363,10 +363,40 @@ class TestDoubleTouchRule:
         assert violation is not None
         assert violation.rule_name == "double_touch"
         assert violation.next_command == RefereeCommand.DIRECT_FREE_BLUE
+        assert violation.offending_teams == (True,)
+        assert violation.offending_robots == ((True, 0),)
+
+    def test_double_touch_charges_offending_teams_for_foul_counter(self):
+        # Double touch is a foul with foul counter increment (SSL §8.4);
+        # offending_teams must be populated with the offending color.
+        rule = DoubleTouchRule()
+        _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_BLUE)
+
+        # Blue kicker (enemy when my_team_is_yellow=True)
+        enemy = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=enemy, my_team_is_yellow=True), GEO, RefereeCommand.NORMAL_START
+        )
+        released = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=False)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=released, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+        retouched = {1: _robot(1, 0.0, 0.0, is_friendly=False, has_ball=True)}
+        violation = rule.check(
+            _frame(ball=_ball(0.0, 0.0), enemy_robots=retouched, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+        assert violation is not None
+        assert violation.offending_teams == (False,)  # blue is yellow=False
+        assert violation.offending_robots == ((False, 1),)
 
     def test_designated_position_is_projected_clear_of_the_defense_area(self):
         """Regression, same class of bug as DefenseAreaRule/KeeperHeldBallRule/
-        ExcessiveDribblingRule/PushingRule/BallSpeedRule (roadmap item 15/16): a
+        ExcessiveDribblingRule/PushingRule/BallSpeedRule (roadmap "`custom_referee` missing-`designated_position` audit"): a
         double touch resolved right at a defense-area edge must not hand back
         a `designated_position` inside that box."""
         rule = DoubleTouchRule()
@@ -1133,7 +1163,7 @@ class TestCustomReferee:
         assert data.next_command == RefereeCommand.NORMAL_START
 
     def test_simulation_stop_advances_after_timeout_even_if_a_robot_never_clears(self):
-        """Found live in a full_match_tournament.py replay
+        """Found live in a round-robin replay
         (counter_press_vs_tiki_taka_RK.pkl, 2026-09-01): an out-of-bounds STOP
         queued a DIRECT_FREE_BLUE restart, but one robot parked itself
         oscillating just inside _BALL_CLEAR_DIST of the stationary ball and
@@ -1376,3 +1406,21 @@ game:
     def test_unknown_profile_raises(self):
         with pytest.raises(FileNotFoundError):
             load_profile("nonexistent_profile")
+
+
+def test_only_a_halt_an_operator_called_counts_as_the_operators():
+    """The simulators resume a HALT the rules call; one the operator called waits for them."""
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.seed_clock(0.0, RefereeCommand.HALT)
+    assert not referee.halted_by_operator  # no dashboard: nobody to end it
+    referee.set_command(RefereeCommand.STOP, 1.0, by_operator=True)
+    assert not referee.halted_by_operator
+    referee.force_command(RefereeCommand.HALT, 2.0, by_operator=True)
+    assert referee.halted_by_operator
+    referee.force_command(RefereeCommand.HALT, 3.0)  # the runner's or a rule's
+    assert not referee.halted_by_operator
+
+    referee = CustomReferee.from_profile_name("simulation")
+    referee.attach_dashboard_notifier(lambda *args: None)
+    referee.seed_clock(0.0, RefereeCommand.HALT)  # started halted, with a page to end it
+    assert referee.halted_by_operator

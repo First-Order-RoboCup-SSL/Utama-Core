@@ -43,6 +43,7 @@ from utama_core.strategy.pickers import (
     carrier_first,
     fixed_ratio_picker,
     friendly_closer_to_ball,
+    reset_closer_to_ball_state,
 )
 from utama_core.strategy.press_and_pass import build_press_and_pass_kernel_strategy
 from utama_core.strategy.press_trigger_flow import (

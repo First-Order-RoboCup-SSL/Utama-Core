@@ -7,16 +7,15 @@ Run:
 
 - `pixi run python tools/evaluation/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
   named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
-- `pixi run python tools/evaluation/ladder.py <name>` — one candidate against the top of the
-  newest round-robin, over both sides and both kickoffs.
+- `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
+  of the reference pool (`tools/evaluation/pools/pool_v1.json`). The way to judge a strategy.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
 rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
 only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
 
-**In the round-robin**, in order of the 2026-10-19 standings (below). A round-robin or a
-ladder with no strategies named plays these.
+**In the round-robin**. A round-robin with no strategies named plays these.
 
 | Strategy | Description |
 |---|---|
@@ -35,9 +34,9 @@ ladder with no strategies named plays these.
 | `clear_press_plus` | `clear_danger` plus `tiki_taka_plus`'s final-third overload. |
 
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
-or a ladder pool unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
-kept strategies and tests build on some of them. A retired strategy comes back by laddering
-against the round-robin's top.
+unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
+kept strategies and tests build on some of them. A retired strategy comes back by being judged
+with `evaluate.py` against the pool.
 
 | Strategy | Description |
 |---|---|
@@ -53,6 +52,10 @@ against the round-robin's top.
 | `shadow_switch` | `SwitchOfPlayTactic` relay attack + `ShadowAndMarkTactic` defense, 3/2. |
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
+
+Strategies are judged with `evaluate.py` against the reference pool `pool_v1`
+(`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). The round-robin results below are a
+snapshot of the catalog, not the verdict on any one strategy.
 
 ## Latest results
 
@@ -81,6 +84,36 @@ Against the 2026-10-19 run: `flat_rule` won all 12, conceding 7 goals where it c
 | `press_and_pass` | 3-2-7 | 14-29 | 0.92 |
 | `press_trigger_flow` | 2-4-6 | 17-33 | 0.83 |
 | `clear_press_plus` | 1-3-8 | 13-33 | 0.50 |
+
+### Reference-pool run with sim noise
+
+**Round-robin** (2026-10-17, sim-realism-20261016 at 423f63a0, the 12 strategies before flat_rule was added, 66
+matches, two halves of 300 s of playing time, seeded sim noise `v3_seed2`,
+`replays/tournament_20261017_151052/summary.json`). Points are 3 a win, 1 a draw; 14 of 66
+matches were draws. 4 matches stalled (three committed robots frozen about 10 s, and one kick-off
+that waited the referee's 15 s cap, fixed after this run in 1731e904); 97% of 3232 restarts
+reached NORMAL_START.
+
+Against the 2026-10-10 run: rsim is our fork with the v3 sim noise (latency, motion limits, ball
+friction, kick direction), and restarts, ball placement and the carry limit were fixed, so goals
+fell from 7.1 a match to 4.0 and the results are not comparable with earlier runs.
+`split_shape` is still first, unbeaten; `counter_flow`, second before, is eleventh.
+What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
+
+| Strategy | W-D-L | GF-GA | Points per match |
+|---|---|---|---|
+| `split_shape` | 10-1-0 | 66-14 | 2.82 |
+| `clear_press_plus` | 5-5-1 | 14-9 | 1.82 |
+| `overload_press` | 6-2-3 | 22-18 | 1.82 |
+| `clear_danger` | 5-2-4 | 20-24 | 1.55 |
+| `tiki_taka_plus` | 5-1-5 | 23-21 | 1.45 |
+| `high_press` | 4-3-4 | 24-27 | 1.36 |
+| `press_trigger_flow` | 4-1-6 | 13-19 | 1.18 |
+| `give_and_go_solo` | 3-3-5 | 20-30 | 1.09 |
+| `press_and_pass` | 3-3-5 | 14-28 | 1.09 |
+| `decoy_and_overload` | 3-2-6 | 16-27 | 1.00 |
+| `counter_flow` | 2-4-5 | 17-21 | 0.91 |
+| `score_aware_counter_flow` | 2-1-8 | 16-27 | 0.64 |
 
 ## Known open bugs
 

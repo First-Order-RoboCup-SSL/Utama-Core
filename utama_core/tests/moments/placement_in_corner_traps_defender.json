@@ -1,0 +1,162 @@
+{
+  "name": "placement_in_corner_traps_defender",
+  "note": "Their ball placement to (4.0, 2.5), near our corner. Robot 2, 0.3 m from the ball, is pushed out to 0.8 m along its own bearing, off the pitch; clamped back onto it the target is still inside the circle, so the robot never leaves: a placement interference foul. Round-robin tournament_20261017_002337, counter_flow vs give_and_go_solo.",
+  "source": {
+    "replay": "replays/tournament_20261017_002337/counter_flow_vs_give_and_go_solo.npz",
+    "t": 163.0
+  },
+  "strategy": "all",
+  "opponent": "build_give_and_go_solo_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "keeps_clear",
+    "ball_placement_interference"
+  ],
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ],
+  "known_failure": null,
+  "designated_position": [
+    4.0,
+    2.5
+  ],
+  "sim_noise": {
+    "seed": 2,
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ]
+  },
+  "scenario": {
+    "referee_command": "BALL_PLACEMENT_BLUE",
+    "ball": [
+      4.000718593597412,
+      2.5001039505004883,
+      0.03022906184196472,
+      0.01820620521903038
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.407966136932373,
+        "y": 0.4080584943294525,
+        "orientation": 1.6470003128051758,
+        "vx": -0.0005575984832830727,
+        "vy": 0.03238838165998459
+      },
+      {
+        "id": 1,
+        "x": 3.4034035205841064,
+        "y": 0.31569981575012207,
+        "orientation": 1.4781031608581543,
+        "vx": 0.01965811289846897,
+        "vy": 0.01500271912664175
+      },
+      {
+        "id": 2,
+        "x": 4.276703834533691,
+        "y": 2.3508384227752686,
+        "orientation": -1.1787805557250977,
+        "vx": 0.0009964045602828264,
+        "vy": -0.007879270240664482
+      },
+      {
+        "id": 3,
+        "x": -2.7047958374023438,
+        "y": -0.032752856612205505,
+        "orientation": 0.34564128518104553,
+        "vx": 0.001046720426529646,
+        "vy": -0.025415241718292236
+      },
+      {
+        "id": 4,
+        "x": 2.2714576721191406,
+        "y": 0.9499884247779846,
+        "orientation": 0.6757456064224243,
+        "vx": 0.02668331004679203,
+        "vy": -0.017388781532645226
+      },
+      {
+        "id": 5,
+        "x": 2.8221805095672607,
+        "y": 1.6641405820846558,
+        "orientation": 0.481290727853775,
+        "vx": 0.002441104268655181,
+        "vy": -0.02858341671526432
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.5,
+        "y": -0.401977002620697,
+        "orientation": 0.00540520902723074,
+        "vx": 0.017526358366012573,
+        "vy": -0.008871330879628658
+      },
+      {
+        "id": 1,
+        "x": 2.8238449096679688,
+        "y": 1.1251498460769653,
+        "orientation": 0.5976036190986633,
+        "vx": -0.02055889181792736,
+        "vy": -0.008285828866064548
+      },
+      {
+        "id": 2,
+        "x": 2.925846815109253,
+        "y": 0.150612011551857,
+        "orientation": 0.9782609939575195,
+        "vx": 0.006188818719238043,
+        "vy": 0.04150957241654396
+      },
+      {
+        "id": 3,
+        "x": 4.0975236892700195,
+        "y": 2.3687822818756104,
+        "orientation": -2.889813184738159,
+        "vx": -0.012717907316982746,
+        "vy": -0.005403792019933462
+      },
+      {
+        "id": 4,
+        "x": 2.931936740875244,
+        "y": -1.0765888690948486,
+        "orientation": 1.1885813474655151,
+        "vx": -0.01568521000444889,
+        "vy": -0.03724595531821251
+      },
+      {
+        "id": 5,
+        "x": 3.718639612197876,
+        "y": 1.927229881286621,
+        "orientation": -1.0715361833572388,
+        "vx": -0.12264327704906464,
+        "vy": -0.07666496932506561
+      }
+    ]
+  }
+}

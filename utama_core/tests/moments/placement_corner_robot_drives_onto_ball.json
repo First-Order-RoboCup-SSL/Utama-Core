@@ -1,0 +1,162 @@
+{
+  "name": "placement_corner_robot_drives_onto_ball",
+  "note": "Their placement at (-4.0, -2.5): robot 1 starts inside the keep-out circle, boxed in the corner by two opponents. It must leave without closing on the ball. Before 935da778 the planner's detour took it back toward the ball (fails at seeds 0, 1, 3, 4; seed 1 stored). The placement moves the ball onto robot 1, which keeps_clear does not count as driving in.",
+  "source": {
+    "replay": "replays/tournament_20261017_002337/overload_press_vs_press_trigger_flow.npz",
+    "t": 333.5
+  },
+  "strategy": "all",
+  "opponent": "build_press_trigger_flow_kernel_strategy",
+  "seconds": 3.0,
+  "checks": [
+    "keeps_clear",
+    "ball_placement_interference"
+  ],
+  "known_failure": null,
+  "designated_position": [
+    -4.0,
+    -2.5
+  ],
+  "sim_noise": {
+    "seed": 1,
+    "latency_s": [
+      0.03,
+      0.15
+    ],
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "vision": {
+      "x_stddev": 0.0007,
+      "y_stddev": 0.0007,
+      "th_stddev_deg": 0.3
+    },
+    "vanishing": 0.005,
+    "ball_roll_decel": [
+      0.27,
+      0.33
+    ],
+    "ball_slide_decel": [
+      2.5,
+      4.0
+    ],
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0,
+    "max_accel": [
+      1.5,
+      3.5
+    ]
+  },
+  "scenario": {
+    "referee_command": "BALL_PLACEMENT_BLUE",
+    "ball": [
+      -3.8450865745544434,
+      -2.4952964782714844,
+      0.26960477232933044,
+      -0.004714237991720438
+    ],
+    "friendly": [
+      {
+        "id": 0,
+        "x": 4.408496856689453,
+        "y": 0.05949976667761803,
+        "orientation": -3.0830912590026855,
+        "vx": -0.02837618812918663,
+        "vy": 0.018985001370310783
+      },
+      {
+        "id": 1,
+        "x": -3.961132764816284,
+        "y": -2.4723739624023438,
+        "orientation": -2.9403579235076904,
+        "vx": 0.41556069254875183,
+        "vy": 0.14093388617038727
+      },
+      {
+        "id": 2,
+        "x": -1.7985084056854248,
+        "y": 0.7482134699821472,
+        "orientation": -2.174622058868408,
+        "vx": -0.007584169041365385,
+        "vy": 0.025894450023770332
+      },
+      {
+        "id": 3,
+        "x": -1.801575779914856,
+        "y": -0.7477805018424988,
+        "orientation": -2.4529616832733154,
+        "vx": -0.003465779824182391,
+        "vy": 0.006816626526415348
+      },
+      {
+        "id": 4,
+        "x": -3.48284649848938,
+        "y": -2.4960625171661377,
+        "orientation": -0.008658156730234623,
+        "vx": 0.6966798305511475,
+        "vy": 0.147159144282341
+      },
+      {
+        "id": 5,
+        "x": -3.473487138748169,
+        "y": -2.0466408729553223,
+        "orientation": 0.762504518032074,
+        "vx": 0.29568204283714294,
+        "vy": 0.3123944401741028
+      }
+    ],
+    "enemy": [
+      {
+        "id": 0,
+        "x": -4.5,
+        "y": -0.4088737368583679,
+        "orientation": -0.005148385651409626,
+        "vx": 0.05368196219205856,
+        "vy": 0.003654107451438904
+      },
+      {
+        "id": 1,
+        "x": -2.546550750732422,
+        "y": -0.7113376259803772,
+        "orientation": -2.2168846130371094,
+        "vx": -0.010257352143526077,
+        "vy": -0.010980518534779549
+      },
+      {
+        "id": 2,
+        "x": -3.9515433311462402,
+        "y": -1.7606247663497925,
+        "orientation": 1.5919874906539917,
+        "vx": -0.0330691933631897,
+        "vy": 0.16876448690891266
+      },
+      {
+        "id": 3,
+        "x": -2.365267515182495,
+        "y": 0.6217703223228455,
+        "orientation": -2.1252009868621826,
+        "vx": 0.034154750406742096,
+        "vy": -0.0006636145408265293
+      },
+      {
+        "id": 4,
+        "x": -3.997985363006592,
+        "y": -2.295707941055298,
+        "orientation": -1.145664930343628,
+        "vx": 0.2552659809589386,
+        "vy": 0.10615040361881256
+      },
+      {
+        "id": 5,
+        "x": -4.202090740203857,
+        "y": -2.402651786804199,
+        "orientation": 2.385448455810547,
+        "vx": 0.24332153797149658,
+        "vy": 0.07585639506578445
+      }
+    ]
+  },
+  "requires": [
+    "restart_lasts",
+    "robot_near_ball"
+  ]
+}

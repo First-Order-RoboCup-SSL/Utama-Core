@@ -248,10 +248,13 @@ class AbstractStrategy:
         signal in this model), and the tactic's `TacticTag` value, which the
         dashboard colours robots by — used by `StrategyRunner._push_debug_status_to_referee`
         for the debug GUI panel. The goalkeeper is just `["goalkeeper"]`: it is
-        pinned outside the scheduler, so a scheduling role tag would say nothing.
+        pinned outside the scheduler, so a scheduling role tag would say nothing,
+        and is left out when its robot is not on the field (as it is not ticked then).
         """
         game = self.game
-        status: dict[int, list[str]] = {self._goalkeeper_id: ["goalkeeper"]}
+        status: dict[int, list[str]] = {}
+        if self._goalkeeper_id in game.friendly_robots:
+            status[self._goalkeeper_id] = ["goalkeeper"]
         for tactic_id, info in self._kernel_strategy.slot_status(game).items():
             label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
             for robot_id in info["robots"]:

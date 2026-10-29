@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+import math
 import time
 import warnings
 from typing import Dict, List, Optional, Union
@@ -76,6 +77,8 @@ class RealRobotController(AbstractRobotController):
         self._out_packet = self._empty_command()
         self._in_packet_size = 1  # size of the feedback packet received from the robots
         self._robots_info: List[RobotResponse] = [None] * self._n_friendly
+        # Set by StrategyRunner to record the radio's bytes both ways (`GameLogWriter`).
+        self.game_log = None
         if serial_port is None:
             logger.debug(f"Serial port: {PORT} opened with baudrate: {BAUD_RATE} and timeout {TIMEOUT}")
         else:
@@ -111,7 +114,10 @@ class RealRobotController(AbstractRobotController):
         # 1. Non-blocking read: Only read if bytes are actually waiting
         bytes_available = self._serial_port.in_waiting
         if bytes_available > 0:
-            self._buffer.extend(self._serial_port.read(bytes_available))
+            data = self._serial_port.read(bytes_available)
+            self._buffer.extend(data)
+            if self.game_log is not None:
+                self.game_log.radio_in(bytes(data))
 
         responses = []
         responded_ids = set()
@@ -179,6 +185,8 @@ class RealRobotController(AbstractRobotController):
                 f"Only {len(self._assigned_mapping)} out of {self._n_friendly} robots have been assigned commands. Sending empty commands for unassigned robots."
             )
         self._serial_port.write(self._out_packet)
+        if self.game_log is not None:
+            self.game_log.radio_out(bytes(self._out_packet))
 
         ### update kick and chip trackers. We persist the kick/chip command for KICKER_PERSIST_TIMESTEPS
         ### this feature is to combat packet loss and to ensure the robot does not kick within its cooldown period
@@ -408,16 +416,23 @@ class RealRobotController(AbstractRobotController):
                 f"Angular velocity for robot {robot_id} is greater than the maximum angular velocity. Clipping to {MAX_ANGULAR_VEL}."
             )
             angular_vel = MAX_ANGULAR_VEL if angular_vel > 0 else -MAX_ANGULAR_VEL
-        if abs(local_forward_vel) > MAX_VEL:
+        speed = math.hypot(local_forward_vel, local_left_vel)
+        if speed > MAX_VEL:
             warnings.warn(
-                f"Local forward velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
+                f"Translation speed for robot {robot_id} is greater than the maximum velocity. Scaling to {MAX_VEL}."
             )
-            local_forward_vel = MAX_VEL if local_forward_vel > 0 else -MAX_VEL
-        if abs(local_left_vel) > MAX_VEL:
-            warnings.warn(
-                f"Local left velocity for robot {robot_id} is greater than the maximum velocity. Clipping to {MAX_VEL}."
-            )
-            local_left_vel = MAX_VEL if local_left_vel > 0 else -MAX_VEL
+            scale = MAX_VEL / speed
+            local_forward_vel *= scale
+            local_left_vel *= scale
+
+        # Binary16 rounding can push an otherwise capped diagonal just over MAX_VEL.
+        # Move the larger component towards zero until the encoded speed is within it.
+        local_forward_vel, local_left_vel = np.float16(local_forward_vel), np.float16(local_left_vel)
+        while math.hypot(float(local_forward_vel), float(local_left_vel)) > MAX_VEL:
+            if abs(local_forward_vel) >= abs(local_left_vel):
+                local_forward_vel = np.nextafter(local_forward_vel, np.float16(0))
+            else:
+                local_left_vel = np.nextafter(local_left_vel, np.float16(0))
 
         command = RobotCommand(
             local_forward_vel=self._float16_rep(local_forward_vel),

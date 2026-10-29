@@ -4,14 +4,16 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 
 ## How to
 
-- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, the scenario bench, observability tools. Read before any strategy-layer change.
+- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, observability tools. Read before any strategy-layer change.
 - [custom_referee.md](custom_referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
 - [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
 - [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.
 - [motion_planning_comparison.md](motion_planning_comparison.md): the motion-planning benchmark and how to read it.
 - [motion_planning_results.md](motion_planning_results.md): its latest full run.
 - [tools.md](tools.md): every script and pixi task, by purpose.
-- [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee, SSL Vision for real robots.
+- [visual_guide.md](visual_guide.md): the game drawn on the pitch from real replays (how each strategy plays, one match over time, a restart, the motion planner), what each picture has shown us, and how to draw it.
+- [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee.
+- [real_robot_setup.md](real_robot_setup.md): a test day with real robots: ssl-vision on its own laptop, WSL networking and USB, the radio, and the checks before a robot moves.
 - [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
 
 ## Design rationale
@@ -20,6 +22,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [scheduling_math_model.md](scheduling_math_model.md): a mathematical model of tactic scheduling and role allocation, a companion to the above.
 - [custom_referee_design_decisions.md](custom_referee_design_decisions.md): rule-by-rule decisions from auditing `CustomReferee` against the SSL rulebook.
 - [pipeline_method.md](pipeline_method.md): how vision, robot and referee data are refined into one `Game` state, and one tick from state to robot commands.
+- [architecture.md](architecture.md): the one-tick diagram, and the generated package dependency graph with its import-rule check.
 
 ## Current results
 
@@ -32,6 +35,8 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 ## Open work
 
 - [roadmap.md](roadmap.md): larger open workstreams, and one-line pointers to finished ones.
+- [sim_realism.md](sim_realism.md): how far rsim is from real matches, the realism scorecard, and the plan to close the gap with measured, randomized physics.
+- [in_house_vision.md](in_house_vision.md): our own vision stack for lab days (per-session tag calibration, tags on robots), the experiments that decide it, and the 2026-10-22 test day's vision findings.
 - [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
 - [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
 - [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.

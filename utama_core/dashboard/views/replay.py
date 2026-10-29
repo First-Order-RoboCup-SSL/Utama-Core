@@ -11,7 +11,7 @@ into the same JSON shape `dashboard.views.referee` produces, so the shared
 `FieldCanvas.draw()` on the frontend needs no replay-specific branch.
 
 If a sibling `<match_tag>.intentions.jsonl` sits next to the `.pkl` (written
-by `full_match_tournament.py` via `StrategyRunner(match_log_path=...)`), its
+by a round-robin run via `StrategyRunner(match_log_path=...)`), its
 sparse `IntentionEvent`/`RefereeEvent` rows are shipped to the browser
 as-is — `tactic_events`/`referee_events` — rather than forward-filled onto
 every frame here. Frame counts run into the tens of thousands while event
@@ -26,8 +26,14 @@ second algorithm.
 
 `markers` are the moments worth jumping to, in time order: goals (a score
 change in the referee events), fouls and stalls (the sibling `.stats.json`),
-and the recorded team's real ball losses (`turnover_breakdown.analyse_match`,
-columnar replays only; it re-reads the replay, about a second).
+and the recorded team's real ball losses. Ball losses and `shots` come from
+`turnover_breakdown.analyse_match` (columnar replays only), which re-reads the
+replay frame by frame, several seconds; its result is kept beside the replay in
+`<match>.timeline.json`, redone when the replay or `ANALYSIS_VERSION` changes.
+
+`play` is the match told as its situations (`goal_ledger`: a restart going live
+or a side winning the ball), one row each with how it ended: a goal, a stoppage
+and its reason, or the other side winning the ball (with how we lost it).
 
 `ReplayMetadata` (see `replay/entities.py`) does not carry field geometry, so
 there is no ground truth for it in the replay file itself. `/replay/frames`
@@ -43,6 +49,9 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+import numpy as np
+
+from utama_core.analysis import goal_ledger
 from utama_core.analysis.turnover_breakdown import analyse_match, is_real
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.settings import REPLAY_BASE_PATH
@@ -60,6 +69,8 @@ from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.replay_player import _load_replay
 
 _DEFAULT_GEOMETRY = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
+ANALYSIS_VERSION = 1  # bump when what `_analysis` keeps changes, to redo every sidecar
+_LIVE_COMMANDS = ("NORMAL_START", "FORCE_START")
 
 
 def attach(server: DashboardServer) -> None:
@@ -94,6 +105,45 @@ def _iter_game_frames(replay_path: Path):
             yield obj
 
 
+def _ints(a: np.ndarray, scale: float) -> list:
+    """`a` in whole units of 1/`scale` (NaN as 0: a `seen` mask says which are real), as lists."""
+    return np.nan_to_num(np.round(a * scale)).astype(np.int32).tolist()
+
+
+def columnar_payload(replay) -> dict:
+    """A columnar replay's ticks as columns of whole numbers: positions in mm, speeds in cm/s,
+    headings in mrad, `seen` masks for robots and ball. The page (`replay.js`,
+    `framesFromColumns`) rebuilds each tick in `_serialise_robots`/`_serialise_ball`'s shape;
+    as one JSON object per tick, repeating every key, a match was 65 MB and took 4 s to build."""
+
+    def team(ids, p, v, orientation, has_ball):
+        return {
+            "ids": [int(i) for i in ids],
+            "seen": (~np.isnan(p[..., 0])).astype(np.int8).tolist(),
+            "x": _ints(p[..., 0], 1000),
+            "y": _ints(p[..., 1], 1000),
+            "vx": _ints(v[..., 0], 100),
+            "vy": _ints(v[..., 1], 100),
+            "o": _ints(orientation, 1000),
+            "has_ball": has_ball.astype(np.int8).tolist(),
+        }
+
+    r = replay
+    return {
+        "ts": np.round(r.ts, 4).tolist(),
+        "right": r.side_is_right.astype(np.int8).tolist() if r.side_is_right is not None else None,
+        "friendly": team(r.friendly_ids, r.friendly_p, r.friendly_v, r.friendly_orientation, r.friendly_has_ball),
+        "enemy": team(r.enemy_ids, r.enemy_p, r.enemy_v, r.enemy_orientation, r.enemy_has_ball),
+        "ball": {
+            "seen": (~np.isnan(r.ball_p[:, 0])).astype(np.int8).tolist(),
+            "x": _ints(r.ball_p[:, 0], 1000),
+            "y": _ints(r.ball_p[:, 1], 1000),
+            "vx": _ints(r.ball_v[:, 0], 100),
+            "vy": _ints(r.ball_v[:, 1], 100),
+        },
+    }
+
+
 def _frames_bytes(query: Optional[dict] = None) -> bytes:
     query = query or {}
     rel_path = query.get("path")
@@ -105,24 +155,33 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
         return json.dumps({"error": "replay not found"}).encode()
 
     intention_events, referee_events, trace_events = _load_match_log_events(replay_path)
+    analysis = _analysis(replay_path)
 
     frames = []
+    columns = None
     my_team_is_right = None
     my_team_is_yellow = True
-    for obj in _iter_game_frames(replay_path):
-        if my_team_is_right is None:
-            my_team_is_right = obj.my_team_is_right
-            my_team_is_yellow = obj.my_team_is_yellow
+    if replay_path.suffix == ".npz":
+        replay = load_columnar_replay(replay_path)
+        columns = columnar_payload(replay)
+        my_team_is_right, my_team_is_yellow = replay.my_team_is_right, replay.my_team_is_yellow
+    else:
+        for obj in _iter_game_frames(replay_path):
+            if my_team_is_right is None:
+                my_team_is_right = obj.my_team_is_right
+                my_team_is_yellow = obj.my_team_is_yellow
 
-        frames.append(
-            {
-                "ts": obj.ts,
-                "my_team_is_right": bool(obj.my_team_is_right),  # the teams change ends at half-time
-                "robots": _serialise_robots(obj),
-                "ball": _serialise_ball(obj),
-            }
-        )
+            frames.append(
+                {
+                    "ts": round(obj.ts, 4),
+                    "my_team_is_right": bool(obj.my_team_is_right),  # the teams change ends at half-time
+                    "robots": _serialise_robots(obj),
+                    "ball": _serialise_ball(obj),
+                }
+            )
 
+    ticks = columns["ts"] if columns else [f["ts"] for f in frames]
+    end_t = ticks[-1] if ticks else 0.0
     payload = {
         "my_team_is_right": bool(my_team_is_right),
         "my_team_is_yellow": my_team_is_yellow,
@@ -135,7 +194,8 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
             "center_circle_radius": _DEFAULT_GEOMETRY.center_circle_radius,
             "goal_depth": _DEFAULT_GEOMETRY.goal_depth,
         },
-        "frames": frames,
+        "frames": frames,  # a pickled replay's ticks; a columnar one sends `columns` instead
+        "columns": columns,
         # Sparse — one row per assignment/state *change*, not per frame. The
         # frontend forward-fills these against the currently-viewed frame's
         # `ts`, mirroring what this module used to do server-side.
@@ -168,7 +228,9 @@ def _frames_bytes(query: Optional[dict] = None) -> bytes:
         # interpret `key`/`value` here, it just forward-fills and hands them
         # to whichever overlay renderer knows that key.
         "trace_events": [{"sim_time": e.sim_time, "key": e.key, "value": e.value} for e in trace_events],
-        "markers": _markers(replay_path, referee_events, my_team_is_yellow),
+        "markers": _markers(replay_path, referee_events, my_team_is_yellow, analysis["losses"]),
+        "shots": analysis["shots"],
+        "play": _play(replay_path, referee_events, analysis["losses"], end_t),
         "has_tactic_data": len(intention_events) > 0,
         "has_referee_data": len(referee_events) > 0,
     }
@@ -196,17 +258,76 @@ def _load_match_log_events(replay_path: Path) -> tuple[list, list, list]:
     return intention_events, referee_events, trace_events
 
 
-def _ball_losses(replay_path: Path) -> list[dict]:
-    """The recorded team's real ball losses (see `turnover_breakdown.is_real`)."""
+def _analysis(replay_path: Path) -> dict:
+    """The recorded team's real ball losses (`turnover_breakdown.is_real`) and both sides' shots
+    ({t, side: friendly|enemy}), from the sidecar when it is for this replay and version."""
+    empty = {"losses": [], "shots": []}
+    if replay_path.suffix != ".npz":
+        return empty
+    sidecar = replay_path.with_name(replay_path.name[: -len(".npz")] + ".timeline.json")
+    stat = replay_path.stat()
+    key = {"version": ANALYSIS_VERSION, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    try:
+        cached = json.loads(sidecar.read_text())
+        if cached.get("key") == key:
+            return cached["analysis"]
+    except (OSError, json.JSONDecodeError, KeyError):
+        pass
+    try:
+        result = analyse_match(str(replay_path))
+    except Exception:  # noqa: BLE001 - markers are optional, never break loading the replay
+        return empty
+    analysis = {
+        "losses": [t for t in result["turnovers"] if is_real(t)],
+        "shots": [{"t": s["t"], "side": s["side"]} for s in result["chances"]["shots"]],
+    }
+    try:
+        sidecar.write_text(json.dumps({"key": key, "analysis": analysis}))
+    except OSError:
+        pass  # a read-only replay directory: recompute next time
+    return analysis
+
+
+def _play(replay_path: Path, referee_events: list, losses: list[dict], end_t: float) -> list[dict]:
+    """The match's situations (columnar replays only) as `play_rows`."""
     if replay_path.suffix != ".npz":
         return []
     try:
-        return [t for t in analyse_match(str(replay_path))["turnovers"] if is_real(t)]
-    except Exception:  # noqa: BLE001 - markers are optional, never break loading the replay
+        match = goal_ledger.match_ledger(replay_path)
+    except Exception:  # noqa: BLE001 - optional, like the markers
         return []
+    return play_rows(goal_ledger.situations(match), referee_events, losses, end_t)
 
 
-def _markers(replay_path: Path, referee_events: list, my_team_is_yellow: bool) -> list[dict]:
+def play_rows(starts: list[dict], referee_events: list, losses: list[dict], end_t: float) -> list[dict]:
+    """One row per situation start ({t, kind, side: friendly|enemy|None, third}): `t`, `t_end`
+    (the next start, or play stopping first), `side`, `kind`, `third`, and `ended`: the
+    stoppage's reason (the referee's note, else its command), or the next side winning the ball,
+    with how a ball we lost was lost."""
+    stops = [e for e in referee_events if e.command not in _LIVE_COMMANDS]
+    rows = []
+    for i, s in enumerate(starts):
+        nxt = starts[i + 1] if i + 1 < len(starts) else None
+        t_end = nxt["t"] if nxt else end_t
+        stop = next((e for e in stops if s["t"] < e.sim_time <= t_end), None)
+        row = {"t": s["t"], "side": s["side"], "kind": s["kind"], "third": s["third"]}
+        if stop is not None:
+            row["t_end"] = stop.sim_time
+            row["ended"] = stop.note or stop.command.replace("_", " ").lower()
+        elif nxt is not None and nxt["kind"] == "ball won":
+            row["t_end"] = t_end
+            row["ended"] = ("won back by " if nxt["side"] == s["side"] else "won by ") + nxt["side"]
+            loss = next((x for x in losses if s["t"] < x["t"] <= t_end + 0.2), None)
+            if s["side"] == "friendly" and loss is not None:
+                row["ended"] += " (" + loss["kind"].replace("_", " ") + ")"
+        else:
+            row["t_end"] = t_end
+            row["ended"] = None
+        rows.append(row)
+    return rows
+
+
+def _markers(replay_path: Path, referee_events: list, my_team_is_yellow: bool, losses: list[dict]) -> list[dict]:
     markers = []
     yellow, blue = 0, 0
     for e in referee_events:
@@ -239,7 +360,7 @@ def _markers(replay_path: Path, referee_events: list, my_team_is_yellow: bool) -
         label = f"Stall: {stall['kind']} for {stall['duration_s']:.0f}s{detail}"
         markers.append({"sim_time": stall["sim_time"], "kind": "stall", "label": label})
 
-    for loss in _ball_losses(replay_path):
+    for loss in losses:
         label = f"{colour.capitalize()} lost the ball: {loss['kind'].replace('_', ' ')} ({loss['tactic']})"
         markers.append({"sim_time": loss["t"], "kind": "loss", "label": label})
     return sorted(markers, key=lambda m: m["sim_time"])

@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """examples/demo_referee_gui_rsim.py — CustomReferee + web GUI + StrategyRunner (RSim).
 
 Run:
@@ -25,6 +26,12 @@ Operator workflow:
   4. Click Normal Start to resume free play.
   5. With the human profile, the referee stays in STOP after a goal until the operator advances play.
 """
+
+import sys
+from pathlib import Path
+
+# Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile

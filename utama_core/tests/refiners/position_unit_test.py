@@ -1,4 +1,9 @@
+from dataclasses import replace
+
+import pytest
+
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.settings import BALL_ROLL_DECEL
 from utama_core.data_processing.refiners import PositionRefiner
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -268,6 +273,109 @@ def test_impute_vanished_true_keeps_vanished_robot():
     result = p.refine(g, frames)
 
     assert 0 in result.friendly_robots
+
+
+def _unseen_ball_path(v0: tuple[float, float], seconds: float, dt: float = 1 / 60) -> list[Ball]:
+    """The ball, rolling at `v0` from the centre, then unseen for `seconds`. Between ticks its
+    velocity is recomputed from its positions, as `VelocityRefiner` does."""
+    p = PositionRefiner(full_field_dims)
+    p.start_filtering()
+    ball = Ball(Vector3D(0, 0, 0), Vector3D(*v0, 0), Vector3D(0, 0, 0))
+    g = GameFrame(0, True, True, {}, {}, ball)
+    path = []
+    for k in range(1, round(seconds / dt) + 1):
+        g = p.refine(g, [RawVisionData(k * dt, [], [], [], 0)])
+        last = path[-1].p if path else ball.p
+        v = Vector3D((g.ball.p.x - last.x) / dt, (g.ball.p.y - last.y) / dt, 0)
+        g = replace(g, ball=replace(g.ball, v=v))
+        path.append(g.ball)
+    return path
+
+
+def test_an_unseen_ball_slows_at_the_rolling_deceleration_and_stops():
+    """The rsim ball 'escape' (2026-10-21): a ball unseen kept its last velocity forever and was
+    600 m away after 15 minutes. Unseen, it now rolls as a real ball does, then stops."""
+    path = _unseen_ball_path((1.0, 0.0), seconds=5.0)
+    stop = 1.0 / BALL_ROLL_DECEL
+    assert path[59].p.x == pytest.approx(1.0 - 0.5 * BALL_ROLL_DECEL, abs=0.01)  # 1 s in
+    assert path[-1].p.x == pytest.approx(0.5 * stop, abs=0.01)  # 1 m/s rolls 1/(2a) m, then stops
+    assert path[-1].p.y == 0
+
+
+def test_an_unseen_ball_stays_where_vision_would_still_see_it():
+    """Fast and unseen towards the corner: it stops at the edge of what vision accepts (field plus
+    `VISION_BOUNDS_BUFFER`), not beyond."""
+    path = _unseen_ball_path((4.0, 4.0), seconds=10.0)
+    bounds = PositionRefiner(full_field_dims).vision_bounds
+    assert (path[-1].p.x, path[-1].p.y) == pytest.approx((bounds.x_max, bounds.y_max))
+    assert max(abs(b.p.x) for b in path) <= bounds.x_max
+
+
+def test_with_smoothing_off_a_second_loss_starts_where_the_ball_was_last_seen():
+    """Smoothing off, imputation on: the filter only runs while the ball is unseen, so it kept
+    the first loss and a second one carried on that roll from where the first started."""
+    p = PositionRefiner(full_field_dims, smooth_positions=False, impute_vanished=True)
+    p.start_filtering()
+    g = GameFrame(0, True, True, {}, {}, Ball(Vector3D(0, 0, 0), Vector3D(1, 0, 0), Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.1, [], [], [], 0)])  # lost, rolling on at 1 m/s
+    g = replace(g, ball=replace(g.ball, v=Vector3D(1, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.2, [], [], [RawBallData(-1.0, 0.5, 0, 1)], 0)])  # seen, still
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5))
+    g = replace(g, ball=replace(g.ball, v=Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.3, [], [], [], 0)])  # lost again
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5), abs=0.01)
+
+
+def test_with_no_filtering_a_seen_ball_passes_through():
+    p = PositionRefiner(full_field_dims, filtering=False)
+    p.start_filtering()
+    g = GameFrame(0, True, True, {}, {}, Ball(Vector3D(0, 0, 0), Vector3D(0, 0, 0), Vector3D(0, 0, 0)))
+    g = p.refine(g, [RawVisionData(0.1, [], [], [RawBallData(-1.0, 0.5, 0, 1)], 0)])
+    assert (g.ball.p.x, g.ball.p.y) == pytest.approx((-1.0, 0.5))
+
+
+def test_the_refiner_keeps_a_cameras_gap_between_frames():
+    # The combiner remembers each camera's gap to the others at a robot; a fresh combiner per
+    # frame would forget it, and a ball whose camera just lost the robot lands inside the robot.
+    p = PositionRefiner(full_field_dims, filtering=False)
+    g = GameFrame(0, True, True, {}, {}, bfac3d(0, 0))
+    for ts, robot_1 in ((0.0, [RawRobotData(2, -0.415, 0.3, 0, 1)]), (0.016, [])):
+        frames = [
+            RawVisionData(ts, [], [RawRobotData(2, -0.5, 0.3, 0, 1)], [], 0),
+            RawVisionData(ts, [], robot_1, [RawBallData(-0.3, 0.3, 0, 0.9)], 1),
+        ]
+        g = p.refine(g, frames)
+    assert g.ball.p.x - g.enemy_robots[2].p.x == pytest.approx(0.115)
+
+
+def _picked(p, last, balls):
+    g = GameFrame(0, True, True, {}, {}, last)
+    return p.refine(g, [RawVisionData(0.1, [], [], balls, 0)]).ball
+
+
+def test_stray_balls_off_the_field_do_not_take_the_ball():
+    # 2026-10-22: camera 0 also saw four steady "balls" 15 cm past the +y touch line, as confident
+    # as the real one; the most confident, ties in list order, picked a fake 22% of the time.
+    p = PositionRefiner(full_field_dims, filtering=False)
+    w = full_field_dims.full_field_half_width
+    fakes = [RawBallData(x, w + 0.15, 0, 1.0) for x in (-0.705, -0.22, -0.075, 0.079)]
+    real = RawBallData(-0.8, -0.35, 0, 1.0)
+    for balls in (fakes + [real], [real] + fakes, fakes[:2] + [real] + fakes[2:]):
+        ball = _picked(p, bfac3d(-0.8, -0.35), balls)
+        assert (ball.p.x, ball.p.y) == pytest.approx((-0.8, -0.35))
+    alone = _picked(p, bfac3d(0, 0), [fakes[0]])  # the only ball: taken, though off the field
+    assert alone.p.y == pytest.approx(w + 0.15)
+
+
+def test_among_balls_in_play_the_one_nearest_the_last_is_kept():
+    p = PositionRefiner(full_field_dims, filtering=False)
+    balls = [RawBallData(1.0, 0.0, 0, 1.0), RawBallData(-1.0, 0.0, 0, 0.5)]
+    assert _picked(p, bfac3d(-0.9, 0.0), balls).p.x == pytest.approx(-1.0)
+    assert _picked(p, None, balls).p.x == pytest.approx(1.0)  # no last ball: the most confident
+    # A ball in the goal is in play (2026-10-22: a shot past the goal line, a blob elsewhere).
+    in_goal = full_field_dims.full_field_half_length + 0.05
+    balls = [RawBallData(1.0, 0.0, 0, 1.0), RawBallData(in_goal, 0.0, 0, 1.0)]
+    assert _picked(p, bfac3d(in_goal, 0.0), balls).p.x == pytest.approx(in_goal)
 
 
 if __name__ == "__main__":

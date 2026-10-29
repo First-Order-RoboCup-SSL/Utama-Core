@@ -295,7 +295,7 @@ def _has_priority(robot_id: int, other_id: int, game: Optional[Game] = None) -> 
 # on formation -- none of them settle for more than a fraction of a second,
 # so within priority-blocking's collision margin there is almost always some
 # higher-priority teammate's (itself about to be replaced) trajectory
-# crossing somewhere. Confirmed live (roadmap item 15/16): a
+# crossing somewhere. Confirmed live (roadmap "trajsample liveness fixes"): a
 # PREPARE_KICKOFF_YELLOW restart's designated kicker -- always the lowest
 # non-keeper robot ID, so by `_has_priority`'s fixed ordering also the LOWEST
 # priority outfield robot -- had every direct-line candidate to the ball
@@ -367,8 +367,8 @@ _TRAJECTORY_TARGET_TOLERANCE = 0.01
 # invalidate an already-committed, currently-collision-clear trajectory just
 # because a higher-priority teammate's OWN committed trajectory crosses its
 # margin somewhere in that window. Originally widened to the full
-# `MAX_LOOKAHEAD_TIME` (1.5s, see roadmap item 15's Sumatra-fidelity audit,
-# finding #3) so a robot would notice a priority conflict as soon as it
+# `MAX_LOOKAHEAD_TIME` (1.5s, see the roadmap's "Sumatra-fidelity audit,
+# top 3 findings", finding #3) so a robot would notice a priority conflict as soon as it
 # appeared anywhere in its remaining plan, not only once `elapsed` caught up
 # to it. That's correct when the crossing trajectory is settled, but at a
 # kickoff/formation restart every non-keeper teammate is SIMULTANEOUSLY
@@ -683,12 +683,23 @@ class TrajectorySamplingPlanner:
         best_fallback = PlanResult(trajectory=direct, has_collision=True, collision_time=collision_time)
         best_rank = fallback_rank(direct, collision_time, direct_blocked, obs_kind=direct_kind)
 
-        cand_targets = self._intermediate_targets(robot_id, p0, target_pos)
-
         best_accepted: Optional[PlanResult] = None
         best_accepted_target: Optional[Tuple[float, float]] = None
         best_accepted_duration: float = math.inf
 
+        # Temporal speed-modulation candidates along the direct heading: allowing a
+        # robot to yield to dynamic crossing obstacles along a straight line rather
+        # than forcing an excessive spatial detour.
+        for v_scale in (0.75, 0.55):
+            direct_mod = Trajectory2D.compute(p0, v0, target_pos, v_scale * self.v_max, self.a_max)
+            t_col_mod, mod_kind = self._check_collision(direct_mod, obstacle_arrays)
+            if t_col_mod is None:
+                best_accepted_duration = direct_mod.duration
+                best_accepted = PlanResult(trajectory=direct_mod, has_collision=False, collision_time=None)
+                best_accepted_target = target_pos
+                break
+
+        cand_targets = self._intermediate_targets(robot_id, p0, target_pos)
         last_dir = self._last_intermediate_direction.get(robot_id)
 
         for candidate_target in cand_targets:
@@ -700,10 +711,19 @@ class TrajectorySamplingPlanner:
                     if abs(cdx / cdist - last_dir[0]) < 1e-4 and abs(cdy / cdist - last_dir[1]) < 1e-4:
                         is_last = True
 
+            # Calculate candidate target angular deviation from the direct path (to penalize wide bows)
+            cdx, cdy = candidate_target[0] - p0[0], candidate_target[1] - p0[1]
+            cand_angle = math.atan2(cdy, cdx)
+            tgt_dx, tgt_dy = target_pos[0] - p0[0], target_pos[1] - p0[1]
+            tgt_angle = math.atan2(tgt_dy, tgt_dx)
+            diff = abs(cand_angle - tgt_angle)
+            angle_diff = min(diff, 2 * math.pi - diff)
+            angle_penalty = 0.5 * angle_diff  # Sumatra-style penalty for wide lateral deviation
+
             for candidate in self._two_segment_candidates(p0, v0, candidate_target, target_pos):
                 t_col, cand_kind = self._check_collision(candidate, obstacle_arrays)
                 if t_col is None:
-                    eff_dur = candidate.duration - (0.15 if is_last else 0.0)
+                    eff_dur = candidate.duration + angle_penalty - (0.15 if is_last else 0.0)
                     if eff_dur < best_accepted_duration:
                         best_accepted_duration = eff_dur
                         best_accepted = PlanResult(trajectory=candidate, has_collision=False, collision_time=None)
@@ -713,7 +733,7 @@ class TrajectorySamplingPlanner:
                     robot_id, candidate, obstacles, t_col, priority_enabled, game=game
                 )
                 if not blocked and self._collision_leniency_accepts(candidate, t_col, v0, target_pos, priority_enabled):
-                    eff_dur = candidate.duration - (0.15 if is_last else 0.0) + 0.05
+                    eff_dur = candidate.duration + angle_penalty - (0.15 if is_last else 0.0) + 0.05
                     if eff_dur < best_accepted_duration:
                         best_accepted_duration = eff_dur
                         best_accepted = PlanResult(trajectory=candidate, has_collision=True, collision_time=t_col)
@@ -1105,6 +1125,8 @@ class TrajectorySamplingPlanner:
         step = math.radians(15)
         for i in range(1, (n // 2) + 1):
             offset = step * i
+            if offset > math.pi / 2 + 1e-6:
+                break
             # Compact radius (0.6m) for tight angles <= 30 deg, scaling to full radius (1.0m) at >= 60 deg
             rad_scale = min(1.0, 0.6 + 0.13 * (i - 1))
             cand_r = r * rad_scale
@@ -1115,7 +1137,10 @@ class TrajectorySamplingPlanner:
                 (p0[0] + cand_r * math.cos(final_angle - offset), p0[1] + cand_r * math.sin(final_angle - offset))
             )
         if len(fresh) < n:
-            fresh.append((p0[0] + r * math.cos(final_angle + math.pi), p0[1] + r * math.sin(final_angle + math.pi)))
+            # Lateral flank candidate within forward hemisphere (never 180 deg backward, which would cause reversing)
+            fresh.append(
+                (p0[0] + r * math.cos(final_angle + math.pi / 2), p0[1] + r * math.sin(final_angle + math.pi / 2))
+            )
 
         # Sort by angle between (p0 -> final_target) and (p0 -> candidate),
         # smallest first -- paper section 2.2: "This favors paths pointing
@@ -1270,7 +1295,7 @@ class TrajectorySamplingPlanner:
         instability in the same restart-congestion family as
         `_intermediate_targets`'s stale-direction/side-flip bugs: live-traced
         on `counter_press_vs_overload_flow`'s PREPARE_KICKOFF_BLUE stall
-        (roadmap item 15/16), where the blocking teammate was itself still
+        (roadmap "trajsample liveness fixes"), where the blocking teammate was itself still
         actively moving to ITS OWN formation spot (not one near-stationary
         robot, the earlier-fixed case) -- the collision was ~0.9m from the
         kicker's destination, so leniency never applied at all regardless of

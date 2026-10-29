@@ -1,0 +1,106 @@
+{
+ "name": "striker_rl2_w150",
+ "what": "1v1 attacker policy against one goalkeeper (tools/striker_duel.py); yellow, attacking +x",
+ "network": {
+  "layers": "28 -> 128 tanh -> 128 tanh -> 16 logits (masked softmax); w<i> are [in, out]",
+  "arrays": {
+   "w0": [
+    28,
+    128
+   ],
+   "b0": [
+    128
+   ],
+   "w1": [
+    128,
+    128
+   ],
+   "b1": [
+    128
+   ],
+   "w2": [
+    128,
+    16
+   ],
+   "b2": [
+    16
+   ]
+  }
+ },
+ "observation": [
+  "ball.x/4.5",
+  "ball.y/3",
+  "ball.vx/4",
+  "ball.vy/4",
+  "me.x/4.5",
+  "me.y/3",
+  "me.vx/2",
+  "me.vy/2",
+  "cos(heading)",
+  "sin(heading)",
+  "keeper.x/4.5",
+  "keeper.y/3",
+  "keeper.vx/2",
+  "keeper.vy/2",
+  "(ball.x-me.x)/0.2",
+  "(ball.y-me.y)/0.2",
+  "carry/0.8",
+  "on_dribbler",
+  "t/8",
+  "goal angular width (rad, from the ball)",
+  "keeper across the mouth (0..1)",
+  "gap below the keeper (fraction)",
+  "gap above the keeper (fraction)",
+  "keeper off its line (m)",
+  "ball to goal centre / 4.5",
+  "rule's gap y / half goal width",
+  "no gap (0/1)",
+  "heading off the goal centre / pi"
+ ],
+ "actions": [
+  "shoot:0",
+  "shoot:1",
+  "shoot:2",
+  "shoot:3",
+  "shoot:4",
+  "shoot:5",
+  "shoot:6",
+  "shoot:7",
+  "shoot:8",
+  "kick_now",
+  "dribble:0",
+  "dribble:60",
+  "dribble:-60",
+  "dribble:120",
+  "dribble:-120",
+  "dribble:180"
+ ],
+ "shots": "shoot:i aims at x=goal line, y = -0.45 + 0.1125*i (goal half-width 0.5 m, SHOT_SPAN 0.9)",
+ "dribble": "a 0.35 m carry at the given angle (deg) from the line to the goal centre; masked near the 1 m dribbling limit",
+ "decisions": "only with the ball on the dribbler, every 0.1 s (a shot is kept up to 1.5 s, until kicked)",
+ "training": {
+  "algorithm": "PPO (tools/striker_rl.py)",
+  "iterations": 150,
+  "episodes": 450000,
+  "keepers": "default and flat, alternating",
+  "simulator": "rsim",
+  "entropy": 0.02,
+  "gamma": 0.99,
+  "lam": 0.95,
+  "lr": 0.0003,
+  "device": "RTX 5090",
+  "code": "Utama-Core jev-engine @ bc04450a + tools/striker_duel.py, striker_rl.py (uncommitted at packaging)"
+ },
+ "evaluation_rsim": {
+  "starts": "seed 9999, 4000 episodes, 2000 per keeper, greedy",
+  "network": {
+   "default": 0.5795,
+   "flat": 0.513
+  },
+  "rule": {
+   "default": 0.4665,
+   "flat": 0.136
+  }
+ },
+ "sha256": "d6e20d4b5bab24424c5d3a391bff38c1700aee7d921788d15e55e978c06a34f0"
+}

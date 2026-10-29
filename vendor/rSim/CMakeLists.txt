@@ -6,7 +6,14 @@ set(CMAKE_CXX_STANDARD 11)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
+# -march=native changes floating-point results (FMA contraction), so a native build plays
+# different matches than the installed binary and than other CPUs. Opt in for speed only.
+option(RSIM_NATIVE_ARCH "Compile with -march=native" OFF)
+if(RSIM_NATIVE_ARCH)
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
+else()
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
 
 # Define CMAKE_INSTALL_xxx: LIBDIR, INCLUDEDIR
 include(GNUInstallDirs)

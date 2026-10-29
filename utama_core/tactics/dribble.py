@@ -35,6 +35,7 @@ _LEGAL_LIMIT = 0.8  # max legal dribble — buffer from 1.0 m rule
 _EXPECTED_BALL_ROLL = 0.6  # ball roll at normalised release speed (PID_BUFFER=0.5)
 _PID_BUFFER = 0.5  # distance past release point for PID deceleration
 _MIN_LIMIT = 0.2  # minimum dribble segment length
+_BACK_OFF_SPEED = 0.2  # m/s backwards while letting go, until the ball is _BALL_SEPARATION_THRESHOLD away
 
 
 def dribbled_enough(distance: float, limit: float) -> bool:
@@ -135,7 +136,9 @@ class DribbleTactic(BaseTactic[DribbleMem]):
         if mem.releasing or dribbled_enough(mem.dribbled_distance, mem.dribble_limit):
             mem.releasing = True
             if not ball_separated(game, robot_id, _BALL_SEPARATION_THRESHOLD):
-                return {robot_id: empty_command()}, mem
+                # Back off: standing still waited forever for a ball that stopped short of the
+                # threshold (rsim, 2026-10-22: 11 cm away, the robot frozen for good).
+                return {robot_id: empty_command()._replace(local_forward_vel=-_BACK_OFF_SPEED)}, mem
             mem.dribbled_distance = -1.0
             mem.releasing = False
             return {robot_id: empty_command()}, mem

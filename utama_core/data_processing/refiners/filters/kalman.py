@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from utama_core.config.settings import EXACT_MATH
+from utama_core.config.settings import BALL_ROLL_DECEL, EXACT_MATH
 from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball, Robot
@@ -136,9 +136,6 @@ class KalmanFilter:
 
         """
 
-        # class Robot: id: int; is_friendly: bool; has_ball: bool
-        # p: Vector2D; v: Vector2D; a: Vector2D; orientation: float
-
         # x and y are filtered as two independent scalar Kalman filters (see __init__ for why
         # that's mathematically equivalent to the 2D matrix form here), using the same
         # closed-form update as _step_th below.
@@ -258,7 +255,6 @@ class KalmanFilter:
                 and orientation, packaged as a VisionRobotData object.
         """
 
-        # class VisionRobotData: id: int; x: float; y: float; orientation: float
         xy_tuple = (data.x, data.y) if data is not None else None
         x_f, y_f = self._step_xy(xy_tuple, last_frame, time_elapsed)
         th_f = self._step_th(
@@ -282,13 +278,23 @@ class KalmanFilterBall:
             Defaults to 0.01 (In simulation, this should match the argument
             passed to the rsim noise generator, but should be adjusted based on
             real-world conditions when live robots are used).
+        bounds (Optional[tuple[float, float, float, float]]): (x_min, x_max, y_min, y_max) an
+            unseen ball is kept within (m); None for no limit.
+
+    While the ball is unseen it rolls on from where it was lost, slowing at `BALL_ROLL_DECEL`
+    until it stops, and never leaves `bounds`. (Carrying its last velocity unchanged, a ball out
+    of sight flew off for good.)
     """
 
-    def __init__(self, noise_sd: float = 0.01):
+    def __init__(self, noise_sd: float = 0.01, bounds: Optional[tuple[float, float, float, float]] = None):
         assert noise_sd > 0, "The standard deviation must be greater than 0"
 
         # s; to be initialised by strategy runner with 1st GameFrame
         self.state = None
+        self.bounds = bounds
+        # While unseen: (position, xy velocity) when it was lost, and the time since.
+        self._lost: Optional[tuple[np.ndarray, np.ndarray]] = None
+        self._unseen_s = 0.0
 
         # sigma squared x, y, z
         noise_var = pow(noise_sd, 2)
@@ -341,8 +347,6 @@ class KalmanFilterBall:
                 returned to the filter_data function for packaging.
         """
 
-        # class Ball: p: Vector3D; v: Vector3D; a: Vector3D
-
         # Phase 0: Initialised with the 1st valid GameFrame (only on initialisation)
         if self.state is None:
             self.state = np.array((last_ball.p.x, last_ball.p.y, last_ball.p.z))
@@ -367,6 +371,7 @@ class KalmanFilterBall:
 
             # s_n,n
             self.state = pred_state + np.matmul(kalman_gain, (measurement - pred_state))
+            self._lost = None
 
             ident_less_kalman = self.identity - kalman_gain
             measurement_uncertainty = np.matmul(kalman_gain, np.matmul(self.measurement_cov, kalman_gain.T))
@@ -378,11 +383,27 @@ class KalmanFilterBall:
 
         # We can rely on the invariant that vanished frames have null x values
         # as they are imputed with None by filter_data
-        else:  # Vanished frame: use predicted values.
-            self.state = pred_state
+        else:  # Vanished frame: the ball rolls on from where it was lost.
+            if self._lost is None:
+                self._lost = (self.state.copy(), np.array((last_ball.v.x, last_ball.v.y)))
+                self._unseen_s = 0.0
+            self._unseen_s += time_elapsed
+            self.state = self._rolled(*self._lost, self._unseen_s)
             self.covariance_mat = pred_cov
 
         return tuple(self.state)
+
+    def _rolled(self, p0: np.ndarray, v0: np.ndarray, t: float) -> np.ndarray:
+        """Where a ball at `p0` rolling at `v0` is after `t` s of `BALL_ROLL_DECEL`, within `bounds`."""
+        speed = math.hypot(v0[0], v0[1])
+        xy = p0[:2].copy()
+        if speed > 0:
+            t = min(t, speed / BALL_ROLL_DECEL)
+            xy += v0 / speed * (speed * t - 0.5 * BALL_ROLL_DECEL * t * t)
+        if self.bounds is not None:
+            x_min, x_max, y_min, y_max = self.bounds
+            xy = np.clip(xy, (x_min, y_min), (x_max, y_max))
+        return np.array((xy[0], xy[1], p0[2]))
 
     def filter_data(self, data: Optional[Ball], last_frame: Ball, time_elapsed: float) -> Ball:
         """
@@ -391,7 +412,7 @@ class KalmanFilterBall:
         The ball's position is first predicted using its last known velocity
         and the elapsed time. If new vision data is available, the prediction
         is corrected using the Kalman gain. If the vision frame is missing,
-        the predicted state is used directly.
+        the ball rolls on from where it was lost (see the class docstring).
 
         Args:
             data (Optional[Ball]): New vision measurement containing the ball's position
@@ -406,7 +427,6 @@ class KalmanFilterBall:
                 acceleration.
         """
 
-        # class Ball: p: Vector3D, v: Vector3D, a: Vector3D
         if data is not None:
             new_data = (data.p.x, data.p.y, data.p.z)
             velocity, acceleration = data.v, data.a

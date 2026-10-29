@@ -3,7 +3,7 @@
 Run:
     python tools/check_strategy_branch.py --base origin/main
 
-A strategy is scored by the round-robin and the scenario bench. If the branch that changes it, often
+A strategy is scored by the round-robin and the evaluation. If the branch that changes it, often
 written by an agent, could also change the evaluation or its opponents, it could raise its score
 without playing better. CI runs this on every pull request from a `strategy/*` branch, using the
 copy of this file on the base branch, so the branch under test can't loosen it. Three checks:

@@ -32,7 +32,13 @@ from typing import Optional
 
 import numpy as np
 
-from tools.striker_duel import GRSIM_SETTLE_TICKS, LIVE, TICKS_PER_SECOND, approach, load_params
+from tools.striker_duel import (
+    GRSIM_SETTLE_TICKS,
+    LIVE,
+    TICKS_PER_SECOND,
+    approach,
+    load_params,
+)
 from tools.striker_e2e import N_ACT, OBS_CLIP, E2EMem, E2ETactic, _local, actor
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile

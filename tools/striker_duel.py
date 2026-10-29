@@ -33,12 +33,13 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
-from utama_core.engine.tactic import BaseTactic, RobotId
+from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -56,7 +57,6 @@ from utama_core.shared.pass_and_score_geometry import (
     carry_exhausted,
     carry_origin,
     clamp_outside_enemy_defense_area,
-    clamp_to_field,
     enemy_goal_line,
     find_best_shot,
     has_ball,
@@ -97,11 +97,14 @@ class StrikerMem:
     decided_at: float = -math.inf
     carry_origin: Optional[Vector2D] = None
     shot_y: Optional[float] = None  # the rule's last gap, for `find_best_shot`'s hysteresis
+    started_at: Optional[float] = None
 
 
 def shot_point(game: Game, i: int) -> Vector2D:
     goal_x, y1, y2 = enemy_goal_line(game)
     mid, half = (y1 + y2) / 2.0, abs(y2 - y1) / 2.0 * SHOT_SPAN
+    if game.field.my_team_is_right:
+        i = N_SHOTS - 1 - i  # rotate the training frame, including its action indices
     return Vector2D(goal_x, mid - half + 2.0 * half * i / (N_SHOTS - 1))
 
 
@@ -110,7 +113,9 @@ def dribble_target(game: Game, rid: int, deg: float) -> Vector2D:
     goal_x, y1, y2 = enemy_goal_line(game)
     a = math.atan2((y1 + y2) / 2.0 - me.y, goal_x - me.x) + math.radians(deg)
     p = Vector2D(me.x + DRIBBLE_STEP_M * math.cos(a), me.y + DRIBBLE_STEP_M * math.sin(a))
-    return clamp_outside_enemy_defense_area(game, clamp_to_field(p, game))
+    (left, top), (right, bottom) = game.field.field_bounds.top_left, game.field.field_bounds.bottom_right
+    p = Vector2D(max(left + 0.3, min(right - 0.3, p.x)), max(bottom + 0.3, min(top - 0.3, p.y)))
+    return clamp_outside_enemy_defense_area(game, p)
 
 
 def approach(game: Game, ctx: TickContext, rid: int) -> RobotCommand:
@@ -131,24 +136,28 @@ def goal_view(game: Game, rid: int) -> list[float]:
     gaps either side of it (fractions of the width); the keeper's distance off its line; the ball's
     distance to the goal; the rule's gap (`find_best_shot`, as a fraction of the half-width, and
     whether there is none); the attacker's heading off the goal's centre."""
-    me, ball = game.friendly_robots[rid], game.ball.p.to_2d()
-    keeper = next(iter(game.enemy_robots.values())).p
+    robot = game.friendly_robots[rid]
+    sign = -1 if game.field.my_team_is_right else 1
+    me, ball = robot.p * sign, game.ball.p.to_2d() * sign
+    keeper = next(iter(game.enemy_robots.values())).p * sign
     goal_x, y1, y2 = enemy_goal_line(game)
+    best_y, _ = find_best_shot(robot.p, list(game.enemy_robots.values()), goal_x, y1, y2)
+    goal_x, y1, y2 = goal_x * sign, min(y1 * sign, y2 * sign), max(y1 * sign, y2 * sign)
     lo, hi, mid = min(y1, y2), max(y1, y2), (y1 + y2) / 2.0
     a_lo, a_hi = math.atan2(lo - ball.y, goal_x - ball.x), math.atan2(hi - ball.y, goal_x - ball.x)
     width = max(a_hi - a_lo, 1e-3)
     a_k = math.atan2(keeper.y - ball.y, keeper.x - ball.x)
     half_k = math.atan2(ROBOT_RADIUS, max(ball.distance_to(keeper), ROBOT_RADIUS))
-    best_y, _ = find_best_shot(me.p, list(game.enemy_robots.values()), goal_x, y1, y2)
-    heading = (me.orientation - math.atan2(mid - me.p.y, goal_x - me.p.x) + math.pi) % (2 * math.pi) - math.pi
+    heading = robot.orientation + (math.pi if sign < 0 else 0.0) - math.atan2(mid - me.y, goal_x - me.x)
+    heading = (heading + math.pi) % (2 * math.pi) - math.pi
     return [
         width,
         (a_k - a_lo) / width,
         (a_k - half_k - a_lo) / width,
         (a_hi - a_k - half_k) / width,
         abs(goal_x - keeper.x),
-        ball.distance_to(Vector2D(goal_x, mid)) / game.field.half_length,
-        0.0 if best_y is None else (best_y - mid) / ((hi - lo) / 2.0),
+        ball.distance_to(Vector2D(goal_x, mid)) / game.field.full_field_half_length,
+        0.0 if best_y is None else (best_y * sign - mid) / ((hi - lo) / 2.0),
         float(best_y is None),
         heading / math.pi,
     ]
@@ -157,29 +166,30 @@ def goal_view(game: Game, rid: int) -> list[float]:
 def observe(game: Game, rid: int, mem: StrikerMem, t0: float) -> np.ndarray:
     me, ball = game.friendly_robots[rid], game.ball
     keeper = next(iter(game.enemy_robots.values()))
-    hx, hy = game.field.half_length, game.field.half_width
+    sign = -1 if game.field.my_team_is_right else 1
+    hx, hy = game.field.full_field_half_length, game.field.full_field_half_width
     carry = 0.0 if mem.carry_origin is None else ball.p.to_2d().distance_to(mem.carry_origin)
     return np.array(
         [
-            ball.p.x / hx,
-            ball.p.y / hy,
-            ball.v.x / 4.0,
-            ball.v.y / 4.0,
-            me.p.x / hx,
-            me.p.y / hy,
-            me.v.x / 2.0,
-            me.v.y / 2.0,
-            math.cos(me.orientation),
-            math.sin(me.orientation),
-            keeper.p.x / hx,
-            keeper.p.y / hy,
-            keeper.v.x / 2.0,
-            keeper.v.y / 2.0,
-            (ball.p.x - me.p.x) / 0.2,
-            (ball.p.y - me.p.y) / 0.2,
+            sign * ball.p.x / hx,
+            sign * ball.p.y / hy,
+            sign * ball.v.x / 4.0,
+            sign * ball.v.y / 4.0,
+            sign * me.p.x / hx,
+            sign * me.p.y / hy,
+            sign * me.v.x / 2.0,
+            sign * me.v.y / 2.0,
+            sign * math.cos(me.orientation),
+            sign * math.sin(me.orientation),
+            sign * keeper.p.x / hx,
+            sign * keeper.p.y / hy,
+            sign * keeper.v.x / 2.0,
+            sign * keeper.v.y / 2.0,
+            sign * (ball.p.x - me.p.x) / 0.2,
+            sign * (ball.p.y - me.p.y) / 0.2,
             carry / CARRY_LIMIT_M,
             float(has_ball(game, rid)),
-            (game.ts - t0) / EPISODE_S,
+            min(max((game.ts - t0) / EPISODE_S, 0.0), 1.0),
             *goal_view(game, rid),
         ],
         dtype=np.float32,
@@ -223,10 +233,12 @@ class StrikerTactic(BaseTactic[StrikerMem]):
     differ only in what they choose. Every decision is appended to `trajectory` as (obs, mask, action,
     logp)."""
 
+    tag = TacticTag.ATTACK
+
     def __init__(self, choose: Optional[Chooser] = None, robot_id: int = 0):
         self.robot_id = robot_id
         self.choose = choose
-        self.t0 = 0.0
+        self.t0: Optional[float] = None  # the duel supplies its exact start; live runs use tactic memory
         self.trajectory: list[tuple[np.ndarray, np.ndarray, int, float]] = []
 
     def initial_mem(self) -> StrikerMem:
@@ -239,8 +251,10 @@ class StrikerTactic(BaseTactic[StrikerMem]):
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: StrikerMem
     ) -> tuple[dict[RobotId, RobotCommand], StrikerMem]:
         rid = self.robot_id
-        if game.ball is None or rid not in game.friendly_robots:
+        if game.ball is None or rid not in game.friendly_robots or not game.enemy_robots:
             return {}, mem
+        if mem.started_at is None:
+            mem.started_at = game.ts if self.t0 is None else self.t0
         mem.carry_origin = carry_origin(game, rid, mem.carry_origin)
         if not has_ball(game, rid, visual=True):
             mem.action = None
@@ -249,7 +263,7 @@ class StrikerTactic(BaseTactic[StrikerMem]):
         t = game.ts
         kicking = mem.action is not None and mem.action <= N_SHOTS
         if on_ball and (mem.action is None or t - mem.decided_at >= (SHOT_TIMEOUT_S if kicking else DECIDE_EVERY_S)):
-            obs, mask = observe(game, rid, mem, self.t0), action_mask(game, rid, mem)
+            obs, mask = observe(game, rid, mem, mem.started_at), action_mask(game, rid, mem)
             a, logp = self.choose(obs, mask) if self.choose is not None else (rule_choice(game, rid, mem, mask), 0.0)
             self.trajectory.append((obs, mask, a, logp))
             mem.action, mem.decided_at = a, t
@@ -304,17 +318,23 @@ def net_chooser(params: dict[str, np.ndarray], greedy: bool, rng: np.random.Gene
 # --- the duel --------------------------------------------------------------------------------------
 
 
-def sample_start(rng: random.Random) -> Scenario:
+def sample_start(rng: random.Random, field_dims: FieldDimensions = STANDARD_FIELD_DIMS) -> Scenario:
     """Ball anywhere from just inside our half to the edge of their area, at rest or rolling; the
-    attacker 0.25-2 m from it on any side; the keeper near its goal's centre."""
-    while True:
-        bx, by = rng.uniform(-0.5, 3.3), rng.uniform(-2.7, 2.7)
-        if bx > 3.2 and abs(by) < 1.25:
+    attacker 0.25-2 m from it, scaled down on smaller fields; the keeper near its goal's centre."""
+    length, width = field_dims.full_field_half_length, field_dims.full_field_half_width
+    front, area_width = length - 2 * field_dims.half_defense_area_depth, field_dims.half_defense_area_width
+    x_scale = length / STANDARD_FIELD_DIMS.full_field_half_length
+    scale = min(x_scale, width / STANDARD_FIELD_DIMS.full_field_half_width)
+    for _ in range(10000):
+        bx, by = rng.uniform(-0.5 * x_scale, front - 0.2), rng.uniform(-width + 0.3, width - 0.3)
+        if bx > front - 0.3 and abs(by) < area_width + 0.25:
             continue
-        d, a = rng.uniform(0.25, 2.0), rng.uniform(-math.pi, math.pi)
+        d, a = rng.uniform(0.25, max(0.25, min(2.0, 2.0 * scale))), rng.uniform(-math.pi, math.pi)
         rx, ry = bx + d * math.cos(a), by + d * math.sin(a)
-        if abs(rx) < 4.3 and abs(ry) < 2.8 and not (rx > 3.3 and abs(ry) < 1.3):
+        if abs(rx) < length - 0.2 and abs(ry) < width - 0.2 and not (rx > front - 0.2 and abs(ry) < area_width + 0.3):
             break
+    else:
+        raise ValueError("Field is too small to sample a striker start with the required clearances")
     speed, heading = (0.0 if rng.random() < 0.4 else rng.uniform(0.3, 1.5)), rng.uniform(-math.pi, math.pi)
     return Scenario(
         sim_time=0.0,
@@ -323,7 +343,16 @@ def sample_start(rng: random.Random) -> Scenario:
         ball_vx=speed * math.cos(heading),
         ball_vy=speed * math.sin(heading),
         friendly_robots=(RobotState(0, rx, ry, rng.uniform(-math.pi, math.pi), 0.0, 0.0),),
-        enemy_robots=(RobotState(0, rng.uniform(4.1, 4.4), rng.uniform(-0.5, 0.5), math.pi, 0.0, 0.0),),
+        enemy_robots=(
+            RobotState(
+                0,
+                rng.uniform(length - 0.4, length - 0.1),
+                rng.uniform(-field_dims.half_goal_width, field_dims.half_goal_width),
+                math.pi,
+                0.0,
+                0.0,
+            ),
+        ),
         referee_command=None,
         source_replay=Path("-"),
     )
@@ -333,9 +362,15 @@ class Duel:
     """One match, one robot a side, replayed from a fresh start every episode: in rsim, or in an
     external grSim (`mode="grsim"`, real time, `tools/striker_grsim.py`)."""
 
-    def __init__(self, mode: str = "rsim", record: Optional[str] = None) -> None:
+    def __init__(
+        self, mode: str = "rsim", field_dims: FieldDimensions = STANDARD_FIELD_DIMS, record: Optional[str] = None
+    ) -> None:
         """`record`: a replay name under `replays/`; every tick is written to `<record>.npz` (watch an
         episode with `utama_core.analysis.render_clip`, from its `t0` to where it ended)."""
+        if mode not in ("rsim", "grsim"):
+            raise ValueError(
+                "Duel requires rsim or grsim; use examples/real_striker.py for operator-controlled real runs"
+            )
         self.mode = mode
         enable_sim_reuse()
         self.attacker = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
@@ -350,6 +385,7 @@ class Duel:
             my_team_is_yellow=True,
             my_team_is_right=False,
             mode=mode,
+            full_field_dims=field_dims,
             exp_friendly=1,
             exp_enemy=1,
             exp_ball=True,
@@ -372,7 +408,7 @@ class Duel:
         # The last episode's stoppage left the runner re-pinning the ball at its restart spot.
         self.runner._teleport_settle_target = None
         self.runner._pending_placement_teleport = None
-        start = sample_start(rng)
+        start = sample_start(rng, self.runner.full_field_dims)
         if self.mode == "rsim":
             apply_scenario(self.runner, start, verify=True)
         else:
