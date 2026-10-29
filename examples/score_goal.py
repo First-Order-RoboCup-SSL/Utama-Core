@@ -34,12 +34,13 @@ from shooting_drill import (
     CAMERA_HALF,
     DASHBOARD_PORT,
     FIELD,
+    RADIO_0,
     RECORD,
-    YELLOW_1,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
     _referee_profile,
+    on_field,
 )
 
 from utama_core.custom_referee import CustomReferee
@@ -55,8 +56,7 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 # Test-day configuration
 # ---------------------------------------------------------------------------
 
-SHOOTER_COLOUR = "yellow"
-SHOOTER = YELLOW_1
+SHOOTER = RADIO_0
 
 # ---------------------------------------------------------------------------
 
@@ -66,13 +66,12 @@ def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyR
     ({name: tactic class}, default this example's shooter). `name` tags the recorded log."""
     tactics = tactics or {"shoot": LeadAndSupportTactic}
     real = mode == "real"
-    shooter_id = SHOOTER.vision_id if real else 0  # in the simulators robots are numbered from 0
-    is_yellow = SHOOTER_COLOUR == "yellow"
-    if SHOOTER_COLOUR not in ("yellow", "blue"):
-        raise ValueError(f"SHOOTER_COLOUR must be 'yellow' or 'blue', got {SHOOTER_COLOUR!r}")
-    mapping = {SHOOTER.vision_id: SHOOTER.firmware_id} if real else None
+    (shooter,) = on_field(SHOOTER) if real else (SHOOTER,)
+    shooter_id = shooter.vision_id if real else 0  # in the simulators robots are numbered from 0
+    is_yellow = shooter.colour == "yellow"
+    mapping = {shooter.vision_id: shooter.firmware_id} if real else None
 
-    profile = _referee_profile()
+    profile = _referee_profile(kickoff=shooter.colour)
     referee = CustomReferee(profile, n_robots_yellow=int(is_yellow), n_robots_blue=int(not is_yellow))
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)
@@ -96,8 +95,8 @@ def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyR
         show_live_status=not real,
         yellow_vision_to_cmd_mapping=mapping if is_yellow else None,
         blue_vision_to_cmd_mapping=None if is_yellow else mapping,
-        yellow_robot_profiles={shooter_id: SHOOTER.profile} if is_yellow else None,
-        blue_robot_profiles=None if is_yellow else {shooter_id: SHOOTER.profile},
+        yellow_robot_profiles={shooter_id: shooter.profile} if is_yellow else None,
+        blue_robot_profiles=None if is_yellow else {shooter_id: shooter.profile},
     )
     strategy_view.attach(
         server,

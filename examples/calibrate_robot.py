@@ -2,12 +2,15 @@
 """examples/calibrate_robot.py — measure one real robot and write its profile: no dashboard.
 
 Run:
-    pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
-    pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
-    pixi run calibrate --robot yellow:0 --radio 0 --check       # is the new profile better?
-    pixi run calibrate --robot yellow:0 --radio 0 --mode rsim --yes   # rehearse it in the simulator
+    pixi run calibrate                  # finds the robots on the field; asks which if several
+    pixi run calibrate --radio 0        # the robot on radio 0, whatever lid it wears
+    pixi run calibrate --radio 0 --ball-only   # the ball part again, no driving
+    pixi run calibrate --radio 0 --check       # is the new profile better?
+    pixi run calibrate --mode rsim --yes       # rehearse it in the simulator
 
-It waits until vision sees the robot, then asks you once to put it near the middle of the
+Without both `--robot colour:id` (its lid's pattern) and `--radio`, it first finds the robots
+on the field (`find_robots.py`: each radio that answers turns a little on the spot and back) and
+takes the robot on `--radio`, the only one, or the one you pick. It waits until vision sees the robot, then asks you once to put it near the middle of the
 camera's view facing +x (0.8 m clear ahead, 0.6 m to its left) with a ball at rest in view.
 It plays fixed moves first (`tactics/scripted_moves.py`, `CALIBRATION_SCRIPT`): about 65 s of
 driving and turning, its turns on the spot also showing where its tag sits. Then the ball part
@@ -81,6 +84,7 @@ from utama_core.team_controller.src.controllers.common.robot_profile import (
     profile_path,
     save_profile,
 )
+from utama_core.team_controller.src.controllers.real import find_robots
 
 _START = (
     "Robot near the middle of the camera's view facing +x, 0.8 m clear ahead and 0.6 m to its left, "
@@ -244,8 +248,8 @@ def play(runner, tactic, robot_id: int, label: str, yes: bool, on_tick=None) -> 
 
 def parse_args(description: str, ball: bool = False):
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--robot", type=_robot, required=True, help="colour:vision id, e.g. yellow:0")
-    parser.add_argument("--radio", type=int, required=True, help="the robot's radio (firmware) id")
+    parser.add_argument("--robot", type=_robot, help="its lid, colour:vision id, e.g. yellow:0 (default: found)")
+    parser.add_argument("--radio", type=int, help="the robot's radio (firmware) id (default: found)")
     parser.add_argument("--mode", choices=("real", "rsim"), default="real", help="rsim: rehearse, nothing recorded")
     parser.add_argument("--yes", action="store_true", help="answer every question at once (a rehearsal)")
     if ball:
@@ -417,8 +421,48 @@ def run_check(args, bounds) -> None:
     print(f"\nWritten {out}")
 
 
+def pick(lids: dict[int, tuple[str, int]], radio: Optional[int], robot: Optional[tuple[str, int]], ask=input) -> int:
+    """The radio to calibrate among those found (`lids`): `radio`, the one wearing `robot`, the
+    only one, or the one the operator picks."""
+    if radio is None and robot is not None:
+        radio = next((r for r, lid in lids.items() if lid == tuple(robot)), None)
+        if radio is None:
+            raise SystemExit(f"No robot found wearing {robot[0]} {robot[1]}.")
+    if radio is None:
+        if not lids:
+            raise SystemExit("No robot found: switched on, in view, its radio in range?")
+        if len(lids) == 1:
+            return next(iter(lids))
+        choices = ", ".join(f"{r} ({c} {v})" for r, (c, v) in sorted(lids.items()))
+        while radio not in lids:
+            answer = ask(f"Which radio to calibrate? {choices}: ").strip()
+            radio = int(answer) if answer.isdigit() else None
+    if radio not in lids:
+        raise SystemExit(f"Radio {radio} was not found on the field.")
+    return radio
+
+
+def choose_robot(args) -> None:
+    """Fills in `args.robot` and `args.radio`: on real robots from the robots found on the field
+    unless both were given; in a rehearsal yellow 0 on radio 0."""
+    if args.mode != "real":
+        args.robot = args.robot or ("yellow", 0)
+        args.radio = 0 if args.radio is None else args.radio
+        return
+    if args.robot is not None and args.radio is not None:
+        return
+    print("Finding the robots on the field: each one that answers turns a little and back ...")
+    found = find_robots.find()
+    find_robots.save(found)
+    print(find_robots.report(found) + "\n")
+    lids = {r["radio"]: tuple(r["lid"]) for r in found["robots"] if r["lid"] is not None}
+    args.radio = pick(lids, args.radio, args.robot)
+    args.robot = lids[args.radio]
+
+
 def main() -> None:
     args = parse_args(__doc__, ball=True)
+    choose_robot(args)
     bounds = _field_bounds(FIELD, CAMERA_HALF)
     if args.check:
         run_check(args, bounds)

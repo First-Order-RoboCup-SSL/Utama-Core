@@ -35,13 +35,14 @@ import statistics
 import time
 from typing import Optional
 
-from pass_receive import ROBOT_A, ROBOT_A_COLOUR, ROBOT_B
+from pass_receive import ROBOT_A, ROBOT_B
 from shooting_drill import (
     CAMERA_HALF,
     FIELD,
     _field_bounds,
     _one_robot_strategy,
     no_rules_referee,
+    on_field,
 )
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
@@ -150,10 +151,11 @@ class SwapTactic(BaseTactic[None]):
 def run_block(mode: str, scheme: str, legs: int, block: int, stamp: str) -> list[dict]:
     """One block of `legs` legs, both robots on `scheme`; its legs' results."""
     real = mode == "real"
-    a_is_yellow = ROBOT_A_COLOUR == "yellow"
-    a_id = ROBOT_A.vision_id if real else 0
-    b_id = ROBOT_B.vision_id if real else 0
-    a_map, b_map = {ROBOT_A.vision_id: ROBOT_A.firmware_id}, {ROBOT_B.vision_id: ROBOT_B.firmware_id}
+    robot_a, robot_b = on_field(ROBOT_A, ROBOT_B) if real else (ROBOT_A, ROBOT_B)
+    a_is_yellow = robot_a.colour == "yellow"
+    a_id = robot_a.vision_id if real else 0
+    b_id = robot_b.vision_id if real else 0
+    a_map, b_map = {robot_a.vision_id: robot_a.firmware_id}, {robot_b.vision_id: robot_b.firmware_id}
     drill = Drill(legs)
     game_log = f"replays/field/{stamp}_real_planner_ab_{block}_{scheme}.log" if real else None
     strategies = [
@@ -181,8 +183,8 @@ def run_block(mode: str, scheme: str, legs: int, block: int, stamp: str) -> list
         show_live_status=False,
         yellow_vision_to_cmd_mapping=(a_map if a_is_yellow else b_map) if real else None,
         blue_vision_to_cmd_mapping=(b_map if a_is_yellow else a_map) if real else None,
-        yellow_robot_profiles={a_id: ROBOT_A.profile} if a_is_yellow else {b_id: ROBOT_B.profile},
-        blue_robot_profiles={b_id: ROBOT_B.profile} if a_is_yellow else {a_id: ROBOT_A.profile},
+        yellow_robot_profiles={a_id: robot_a.profile} if a_is_yellow else {b_id: robot_b.profile},
+        blue_robot_profiles={b_id: robot_b.profile} if a_is_yellow else {a_id: robot_a.profile},
     )
     print(f"block {block + 1}: {scheme}" + (f", recording to {game_log}" if game_log else ""))
     shown = None

@@ -138,13 +138,33 @@ robot was trying to do.
 
 ### 5. Measuring a robot
 
+**Which robot is which.** A robot is its radio ID: the radio board stays with its motors,
+kicker and dribbler, and its profile goes by it. The lid with the pattern is a separate shell
+and can be swapped. After switching robots on, or swapping a lid:
+
+```
+pixi run find-robots          # radios 0 to 7; --radios 0 1 4 for others
+```
+
+Each radio that answers turns about 70° on the spot and back (keep 15 cm clear round the
+robots), and the pattern that turned with it is its lid. It prints radio, lid and whether the
+profile was calibrated on that lid (a profile's tag offset is its lid's: calibrate again after a
+swap), and the radios that did not answer and patterns no radio turned. The pairing is saved on
+this machine (`replays/field/robots_found.json`); the examples take each robot's colour and
+pattern from it on real robots (`shooting_drill.on_field`), so no vision ID or colour is written
+by hand. The robots an example uses are chosen by radio (`RADIO_0`, `RADIO_1` in
+`shooting_drill.py`), one per colour.
+
 One command measures a robot and writes its profile:
 
 ```
-pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
-pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
-pixi run calibrate --robot yellow:0 --radio 0 --check       # the new profile against the committed one
+pixi run calibrate                    # finds the robots; the only one, or asks which
+pixi run calibrate --radio 0          # the robot on radio 0
+pixi run calibrate --radio 0 --ball-only   # the ball part again, no driving
+pixi run calibrate --radio 0 --check       # the new profile against the committed one
 ```
+
+Without both `--robot colour:id` and `--radio` it runs `find-robots` first.
 
 No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
 it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,

@@ -6,6 +6,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from utama_core.team_controller.src.controllers.common.robot_profile import (
     RobotProfile,
     load_profile,
@@ -79,3 +81,25 @@ def test_a_profile_file_reads_back_as_written(tmp_path):
 
 def test_the_committed_profiles_load():
     assert load_profile(0).kick_bend_deg_per_cm > 0 and load_profile(1).kick_bend_deg_per_cm > 0
+
+
+LIDS = {0: ("yellow", 0), 1: ("blue", 0)}
+
+
+def test_the_robot_to_calibrate_is_the_radio_given_the_lid_given_or_the_only_one():
+    assert ex.pick(LIDS, 1, None) == 1
+    assert ex.pick(LIDS, None, ("blue", 0)) == 1
+    assert ex.pick({4: ("yellow", 2)}, None, None) == 4
+
+
+def test_with_several_robots_found_the_operator_picks_one_until_it_is_one_found():
+    answers = iter(["7", "x", "1"])
+    assert ex.pick(LIDS, None, None, ask=lambda _: next(answers)) == 1
+
+
+@pytest.mark.parametrize("radio, robot", [(5, None), (None, ("yellow", 9))])
+def test_a_robot_not_found_stops_it(radio, robot):
+    with pytest.raises(SystemExit):
+        ex.pick(LIDS, radio, robot)
+    with pytest.raises(SystemExit):
+        ex.pick({}, None, None)

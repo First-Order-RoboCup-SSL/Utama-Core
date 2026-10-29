@@ -95,6 +95,9 @@ from utama_core.team_controller.src.controllers.common.robot_profile import Robo
 from utama_core.team_controller.src.controllers.common.robot_profile import (
     load_profile as robot_profile,
 )
+from utama_core.team_controller.src.controllers.real.find_robots import (
+    on_field as found_lids,
+)
 
 # The keeper kicks the ball back within this of the attacker's direction: at 1.5 m the ball
 # passes within 0.25 m, a step for the attacker. Real keepers barely turn finely with the ball
@@ -154,29 +157,51 @@ FIELD = FieldDimensions(
 # ssl-vision's coordinates), or "full". The goal in that half is the one in play.
 CAMERA_HALF = "full"
 
-ATTACKER_COLOUR = "yellow"  # the defender is the other colour
-
 
 class TestRobot(NamedTuple):
-    vision_id: int  # its pattern on top
+    vision_id: int  # the pattern on its lid
     firmware_id: int  # its radio ID; the two robots' must differ, one radio sends both
     # What works on it. A robot without a kicker pushes the ball instead of kicking; one
     # without a dribbler carries the ball slowly and never backs up; one without a ball
     # sensor (ir) has the ball once its centre is within 13 cm of it, whatever way it faces,
     # so it can stop ~2 cm short and kick at nothing (seen in grSim).
     profile: RobotProfile = RobotProfile(kicker=True, dribbler=True, ir=True)
+    colour: str = "yellow"  # its lid's
 
 
-# Our robots. Each one's profile (kick bend and bias, tag offset, carry caps) is its own file,
-# `utama_core/config/robots/radio_<radio id>.json`, written by `pixi run calibrate`; hardware
-# that breaks (kicker, dribbler, ir) is set there by hand.
-# YELLOW_1 is the robot on radio 0, measured as yellow 1; since 2026-10-28 its lid reads as yellow 0.
-YELLOW_1 = TestRobot(vision_id=0, firmware_id=0, profile=robot_profile(0))
-BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=robot_profile(1))
+# Our robots, by radio ID: the radio stays with the robot, the lid (colour and pattern) can be
+# swapped. On real robots the lids are the ones `pixi run find-robots` last found (`on_field`);
+# those written here are for the simulators, and for a machine where it never ran. Each one's
+# profile is its own file, `utama_core/config/robots/radio_<radio id>.json`, written by
+# `pixi run calibrate`; hardware that breaks (kicker, dribbler, ir) is set there by hand.
+RADIO_0 = TestRobot(vision_id=0, firmware_id=0, profile=robot_profile(0), colour="yellow")
+RADIO_1 = TestRobot(vision_id=0, firmware_id=1, profile=robot_profile(1), colour="blue")
 
-# Swapping a robot is a change here only.
-ATTACKER = YELLOW_1
-DEFENDER = BLUE_0
+# Swapping a robot is a change here only; they must wear different colours.
+ATTACKER = RADIO_0
+DEFENDER = RADIO_1
+
+
+def on_field(*robots: TestRobot) -> tuple[TestRobot, ...]:
+    """`robots` wearing the lids `pixi run find-robots` last found them in on this machine. Two
+    robots must wear different colours (one per team)."""
+    when, lids = found_lids()
+    if when is None:
+        print("pixi run find-robots has never run here: the lids are those written in shooting_drill.py.")
+    else:
+        missing = [r.firmware_id for r in robots if r.firmware_id not in lids]
+        if missing:
+            raise SystemExit(
+                f"Radio {', '.join(map(str, missing))} was not on the field when find-robots ran ({when}): "
+                "switch it on and run `pixi run find-robots`."
+            )
+        robots = tuple(r._replace(colour=lids[r.firmware_id][0], vision_id=lids[r.firmware_id][1]) for r in robots)
+        found = ", ".join(f"radio {r.firmware_id} {r.colour} {r.vision_id}" for r in robots)
+        print(f"Lids as find-robots found them ({when}): {found}. Swapped since? Run it again.")
+    if len(robots) == 2 and robots[0].colour == robots[1].colour:
+        raise SystemExit(f"Both robots wear {robots[0].colour} lids: one per colour; swap a lid, then find-robots.")
+    return robots
+
 
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
 DEFENDER_TACTIC = "keeper_feed"  # see DEFENDER_TACTICS
@@ -247,16 +272,17 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     )
 
 
-def _referee_profile(rules_on: bool | None = None, goals: bool = True) -> RefereeProfile:
-    """`RULES`' profile (`rules_on` overrides it); every transition is left to the operator either
-    way. With the rules off, `goals=False` turns goal detection off too: nothing ever stops play."""
+def _referee_profile(rules_on: bool | None = None, goals: bool = True, kickoff: str = "yellow") -> RefereeProfile:
+    """`RULES`' profile (`rules_on` overrides it), `kickoff` the colour kicking off; every
+    transition is left to the operator either way. With the rules off, `goals=False` turns goal
+    detection off too: nothing ever stops play."""
     if rules_on is None:
         if RULES not in ("on", "off"):
             raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
         rules_on = RULES == "on"
     if rules_on:
         human = load_profile("human")
-        game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=ATTACKER_COLOUR)
+        game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=kickoff)
         return dataclasses.replace(human, profile_name="shooting_drill_test (rules on)", game=game)
     defaults = RulesConfig()
     rules = RulesConfig(
@@ -270,7 +296,7 @@ def _referee_profile(rules_on: bool | None = None, goals: bool = True) -> Refere
         rules=rules,
         game=GameConfig(
             half_duration_seconds=3600.0,
-            kickoff_team=ATTACKER_COLOUR,
+            kickoff_team=kickoff,
             force_start_after_goal=False,
             auto_advance=AutoAdvanceConfig(
                 stop_to_next_command=False,
@@ -295,23 +321,22 @@ def no_rules_referee(n_yellow: int, n_blue: int) -> CustomReferee:
 def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
-    attacker_id = ATTACKER.vision_id if real else 0
-    defender_id = DEFENDER.vision_id if real else 0
-    attacker_is_yellow = ATTACKER_COLOUR == "yellow"
-    if ATTACKER_COLOUR not in ("yellow", "blue"):
-        raise ValueError(f"ATTACKER_COLOUR must be 'yellow' or 'blue', got {ATTACKER_COLOUR!r}")
+    attacker, defender = on_field(ATTACKER, DEFENDER) if real else (ATTACKER, DEFENDER)
+    attacker_id = attacker.vision_id if real else 0
+    defender_id = defender.vision_id if real else 0
+    attacker_is_yellow = attacker.colour == "yellow"
 
     # The defender's goal is the one in the camera's half, so the attacker's own goal
     # is on the other side. With the full field, the attacker attacks the right goal.
     attacker_is_right = CAMERA_HALF == "left"
 
-    attacker_map = {ATTACKER.vision_id: ATTACKER.firmware_id}
-    defender_map = {DEFENDER.vision_id: DEFENDER.firmware_id}
+    attacker_map = {attacker.vision_id: attacker.firmware_id}
+    defender_map = {defender.vision_id: defender.firmware_id}
     # The profiles apply in the simulators too, to rehearse a test with a broken robot.
-    attacker_profiles = {attacker_id: ATTACKER.profile}
-    defender_profiles = {defender_id: DEFENDER.profile}
+    attacker_profiles = {attacker_id: attacker.profile}
+    defender_profiles = {defender_id: defender.profile}
 
-    profile = _referee_profile()
+    profile = _referee_profile(kickoff=attacker.colour)
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
     server = attach_dashboard(port=DASHBOARD_PORT)
     referee_view.attach(server, referee, profile)

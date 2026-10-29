@@ -41,13 +41,14 @@ import time
 from typing import Optional
 
 from shooting_drill import (
-    BLUE_0,
     FIELD,
-    YELLOW_1,
+    RADIO_0,
+    RADIO_1,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
     _referee_profile,
+    on_field,
 )
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
@@ -81,9 +82,8 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 
 # Swapping a robot is a change here only. They must wear different colours (one per team).
-ROBOT_A = YELLOW_1
-ROBOT_B = BLUE_0
-ROBOT_A_COLOUR = "yellow"  # robot B is the other colour
+ROBOT_A = RADIO_0
+ROBOT_B = RADIO_1
 
 # The attacker carries the ball to this far from the goal line before it looks for a shot. The
 # robot's aim error is an angle, so the goal it can hit past a keeper grows as it gets closer:
@@ -235,17 +235,16 @@ TACTICS = {"save_and_counter": KeepOrAttackTactic, "still": _still}
 
 def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
     real = mode == "real"
-    if ROBOT_A_COLOUR not in ("yellow", "blue"):
-        raise ValueError(f"ROBOT_A_COLOUR must be 'yellow' or 'blue', got {ROBOT_A_COLOUR!r}")
-    a_is_yellow = ROBOT_A_COLOUR == "yellow"
+    robot_a, robot_b = on_field(ROBOT_A, ROBOT_B) if real else (ROBOT_A, ROBOT_B)
+    a_is_yellow = robot_a.colour == "yellow"
     # In the simulators each team's robots are numbered from 0.
-    a_id = ROBOT_A.vision_id if real else 0
-    b_id = ROBOT_B.vision_id if real else 0
-    a_map = {ROBOT_A.vision_id: ROBOT_A.firmware_id}
-    b_map = {ROBOT_B.vision_id: ROBOT_B.firmware_id}
-    a_profiles, b_profiles = {a_id: ROBOT_A.profile}, {b_id: ROBOT_B.profile}
+    a_id = robot_a.vision_id if real else 0
+    b_id = robot_b.vision_id if real else 0
+    a_map = {robot_a.vision_id: robot_a.firmware_id}
+    b_map = {robot_b.vision_id: robot_b.firmware_id}
+    a_profiles, b_profiles = {a_id: robot_a.profile}, {b_id: robot_b.profile}
 
-    profile = _referee_profile()
+    profile = _referee_profile(kickoff=robot_a.colour)
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
     server = attach_dashboard(port=port)
     referee_view.attach(server, referee, profile)
