@@ -49,6 +49,7 @@ from shooting_drill import (
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
+    no_rules_referee,
 )
 
 from utama_core.analysis.robot_calibration import (
@@ -58,6 +59,7 @@ from utama_core.analysis.robot_calibration import (
     report,
 )
 from utama_core.engine.tactic import BaseTactic, TacticTag
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
 from utama_core.tactics.scripted_moves import (
     CALIBRATION_SCRIPT,
@@ -178,6 +180,8 @@ def build_runner(args, tactic, name: str, profile: RobotProfile = RobotProfile()
         exp_enemy=0,
         full_field_dims=FIELD,
         field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        referee=no_rules_referee(int(is_yellow), int(not is_yellow)),
+        referee_initial_command=RefereeCommand.FORCE_START,
         show_live_status=False,
         yellow_vision_to_cmd_mapping=mapping if is_yellow else None,
         blue_vision_to_cmd_mapping=None if is_yellow else mapping,

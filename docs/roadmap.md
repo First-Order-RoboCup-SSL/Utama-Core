@@ -215,7 +215,10 @@ entry by its title, not its number.
          With the calibrated robot `trajsample` fails 12 of 145 seeded runs against `fpp`'s 27,
          slower in crowds ([motion_planning_comparison.md](motion_planning_comparison.md#on-the-calibrated-robot-2026-10-28)).
          *Open:* whether to run the real robots on `trajsample`: compare both in the same field
-         drills once 3+ robots share the field; the sim evaluation stays on `fpp`.
+         drills once 3+ robots share the field; the sim evaluation stays on `fpp`. The drill
+         (2026-10-29): `examples/planner_ab.py`, two robots swapping ends head on and crossing,
+         in blocks alternating the planners; about 40 legs per planner. Not yet run on the field.
+         Field logs' close calls and their referee state: `analysis/close_calls.py`.
     - *Calibration routine (the full plan):* per robot, at full battery on the
       competition carpet: commanded vs measured speed at a few speeds, acceleration and
       braking from vision, straight-line drift over 3 m, turn rate; ten kicks (speed from

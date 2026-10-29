@@ -256,18 +256,21 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     )
 
 
-def _referee_profile() -> RefereeProfile:
-    """`RULES`' profile; every transition is left to the operator either way."""
-    if RULES == "on":
+def _referee_profile(rules_on: bool | None = None, goals: bool = True) -> RefereeProfile:
+    """`RULES`' profile (`rules_on` overrides it); every transition is left to the operator either
+    way. With the rules off, `goals=False` turns goal detection off too: nothing ever stops play."""
+    if rules_on is None:
+        if RULES not in ("on", "off"):
+            raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
+        rules_on = RULES == "on"
+    if rules_on:
         human = load_profile("human")
         game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=ATTACKER_COLOUR)
         return dataclasses.replace(human, profile_name="shooting_drill_test (rules on)", game=game)
-    if RULES != "off":
-        raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
     defaults = RulesConfig()
     rules = RulesConfig(
         **{
-            f.name: dataclasses.replace(getattr(defaults, f.name), enabled=(f.name == "goal_detection"))
+            f.name: dataclasses.replace(getattr(defaults, f.name), enabled=(goals and f.name == "goal_detection"))
             for f in dataclasses.fields(RulesConfig)
         }
     )
@@ -288,6 +291,14 @@ def _referee_profile() -> RefereeProfile:
             ),
         ),
     )
+
+
+def no_rules_referee(n_yellow: int, n_blue: int) -> CustomReferee:
+    """A referee that never stops play: no rules, not even goals, so no defense-area keep-out
+    either (`Field.defense_area_rules`). For drills and calibration, which start at once
+    (`referee_initial_command=RefereeCommand.FORCE_START`); without a referee the box rules are on,
+    and on this small field they keep a robot 0.57 m off either box."""
+    return CustomReferee(_referee_profile(rules_on=False, goals=False), n_robots_yellow=n_yellow, n_robots_blue=n_blue)
 
 
 def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
