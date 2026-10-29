@@ -1083,6 +1083,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._pending_strategies[side] = (strategy, name)
 
     @property
+    def auto_halt(self) -> Optional[str]:
+        """The field check's HALT in force, as "time: the failing check", or None."""
+        return self._auto_halt
+
+    def resume_after_auto_halt(self) -> bool:
+        """Force Start once the field check passes again after a HALT it forced, for a run nobody
+        resumes from the dashboard (`examples/calibrate_robot.py`). True when it resumed."""
+        if self._auto_halt is None or self._prev_custom_ref_command != RefereeCommand.HALT:
+            return False
+        if self.field_check.halt_reason(self._field_check_rows) is not None:
+            return False
+        self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+        self._auto_halt = None
+        return True
+
+    @property
     def halted(self) -> bool:
         """Whether the game is in a HALT (safe from any thread: reads the last frame)."""
         return self._halted(self.my)

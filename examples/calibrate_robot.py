@@ -222,9 +222,17 @@ def play(runner, tactic, robot_id: int, label: str, yes: bool, on_tick=None) -> 
     prompt = _Prompt()
     try:
         _wait_until_seen(runner, robot_id, label)
-        shown = None
+        shown, halt = None, None
         while not tactic.done:
             runner.step_once()
+            # No dashboard to press Force Start on: play resumes by itself once the field check
+            # passes again, and the step the HALT interrupted starts over.
+            if runner.auto_halt is not None and runner.auto_halt != halt:
+                print(f"!! Auto-HALT {runner.auto_halt}; resumes once that passes")
+            halt = runner.auto_halt
+            if runner.resume_after_auto_halt():
+                print("Field check passing: resumed")
+                halt = None
             if on_tick is not None and not tactic.done:
                 on_tick(tactic)
             if tactic.waiting_for is not None:

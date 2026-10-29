@@ -278,3 +278,26 @@ def test_a_robot_in_a_keep_out_zone_fails_and_the_page_gets_the_zone():
     assert _row(rows, "yellow 1")["status"] == "fail"
     assert "keep-out" in fc.halt_reason(rows)
     assert fc.payload(rows, None)["keep_out"] == [[0.0, -1.0, 1.0, -0.5]]
+
+
+def test_a_run_without_a_dashboard_resumes_its_auto_halt_once_the_check_passes():
+    """2026-10-29: calibration's first tick ran before vision arrived; its auto-HALT, which only
+    the dashboard's Force Start ends, held the robot still for the whole run."""
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    StrategyRunner._tick_field_check(runner, [None], now=0.0)  # nothing seen yet: fails
+    assert runner._auto_halt is not None
+    runner._prev_custom_ref_command = RefereeCommand.HALT
+    assert not StrategyRunner.resume_after_auto_halt(runner)  # still failing: stays halted
+
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.02)
+    runner.referee.force_command.reset_mock()
+    assert StrategyRunner.resume_after_auto_halt(runner)
+    runner.referee.force_command.assert_called_once_with(RefereeCommand.FORCE_START, 5.0)
+    assert runner._auto_halt is None
+
+
+def test_a_halt_the_field_check_did_not_force_is_not_resumed():
+    runner = _runner(Mode.REAL, RefereeCommand.HALT)  # the operator's own HALT
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    assert not StrategyRunner.resume_after_auto_halt(runner)
+    runner.referee.force_command.assert_not_called()
