@@ -159,14 +159,11 @@ CAMERA_HALF = "full"
 
 # Parts of the field no robot may enter, in ssl-vision's coordinates (+x right, +y up, as on
 # ssl-vision's own view): the fence slows each robot to stop 0.1 m before one, and on real robots
-# one found inside forces HALT (`StrategyRunner(keep_out=...)`). Now the bottom half of the
-# bottom-right quarter: half-way line to right goal line, bottom touch line to y = -W/2. () for none.
-KEEP_OUT = (
-    FieldBounds(
-        top_left=(0.0, -FIELD.full_field_half_width / 2),
-        bottom_right=(FIELD.full_field_half_length, -FIELD.full_field_half_width),
-    ),
-)
+# one found inside forces HALT (`StrategyRunner(keep_out=...)`). None now; on 2026-10-29 the
+# bottom half of the bottom-right quarter was kept out:
+#   (FieldBounds(top_left=(0.0, -FIELD.full_field_half_width / 2),
+#                bottom_right=(FIELD.full_field_half_length, -FIELD.full_field_half_width)),)
+KEEP_OUT: tuple[FieldBounds, ...] = ()
 
 
 class TestRobot(NamedTuple):
