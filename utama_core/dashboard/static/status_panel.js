@@ -106,6 +106,8 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
 // its ball sensor (the IR bit the firmware sends back), how fresh that answer is, and where
 // vision has it. `ballLastOn` is {port_id: seconds since the sensor was last on}, kept by the
 // caller across every state, so a touch shorter than the panel's refresh still shows.
+const LOW_REPLY_RATE = 0.8; // find_robots.py's
+
 function robotFeedbackHtml(d, ballLastOn) {
   const feedback = d.robot_feedback || [];
   if (feedback.length === 0) return "";
@@ -120,8 +122,15 @@ function robotFeedbackHtml(d, ballLastOn) {
     else if (lastOn[row.port_id] != null) sensor = '<span class="muted">no ball · last ' + lastOn[row.port_id].toFixed(1) + " s ago</span>";
     else sensor = '<span class="muted">no ball</span>';
 
+    // The share of its commands it answered over the last 2 s; under find_robots' LOW_REPLY_RATE
+    // the link is poor (a flat battery, the radio out of reach) before it goes silent.
+    let rate = "";
+    if (row.reply_rate != null) {
+      const pct = Math.round(row.reply_rate * 100) + "% answered";
+      rate = " · " + (row.reply_rate < LOW_REPLY_RATE ? '<span class="check-fail">' + pct + "</span>" : pct);
+    }
     let radio;
-    if (row.connected) radio = "fw " + row.port_id + " · " + Math.round(row.age_seconds * 1000) + " ms";
+    if (row.connected) radio = "fw " + row.port_id + " · " + Math.round(row.age_seconds * 1000) + " ms" + rate;
     else if (row.age_seconds != null) radio = '<span class="check-fail">fw ' + row.port_id + " silent " + row.age_seconds.toFixed(1) + " s</span>";
     else radio = '<span class="check-warn">fw ' + row.port_id + " no feedback yet</span>";
 

@@ -52,29 +52,37 @@ def vision_lines(heard: dict, seconds: float) -> list[str]:
     return lines
 
 
+def check(radios, out=print, listener=listen, finder=find_robots.find) -> bool:
+    """Runs the check, each line to `out`; whether vision and the radio were there. The pairing
+    found is saved. The dashboard's Demo panel runs it too (`examples/demos.py`)."""
+    sock = _socket()
+    try:
+        heard = listener(sock, VISION_S)
+    finally:
+        sock.close()
+    for line in vision_lines(heard, VISION_S):
+        out(line)
+    if not heard["senders"]:
+        return False
+
+    out("Finding the robots: each one that answers turns about 70 degrees and back; keep 15 cm clear.")
+    try:
+        found = finder(tuple(radios))
+    except (ConnectionError, socket.error) as e:
+        out(f"!! radio: {e} (is the transmitter plugged in at {PORT}?)")
+        return False
+    find_robots.save(found)
+    for line in find_robots.report(found).splitlines():
+        out(line)
+    return True
+
+
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--radios", type=int, nargs="+", default=list(find_robots.RADIOS))
     args = parser.parse_args(argv)
-
-    sock = _socket()
-    try:
-        heard = listen(sock, VISION_S)
-    finally:
-        sock.close()
-    lines = vision_lines(heard, VISION_S)
-    print("\n".join(lines))
-    if not heard["senders"]:
+    if not check(args.radios):
         sys.exit(1)
-
-    print("\nFinding the robots: each one that answers turns about 70 degrees and back; keep 15 cm clear.")
-    try:
-        found = find_robots.find(tuple(args.radios))
-    except (ConnectionError, socket.error) as e:
-        print(f"!! radio: {e} (is the transmitter plugged in at {PORT}?)")
-        sys.exit(1)
-    find_robots.save(found)
-    print("\n" + find_robots.report(found))
 
 
 if __name__ == "__main__":

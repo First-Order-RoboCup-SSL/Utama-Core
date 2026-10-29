@@ -25,6 +25,7 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
         "calibrate_robot.py",
         "planner_ab.py",
         "demos.py",
+        "teleop.py",
         "demo_referee_feedback_gui.py",
     ],
 )

@@ -154,6 +154,29 @@ def _record_robot_feedback_responses(
         )
 
 
+class _ReplyRates:
+    """Each robot's share of the radio's commands it answered over the last `window_s`: one
+    command goes to every robot each tick, and a robot answers each one (`find_robots`'
+    `LOW_REPLY_RATE` is where a link is poor)."""
+
+    def __init__(self, window_s: float = 2.0):
+        self.window_s = window_s
+        self._ticks: deque = deque()  # (time, ids that answered)
+
+    def tick(self, now: float, responses: List[RobotResponse]) -> None:
+        self._ticks.append((now, {r.id for r in responses or []}))
+        while self._ticks and self._ticks[0][0] < now - self.window_s:
+            self._ticks.popleft()
+
+    def rates(self) -> dict[int, float]:
+        n = len(self._ticks)
+        counts: dict[int, int] = {}
+        for _, ids in self._ticks:
+            for port_id in ids:
+                counts[port_id] = counts.get(port_id, 0) + 1
+        return {port_id: min(1.0, c / n) for port_id, c in counts.items()}
+
+
 def _build_robot_feedback_snapshot(
     feedback_by_port_id: dict[int, _RobotPortFeedbackState],
     *,
@@ -162,7 +185,10 @@ def _build_robot_feedback_snapshot(
     yellow_cmd_to_vision_mapping: dict[int, int],
     blue_cmd_to_vision_mapping: dict[int, int],
     timeout_seconds: float = ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
+    reply_rates: Optional[dict[int, float]] = None,
 ) -> list[dict]:
+    """`reply_rates` (`_ReplyRates.rates`), when given, adds each robot's `reply_rate` (0 for one
+    that answered nothing)."""
     snapshot = []
     port_ids = set(feedback_by_port_id) | set(yellow_cmd_to_vision_mapping) | set(blue_cmd_to_vision_mapping)
     for port_id in sorted(port_ids):
@@ -182,6 +208,9 @@ def _build_robot_feedback_snapshot(
                 "connected": age_seconds < timeout_seconds,
                 "age_seconds": age_seconds,
             }
+
+        if reply_rates is not None:
+            item["reply_rate"] = reply_rates.get(port_id, 0.0)
 
         yellow_vision_id = yellow_cmd_to_vision_mapping.get(port_id)
         blue_vision_id = blue_cmd_to_vision_mapping.get(port_id)
@@ -349,6 +378,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._vs_robot_names: dict[tuple[bool, int], str] = {}
         self._robot_feedback_by_port_id: dict[int, _RobotPortFeedbackState] = {}
         self._robot_feedback_snapshot: list[dict] = []
+        self._reply_rates = _ReplyRates()
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -884,12 +914,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _update_robot_feedback_snapshot(self, responses: List[RobotResponse], now: float) -> None:
         _record_robot_feedback_responses(self._robot_feedback_by_port_id, responses, now)
+        self._reply_rates.tick(now, responses)
         self._robot_feedback_snapshot = _build_robot_feedback_snapshot(
             self._robot_feedback_by_port_id,
             now=now,
             my_team_is_yellow=self.my_team_is_yellow,
             yellow_cmd_to_vision_mapping=self.yellow_cmd_to_vision_mapping,
             blue_cmd_to_vision_mapping=self.blue_cmd_to_vision_mapping,
+            reply_rates=self._reply_rates.rates(),
         )
 
     def _push_robot_feedback_to_referee(self) -> None:

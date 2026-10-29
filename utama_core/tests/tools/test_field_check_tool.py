@@ -43,3 +43,30 @@ def test_a_robot_answering_few_commands_is_reported():
     assert "Few replies (radio 0" in fr.report(found)
     found["robots"][0]["reply_rate"] = fr.LOW_REPLY_RATE
     assert "Few replies" not in fr.report(found)
+
+
+def test_check_sends_every_line_out_and_stops_at_no_vision(monkeypatch):
+    monkeypatch.setattr(field_check, "_socket", lambda: type("S", (), {"close": lambda self: None})())
+    saved = []
+    monkeypatch.setattr(fr, "save", lambda found: saved.append(found))
+    found = {
+        "time": "t",
+        "robots": [{"radio": 0, "lid": ("yellow", 0), "answered": True, "reply_rate": 1.0}],
+        "lids_seen": ["yellow 0"],
+    }
+
+    lines = []
+    ok = field_check.check([0], out=lines.append, listener=lambda s, t: heard({0: 120}), finder=lambda radios: found)
+    assert ok and saved == [found]
+    assert lines[0] == "ok camera 0: 60 packets/s" and any(line.startswith("  0      yellow 0") for line in lines)
+
+    lines = []
+    assert not field_check.check([0], out=lines.append, listener=lambda s, t: heard({}), finder=None)
+    assert len(lines) == 1 and lines[0].startswith("!! vision")
+
+    def no_radio(radios):
+        raise ConnectionError("no serial port")
+
+    lines = []
+    assert not field_check.check([0], out=lines.append, listener=lambda s, t: heard({0: 120}), finder=no_radio)
+    assert lines[-1].startswith("!! radio: no serial port")

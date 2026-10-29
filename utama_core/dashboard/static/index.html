@@ -60,8 +60,19 @@
       <div class="row" style="align-items:center;">
         <select id="demo-choice" style="flex:1;"></select>
         <button id="demo-run-btn">Run</button>
+        <button id="demo-check-btn" style="display:none;" title="vision, then each robot turned on the spot to find its lid; then this demo again">Field check</button>
       </div>
+      <div id="demo-settings" class="stack" style="gap:2px; font-size:.75rem;"></div>
       <div id="demo-status" class="muted" style="font-size:.75rem;"></div>
+      <pre id="demo-check-lines" style="display:none; font-size:.68rem; white-space:pre-wrap; margin:4px 0;"></pre>
+    </div>
+    <div id="teleop-panel" style="display:none;">
+      <div class="ref-section-title">Teleop <span class="muted" style="font-size:.65rem;">Force Start to drive · W/S A/D Q/E · Shift faster · B kick · F dribbler</span></div>
+      <div class="row" style="align-items:center;">
+        <select id="teleop-robot" style="flex:1;"></select>
+        <label style="font-size:.75rem;"><input type="checkbox" id="teleop-keys"> keys drive</label>
+      </div>
+      <div id="teleop-state" class="muted" style="font-size:.7rem;"></div>
     </div>
     <div id="strategy-run" style="display:none;">
       <div class="ref-section-title">Strategy <span class="muted" style="font-size:.65rem;">changed only while halted; Run on the one running restarts it</span></div>

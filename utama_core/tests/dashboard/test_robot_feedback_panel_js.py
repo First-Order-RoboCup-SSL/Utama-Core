@@ -65,3 +65,12 @@ def test_never_answered_and_not_seen():
 
 def test_no_feedback_rows_draws_nothing():
     assert _html([]) == ""
+
+
+def test_the_share_of_commands_answered_shows_and_turns_red_below_the_low_rate():
+    good = {**_row(1, 0, "friendly", "blue"), "reply_rate": 0.97}
+    poor = {**_row(2, 0, "enemy", "yellow"), "reply_rate": 0.79}
+    html = _html([good, poor])
+    assert "fw 1 · 20 ms · 97% answered" in html
+    assert '<span class="check-fail">79% answered</span>' in html
+    assert "answered" not in _html([_row(1, 0, "friendly", "blue")])  # a run that counts none

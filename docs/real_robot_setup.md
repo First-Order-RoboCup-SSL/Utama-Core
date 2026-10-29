@@ -152,12 +152,25 @@ robot was trying to do.
 #### Running the demos
 
 `pixi run demos` (`--mode rsim` to rehearse) starts the shooting drill behind one dashboard;
-the Live tab's Demo panel switches to pass-receive, save-and-counter or score goal without
-leaving the page. Halt, pick one, Run: the robots stop, the demo closes (its log saved, the
-radio and vision released), the next one starts, its lids checked as when run alone, and the
-page reloads by itself. A demo that fails to start (a robot not found) shows why under the
+the Live tab's Demo panel switches to pass-receive, save-and-counter, score goal or teleop
+without leaving the page. Halt, pick one, Run: the robots stop, the demo closes (its log saved,
+the radio and vision released), the next one starts, its lids checked as when run alone, and
+the page reloads by itself. A demo that fails to start (a robot not found) shows why under the
 panel; pick again. The Strategy panel still switches tactics within a demo; Ctrl+C ends it.
 Calibration (`pixi run calibrate`) and `planner_ab.py` stay their own commands.
+
+- **Settings** under the list apply from the next Run: *first robot* (the drill's attacker,
+  the shooter, robot A), *camera* (the part of the field in view, `CAMERA_HALF`) and *rules*.
+  They set the examples' config blocks as editing them would, for this process only.
+- **Field check** (real robots): `pixi run field-check` without leaving the page. It stops the
+  demo, checks vision, turns each robot on the spot to find its lid, lists the lines under the
+  panel (a "!!" line in red), then starts the same demo again.
+- **Teleop** (`examples/teleop.py`): drive either robot by keyboard to place robots and the
+  ball. Pick the robot, tick "keys drive", Force Start; W/S A/D Q/E, Shift faster, B kicks, F
+  the dribbler. No rules and no goals; a robot stops when its keys are let go, on Halt, and
+  0.3 s after the page stops sending.
+- The Robots panel shows each robot's share of its commands answered over the last 2 s; under
+  80% (red) the link is poor, often a flat battery, before the robot goes silent.
 
 ### 5. Measuring a robot
 
