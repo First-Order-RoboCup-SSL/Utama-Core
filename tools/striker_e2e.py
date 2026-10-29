@@ -165,6 +165,13 @@ class E2ETactic(BaseTactic[E2EMem]):
     def highlights(self, mem: E2EMem) -> dict[RobotId, str]:
         return {self.robot_id: "e2e"}
 
+    # What the network sees and the shaping potential: a task other than the duel overrides these.
+    def observe(self, game: Game, rid: int, mem: E2EMem) -> np.ndarray:
+        return observe(game, rid, self.t0, mem.prev, mem.origin)
+
+    def potential(self, game: Game, rid: int) -> float:
+        return phi(game, rid)
+
     def tick(
         self, game: Game, ctx: TickContext, robot_ids: tuple[RobotId, ...], mem: E2EMem
     ) -> tuple[dict[RobotId, RobotCommand], E2EMem]:
@@ -178,12 +185,12 @@ class E2ETactic(BaseTactic[E2EMem]):
             cmds, mem.teacher_mem = self.teacher.tick(game, ctx, robot_ids, mem.teacher_mem)
             teacher_cmd = cmds.get(rid)
         if mem.tick % ACTION_REPEAT == 0 or mem.command is None:
-            obs = observe(game, rid, self.t0, mem.prev, mem.origin)
+            obs = self.observe(game, rid, mem)
             label = None
             if self.teacher is not None:
                 label = from_command(teacher_cmd) if teacher_cmd is not None else np.zeros(N_ACT, np.float32)
             a, logp = self.act(obs) if self.act is not None else (label, 0.0)
-            self.trajectory.append((obs, a if label is None else label, logp, phi(game, rid)))
+            self.trajectory.append((obs, a if label is None else label, logp, self.potential(game, rid)))
             mem.command, mem.prev = to_command(a), np.concatenate([np.clip(a[:3], -1, 1), a[3:]]).astype(np.float32)
         mem.tick += 1
         return {rid: mem.command}, mem

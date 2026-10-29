@@ -1,4 +1,5 @@
-"""striker_e2e_rl.py — the end-to-end attacker (`striker_e2e.py`) against the keepers: first it imitates
+"""striker_e2e_rl.py — the end-to-end attacker (`striker_e2e.py`) against the keepers, or with `--task chase`
+the end-to-end ball chaser (`chase_e2e.py`, success: the ball caught; usually from blank): first it imitates
 `striker_duel`'s high-level network (`--teacher`) from `striker_e2e record`, then refines that with
 `--dagger` rounds (the network drives, the teacher labels where it went), then it learns by PPO, like
 `striker_rl.py` but over the robot's own commands, on the GPU (the RTX 5090 only).
@@ -12,6 +13,8 @@ Writes <out>/e<k>.npz (for `striker_e2e --weights`) and <out>/ckpt.pt; the same 
 
   /workspace/FOR-Engine/.pixi/envs/sglang/bin/python tools/striker_e2e_rl.py --out replays/striker/e2e1 \\
       --teacher replays/striker/rl2/w150.npz --iterations 200
+  /workspace/FOR-Engine/.pixi/envs/sglang/bin/python tools/striker_e2e_rl.py --task chase --out replays/chase/c1 \
+      --std 0.3 --lr 3e-4 --iterations 200
 """
 
 from __future__ import annotations
@@ -31,7 +34,9 @@ import torch  # noqa: E402
 from torch import nn  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-N_OBS, N_ACT = 42, 5  # striker_e2e.N_OBS, N_ACT
+N_ACT = 5  # striker_e2e.N_ACT
+# --task: the environment module, what it shows (its N_OBS) and the outcome that scores 1.
+TASKS = {"striker": ("tools.striker_e2e", 42, "goal"), "chase": ("tools.chase_e2e", 23, "caught")}
 EVAL_SEED, BC_SEED = 9999, 777
 
 
@@ -39,9 +44,9 @@ class Policy(nn.Module):
     """As `striker_e2e.forward` reads it: speeds' means tanh of the first three outputs, then the kick
     and dribbler logits; the speeds' spread a learned `log_std`."""
 
-    def __init__(self, hidden: int, std: float):
+    def __init__(self, n_obs: int, hidden: int, std: float):
         super().__init__()
-        layers = [nn.Linear(N_OBS, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, N_ACT)]
+        layers = [nn.Linear(n_obs, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, N_ACT)]
         self.body = nn.Sequential(*layers)
         self.log_std = nn.Parameter(torch.full((3,), math.log(std)))
 
@@ -57,8 +62,8 @@ class Policy(nn.Module):
         return logp, normal.entropy().sum(-1) + coin.entropy().sum(-1)
 
 
-def critic(hidden: int) -> nn.Sequential:
-    layers = [nn.Linear(N_OBS, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 1)]
+def critic(n_obs: int, hidden: int) -> nn.Sequential:
+    layers = [nn.Linear(n_obs, hidden), nn.Tanh(), nn.Linear(hidden, hidden), nn.Tanh(), nn.Linear(hidden, 1)]
     return nn.Sequential(*layers)
 
 
@@ -70,9 +75,12 @@ def export(policy: Policy, path: Path) -> None:
     np.savez(path, **arrays)
 
 
+MODULE, SUCCESS = TASKS["striker"][0], TASKS["striker"][2]  # set from --task in main
+
+
 def e2e(mode: str, args: list[str], log_path: Path) -> None:
     env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
-    cmd = ["pixi", "run", "python", "-m", "tools.striker_e2e", mode, *args]
+    cmd = ["pixi", "run", "python", "-m", MODULE, mode, *args]
     with open(log_path, "a") as log:
         subprocess.run(cmd, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
 
@@ -113,7 +121,7 @@ def rewards(data: dict, gamma: float, foul: float) -> np.ndarray:
     r[:-1] = gamma * phi[1:] - phi[:-1]
     for i in np.nonzero(last)[0]:
         o = str(data["outcome"][episode[i]])
-        r[i] = 1.0 if o == "goal" else foul if o.startswith("stopped:") and o != "stopped:out_of_bounds" else 0.0
+        r[i] = 1.0 if o == SUCCESS else foul if o.startswith("stopped:") and o != "stopped:out_of_bounds" else 0.0
     return r
 
 
@@ -167,12 +175,14 @@ def update(policy, value, p_opt, v_opt, data, a, device, policy_too: bool) -> di
 def evaluate(path: Path, out_json: Path, a: argparse.Namespace, log: Path) -> dict:
     args = ["--weights", str(path), "--episodes", str(a.eval_episodes), "--seed", str(EVAL_SEED)]
     e2e("eval", [*args, "--workers", str(a.workers), "--out", str(out_json)], log)
-    return {k: v["goal_rate"] for k, v in json.loads(out_json.read_text()).items() if isinstance(v, dict)}
+    summary = json.loads(out_json.read_text())
+    return {k: v.get("success_rate", v.get("goal_rate")) for k, v in summary.items() if isinstance(v, dict)}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--task", choices=sorted(TASKS), default="striker", help="chase: tools/chase_e2e.py")
     parser.add_argument("--teacher", type=Path, help="striker_duel's network to imitate first; none: start blank")
     parser.add_argument("--bc-episodes", type=int, default=6000)
     parser.add_argument("--bc-epochs", type=int, default=30)
@@ -201,7 +211,9 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(0)
-    policy, value = Policy(a.hidden, a.std).to(device), critic(a.hidden).to(device)
+    global MODULE, SUCCESS
+    MODULE, n_obs, SUCCESS = TASKS[a.task]
+    policy, value = Policy(n_obs, a.hidden, a.std).to(device), critic(n_obs, a.hidden).to(device)
     p_opt = torch.optim.Adam(policy.parameters(), lr=a.lr)
     v_opt = torch.optim.Adam(value.parameters(), lr=3 * a.lr)
     start = 0
@@ -249,7 +261,7 @@ def main() -> None:
         stats = update(policy, value, p_opt, v_opt, data, a, device, policy_too=it >= a.value_warmup)
         outcomes = [str(o) for o in data["outcome"]]
         rates = {
-            k: round(float(np.mean([o == "goal" for o, kk in zip(outcomes, data["keeper"]) if kk == k])), 4)
+            k: round(float(np.mean([o == SUCCESS for o, kk in zip(outcomes, data["keeper"]) if kk == k])), 4)
             for k in sorted(set(data["keeper"].tolist()))
         }
         fouls = sum(o.startswith("stopped:") and o != "stopped:out_of_bounds" for o in outcomes) / len(outcomes)
