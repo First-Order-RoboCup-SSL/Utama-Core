@@ -206,7 +206,7 @@ def on_field(*robots: TestRobot) -> tuple[TestRobot, ...]:
 
 # With CAMERA_HALF "full", the goal the attacker shoots at: "left" (x < 0) or "right". A half
 # field's is the goal in that half. "left" since 2026-10-29: the right half's bottom is kept out.
-DRILL_GOAL = "left"
+DRILL_GOAL = "right"
 
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
 DEFENDER_TACTIC = "keeper_feed"  # see DEFENDER_TACTICS

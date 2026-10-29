@@ -139,7 +139,7 @@ def test_turn_on_spot_steers_away_from_a_wedged_teammate():
     assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
 
 
-_CARRY_SPEED, _CARRY_TURN = 0.3, 1.0  # REAL_PARAMS's
+_CARRY_SPEED, _CARRY_TURN = 0.3, 0.6  # REAL_PARAMS's
 
 
 @pytest.mark.parametrize(

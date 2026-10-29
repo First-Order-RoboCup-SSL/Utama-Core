@@ -64,8 +64,10 @@ REAL_PARAMS = RobotParams(
     MAX_SIDEWAYS_ACCELERATION=1.8,
     # Field runs 2026-10-28: holding the ball at <= 0.1 m/s and <= 1 rad/s (pass_receive,
     # passing_rally) kept it; 0.5 m/s with 2 rad/s, reversing or sideways, lost it in 0.2 s.
+    # Turn 1.0 until 2026-10-29: that day's drills lost the ball off the dribbler's side turning
+    # at 0.7-0.95 rad/s.
     CARRY_SPEED=0.3,
-    CARRY_TURN=1.0,
+    CARRY_TURN=0.6,
     # Passing rallies 2026-10-28: commanded 0.1 rad/s, a robot with the ball stood still for
     # 0.5 s; 0.2-0.28 rad/s turned it ~0.16 rad/s.
     MIN_TURN=0.3,

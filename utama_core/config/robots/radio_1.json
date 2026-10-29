@@ -17,7 +17,7 @@
   "lid": "blue 0",
   "tag": "not measured",
   "kick": "2026-10-28 rallies and drills, 33 logs, 84 kicks: 1.2 +/- 0.68 deg/cm, +2.8 +/- 1.0 deg, rms 9.1",
-  "carry": "not measured: the team's 0.3 m/s, 1 rad/s",
+  "carry": "not measured: the team's 0.3 m/s, 0.6 rad/s",
   "kick_speed": "kick speed 2026-10-28 logs, 92 full kicks on the dribbler: median 1.31 m/s (IQR 0.47-1.68); slow to recharge: median 0.41 m/s within 15 s of its last kick, 1.29 after 15-30 s",
   "ir": "broken 2026-10-29: reads 'has ball' all the time; has_ball judged from vision"
  }

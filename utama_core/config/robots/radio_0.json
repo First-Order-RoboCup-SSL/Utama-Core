@@ -17,7 +17,7 @@
   "lid": "yellow 0",
   "tag": "calibrate-tag 2026-10-28 22:33 (spins): 0.0 cm forward, -0.2 cm left",
   "kick": "2026-10-28 rallies and drills, 21 logs, 55 kicks: 4.19 +/- 0.56 deg/cm, +2.7 +/- 0.9 deg, rms 5.9 (bias includes the tag's -3.5 deg heading)",
-  "carry": "not measured: the team's 0.3 m/s, 1 rad/s",
+  "carry": "not measured: the team's 0.3 m/s, 0.6 rad/s",
   "kick_speed": "kick speed 2026-10-28 logs, 103 full kicks on the dribbler: median 2.19 m/s (IQR 1.80-2.46); about the same 1 s or 30 s after its last kick"
  }
 }
