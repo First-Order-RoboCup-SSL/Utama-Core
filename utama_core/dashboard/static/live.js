@@ -259,6 +259,50 @@
       });
   }
 
+  // Which demo the process plays, when it is examples/demos.py (dashboard/views/demo.py): a list
+  // and Run. Polled: a new demo started (its `generation`) reloads the page, so the field,
+  // referee and strategy panels are the new demo's.
+  function mountDemo() {
+    let generation = null;
+    let built = false;
+    const DEMO_POLL_MS = 1000;
+    function poll() {
+      fetch("/demo/config")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((c) => {
+          if (!c) return; // not demos.py: no panel, no polling
+          if (generation !== null && c.generation !== generation) return location.reload();
+          generation = c.generation;
+          if (!built) {
+            built = true;
+            const select = document.getElementById("demo-choice");
+            select.innerHTML = c.choices
+              .map((n) => `<option${n === c.running ? " selected" : ""}>${n}</option>`)
+              .join("");
+            document.getElementById("demo-run-btn").addEventListener("click", () => {
+              const name = select.value;
+              fetch("/demo/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name }),
+              })
+                .then((r) => (r.ok ? null : r.text().then((t) => showSendError(name, t || "HTTP " + r.status))))
+                .catch((err) => showSendError(name, err.message || "no connection"));
+            });
+            document.getElementById("demo-run").style.display = "";
+          }
+          const status = document.getElementById("demo-status");
+          status.className = c.error ? "check-fail" : "muted";
+          status.textContent = c.switching
+            ? "starting " + c.switching + "…"
+            : c.error || (c.running ? "running " + c.running : "");
+          setTimeout(poll, DEMO_POLL_MS);
+        })
+        .catch(() => setTimeout(poll, DEMO_POLL_MS)); // the process restarting: keep asking
+    }
+    poll();
+  }
+
   function mountNote() {
     const input = document.getElementById("log-note");
     document.getElementById("log-note-row").style.display = "";
@@ -276,6 +320,7 @@
   }
 
   function mount() {
+    mountDemo();
     mountStrategy();
     fetch("/referee/config")
       .then((r) => (r.ok ? r.json() : null))

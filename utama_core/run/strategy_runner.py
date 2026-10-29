@@ -361,6 +361,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
         self._stop_event = threading.Event()
+        self._serial_port = None  # real robots: the radio, closed by `close()` for the next runner
         self._vision_receiver: Optional[VisionReceiver] = None
         self.vision_stream: Optional[RSimVisionStreamServer] = None
         self._vision_stream_renderer: Optional[GameFrameRenderer] = None
@@ -676,6 +677,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                         f"vision_to_cmd_mapping for friendly and opponent teams cannot have overlapping command IDs since commands are transmitted together; duplicate command ID: {v}."
                     )
                 seen.add(v)
+
+    def stop(self) -> None:
+        """Ends `run()` after the current tick, from another thread (`examples/demos.py`)."""
+        self._stop_event.set()
 
     def _handle_sigint(self, sig, frame):
         if self._stop_event.is_set():
@@ -1040,6 +1045,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             )
         self._pending_strategies[side] = (strategy, name)
 
+    @property
+    def halted(self) -> bool:
+        """Whether the game is in a HALT (safe from any thread: reads the last frame)."""
+        return self._halted(self.my)
+
     @staticmethod
     def _halted(runtime: SideRuntime) -> bool:
         referee = runtime.game.referee if runtime.game is not None else None
@@ -1256,6 +1266,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 n_friendly=self.exp_friendly,
                 vision_to_cmd_mapping=my_viz_to_cmd_mapping,
             )
+            self._serial_port = my_robot_controller.serial_port
             if self.opp:
                 serial = my_robot_controller.serial_port  # share serial connection for efficiency
                 opp_robot_controller = RealRobotController(
@@ -1605,6 +1616,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.replay_writer.close()
         if getattr(self, "game_log", None) is not None:
             self.game_log.close()  # after the stop commands, so they are in the log
+        if getattr(self, "_serial_port", None) is not None:
+            self._serial_port.close()  # so another runner in this process can open it
+        self._stop_event.set()  # the vision thread stops and closes its socket
         if self.vision_stream:
             self.vision_stream.stop()
         if self.rsim_env:

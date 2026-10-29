@@ -149,6 +149,16 @@ a note whenever a robot's row in the Tactics panel changes (its tactic and step,
 `referee · ball placement · placer` while a restart drives it), so the log also says what each
 robot was trying to do.
 
+#### Running the demos
+
+`pixi run demos` (`--mode rsim` to rehearse) starts the shooting drill behind one dashboard;
+the Live tab's Demo panel switches to pass-receive, save-and-counter or score goal without
+leaving the page. Halt, pick one, Run: the robots stop, the demo closes (its log saved, the
+radio and vision released), the next one starts, its lids checked as when run alone, and the
+page reloads by itself. A demo that fails to start (a robot not found) shows why under the
+panel; pick again. The Strategy panel still switches tactics within a demo; Ctrl+C ends it.
+Calibration (`pixi run calibrate`) and `planner_ab.py` stay their own commands.
+
 ### 5. Measuring a robot
 
 **Which robot is which.** A robot is its radio ID: the radio board stays with its motors,

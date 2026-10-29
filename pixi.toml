@@ -63,6 +63,7 @@ debug-robots = "python -m utama_core.team_controller.src.debug_utils.telop_gui"
 calibrate = "python examples/calibrate_robot.py"
 find-robots = "python -m utama_core.team_controller.src.controllers.real.find_robots"
 field-check = "python tools/field_check.py"
+demos = "python examples/demos.py"
 precommit-install = "pre-commit install && pixi run pre-commit install --hook-type pre-commit"
 precommit-uninstall = "pre-commit uninstall"
 

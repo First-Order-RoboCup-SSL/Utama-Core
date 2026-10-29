@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import time
+from typing import Optional
 
 from shooting_drill import (
     CAMERA_HALF,
@@ -44,7 +45,7 @@ from shooting_drill import (
 )
 
 from utama_core.custom_referee import CustomReferee
-from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -61,7 +62,9 @@ SHOOTER = RADIO_0
 # ---------------------------------------------------------------------------
 
 
-def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyRunner:
+def build_runner(
+    mode: str, tactics=None, name: str = "score_goal", server: Optional[DashboardServer] = None
+) -> StrategyRunner:
     """The robot plays `tactics[next(iter(tactics))]`; the Strategy panel switches among `tactics`
     ({name: tactic class}, default this example's shooter). `name` tags the recorded log."""
     tactics = tactics or {"shoot": LeadAndSupportTactic}
@@ -73,7 +76,7 @@ def build_runner(mode: str, tactics=None, name: str = "score_goal") -> StrategyR
 
     profile = _referee_profile(kickoff=shooter.colour)
     referee = CustomReferee(profile, n_robots_yellow=int(is_yellow), n_robots_blue=int(not is_yellow))
-    server = attach_dashboard(port=DASHBOARD_PORT)
+    server = server or attach_dashboard(port=DASHBOARD_PORT)  # `demos.py` passes its own
     referee_view.attach(server, referee, profile)
 
     game_log = f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{mode}_{name}.log" if RECORD and real else None

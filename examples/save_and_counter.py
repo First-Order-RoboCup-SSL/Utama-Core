@@ -53,7 +53,7 @@ from shooting_drill import (
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee import CustomReferee
-from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.engine.context import TickContext
@@ -233,7 +233,7 @@ def _still():
 TACTICS = {"save_and_counter": KeepOrAttackTactic, "still": _still}
 
 
-def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
+def build_runner(mode: str, port: int = DASHBOARD_PORT, server: Optional[DashboardServer] = None) -> StrategyRunner:
     real = mode == "real"
     robot_a, robot_b = on_field(ROBOT_A, ROBOT_B) if real else (ROBOT_A, ROBOT_B)
     a_is_yellow = robot_a.colour == "yellow"
@@ -246,7 +246,7 @@ def build_runner(mode: str, port: int = DASHBOARD_PORT) -> StrategyRunner:
 
     profile = _referee_profile(kickoff=robot_a.colour)
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
-    server = attach_dashboard(port=port)
+    server = server or attach_dashboard(port=port)  # `demos.py` passes its own
     referee_view.attach(server, referee, profile)
 
     game_log = (

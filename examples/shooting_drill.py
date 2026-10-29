@@ -74,7 +74,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RulesConfig,
     load_profile,
 )
-from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
@@ -308,7 +308,9 @@ def no_rules_referee(n_yellow: int, n_blue: int) -> CustomReferee:
     return CustomReferee(_referee_profile(rules_on=False, goals=False), n_robots_yellow=n_yellow, n_robots_blue=n_blue)
 
 
-def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
+def build_runner(
+    mode: str, calibrate: Optional[str] = None, server: Optional[DashboardServer] = None
+) -> StrategyRunner:
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
     attacker, defender = on_field(ATTACKER, DEFENDER) if real else (ATTACKER, DEFENDER)
@@ -328,7 +330,7 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
 
     profile = _referee_profile(kickoff=attacker.colour)
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
-    server = attach_dashboard(port=DASHBOARD_PORT)
+    server = server or attach_dashboard(port=DASHBOARD_PORT)  # `demos.py` passes its own
     referee_view.attach(server, referee, profile)
 
     attacker_tactic, defender_tactic = ATTACKER_TACTICS[ATTACKER_TACTIC], DEFENDER_TACTICS[DEFENDER_TACTIC]
