@@ -66,6 +66,15 @@ def test_a_robot_lost_by_vision_fails_only_after_the_grace_period():
     assert _row(fc.rows(VISION_LOST_S + 0.01), "yellow 1")["status"] == "fail"
 
 
+def test_a_robot_lost_for_a_fifth_of_a_second_does_not_halt_the_run():
+    # 2026-10-28: "lost by vision 0.2 s ago" auto-HALTed blue 0 mid-run; 2026-10-29, at a 0.1 s
+    # limit, every calibration halted within 0.2 s of starting.
+    fc = _check()
+    fc.observe_vision([_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    fc.observe_vision([_frame()], now=0.2)
+    assert _row(fc.rows(0.2), "yellow 1")["status"] == "ok"
+
+
 @pytest.mark.parametrize(
     "x, status",
     [
