@@ -204,6 +204,10 @@ def on_field(*robots: TestRobot) -> tuple[TestRobot, ...]:
     return robots
 
 
+# With CAMERA_HALF "full", the goal the attacker shoots at: "left" (x < 0) or "right". A half
+# field's is the goal in that half. "left" since 2026-10-29: the right half's bottom is kept out.
+DRILL_GOAL = "left"
+
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
 DEFENDER_TACTIC = "keeper_feed"  # see DEFENDER_TACTICS
 
@@ -330,8 +334,13 @@ def build_runner(
     attacker_is_yellow = attacker.colour == "yellow"
 
     # The defender's goal is the one in the camera's half, so the attacker's own goal
-    # is on the other side. With the full field, the attacker attacks the right goal.
-    attacker_is_right = CAMERA_HALF == "left"
+    # is on the other side. With the full field, the attacker attacks DRILL_GOAL.
+    if CAMERA_HALF == "full":
+        if DRILL_GOAL not in ("left", "right"):
+            raise ValueError(f"DRILL_GOAL must be 'left' or 'right', got {DRILL_GOAL!r}")
+        attacker_is_right = DRILL_GOAL == "left"
+    else:
+        attacker_is_right = CAMERA_HALF == "left"
 
     attacker_map = {attacker.vision_id: attacker.firmware_id}
     defender_map = {defender.vision_id: defender.firmware_id}
