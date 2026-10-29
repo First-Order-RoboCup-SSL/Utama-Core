@@ -9,12 +9,15 @@
   "tag_forward_m": 0.0,
   "tag_left_m": 0.0,
   "carry_speed": null,
-  "carry_turn": null
+  "carry_turn": null,
+  "kick_speed": 1.31,
+  "kick_spread_deg": 9.1
  },
  "calibrated": {
   "lid": "blue 0",
   "tag": "not measured",
   "kick": "2026-10-28 rallies and drills, 33 logs, 84 kicks: 1.2 +/- 0.68 deg/cm, +2.8 +/- 1.0 deg, rms 9.1",
-  "carry": "not measured: the team's 0.3 m/s, 1 rad/s"
+  "carry": "not measured: the team's 0.3 m/s, 1 rad/s",
+  "kick_speed": "kick speed 2026-10-28 logs, 92 full kicks on the dribbler: median 1.31 m/s (IQR 0.47-1.68); slow to recharge: median 0.41 m/s within 15 s of its last kick, 1.29 after 15-30 s"
  }
 }

@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 from typing import List, Optional, Tuple
 
@@ -25,6 +26,7 @@ from utama_core.rsoccer_simulator.src.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.rsoccer_simulator.src.Utils import KDTree
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.real_kick import RealKicks
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import (
     CommandDelay,
     KickAngleNoise,
@@ -170,6 +172,8 @@ class SSLStandardEnv(SSLBaseEnv):
         self._kick_noise: Optional[KickSpeedNoise] = None
         self._kick_angle: Optional[KickAngleNoise] = None
         self._motion_limits: Optional[MotionLimits] = None
+        # Our robots' kickers as calibrated, by (colour, id); set by StrategyRunner from robot profiles.
+        self.real_kicks: Optional[RealKicks] = None
         self._noise_rng = None  # None: `gaussian_noise`/`vanishing` use the global RNG, as before
         if sim_noise is not None:
             assert gaussian_noise == RsimGaussianNoise() and not vanishing, "pass vision noise in sim_noise only"
@@ -221,6 +225,8 @@ class SSLStandardEnv(SSLBaseEnv):
             self._kick_noise.reset()
         if self._kick_angle is not None:
             self._kick_angle.reset()
+        if self.real_kicks is not None:
+            self.real_kicks.reset()
         return super().reset(seed=seed, options=options)
 
     def step(self, action):
@@ -381,6 +387,8 @@ class SSLStandardEnv(SSLBaseEnv):
         return commands
 
     def _kick_direction(self, colour: str, robot_id: int, kicking: bool) -> float:
+        if self.real_kicks is not None and (colour, robot_id) in self.real_kicks:
+            return -self.real_kicks.angle((colour, robot_id), kicking, self._ball_left(colour, robot_id))
         if self._kick_angle is not None:
             return self._kick_angle.angle(colour, robot_id, kicking)
         return 0.0
@@ -392,7 +400,17 @@ class SSLStandardEnv(SSLBaseEnv):
             )
             self._motion_limits.apply(colour, cmd.id, cmd, robots[cmd.id])
 
+    def _ball_left(self, colour: str, robot_id: int) -> float:
+        """How far the ball sits left of the robot's centre line (m, our frame: the sim's y and
+        headings are mirrored)."""
+        robot = (self.frame.robots_yellow if colour == "team_yellow" else self.frame.robots_blue)[robot_id]
+        heading = -math.radians(robot.theta)
+        dx, dy = self.frame.ball.x - robot.x, -(self.frame.ball.y - robot.y)
+        return -math.sin(heading) * dx + math.cos(heading) * dy
+
     def _kick_speed(self, colour: str, robot_id: int, kicking: bool) -> float:
+        if kicking and self.real_kicks is not None and (colour, robot_id) in self.real_kicks:
+            return self.real_kicks.speed((colour, robot_id), RSIM_PARAMS.KICK_SPD)
         if self._kick_noise is not None:
             return self._kick_noise.speed(colour, robot_id, kicking, RSIM_PARAMS.KICK_SPD)
         return RSIM_PARAMS.KICK_SPD if kicking else 0.0

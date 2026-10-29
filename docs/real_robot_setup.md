@@ -49,6 +49,19 @@ vision laptop (Linux)                      robot laptop (Windows + WSL)
 
 ## Each test day
 
+Once the network, vision and radio below are set up, one command checks them all at the start of
+a session:
+
+```
+pixi run field-check          # radios 0 to 7; --radios 0 1 for fewer
+```
+
+It listens to vision for 2 s (cameras and their packets per second, field size, ball, lids in
+view), then finds the robots (`find-robots`, below): each one's radio, lid, share of its commands
+answered (under 80%: range, interference or a flat battery) and whether its profile was
+calibrated on that lid. Each line starts "ok" or "!!". It cannot see batteries: the robots do not
+report them. The steps below are what to do when a line says "!!".
+
 ### 1. Network
 
 Both laptops on the same network, by Ethernet to one switch or router if possible: many Wi-Fi
@@ -150,10 +163,12 @@ Each radio that answers turns about 70° on the spot and back (keep 15 cm clear 
 robots), and the pattern that turned with it is its lid. It prints radio, lid and whether the
 profile was calibrated on that lid (a profile's tag offset is its lid's: calibrate again after a
 swap), and the radios that did not answer and patterns no radio turned. The pairing is saved on
-this machine (`replays/field/robots_found.json`); the examples take each robot's colour and
-pattern from it on real robots (`shooting_drill.on_field`), so no vision ID or colour is written
-by hand. The robots an example uses are chosen by radio (`RADIO_0`, `RADIO_1` in
-`shooting_drill.py`), one per colour.
+this machine (`replays/field/robots_found.json`). The robots an example uses are chosen by radio
+(`RADIO_0`, `RADIO_1` in `shooting_drill.py`), one per colour, and no vision ID or colour is
+written by hand: on real robots an example starts by watching vision for 0.5 s (nothing moves).
+With each robot's saved lid in view it uses them; otherwise (never run here, a lid missing) it
+finds those robots again first (`find_robots.confirm`). It cannot tell two robots in use that
+swapped lids with each other, as both lids stay in view: run `find-robots` after such a swap.
 
 One command measures a robot and writes its profile:
 
@@ -164,7 +179,8 @@ pixi run calibrate --radio 0 --ball-only   # the ball part again, no driving
 pixi run calibrate --radio 0 --check       # the new profile against the committed one
 ```
 
-Without both `--robot colour:id` and `--radio` it runs `find-robots` first.
+Without both `--robot colour:id` and `--radio` it looks the robot up: with `--radio`, as the
+examples do; with neither, by `find-robots`.
 
 No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
 it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
@@ -192,8 +208,22 @@ which every example reads (`load_profile`). Nothing to copy by hand:
 - `kick_bend_deg_per_cm`, `kick_bias_deg`: how far its kicks leave the heading per cm the ball
   sat off-centre, and with it centred, fitted together. The heading is the tag's, so a tag stuck
   on turned (yellow 0's reads 3.5° clockwise) shows in the bias: no straight edge needed.
+- `kick_speed`, `kick_spread_deg`: those kicks' median ball speed, and how far they scatter
+  about bias and bend (the fit's rms).
 - `carry_speed`, `carry_turn`: the carry ladder's slowest direction, the fastest speed it kept
   the ball every time; `move()` holds this robot to them (`RobotParams.CARRY_*` otherwise).
+
+rsim kicks a robot given its profile as it measured (`real_kick.py`): at its kick speed, off its
+heading by its bias and bend, scattered by its spread, and passes and shots aim against bend and
+bias there too. So an example rehearsed in rsim (`--mode rsim`) kicks like the robot on the field.
+Matches without profiles (the strategy evaluation) keep the sim's own kick.
+
+**Kicker charge in play.** On real robots a robot that has not kicked for 25 s fires an empty
+kick, when the ball is neither on it (ball sensor) nor within 30 cm (vision), and never in a HALT
+(`kicker_charge.py`); so does each robot at its first chance after a HALT. 2026-10-28's kicks:
+yellow 0 (radio 0) kicked about 2.2 m/s 1 s or 30 s after its last kick, 1.96 after longer; blue 0
+(radio 1) recharges far slower than 1 s, a median 0.41 m/s within 15 s of its last kick and 1.29
+after 15-30 s. Have the electronics team look at radio 1's charging.
 
 What it could not measure stays as it was; hardware that breaks (`kicker`, `dribbler`, `ir`) is
 set in the file by hand. `--mode rsim --yes` rehearses it in the simulator (its dribbler holds at

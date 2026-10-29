@@ -49,7 +49,8 @@ class RobotProfile:
 
     `kick_bend_deg_per_cm`: how far its kick leaves the heading towards the side the ball
     sits on the dribbler, per cm the ball is off-centre. Passes and shots aim against it
-    (`kick_bend`), on real robots only: the simulators kick along the heading.
+    (`kick_bend`), on real robots and in rsim, which kicks a profiled robot so (`real_kick.py`);
+    grSim kicks along the heading.
 
     `kick_bias_deg`: how far its kick leaves the heading vision reports with the ball centred,
     anticlockwise + (a kicker, or a tag stuck on turned); aimed against with the bend. Fitted
@@ -59,8 +60,12 @@ class RobotProfile:
     robot's centre (from its turns on the spot). Vision is corrected by them on real robots only
     (`PositionRefiner`); a tag is a sticker, measured once per lid.
 
+    `kick_speed`: its kick's ball speed (m/s, the median of its kicks); `kick_spread_deg`: how far
+    its kicks scatter about bias and bend (rms of the fit). rsim kicks a profiled robot so. None:
+    not measured, the sim's speed and no scatter.
+
     `carry_speed`, `carry_turn`: the fastest it carries the ball, m/s and rad/s, from its carry
-    ladder; `move()` holds it to them on real robots. None: the team's (`RobotParams.CARRY_*`).
+    ladder; `move()` holds it to them. None: the team's (`RobotParams.CARRY_*`).
 
     `pixi run calibrate` measures all but the first three and writes them to the robot's profile
     file (`load_profile`).
@@ -75,6 +80,8 @@ class RobotProfile:
     tag_left_m: float = 0.0
     carry_speed: Optional[float] = None
     carry_turn: Optional[float] = None
+    kick_speed: Optional[float] = None
+    kick_spread_deg: Optional[float] = None
 
 
 # One file per robot, by radio ID: `pixi run calibrate` writes it, every script reads it.

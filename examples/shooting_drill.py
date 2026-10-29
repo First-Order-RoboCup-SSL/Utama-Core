@@ -96,7 +96,7 @@ from utama_core.team_controller.src.controllers.common.robot_profile import (
     load_profile as robot_profile,
 )
 from utama_core.team_controller.src.controllers.real.find_robots import (
-    on_field as found_lids,
+    confirm as confirm_lids,
 )
 
 # The keeper kicks the ball back within this of the attacker's direction: at 1.5 m the ball
@@ -170,10 +170,10 @@ class TestRobot(NamedTuple):
 
 
 # Our robots, by radio ID: the radio stays with the robot, the lid (colour and pattern) can be
-# swapped. On real robots the lids are the ones `pixi run find-robots` last found (`on_field`);
-# those written here are for the simulators, and for a machine where it never ran. Each one's
-# profile is its own file, `utama_core/config/robots/radio_<radio id>.json`, written by
-# `pixi run calibrate`; hardware that breaks (kicker, dribbler, ir) is set there by hand.
+# swapped. On real robots each one's lid is looked up when an example starts (`on_field`); those
+# written here are for the simulators. Each one's profile is its own file,
+# `utama_core/config/robots/radio_<radio id>.json`, written by `pixi run calibrate`; hardware that
+# breaks (kicker, dribbler, ir) is set there by hand.
 RADIO_0 = TestRobot(vision_id=0, firmware_id=0, profile=robot_profile(0), colour="yellow")
 RADIO_1 = TestRobot(vision_id=0, firmware_id=1, profile=robot_profile(1), colour="blue")
 
@@ -183,23 +183,13 @@ DEFENDER = RADIO_1
 
 
 def on_field(*robots: TestRobot) -> tuple[TestRobot, ...]:
-    """`robots` wearing the lids `pixi run find-robots` last found them in on this machine. Two
-    robots must wear different colours (one per team)."""
-    when, lids = found_lids()
-    if when is None:
-        print("pixi run find-robots has never run here: the lids are those written in shooting_drill.py.")
-    else:
-        missing = [r.firmware_id for r in robots if r.firmware_id not in lids]
-        if missing:
-            raise SystemExit(
-                f"Radio {', '.join(map(str, missing))} was not on the field when find-robots ran ({when}): "
-                "switch it on and run `pixi run find-robots`."
-            )
-        robots = tuple(r._replace(colour=lids[r.firmware_id][0], vision_id=lids[r.firmware_id][1]) for r in robots)
-        found = ", ".join(f"radio {r.firmware_id} {r.colour} {r.vision_id}" for r in robots)
-        print(f"Lids as find-robots found them ({when}): {found}. Swapped since? Run it again.")
+    """`robots` wearing the lids they wear now: those `pixi run find-robots` saved when all are in
+    view, else found again (`find_robots.confirm`). Two robots must wear different colours (one
+    per team)."""
+    lids = confirm_lids([r.firmware_id for r in robots])
+    robots = tuple(r._replace(colour=lids[r.firmware_id][0], vision_id=lids[r.firmware_id][1]) for r in robots)
     if len(robots) == 2 and robots[0].colour == robots[1].colour:
-        raise SystemExit(f"Both robots wear {robots[0].colour} lids: one per colour; swap a lid, then find-robots.")
+        raise SystemExit(f"Both robots wear {robots[0].colour} lids: one per colour; swap a lid.")
     return robots
 
 

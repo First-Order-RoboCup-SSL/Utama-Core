@@ -58,6 +58,7 @@ from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.real_kick import RealKick, RealKicks
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.field_check import LOOP_STALL_S, FieldCheck
@@ -947,6 +948,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 vanishing=rsim_vanishing,
                 sim_noise=sim_noise,
             )
+            rsim_env.real_kicks = self._real_kicks(sim_noise)
 
             if self.opp:
                 self.opp.strategy.load_rsim_env(rsim_env)
@@ -1292,10 +1294,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
 
+    def _real_kicks(self, sim_noise: Optional[SimNoise]) -> Optional[RealKicks]:
+        """rsim's kicks for the robots given profiles that measured their kick (a rehearsal); None
+        when none did, as in the evaluation's matches."""
+        kicks = {
+            (f"team_{colour}", rid): kick
+            for colour, profiles in (("yellow", self.yellow_robot_profiles), ("blue", self.blue_robot_profiles))
+            for rid, profile in profiles.items()
+            if (kick := RealKick.of(profile)) is not None
+        }
+        return RealKicks(kicks, seed=sim_noise.seed if sim_noise is not None else 0) if kicks else None
+
     def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
-        """`team`'s motion controller, with its real robots' kick bends, biases and carry caps (`RobotProfile`)."""
+        """`team`'s motion controller, with its profiled robots' kick bends, biases (real robots and
+        rsim, which kicks them so) and carry caps (`RobotProfile`)."""
         controller = team.motion_controller(self.mode, self.rsim_env)
-        if self.mode == Mode.REAL:
+        if self.mode in (Mode.REAL, Mode.RSIM):
             controller.kick_bend = {
                 rid: math.radians(p.kick_bend_deg_per_cm) * 100.0
                 for rid, p in profiles.items()
@@ -1304,14 +1318,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             controller.kick_bias = {
                 rid: math.radians(p.kick_bias_deg) for rid, p in profiles.items() if p.kick_bias_deg
             }
-            controller.robot_carry = {
-                rid: (
-                    controller.carry_speed if p.carry_speed is None else p.carry_speed,
-                    controller.carry_turn if p.carry_turn is None else p.carry_turn,
-                )
-                for rid, p in profiles.items()
-                if p.carry_speed is not None or p.carry_turn is not None
-            }
+        controller.robot_carry = {
+            rid: (
+                controller.carry_speed if p.carry_speed is None else p.carry_speed,
+                controller.carry_turn if p.carry_turn is None else p.carry_turn,
+            )
+            for rid, p in profiles.items()
+            if p.carry_speed is not None or p.carry_turn is not None
+        }
         return controller
 
     def _driven_ids(self, is_yellow: bool) -> set[int]:

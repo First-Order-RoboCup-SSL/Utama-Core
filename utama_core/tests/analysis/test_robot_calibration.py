@@ -244,18 +244,23 @@ def test_the_referee_record_reads_back_as_the_same_referee_data(tmp_path):
     assert back.blue_team_on_positive_half is True and back.next_command == RefereeCommand.FORCE_START
 
 
-def _kick(left_cm: float, offset_deg: float) -> dict:
-    return {"chip": False, "ball_left_cm": left_cm, "direction_offset_deg": offset_deg}
+def _kick(left_cm: float, offset_deg: float, speed: float = 2.0) -> dict:
+    return {"chip": False, "ball_left_cm": left_cm, "direction_offset_deg": offset_deg, "ball_speed": speed}
 
 
 def test_the_kick_bend_and_bias_are_fitted_together_over_kicks_on_the_dribbler():
     kicks = [_kick(x, 2.0 + 4.5 * x) for x in (-2.0, -1.0, -0.5, 0.5, 1.0, 2.0)]
-    kicks += [_kick(5.0, 90.0), _kick(1.0, None), {**_kick(1.0, 40.0), "chip": True}]  # off it, unmeasured, a chip
+    kicks += [
+        _kick(5.0, 90.0, 0.3),
+        _kick(1.0, None, 0.3),
+        {**_kick(1.0, 40.0, 0.3), "chip": True},
+    ]  # off it, unmeasured, a chip
 
     bend = kick_bend(kicks)
 
     assert bend["deg_per_cm"] == pytest.approx(4.5) and bend["bias_deg"] == pytest.approx(2.0)
     assert bend["kicks"] == 6 and bend["rms_deg"] == 0.0 and bend["bias_se_deg"] == 0.0
+    assert bend["speed"] == 2.0  # the median of the fitted kicks only: not the chip or the one off the dribbler
 
 
 def test_kicks_all_from_one_spot_on_the_dribbler_give_no_bend():

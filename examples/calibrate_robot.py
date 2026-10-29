@@ -8,9 +8,10 @@ Run:
     pixi run calibrate --radio 0 --check       # is the new profile better?
     pixi run calibrate --mode rsim --yes       # rehearse it in the simulator
 
-Without both `--robot colour:id` (its lid's pattern) and `--radio`, it first finds the robots
-on the field (`find_robots.py`: each radio that answers turns a little on the spot and back) and
-takes the robot on `--radio`, the only one, or the one you pick. It waits until vision sees the robot, then asks you once to put it near the middle of the
+Without both `--robot colour:id` (its lid's pattern) and `--radio`, it looks the robot up
+(`find_robots.py`): with `--radio`, the lid last found for it if that is in view; otherwise it finds
+the robots on the field (each radio that answers turns a little on the spot and back) and takes
+the robot wearing `--robot`, the only one, or the one you pick. It waits until vision sees the robot, then asks you once to put it near the middle of the
 camera's view facing +x (0.8 m clear ahead, 0.6 m to its left) with a ball at rest in view.
 It plays fixed moves first (`tactics/scripted_moves.py`, `CALIBRATION_SCRIPT`): about 65 s of
 driving and turning, its turns on the spot also showing where its tag sits. Then the ball part
@@ -296,10 +297,15 @@ def measured_profile(
         changes.update(tag_forward_m=round(tag["tag_forward_m"], 3), tag_left_m=round(tag["tag_left_m"], 3))
         notes["tag"] = f"{len(tag['spins'])} turns on the spot"
     if bend is not None:
-        changes.update(kick_bend_deg_per_cm=round(bend["deg_per_cm"], 1), kick_bias_deg=round(bend["bias_deg"], 1))
+        changes.update(
+            kick_bend_deg_per_cm=round(bend["deg_per_cm"], 1),
+            kick_bias_deg=round(bend["bias_deg"], 1),
+            kick_speed=bend["speed"],
+            kick_spread_deg=bend["rms_deg"],
+        )
         notes["kick"] = (
             f"{bend['kicks']} kicks: {bend['deg_per_cm']} +/- {bend['deg_per_cm_se']} deg/cm, "
-            f"{bend['bias_deg']:+} +/- {bend['bias_se_deg']} deg, rms {bend['rms_deg']}"
+            f"{bend['bias_deg']:+} +/- {bend['bias_se_deg']} deg, rms {bend['rms_deg']}, {bend['speed']} m/s"
         )
     speed, turn = carry_caps(kept)
     if speed is not None:
@@ -450,6 +456,9 @@ def choose_robot(args) -> None:
         args.radio = 0 if args.radio is None else args.radio
         return
     if args.robot is not None and args.radio is not None:
+        return
+    if args.radio is not None:
+        args.robot = find_robots.confirm([args.radio])[args.radio]
         return
     print("Finding the robots on the field: each one that answers turns a little and back ...")
     found = find_robots.find()

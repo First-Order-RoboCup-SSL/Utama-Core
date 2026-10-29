@@ -98,3 +98,40 @@ def test_the_report_says_when_a_robot_wears_another_lid_than_its_profiles(tmp_pa
     assert "calibrated on lid yellow 4" in text
     assert "No answer from radio 2" in text and "no radio turned: blue 3" in text
     json.dumps(found)  # saveable as is
+
+
+def _finder(field):
+    def finder(radios):
+        return fr.find(radios, controller=field, sock=object(), clock=field.clock, sleep=field.sleep)
+
+    return finder
+
+
+def _never_called(*_):
+    raise AssertionError("no find when the saved lids are in view")
+
+
+def test_confirm_keeps_the_saved_pairing_while_its_lids_are_in_view(tmp_path):
+    path = fr.save(
+        {"time": "t", "robots": [{"radio": 0, "lid": ["yellow", 0]}, {"radio": 1, "lid": ["blue", 0]}]},
+        tmp_path / "found.json",
+    )
+    lids = fr.confirm([0, 1], path, look=lambda: {("yellow", 0), ("blue", 0), ("blue", 3)}, finder=_never_called)
+    assert lids == {0: ("yellow", 0), 1: ("blue", 0)}
+
+
+@pytest.mark.parametrize("saved", [True, False])
+def test_confirm_finds_again_when_a_saved_lid_is_not_in_view_or_it_never_ran(tmp_path, field, saved):
+    path = tmp_path / "found.json"
+    if saved:
+        fr.save({"time": "t", "robots": [{"radio": 0, "lid": ["yellow", 4]}]}, path)
+
+    lids = fr.confirm([0, 1], path, look=lambda: {("yellow", 0), ("blue", 0)}, finder=_finder(field))
+
+    assert lids == {0: ("yellow", 0), 1: ("blue", 0)}
+    assert fr.on_field(path)[1] == lids  # saved for next time
+
+
+def test_confirm_stops_when_a_radio_is_not_found(tmp_path, field):
+    with pytest.raises(SystemExit, match="Radio 2 not found"):
+        fr.confirm([0, 2], tmp_path / "found.json", look=set, finder=_finder(field))

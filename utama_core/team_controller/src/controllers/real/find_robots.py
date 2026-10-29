@@ -46,6 +46,8 @@ TURN_SPEED = 2.0  # rad/s
 TURN_S = 0.6  # about 1.2 rad with the robot's acceleration and delay
 SETTLE_S = 0.4  # still after a turn, for the heading to settle and vision to catch up
 TURN_RAD = 0.5  # a lid whose heading turned at least this much is the probed robot's
+LOW_REPLY_RATE = 0.8  # a robot answering fewer of its commands than this has a poor radio link
+LOOK_S = 0.5  # how long `confirm` watches vision for the saved lids
 _STILL = RobotCommand(0.0, 0.0, 0.0, kick=False, chip=False, dribble=False)
 
 Lid = tuple[str, int]  # (colour, vision id)
@@ -100,6 +102,8 @@ class _Probe:
         self.controller, self.sock, self.clock, self.sleep = controller, sock, clock, sleep
         self.seen: set[Lid] = set()  # every lid seen while probing
         self.current: Optional[int] = None  # the radio being probed
+        self.sent: dict[int, int] = {}  # radio -> commands sent to it
+        self.replies: dict[int, int] = {}  # radio -> replies from it
 
     def hold(self, radio: int, command: RobotCommand, seconds: float) -> tuple[dict[Lid, list[float]], set[int]]:
         lids: dict[Lid, list[float]] = {}
@@ -110,7 +114,10 @@ class _Probe:
         while self.clock() < end:
             self.controller.add_robot_commands(command, radio)
             self.controller.send_robot_commands()
-            answered |= {r.id for r in self.controller.get_robots_responses()}
+            replied = {r.id for r in self.controller.get_robots_responses()}
+            answered |= replied
+            self.sent[radio] = self.sent.get(radio, 0) + 1
+            self.replies[radio] = self.replies.get(radio, 0) + (radio in replied)
             read_lids(self.sock, lids)
             self.sleep(TICK_S)
         self.seen |= lids.keys()
@@ -127,6 +134,7 @@ class _Probe:
         after, _ = self.hold(radio, _STILL, SETTLE_S)
         self.hold(radio, turn._replace(angular_vel=-TURN_SPEED), TURN_S)  # back to about where it was
         self.hold(radio, _STILL, SETTLE_S)
+        row["reply_rate"] = round(self.replies[radio] / self.sent[radio], 2)
         turned, _ = which_turned(before, after)
         row["turned"] = [f"{c} {i}" for c, i in turned]
         if len(turned) == 1:
@@ -182,6 +190,48 @@ def on_field(path: Path = FOUND_PATH) -> tuple[Optional[str], dict[int, Lid]]:
     return found["time"], {r["radio"]: tuple(r["lid"]) for r in found["robots"] if r["lid"] is not None}
 
 
+def in_view(seconds: float = LOOK_S, sock=None, clock=time.monotonic, sleep=time.sleep) -> set[Lid]:
+    """The lids vision sees in `seconds`; nothing moves."""
+    own = sock is None
+    sock = vision_socket() if own else sock
+    lids: dict[Lid, list[float]] = {}
+    try:
+        end = clock() + seconds
+        while clock() < end:
+            read_lids(sock, lids)
+            sleep(TICK_S)
+    finally:
+        if own:
+            sock.close()
+    return set(lids)
+
+
+def confirm(radios, path: Path = FOUND_PATH, look=in_view, finder=find) -> dict[int, Lid]:
+    """{radio: lid} for `radios`: the saved pairing when each of their lids is in view now, else a
+    new find of those radios (saved). A lid swapped between two of `radios` still looks right, as
+    both lids stay in view: run `find-robots` after such a swap."""
+    when, lids = on_field(path)
+    seen = look()
+    missing = [r for r in radios if lids.get(r) not in seen]
+    if when is not None and not missing:
+        print(f"Robots as find-robots paired them ({when}), lids all in view: " + _pairs(radios, lids))
+        return {r: lids[r] for r in radios}
+    why = "never ran here" if when is None else f"lid of radio {', '.join(map(str, missing))} not in view"
+    print(f"Finding the robots ({why}): each one turns a little on the spot and back ...")
+    found = finder(tuple(radios))
+    save(found, path)
+    lids = {r["radio"]: tuple(r["lid"]) for r in found["robots"] if r["lid"] is not None}
+    unpaired = [r for r in radios if r not in lids]
+    if unpaired:
+        raise SystemExit(f"{report(found)}\n\nRadio {', '.join(map(str, unpaired))} not found on the field.")
+    print("Found: " + _pairs(radios, lids))
+    return {r: lids[r] for r in radios}
+
+
+def _pairs(radios, lids: dict[int, Lid]) -> str:
+    return ", ".join(f"radio {r} {lids[r][0]} {lids[r][1]}" for r in radios)
+
+
 def calibrated_lid(radio: int, directory: Path = PROFILE_DIR) -> Optional[str]:
     """The lid the robot's profile was calibrated on (its `calibrated.lid`), e.g. "yellow 0"."""
     path = profile_path(radio, directory)
@@ -207,6 +257,9 @@ def report(found: dict, directory: Path = PROFILE_DIR) -> str:
         else:
             note = "ok"
         lines.append(f"  {row['radio']:<6} {lid:<10} {note}")
+    low = [f"radio {r['radio']} {r['reply_rate']:.0%}" for r in rows if r.get("reply_rate", 1) < LOW_REPLY_RATE]
+    if low:
+        lines.append(f"Few replies ({', '.join(low)} of commands): radio range, interference or a flat battery.")
     if not paired:
         lines.append("  (none)")
     for row in rows:

@@ -389,15 +389,16 @@ def kick_bend(robot_kicks: list[dict]) -> Optional[dict]:
     (`RobotProfile.kick_bend_deg_per_cm`), and its direction off the heading with the ball
     centred (`kick_bias_deg`), fitted together over full kicks with the ball on the dribbler
     (within `BEND_BALL_LEFT_CM`); with each one's standard error and the fit's rms. The heading
-    is the tag's, so a tag stuck on turned shows in the bias."""
+    is the tag's, so a tag stuck on turned shows in the bias. Also those kicks' median ball speed
+    (`RobotProfile.kick_speed`)."""
     rows = [
-        (k["ball_left_cm"], k["direction_offset_deg"])
+        (k["ball_left_cm"], k["direction_offset_deg"], k["ball_speed"])
         for k in robot_kicks
         if not k["chip"] and k["direction_offset_deg"] is not None and abs(k["ball_left_cm"]) <= BEND_BALL_LEFT_CM
     ]
     if len(rows) < BEND_MIN_KICKS:
         return None
-    left, off = np.array(rows).T
+    left, off, speed = np.array(rows).T
     if np.ptp(left) == 0:
         return None
     a = np.column_stack([left, np.ones_like(left)])
@@ -411,6 +412,7 @@ def kick_bend(robot_kicks: list[dict]) -> Optional[dict]:
         "bias_deg": round(float(bias), 1),
         "bias_se_deg": round(float(se_bias), 1),
         "rms_deg": round(float(np.sqrt(np.mean(residual**2))), 1),
+        "speed": round(float(np.median(speed)), 2),
         "kicks": len(rows),
     }
 

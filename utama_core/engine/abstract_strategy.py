@@ -36,6 +36,7 @@ from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
+from utama_core.team_controller.src.controllers.real.kicker_charge import KickerCharge
 
 
 @dataclass(slots=True, frozen=True)
@@ -111,6 +112,7 @@ class AbstractStrategy:
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: Optional[AbstractRobotController] = None
+        self._kicker_charge: Optional[KickerCharge] = None  # real robots: see `kicker_charge.py`
         self.motion_controller: Optional[MotionController] = None
         self.rsim_env: Optional[SSLBaseEnv] = None
         self.game: Optional[Game] = None
@@ -167,6 +169,9 @@ class AbstractStrategy:
     def load_robot_controller(self, robot_controller: AbstractRobotController):
         """Called by StrategyRunner: store the robot controller."""
         self.robot_controller = robot_controller
+        self._kicker_charge = (
+            KickerCharge() if getattr(robot_controller, "keeps_kickers_charged", False) is True else None
+        )
 
     def load_motion_controller(self, motion_controller: MotionController):
         """Called by StrategyRunner: store the motion controller and build the
@@ -230,6 +235,8 @@ class AbstractStrategy:
         # pinned goalkeeper slot (see `Strategy.set_goalkeeper`) in one call
         # — this class no longer special-cases the goalkeeper itself.
         cmd_map: dict[int, RobotCommand] = dict(self._kernel_strategy.tick(game))
+        if self._kicker_charge is not None:
+            cmd_map = self._kicker_charge.apply(game, cmd_map)
 
         for robot_id in game.friendly_robots:
             if robot_id in cmd_map:

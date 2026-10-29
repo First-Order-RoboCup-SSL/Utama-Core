@@ -58,17 +58,19 @@ def test_a_run_writes_what_it_measured_and_keeps_the_rest():
     assert set(notes) == {"tag", "carry"}
 
 
-def test_a_kick_fit_sets_both_bend_and_bias():
+def test_a_kick_fit_sets_bend_bias_speed_and_spread():
     bend = {
         "deg_per_cm": 4.19,
         "deg_per_cm_se": 0.56,
         "bias_deg": 2.66,
         "bias_se_deg": 0.9,
         "rms_deg": 5.9,
+        "speed": 2.19,
         "kicks": 55,
     }
     new, notes = ex.measured_profile(RobotProfile(), None, bend, {})
     assert (new.kick_bend_deg_per_cm, new.kick_bias_deg) == (4.2, 2.7)
+    assert (new.kick_speed, new.kick_spread_deg) == (2.19, 5.9)
     assert "55 kicks" in notes["kick"]
 
 

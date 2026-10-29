@@ -457,6 +457,17 @@ detections, because the two cameras disagreed by several cm. Vision noise comes 
 - **Still unmeasured:** loop delay and acceleration limits (they need a `--calibrate` run, not
   strategy runs), spread across robots (one robot), and kick strength against charging time.
 
+#### Our robots' kicks in rsim rehearsals (2026-10-29)
+
+A robot's calibrated profile now drives its kick in rsim when a run gives the profile (the
+examples do): ball speed `kick_speed` (yellow 0 2.19 m/s, blue 0 1.31, the medians of
+2026-10-28's kicks), direction bias + bend × ball offset + normal scatter of `kick_spread_deg`
+(`utama_core/rsoccer_simulator/src/Utils/real_kick.py`). rsim's ball leaves 0.26 m/s slower than
+the kick speed commanded, at 1 to 5 m/s, so the command adds that back. The strategy evaluation
+passes no profiles, so its matches are unchanged: whether evaluation should use our kick is the
+Phase 4 / roadmap 2a decision, not this one. Latency is left out: real robots predict their
+79 ms delay, and rsim would need both to stay faithful.
+
 ## P1: Value model on real data
 
 The xG model is already a small value model fitted on reality, for shots only. The extension
