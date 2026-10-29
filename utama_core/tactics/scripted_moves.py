@@ -53,7 +53,7 @@ def _turns(rate: float, seconds: float) -> list[Move]:
     return [Move(name, seconds, turn=rate), Move("rest", _REST), Move(name, seconds, turn=-rate), Move("rest", _REST)]
 
 
-# About 70 s. Speeds stay within the real robots' caps (REAL_PARAMS: 1.5 m/s, 6 rad/s).
+# About 70 s. Speeds stay within the real robots' caps (REAL_PARAMS: 1 m/s, 4 rad/s).
 CALIBRATION_SCRIPT: tuple[Move, ...] = (
     Move("still", 10.0),  # vision noise: robot (and a ball placed in view) at rest
     *_there_and_back("forward 0.3 m/s", 0.3, 0.6),

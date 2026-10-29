@@ -23,11 +23,12 @@ from utama_core.entities.data.raw_vision import RawVisionData
 # driven on a stale position. On the 2026-10-27 field test (two cameras, 60-90 Hz) a
 # robot's gaps were p99.9 50-100 ms; every longer one was our own loop stalling (see
 # `StrategyRunner._tick_field_check`), not vision. 0.15 s until 2026-10-28, when a robot
-# lost for 0.2 s halted a field run: the Kalman filter coasts it through such a gap.
-VISION_LOST_S = 0.5
+# lost for 0.2 s halted a field run: the Kalman filter coasts it through such a gap. 0.5 s
+# until 2026-10-29, lowered for testing: a robot lost to vision halts play at once.
+VISION_LOST_S = 0.1
 # No vision packet at all for this long fails (camera or network down). 0.15 s until 2026-10-28,
-# raised with VISION_LOST_S.
-CAMERA_SILENT_S = 0.5
+# then 0.5 s; lowered with VISION_LOST_S.
+CAMERA_SILENT_S = 0.1
 # A gap between two ticks of the runner's loop longer than this is the loop stalling (it ticks
 # every 6-17 ms on real robots).
 LOOP_STALL_S = 0.1

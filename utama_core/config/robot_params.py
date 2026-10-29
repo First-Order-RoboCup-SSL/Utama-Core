@@ -47,12 +47,13 @@ RSIM_PARAMS = RobotParams(
 )
 
 REAL_PARAMS = RobotParams(
-    # Raised 2026-10-28 from 1 m/s, 4 rad/s and 50 rad/s^2 (team decision). Calibrations
-    # measured forward 3.6-6.4 m/s^2 and turning 58-244 rad/s^2.
-    MAX_VEL=1.5,
-    MAX_ANGULAR_VEL=6,
+    # Back to 1 m/s, 4 rad/s and 50 rad/s^2 for testing 2026-10-29; 1.5 m/s, 6 rad/s and
+    # 100 rad/s^2 from 2026-10-28 (team decision). Calibrations measured forward 3.6-6.4 m/s^2
+    # and turning 58-244 rad/s^2.
+    MAX_VEL=1,
+    MAX_ANGULAR_VEL=4,
     MAX_ACCELERATION=4,
-    MAX_ANGULAR_ACCELERATION=100,
+    MAX_ANGULAR_ACCELERATION=50,
     KICK_SPD=5,
     DRIBBLE_SPD=3,
     CHIP_ANGLE=pi / 4,
