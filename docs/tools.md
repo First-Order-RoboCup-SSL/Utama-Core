@@ -18,6 +18,7 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
 | `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [real_robot_setup.md](real_robot_setup.md)) |
 | `calibrate` | measure one real robot from the terminal (`examples/calibrate_robot.py --robot yellow:1 --radio 0`): fixed moves, dribbling and 3 kicks, asking before each set-up, then DONE and its loop delay, speed gain, acceleration, vision noise, kick speed and direction, and ball holding ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
+| `calibrate-tag` | where one real robot's vision tag sits on it (`examples/calibrate_tag.py --robot yellow:0 --radio 0`): its offset from the centre and its heading offset, printed as the `RobotProfile` fields that correct vision ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
 
 ## Worktrees
 

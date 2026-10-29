@@ -1,6 +1,6 @@
 """`StrategyRunner` gives a team's motion controller its real robots' kick bends, in rad per
 metre off-centre (`RobotProfile.kick_bend_deg_per_cm`), and biases, in rad
-(`kick_bias_deg`), and none in the simulators."""
+(`kick_bias_deg`), and none in the simulators; likewise its vision the tags' offsets."""
 
 import math
 from types import SimpleNamespace
@@ -35,3 +35,13 @@ def test_real_robots_get_their_kick_bias_and_the_sims_none(mode, expected):
     controller = StrategyRunner._motion_controller(runner, team, _PROFILES)
 
     assert controller.kick_bias == pytest.approx(expected)
+
+
+def test_real_robots_get_their_tag_offsets_and_the_sims_none():
+    tagged = {0: RobotProfile(tag_left_m=-0.002, tag_heading_deg=-3.5), 1: RobotProfile(kick_bend_deg_per_cm=4.7)}
+    real = SimpleNamespace(mode=Mode.REAL, yellow_robot_profiles=tagged, blue_robot_profiles=tagged)
+
+    assert StrategyRunner._tag_offsets(real) == pytest.approx(
+        {(True, 0): (0.0, -0.002, math.radians(-3.5)), (False, 0): (0.0, -0.002, math.radians(-3.5))}
+    )
+    assert StrategyRunner._tag_offsets(SimpleNamespace(mode=Mode.RSIM)) == {}

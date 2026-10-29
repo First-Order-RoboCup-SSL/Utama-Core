@@ -33,6 +33,20 @@ def _in_field_or_goal(x: float, y: float, dimensions: FieldDimensions) -> bool:
     return abs(y) <= dimensions.half_goal_width and abs(x) <= dimensions.full_field_half_length + dimensions.goal_depth
 
 
+def on_robot(robot: RawRobotData, offset: Tuple[float, float, float]) -> RawRobotData:
+    """`robot`, a detection of its tag, moved to the robot itself: `offset` is (forward, left) of the
+    tag from the robot's centre in metres, in the frame of the tag's heading, and the tag's heading
+    minus the robot's in radians (`analysis/tag_calibration.py` measures all three)."""
+    forward, left, heading = offset
+    c, s = math.cos(robot.orientation), math.sin(robot.orientation)
+    return replace(
+        robot,
+        x=robot.x - (c * forward - s * left),
+        y=robot.y - (s * forward + c * left),
+        orientation=math.atan2(math.sin(robot.orientation - heading), math.cos(robot.orientation - heading)),
+    )
+
+
 @dataclass
 class VisionBounds:
     x_min: float
@@ -55,6 +69,8 @@ class PositionRefiner(BaseRefiner):
         impute_vanished: Whether to impute robots that vanish from vision (via the Kalman predict step,
             with no measurement update that tick). Defaults to `filtering`. Note this is independent of
             smoothing: it can be kept on even if `smooth_positions` is off, or vice versa.
+        tag_offsets: Where each robot's tag sits on it, by (is_yellow, vision id): see `on_robot`.
+            Each detection is moved to its robot before the cameras are combined.
 
     Important:
         when exp_ball set to False, the refiner could return either Ball | None type ball value
@@ -70,6 +86,7 @@ class PositionRefiner(BaseRefiner):
         allowed_blue_ids: Optional[frozenset[int]] = None,
         smooth_positions: Optional[bool] = None,
         impute_vanished: Optional[bool] = None,
+        tag_offsets: Optional[Dict[Tuple[bool, int], Tuple[float, float, float]]] = None,
     ):
         top_left = full_field_dims.full_field_bounds.top_left
         bottom_right = full_field_dims.full_field_bounds.bottom_right
@@ -95,12 +112,17 @@ class PositionRefiner(BaseRefiner):
         self.exp_ball = exp_ball
         self.allowed_yellow_ids = allowed_yellow_ids
         self.allowed_blue_ids = allowed_blue_ids
+        self.tag_offsets = tag_offsets or {}
 
         if self._uses_kalman:
             # Instantiate a dedicated Kalman filter for each robot so filtering can be kept independent.
             self.kalman_filters_yellow: dict[int, KalmanFilter] = {}
             self.kalman_filters_blue: dict[int, KalmanFilter] = {}
             self.kalman_filter_ball = self._ball_filter()
+
+    def _on_robot(self, is_yellow: bool, robot: RawRobotData) -> RawRobotData:
+        offset = self.tag_offsets.get((is_yellow, robot.id))
+        return robot if offset is None else on_robot(robot, offset)
 
     def _ball_filter(self) -> KalmanFilterBall:
         b = self.vision_bounds
@@ -116,10 +138,14 @@ class PositionRefiner(BaseRefiner):
             replace(
                 frame,
                 yellow_robots=[
-                    r for r in frame.yellow_robots if self.allowed_yellow_ids is None or r.id in self.allowed_yellow_ids
+                    self._on_robot(True, r)
+                    for r in frame.yellow_robots
+                    if self.allowed_yellow_ids is None or r.id in self.allowed_yellow_ids
                 ],
                 blue_robots=[
-                    r for r in frame.blue_robots if self.allowed_blue_ids is None or r.id in self.allowed_blue_ids
+                    self._on_robot(False, r)
+                    for r in frame.blue_robots
+                    if self.allowed_blue_ids is None or r.id in self.allowed_blue_ids
                 ],
             )
             for frame in data

@@ -156,6 +156,20 @@ Calibrate every robot, twice per session (early and late): how far the two runs 
 far to trust them. An older log is measured again with
 `pixi run python tools/robot_calibration.py replays/field/<run>.log`.
 
+**Where the tag sits.** A lid's tag is a sticker, rarely centred or square on the robot. Measure
+it once per lid:
+
+```
+pixi run calibrate-tag --robot yellow:0 --radio 0
+```
+
+The robot turns on the spot and drives straight (about 70 s), then you press its front against a
+straight edge along a cross-field line. It prints the tag's offset from the robot's centre, its
+heading offset, and the `RobotProfile` fields to paste into the robot's profile
+(`examples/shooting_drill.py`): `tag_forward_m`, `tag_left_m`, `tag_heading_deg`. On real robots
+vision then reports the robot, not its tag. Yellow 0's tag (2026-10-28) reads 3.5° clockwise of
+the robot: uncorrected, every aim and kick-direction measurement is off by that much.
+
 
 | Symptom | Cause |
 |---|---|

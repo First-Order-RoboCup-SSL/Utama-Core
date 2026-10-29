@@ -1357,6 +1357,18 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             return controller
         return ProfiledRobotController(controller, profiles)
 
+    def _tag_offsets(self) -> dict[tuple[bool, int], tuple[float, float, float]]:
+        """Where each profiled robot's tag sits on it, for `PositionRefiner`: real robots only (a
+        simulator's tag is its robot)."""
+        if self.mode != Mode.REAL:
+            return {}
+        return {
+            (is_yellow, rid): (p.tag_forward_m, p.tag_left_m, math.radians(p.tag_heading_deg))
+            for is_yellow, profiles in ((True, self.yellow_robot_profiles), (False, self.blue_robot_profiles))
+            for rid, p in profiles.items()
+            if p.tag_forward_m or p.tag_left_m or p.tag_heading_deg
+        }
+
     def _init_refiners(
         self,
         field_dims: FieldDimensions,
@@ -1388,6 +1400,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             exp_ball=exp_ball,
             allowed_yellow_ids=allowed_yellow_ids,
             allowed_blue_ids=allowed_blue_ids,
+            tag_offsets=self._tag_offsets(),
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner(trusted_ir_robots=trusted_ir_robots)

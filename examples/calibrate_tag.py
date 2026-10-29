@@ -18,6 +18,10 @@ It prints, from the recorded log (`analysis/tag_calibration.py`):
 And, measured here while the robot rests against the edge:
 - **Heading offset**: the tag's heading minus the robot's true one (0, facing +x), as good as
   the edge is square to the field (1 mm in 5 cm is about 1 degree).
+
+Last it prints the `RobotProfile` fields (`tag_forward_m`, `tag_left_m`, `tag_heading_deg`) to put
+in the robot's profile; on real robots vision is then corrected by them. Run it with the robot's
+profile left out, as here: it measures the tag as vision reads it.
 """
 
 import sys
@@ -71,6 +75,17 @@ TAG_SCRIPT: tuple[Move, ...] = (
 _ALIGNED = len(TAG_SCRIPT) - 1
 
 
+def profile_fields(result: dict, heading_offset) -> str:
+    """The `RobotProfile` fields for one robot's measured tag, to paste into its profile
+    (`examples/shooting_drill.py`); a part not measured is left out."""
+    fields = []
+    if result["tag_forward_m"] is not None:
+        fields += [f"tag_forward_m={result['tag_forward_m']:.3f}", f"tag_left_m={result['tag_left_m']:.3f}"]
+    if heading_offset is not None:
+        fields.append(f"tag_heading_deg={heading_offset:.1f}")
+    return ", ".join(fields) or "nothing measured"
+
+
 def main() -> None:
     args = parse_args(__doc__)
     runner, tactic, robot_id, label, game_log = build_runner(args, TAG_SCRIPT, "calibrate_tag")
@@ -96,6 +111,8 @@ def main() -> None:
     if game_log:
         results = tag_calibration(FieldLog(game_log))
         print(report(results))
+        for r in results:
+            print(f"\n{r['robot']}'s profile: {profile_fields(r, heading_offset)}")
         out = Path(game_log).with_suffix(".tag.json")
         out.write_text(json.dumps({"log": game_log, "heading_offset_deg": heading_offset, "robots": results}, indent=1))
         print(f"\nWritten {out}")

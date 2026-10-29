@@ -165,11 +165,18 @@ class TestRobot(NamedTuple):
 
 
 # Our robots. The kick bend (`RobotProfile.kick_bend_deg_per_cm`, `kick_bias_deg`) is each one's
-# own; measure it again after any dribbler or kicker change. Fitted over the 2026-10-28 passing
-# rallies' full kicks: yellow 5.0 deg/cm +2.3 deg (51 kicks, rms 3.8; the bias may be its tag
-# turned on it, see `pixi run calibrate-tag`), blue 1.9 deg/cm +0.5 (27, rms 5.8: kept at 2.1, no bias).
+# own; measure it again after any dribbler or kicker change. The tag offset (`tag_*`) is its lid's,
+# from `pixi run calibrate-tag`; measure it again for a new lid.
 # YELLOW_1 is the robot on radio 0, measured as yellow 1; since 2026-10-28 its lid reads as yellow 0.
-YELLOW_1 = TestRobot(vision_id=0, firmware_id=0, profile=RobotProfile(kick_bend_deg_per_cm=5.0, kick_bias_deg=2.3))
+# That lid's tag reads 3.5 deg clockwise of the robot (calibrate-tag 2026-10-28 22:33). With the
+# heading corrected, its 63 full kicks of 2026-10-28 fit 4.2 deg/cm +1.2 deg, rms 5.8; through zero
+# 4.4 deg/cm, rms 5.9: no bias (the +2.3 deg fitted before was mostly the tag).
+# BLUE_0: 2026-10-28 rallies 1.9 deg/cm +0.5 (27 kicks, rms 5.8: kept at 2.1, no bias); tag not measured.
+YELLOW_1 = TestRobot(
+    vision_id=0,
+    firmware_id=0,
+    profile=RobotProfile(kick_bend_deg_per_cm=4.4, tag_left_m=-0.002, tag_heading_deg=-3.5),
+)
 BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=RobotProfile(kick_bend_deg_per_cm=2.1))
 
 # Swapping a robot is a change here only.

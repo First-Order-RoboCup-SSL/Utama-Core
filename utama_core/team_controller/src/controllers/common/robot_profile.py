@@ -51,6 +51,11 @@ class RobotProfile:
 
     `kick_bias_deg`: how far its kick leaves the heading with the ball centred, anticlockwise +
     (a kicker or a tag turned on the robot); aimed against with the bend.
+
+    `tag_forward_m`, `tag_left_m`, `tag_heading_deg`: where its vision tag sits on it, as
+    `pixi run calibrate-tag` measures it: the tag's centre ahead of and left of the robot's
+    centre, and the tag's heading minus the robot's (anticlockwise +). Vision is corrected by
+    them on real robots only (`PositionRefiner`); a tag is a sticker, measured once per lid.
     """
 
     kicker: bool = True
@@ -58,6 +63,9 @@ class RobotProfile:
     ir: bool = True
     kick_bend_deg_per_cm: float = 0.0
     kick_bias_deg: float = 0.0
+    tag_forward_m: float = 0.0
+    tag_left_m: float = 0.0
+    tag_heading_deg: float = 0.0
 
 
 def _is_stop(c: RobotCommand) -> bool:
