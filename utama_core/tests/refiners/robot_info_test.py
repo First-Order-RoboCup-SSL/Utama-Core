@@ -218,6 +218,15 @@ def test_mixed_team_trusted_uses_ir_untrusted_uses_vision():
     assert result.friendly_robots[1].has_ball is True  # from vision (close enough)
 
 
+def test_an_untrusted_sensor_stuck_on_is_ignored_away_from_the_ball():
+    """2026-10-29: radio 1's IR read 'has ball' all the time; its profile's `ir: false` must
+    leave has_ball to vision, false while the ball is far."""
+    refiner = RobotInfoRefiner(trusted_ir_robots=frozenset())
+    frame = _make_frame({1: _make_robot(1, 1.0, 0.0)}, ball_pos=(0.0, 0.0))
+    result = refiner.refine(frame, [RobotResponse(id=1, has_ball=True)])
+    assert result.friendly_robots[1].has_ball is False
+
+
 def test_untrusted_robot_missing_from_responses_uses_vision():
     """Untrusted robot absent from responses this tick must not keep stale has_ball."""
     refiner = RobotInfoRefiner(trusted_ir_robots=frozenset({0}))
