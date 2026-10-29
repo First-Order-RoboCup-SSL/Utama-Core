@@ -123,6 +123,7 @@ def test_stop_step_physically_separates_the_pinned_pair():
         bottom_right: tuple = (4.5, -3.0)
         half_defense_area_depth: float = 0.9
         half_defense_area_width: float = 1.8
+        defense_area_rules: bool = True
 
         @property
         def half_length(self) -> float:
@@ -143,6 +144,7 @@ def test_stop_step_physically_separates_the_pinned_pair():
     @dataclass
     class _FakeGame:
         friendly_robots: dict
+        enemy_robots: dict = dc_field(default_factory=dict)
         my_team_is_yellow: bool = True
         my_team_is_right: bool = False
         ball: Ball = dc_field(default_factory=lambda: _ball(_CONTACT_X / 2.0, 0.0))

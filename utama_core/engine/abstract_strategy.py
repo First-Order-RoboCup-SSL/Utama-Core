@@ -36,6 +36,7 @@ from utama_core.skills.src.utils.move_utils import empty_command
 from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
+from utama_core.team_controller.src.controllers.real.kicker_charge import KickerCharge
 
 
 @dataclass(slots=True, frozen=True)
@@ -111,6 +112,7 @@ class AbstractStrategy:
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
         self.robot_controller: Optional[AbstractRobotController] = None
+        self._kicker_charge: Optional[KickerCharge] = None  # real robots: see `kicker_charge.py`
         self.motion_controller: Optional[MotionController] = None
         self.rsim_env: Optional[SSLBaseEnv] = None
         self.game: Optional[Game] = None
@@ -167,6 +169,9 @@ class AbstractStrategy:
     def load_robot_controller(self, robot_controller: AbstractRobotController):
         """Called by StrategyRunner: store the robot controller."""
         self.robot_controller = robot_controller
+        self._kicker_charge = (
+            KickerCharge() if getattr(robot_controller, "keeps_kickers_charged", False) is True else None
+        )
 
     def load_motion_controller(self, motion_controller: MotionController):
         """Called by StrategyRunner: store the motion controller and build the
@@ -230,6 +235,8 @@ class AbstractStrategy:
         # pinned goalkeeper slot (see `Strategy.set_goalkeeper`) in one call
         # — this class no longer special-cases the goalkeeper itself.
         cmd_map: dict[int, RobotCommand] = dict(self._kernel_strategy.tick(game))
+        if self._kicker_charge is not None:
+            cmd_map = self._kicker_charge.apply(game, cmd_map)
 
         for robot_id in game.friendly_robots:
             if robot_id in cmd_map:
@@ -241,7 +248,7 @@ class AbstractStrategy:
         self.robot_controller.send_robot_commands()
 
     def debug_status(self) -> dict[int, list[str]]:
-        """Per-robot `["<tactic_id>[ (committed)]", "<tag>"]` for GUI display.
+        """Per-robot `["<tactic_id>[ (committed)]", "<tag>", "<steps>"]` for GUI display.
 
         Reports which tactic slot each robot currently belongs to, whether
         that slot is `is_committed()` (the actual "why won't this reassign"
@@ -250,13 +257,37 @@ class AbstractStrategy:
         for the debug GUI panel. The goalkeeper is just `["goalkeeper"]`: it is
         pinned outside the scheduler, so a scheduling role tag would say nothing,
         and is left out when its robot is not on the field (as it is not ticked then).
+
+        A robot a restart or HALT drives is `["referee · <its job>", "referee"]` instead
+        (`Strategy.referee_control`): its slot keeps it, but no tactic is running it.
+        `<steps>` is what the robot's tactic and skills traced this tick, keyed by robot
+        (`go_to_ball[3].approach: direct`, `shoot[3]: turning to shoot`); empty without a match log.
         """
         game = self.game
+        kernel = self._kernel_strategy
         status: dict[int, list[str]] = {}
         if self._goalkeeper_id in game.friendly_robots:
-            status[self._goalkeeper_id] = ["goalkeeper"]
-        for tactic_id, info in self._kernel_strategy.slot_status(game).items():
+            status[self._goalkeeper_id] = ["goalkeeper", ""]
+        for tactic_id, info in kernel.slot_status(game).items():
             label = tactic_id if not info["committed"] else f"{tactic_id} (committed)"
             for robot_id in info["robots"]:
                 status[robot_id] = [label, info["tag"].value]
+        for robot_id, job in kernel.referee_control.items():
+            status[robot_id] = ["halted" if job == "halted" else f"referee · {job}", "referee"]
+        traces = kernel.match_log.current_traces() if kernel.match_log is not None else {}
+        for robot_id, row in status.items():
+            row.append(robot_steps(traces, robot_id))
         return status
+
+
+def robot_steps(traces: dict, robot_id: int) -> str:
+    """The traces naming `robot_id` (`key[<id>]...`) as `name: value`, joined; plain values only
+    (dicts and lists are drawing data for replays, not words)."""
+    tag = f"[{robot_id}]"
+    steps = []
+    for key, value in traces.items():
+        if tag not in key or isinstance(value, (dict, list, tuple)):
+            continue
+        name = key.replace(tag, "").rstrip(".")
+        steps.append(f"{name}: {value}" if name else str(value))
+    return " · ".join(steps)

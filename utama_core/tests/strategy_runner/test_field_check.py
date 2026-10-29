@@ -66,6 +66,15 @@ def test_a_robot_lost_by_vision_fails_only_after_the_grace_period():
     assert _row(fc.rows(VISION_LOST_S + 0.01), "yellow 1")["status"] == "fail"
 
 
+def test_a_robot_lost_for_a_fifth_of_a_second_does_not_halt_the_run():
+    # 2026-10-28: "lost by vision 0.2 s ago" auto-HALTed blue 0 mid-run; 2026-10-29, at a 0.1 s
+    # limit, every calibration halted within 0.2 s of starting.
+    fc = _check()
+    fc.observe_vision([_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    fc.observe_vision([_frame()], now=0.2)
+    assert _row(fc.rows(0.2), "yellow 1")["status"] == "ok"
+
+
 @pytest.mark.parametrize(
     "x, status",
     [
@@ -223,3 +232,72 @@ def test_the_auto_halt_reason_is_kept_through_the_halt_and_cleared_once_play_res
     StrategyRunner._tick_field_check(runner, seen, now=0.2)
     assert runner._auto_halt is None
     assert runner.referee.set_field_check.call_args.args[0]["auto_halt"] is None
+
+
+def test_the_tick_after_a_loop_stall_does_not_halt_the_next_one_does():
+    """2026-10-27: the runner's loop stalled ~0.55 s every ~33 s, cameras and radio silent
+    together. The first tick after judges vision before the receiver thread caught up: that
+    tick must not halt on what our own stall hid, and a real loss halts on the next tick."""
+    from utama_core.run.field_check import LOOP_STALL_S
+
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    seen = _frame(yellow=[(1, 1.0, 0.0)])
+    StrategyRunner._tick_field_check(runner, [seen], now=0.0)
+    t = 0.0
+    while t + 0.05 < VISION_LOST_S:  # normal ticks, unseen but within the grace period
+        t += 0.05
+        StrategyRunner._tick_field_check(runner, [None], now=t)
+    stalled = t + LOOP_STALL_S + 0.1
+    assert stalled > max(VISION_LOST_S, CAMERA_SILENT_S)
+    StrategyRunner._tick_field_check(runner, [None], now=stalled)  # after a stall, not seen
+    assert not runner.referee.force_command.called
+    StrategyRunner._tick_field_check(runner, [None], now=stalled + 0.01)
+    assert runner.referee.force_command.called
+
+
+def test_ticks_just_under_the_stall_limit_still_halt_a_lost_robot():
+    from utama_core.run.field_check import LOOP_STALL_S
+
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    step = LOOP_STALL_S - 0.01
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    n = int(VISION_LOST_S / step) + 1
+    for i in range(1, n + 1):
+        StrategyRunner._tick_field_check(runner, [None], now=i * step)
+    assert n * step > VISION_LOST_S
+    assert runner.referee.force_command.called
+
+
+def test_a_robot_in_a_keep_out_zone_fails_and_the_page_gets_the_zone():
+    zone = FieldBounds(top_left=(0.0, -0.5), bottom_right=(1.0, -1.0))
+    fc = FieldCheck([("yellow", 1)], RIGHT_HALF, FIELD, keep_out=(zone,))
+    fc.observe_vision([_frame(yellow=[(1, 0.5, -0.45)])], now=0.0)  # just above it
+    assert _row(fc.rows(0.0), "yellow 1")["status"] == "ok"
+    fc.observe_vision([_frame(yellow=[(1, 0.5, -0.55)])], now=0.01)
+    rows = fc.rows(0.01)
+    assert _row(rows, "yellow 1")["status"] == "fail"
+    assert "keep-out" in fc.halt_reason(rows)
+    assert fc.payload(rows, None)["keep_out"] == [[0.0, -1.0, 1.0, -0.5]]
+
+
+def test_a_run_without_a_dashboard_resumes_its_auto_halt_once_the_check_passes():
+    """2026-10-29: calibration's first tick ran before vision arrived; its auto-HALT, which only
+    the dashboard's Force Start ends, held the robot still for the whole run."""
+    runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
+    StrategyRunner._tick_field_check(runner, [None], now=0.0)  # nothing seen yet: fails
+    assert runner._auto_halt is not None
+    runner._prev_custom_ref_command = RefereeCommand.HALT
+    assert not StrategyRunner.resume_after_auto_halt(runner)  # still failing: stays halted
+
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.02)
+    runner.referee.force_command.reset_mock()
+    assert StrategyRunner.resume_after_auto_halt(runner)
+    runner.referee.force_command.assert_called_once_with(RefereeCommand.FORCE_START, 5.0)
+    assert runner._auto_halt is None
+
+
+def test_a_halt_the_field_check_did_not_force_is_not_resumed():
+    runner = _runner(Mode.REAL, RefereeCommand.HALT)  # the operator's own HALT
+    StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    assert not StrategyRunner.resume_after_auto_halt(runner)
+    runner.referee.force_command.assert_not_called()

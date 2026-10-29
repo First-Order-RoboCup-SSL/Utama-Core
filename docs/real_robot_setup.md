@@ -3,7 +3,7 @@
 The procedure for a test day with real robots: ssl-vision on its own Linux laptop sending vision
 over the network, and our stack on a Windows laptop in WSL with the radio dongle. Each part is
 checked on its own before anything drives a robot: vision with `tools/vision_check.py`, the radio
-with teleop, then both together in the field check of `examples/real_attacker_defender.py`.
+with teleop, then both together in the field check of `examples/shooting_drill.py`.
 
 ```
 vision laptop (Linux)                      robot laptop (Windows + WSL)
@@ -48,6 +48,19 @@ vision laptop (Linux)                      robot laptop (Windows + WSL)
    terminal you run from (or restart WSL).
 
 ## Each test day
+
+Once the network, vision and radio below are set up, one command checks them all at the start of
+a session:
+
+```
+pixi run field-check          # radios 0 to 7; --radios 0 1 for fewer
+```
+
+It listens to vision for 2 s (cameras and their packets per second, field size, ball, lids in
+view), then finds the robots (`find-robots`, below): each one's radio, lid, share of its commands
+answered (under 80%: range, interference or a flat battery) and whether its profile was
+calibrated on that lid. Each line starts "ok" or "!!". It cannot see batteries: the robots do not
+report them. The steps below are what to do when a line says "!!".
 
 ### 1. Network
 
@@ -118,9 +131,9 @@ radio IDs must differ across all robots on it.
 
 ### 4. Both together
 
-Set the "Test-day configuration" block of `examples/real_attacker_defender.py`: `FIELD`,
+Set the "Test-day configuration" block of `examples/shooting_drill.py`: `FIELD`,
 `CAMERA_HALF` (`"full"` when the cameras cover the whole field), each robot's vision and radio
-ID and working hardware. Then `pixi run python examples/real_attacker_defender.py`, open
+ID and working hardware. Then `pixi run python examples/shooting_drill.py`, open
 http://localhost:8080 and go through the Live tab's field check
 ([custom_referee_gui.md](custom_referee_gui.md#field-check-camera-runs)): every row green or
 amber, each robot under its own ID and colour, a ball in each corner inside the area in play,
@@ -131,9 +144,128 @@ Each run records `replays/field/<time>_<mode>_<name>.log`, a game log of every v
 the radio both ways, the referee and which code ran. Beside it is a `.npz` replay of the world
 the strategy saw, written when the run closes. Use the Live tab's Note box (Enter writes it into
 the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
-a test day is setting up, and notes make the useful minutes easy to find later.
+a test day is setting up, and notes make the useful minutes easy to find later. The runner adds
+a note whenever a robot's row in the Tactics panel changes (its tactic and step, or
+`referee · ball placement · placer` while a restart drives it), so the log also says what each
+robot was trying to do.
 
-## When something fails
+#### Running the demos
+
+`pixi run demos` (`--mode rsim` to rehearse) starts the shooting drill behind one dashboard;
+the Live tab's Demo panel switches to pass-receive, save-and-counter, score goal or teleop
+without leaving the page. Halt, pick one, Run: the robots stop, the demo closes (its log saved,
+the radio and vision released), the next one starts, its lids checked as when run alone, and
+the page reloads by itself. A demo that fails to start (a robot not found) shows why under the
+panel; pick again. The Strategy panel still switches tactics within a demo; Ctrl+C ends it.
+Calibration (`pixi run calibrate`) and `planner_ab.py` stay their own commands.
+
+- **Settings** under the list apply from the next Run: *first robot* (the drill's attacker,
+  the shooter, robot A), *camera* (the part of the field in view, `CAMERA_HALF`) and *rules*.
+  They set the examples' config blocks as editing them would, for this process only.
+- **Field check** (real robots): `pixi run field-check` without leaving the page. It stops the
+  demo, checks vision, turns each robot on the spot to find its lid, lists the lines under the
+  panel (a "!!" line in red), then starts the same demo again.
+- **Teleop** (`examples/teleop.py`): drive either robot by keyboard to place robots and the
+  ball. Pick the robot, tick "keys drive", Force Start; W/S A/D Q/E, Shift faster, B kicks, F
+  the dribbler. No rules and no goals; a robot stops when its keys are let go, on Halt, and
+  0.3 s after the page stops sending.
+- The Robots panel shows each robot's share of its commands answered over the last 2 s; under
+  80% (red) the link is poor, often a flat battery, before the robot goes silent.
+
+### 5. Measuring a robot
+
+**Which robot is which.** A robot is its radio ID: the radio board stays with its motors,
+kicker and dribbler, and its profile goes by it. The lid with the pattern is a separate shell
+and can be swapped. After switching robots on, or swapping a lid:
+
+```
+pixi run find-robots          # radios 0 to 7; --radios 0 1 4 for others
+```
+
+Each radio that answers turns about 70° on the spot and back (keep 15 cm clear round the
+robots), and the pattern that turned with it is its lid. It prints radio, lid and whether the
+profile was calibrated on that lid (a profile's tag offset is its lid's: calibrate again after a
+swap), and the radios that did not answer and patterns no radio turned. The pairing is saved on
+this machine (`replays/field/robots_found.json`). The robots an example uses are chosen by radio
+(`RADIO_0`, `RADIO_1` in `shooting_drill.py`), one per colour, and no vision ID or colour is
+written by hand: on real robots an example starts by watching vision for 0.5 s (nothing moves).
+With each robot's saved lid in view it uses them; otherwise (never run here, a lid missing) it
+finds those robots again first (`find_robots.confirm`). It cannot tell two robots in use that
+swapped lids with each other, as both lids stay in view: run `find-robots` after such a swap.
+
+One command measures a robot and writes its profile:
+
+```
+pixi run calibrate                    # finds the robots; the only one, or asks which
+pixi run calibrate --radio 0          # the robot on radio 0
+pixi run calibrate --radio 0 --ball-only   # the ball part again, no driving
+pixi run calibrate --radio 0 --check       # the new profile against the committed one
+```
+
+Without both `--robot colour:id` and `--radio` it looks the robot up: with `--radio`, as the
+examples do; with neither, by `find-robots`.
+
+No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
+it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
+0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s.
+Then the ball part (`examples/ball_trials.py`), where **the robot fetches the ball itself**:
+
+- **Carry ladder**: it carries the ball 0.5 m forward, backward, left and right, and half a turn
+  each way, at rising speeds (0.2 to 1 m/s, 0.5 to 4 rad/s), twice each (`--repeats`), from
+  standing, then stands 0.5 s with it. A direction stops at the first speed that loses the ball
+  (off the robot by 15 cm, or its ball sensor off 0.3 s). The carry runs towards the middle of
+  the field, and the robot lets go and fetches the ball again before each trial.
+- **Kicks**: 10 (`--kicks`) along the field. Every kick comes charged: the kicker holds its
+  charge about 30 s and recharges in about 1 s, so a kick more than 30 s after the last one is
+  preceded by a kick with no ball (the robot lets go of the ball first).
+
+It asks only when the ball is out of view or within 25 cm of the edge, as after most kicks:
+roll the ball back towards the middle and press Enter. Every step is printed as it starts; Ctrl+C
+halts the robot. At the end it prints DONE, analyses the log (loop delay, speed gain and
+acceleration per axis, vision noise at rest, kick speed; written beside the log as
+`.calibration.json`) and **writes the robot's profile**, `utama_core/config/robots/radio_<radio>.json`,
+which every example reads (`load_profile`). Nothing to copy by hand:
+
+- `tag_forward_m`, `tag_left_m`: where its tag sits on it, from its turns on the spot. A lid's tag
+  is a sticker, rarely centred; on real robots vision then reports the robot, not its tag.
+- `kick_bend_deg_per_cm`, `kick_bias_deg`: how far its kicks leave the heading per cm the ball
+  sat off-centre, and with it centred, fitted together. The heading is the tag's, so a tag stuck
+  on turned (yellow 0's reads 3.5° clockwise) shows in the bias: no straight edge needed.
+- `kick_speed`, `kick_spread_deg`: those kicks' median ball speed, and how far they scatter
+  about bias and bend (the fit's rms).
+- `carry_speed`, `carry_turn`: the carry ladder's slowest direction, the fastest speed it kept
+  the ball every time; `move()` holds this robot to them (`RobotParams.CARRY_*` otherwise).
+
+rsim kicks a robot given its profile as it measured (`real_kick.py`): at its kick speed, off its
+heading by its bias and bend, scattered by its spread, and passes and shots aim against bend and
+bias there too. So an example rehearsed in rsim (`--mode rsim`) kicks like the robot on the field.
+Matches without profiles (the strategy evaluation) keep the sim's own kick.
+
+**Kicker charge in play.** On real robots a robot that has not kicked for 25 s fires an empty
+kick, when the ball is neither on it (ball sensor) nor within 30 cm (vision), and never in a HALT
+(`kicker_charge.py`); so does each robot at its first chance after a HALT. 2026-10-28's kicks:
+yellow 0 (radio 0) kicked about 2.2 m/s 1 s or 30 s after its last kick, 1.96 after longer; blue 0
+(radio 1) recharges far slower than 1 s, a median 0.41 m/s within 15 s of its last kick and 1.29
+after 15-30 s. Have the electronics team look at radio 1's charging.
+
+What it could not measure stays as it was; hardware that breaks (`kicker`, `dribbler`, `ir`) is
+set in the file by hand. `--mode rsim --yes` rehearses it in the simulator (its dribbler holds at
+every speed) and writes nothing.
+
+**Is the new profile better?** `git diff` shows what changed. `--check` tries it against the
+committed one, on the field, same session: 4 blocks (`--blocks`) alternating the two, committed
+first, so battery and floor fall on both alike. In each the robot carries the ball every way at
+that profile's caps (`--repeats`, default 2) and kicks 5 times (`--kicks`) at the middle of the far
+end, aimed against that profile's bend and bias. It prints per profile how often each carry kept
+the ball and how far the kicks missed (mean of |miss| ± its standard error). Commit the file if
+the new profile is no worse. Ten kicks a side tell apart only differences of a few degrees; more
+`--kicks` for finer.
+
+Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
+far to trust them. An older log is measured again with
+`pixi run python tools/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002`
+(`--tag` per robot: its `tag_forward_m`, `tag_left_m`).
+
 
 | Symptom | Cause |
 |---|---|

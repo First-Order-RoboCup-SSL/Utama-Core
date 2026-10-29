@@ -58,9 +58,19 @@
     stage: "ref-stage",
   };
 
+  // When each robot's ball sensor was last on (performance.now(), by radio ID), from every
+  // state, not only the ones the panel draws.
+  const ballOnAt = {};
+
   function onEvent(d) {
     lastEventAt = performance.now();
     currentCmd = d.command;
+    d.ball_sensor = [];
+    for (const row of d.robot_feedback || []) {
+      if (!(row.connected && row.has_ball)) continue;
+      ballOnAt[row.port_id] = lastEventAt;
+      if (row.team) d.ball_sensor.push(row.team + ":" + row.vision_id);
+    }
     d.tactic_tags = tacticTagsFromStatus(d.tactic_status);
     if (timeline && d.ts != null) timeline.append(d.ts, d);
     latest = d;
@@ -111,9 +121,10 @@
     }
     panelDrawnAt = now;
     renderFieldCheck(d.field_check);
-    // With a field check, its rows already give each robot's position and radio.
-    if (d.field_check) document.getElementById("ref-status-entries").innerHTML = "";
-    else renderRobotStatusInto("ref-status-entries", d);
+    const ballLastOn = {};
+    for (const id in ballOnAt) ballLastOn[id] = (now - ballOnAt[id]) / 1000;
+    // With a field check, its rows already list each robot's position.
+    renderRobotStatusInto("ref-status-entries", d, { ballLastOn, hideFriendly: Boolean(d.field_check) });
     renderTacticStatusInto("ref-tactic-entries", d.tactic_status);
   }
 
@@ -248,6 +259,155 @@
       });
   }
 
+  // Which demo the process plays, when it is examples/demos.py (dashboard/views/demo.py): a list
+  // and Run. Polled: a new demo started (its `generation`) reloads the page, so the field,
+  // referee and strategy panels are the new demo's.
+  function mountDemo() {
+    let generation = null;
+    let built = false;
+    const DEMO_POLL_MS = 1000;
+    function poll() {
+      fetch("/demo/config")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((c) => {
+          if (!c) return; // not demos.py: no panel, no polling
+          if (generation !== null && c.generation !== generation) return location.reload();
+          generation = c.generation;
+          if (!built) {
+            built = true;
+            const select = document.getElementById("demo-choice");
+            select.innerHTML = c.choices
+              .map((n) => `<option${n === c.running ? " selected" : ""}>${n}</option>`)
+              .join("");
+            // The settings most changed between runs: sent with Run, they apply from that demo on.
+            const settings = document.getElementById("demo-settings");
+            for (const key in c.settings) {
+              const s = c.settings[key];
+              const row = document.createElement("div");
+              row.className = "row";
+              row.style.alignItems = "center";
+              row.innerHTML =
+                `<span class="muted" style="min-width:72px;">${key}</span><select style="flex:1;" data-setting="${key}">` +
+                s.values.map((v) => `<option${v === s.value ? " selected" : ""}>${v}</option>`).join("") +
+                "</select>";
+              settings.appendChild(row);
+            }
+            function post(path, body, label) {
+              fetch(path, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              })
+                .then((r) => (r.ok ? null : r.text().then((t) => showSendError(label, t || "HTTP " + r.status))))
+                .catch((err) => showSendError(label, err.message || "no connection"));
+            }
+            document.getElementById("demo-run-btn").addEventListener("click", () => {
+              const chosen = {};
+              for (const s of settings.querySelectorAll("select")) chosen[s.dataset.setting] = s.value;
+              post("/demo/run", { name: select.value, settings: chosen }, select.value);
+            });
+            const check = document.getElementById("demo-check-btn");
+            if (c.checks) check.style.display = "";
+            check.addEventListener("click", () => post("/demo/check", {}, "field check"));
+            document.getElementById("demo-run").style.display = "";
+          }
+          const status = document.getElementById("demo-status");
+          status.className = c.error ? "check-fail" : "muted";
+          status.textContent = c.checking
+            ? "field check running: robots turn on the spot…"
+            : c.switching
+              ? "starting " + c.switching + "…"
+              : c.error || (c.running ? "running " + c.running : "");
+          const lines = document.getElementById("demo-check-lines");
+          lines.style.display = c.check_lines.length ? "" : "none";
+          lines.innerHTML = c.check_lines
+            .map((l) => (l.startsWith("!!") ? '<span class="check-fail">' + escapeHtml(l) + "</span>" : escapeHtml(l)))
+            .join("\n");
+          setTimeout(poll, DEMO_POLL_MS);
+        })
+        .catch(() => setTimeout(poll, DEMO_POLL_MS)); // the process restarting: keep asking
+    }
+    poll();
+  }
+
+  // Driving a robot by keyboard (dashboard/views/teleop.py), when the demo is teleop. While
+  // "keys drive" is ticked, held keys are sent every SEND_MS (the server stops a robot a little
+  // after they stop coming); typing in a text box never drives.
+  function mountTeleop() {
+    fetch("/teleop/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (!c) return;
+        const SEND_MS = 100;
+        const SLOW = 0.3; // m/s
+        const FAST = 0.8;
+        const TURN = 1.5; // rad/s
+        const robotSel = document.getElementById("teleop-robot");
+        robotSel.innerHTML = c.robots.map((n) => `<option>${n}</option>`).join("");
+        const enabled = document.getElementById("teleop-keys");
+        const stateEl = document.getElementById("teleop-state");
+        const held = new Set();
+        let dribble = false;
+        let kick = false;
+        let fast = false;
+        let wasMoving = false;
+        function typing(e) {
+          return e.target && (e.target.tagName === "INPUT" && e.target.type === "text" || e.target.tagName === "TEXTAREA");
+        }
+        document.addEventListener("keydown", (e) => {
+          if (!enabled.checked || typing(e) || e.repeat && !"wasdqe".includes(e.key.toLowerCase())) return;
+          const k = e.key.toLowerCase();
+          fast = e.shiftKey;
+          if ("wasdqe".includes(k) && k.length === 1) held.add(k);
+          else if (k === "b") kick = true;
+          else if (k === "f") dribble = !dribble;
+          else return;
+          e.preventDefault();
+          send();
+        });
+        document.addEventListener("keyup", (e) => {
+          held.delete(e.key.toLowerCase());
+          fast = e.shiftKey;
+        });
+        enabled.addEventListener("change", () => {
+          held.clear();
+          dribble = false;
+          send();
+        });
+        function axis(plus, minus) {
+          return (held.has(plus) ? 1 : 0) - (held.has(minus) ? 1 : 0);
+        }
+        function send() {
+          const speed = fast ? FAST : SLOW;
+          const cmd = {
+            robot: robotSel.value,
+            forward: axis("w", "s") * speed,
+            left: axis("a", "d") * speed,
+            turn: axis("q", "e") * TURN,
+            kick,
+            dribble,
+          };
+          kick = false;
+          const moving = held.size > 0 || cmd.dribble || cmd.kick;
+          stateEl.textContent = moving
+            ? `${cmd.robot}: ${cmd.forward.toFixed(1)} fwd ${cmd.left.toFixed(1)} left ${cmd.turn.toFixed(1)} turn` +
+              (cmd.dribble ? " · dribbler on" : "")
+            : "";
+          if (!moving && !wasMoving) return; // the last stop already went
+          wasMoving = moving;
+          fetch("/teleop/drive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(cmd),
+          })
+            .then((r) => (r.ok ? null : r.text().then((t) => showSendError("teleop", t || "HTTP " + r.status))))
+            .catch((err) => showSendError("teleop", err.message || "no connection"));
+        }
+        setInterval(() => enabled.checked && send(), SEND_MS);
+        document.getElementById("teleop-panel").style.display = "";
+      });
+  }
+
   function mountNote() {
     const input = document.getElementById("log-note");
     document.getElementById("log-note-row").style.display = "";
@@ -265,6 +425,8 @@
   }
 
   function mount() {
+    mountDemo();
+    mountTeleop();
     mountStrategy();
     fetch("/referee/config")
       .then((r) => (r.ok ? r.json() : null))

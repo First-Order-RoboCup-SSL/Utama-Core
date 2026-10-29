@@ -40,13 +40,17 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.tactics._pass_and_score import move_for_a_shot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
 _SUPPORT_FORWARD_BIAS = 0.35  # weight favouring support points closer to the enemy goal
@@ -190,6 +194,7 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
 
         leader_has_ball = has_ball(game, leader_id)
         if not leader_has_ball:
+            ctx.trace(game, f"shoot[{leader_id}]", "fetching the ball")
             mem.prev_best_shot_y = None
             # go_to_ball itself holds outside the enemy's box instead of
             # chasing an unreachable ball when the keeper is holding it
@@ -208,26 +213,23 @@ class LeadAndSupportTactic(BaseTactic[LeadAndSupportMem]):
                 prev_best_shot_y=mem.prev_best_shot_y,
                 switch_margin=_SHOT_SWITCH_MARGIN,
             )
+            if best_shot_y is not None and not shot_heading_reachable(
+                game, leader_id, leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
+            ):
+                best_shot_y = None  # a gap too narrow for the shot gate: move for a better one
             mem.prev_best_shot_y = best_shot_y
             if best_shot_y is None:
                 # See `no_shot_reposition_target`'s docstring: freezing here
                 # never resolves against a stationary blocker.
-                reposition = no_shot_reposition_target(
-                    leader_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-                )
-                commands[leader_id] = move(
-                    game=game,
-                    motion_controller=ctx.motion_controller,
-                    robot_id=leader_id,
-                    target_coords=reposition,
-                    target_oren=leader_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-                    dribbling=True,
-                )
+                commands[leader_id] = move_for_a_shot(game, ctx, leader_id)
             else:
-                target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y))
-                if oriented_towards(game, leader_id, target_oren):
+                bend = kick_bend(game, ctx.motion_controller, leader_id)
+                target_oren = leader_pos.angle_to(Vector2D(goal_x, best_shot_y)) - bend
+                if heading_on_target(game, leader_id, bend):
+                    ctx.trace(game, f"shoot[{leader_id}]", "kick")
                     commands[leader_id] = kick()
                 else:
+                    ctx.trace(game, f"shoot[{leader_id}]", "turning to shoot")
                     commands[leader_id] = turn_on_spot(
                         game=game,
                         motion_controller=ctx.motion_controller,

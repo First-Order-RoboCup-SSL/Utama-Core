@@ -20,6 +20,7 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
+from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
 from utama_core.shared.pass_and_score_geometry import enemy_defense_area_hold_point
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 
@@ -57,7 +58,11 @@ def _game(friendly: dict, enemy: dict, ball_xy: tuple) -> Game:
 
 def _ctx() -> TickContext:
     mc = MagicMock()
+    mc.kick_bend = mc.kick_bias = {}  # the sims: kicks leave along the heading
     mc.calculate.return_value = (Vector2D(0.0, 0.0), 0.0)
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed = mc.carry_turn = mc.min_turn = None
+    mc.robot_carry = {}
     return TickContext(motion_controller=mc, match_log=None)
 
 

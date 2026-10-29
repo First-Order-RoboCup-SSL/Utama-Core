@@ -28,6 +28,7 @@ const TACTIC_TAG_COLORS = {
   attack: "#d9694f",
   defense: "#4fb3a9",
   mixed: "#a68fd6",
+  referee: "#c8c8c8", // a restart or HALT drives the robot, not its tactic
 };
 
 // Robot body radius, world meters -> px is ROBOT_RADIUS * scale so the drawn
@@ -239,6 +240,20 @@ class FieldCanvas {
       drawTeam(robots.enemy, enemyFill, false);
       drawTeam(robots.friendly, friendlyFill, true);
       this._drawTagLegend(ctx, tacticTags);
+
+      // A real robot whose ball sensor is on ("friendly:3", from the radio's feedback): a ring
+      // in the ball's colour, so a sensor that never fires (or never stops) shows on the field.
+      const sensorOn = new Set(state.ball_sensor || []);
+      ctx.strokeStyle = FIELD_COLORS.ball;
+      ctx.lineWidth = 3;
+      for (const team of ["friendly", "enemy"]) {
+        for (const bot of robots[team] || []) {
+          if (!sensorOn.has(team + ":" + bot.id)) continue;
+          ctx.beginPath();
+          ctx.arc(toX(bot.x), toY(bot.y), r + 6, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+      }
     }
 
     if (state.field_check && robots) {
@@ -308,6 +323,14 @@ class FieldCanvas {
     ctx.setLineDash([4, 3]);
     ctx.lineWidth = 1.5;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
+    // Keep-out zones (StrategyRunner's keep_out): no robot may enter; one inside forces HALT.
+    ctx.fillStyle = "rgba(224, 106, 96, 0.25)";
+    ctx.strokeStyle = "#e06a60";
+    for (const [kx1, ky1, kx2, ky2] of fieldCheck.keep_out || []) {
+      const k = rectBounds(kx1, ky1, kx2, ky2);
+      ctx.fillRect(k.x, k.y, k.w, k.h);
+      ctx.strokeRect(k.x, k.y, k.w, k.h);
+    }
     ctx.setLineDash([]);
     const ax = toX(0), ay = CH - 6, dir = toX(1) > ax ? 1 : -1;
     ctx.strokeStyle = ctx.fillStyle = FIELD_COLORS.marker;

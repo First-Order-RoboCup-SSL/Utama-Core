@@ -367,7 +367,11 @@ whoever runs it.
   value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
   `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
   `tactics/give_and_go.py`. Enable with `match_log_path=` or `match.run_match(...,
-  run_dir=...)`; read back with `load_jsonl(path)`.
+  run_dir=...)`; read back with `load_jsonl(path)`. A run with a dashboard or a game log keeps one
+  in memory too: a plain value traced under a key naming a robot (`ctx.trace(game, f"shoot[{rid}]",
+  "turning to shoot")`) shows under that robot in the Live tab's Tactics panel and is noted in the
+  game log, so name the step a robot is on in words a tester reads (`AbstractStrategy.debug_status`).
+  While a restart or HALT drives a robot, the panel shows `referee · <its job>` instead of its tactic.
 - **`render_window()` / `render_around_event()`** (`analysis/render_window.py`) — PNG of
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
   over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread
@@ -513,6 +517,8 @@ state to edit. Moments are not a gate on strategies: they pin shared-code bugs.
 | Same moment still failing after the fix | robot driving in | `keeps_clear` counted the ball placed onto a robot standing still | `20ca1974` | `test_moments.py` |
 | keep_out foul on their free kick | robot driving in | referee: the kicker moved the ball 0.75 m in the preparation stage; it was in play | `12b46412` | `test_free_kick_taken.py` |
 | Our placement times out (hand-made moment) | slow placer | placer drove through the ball toward a point behind it (planner ignores the ball in our placement) | `78685f79` (goes round it) | `test_referee_unit.py` (TestBallPlacementOursApproachAroundBall) |
+| Real placer brushes the ball going round it; chases a ball rolling out with its back to it (field day 2026-10-27) | clumsy placer | detour kept only robot plus ball radius (~1 cm); faced the spot from the start; aimed behind a rolling ball | field-day-20261027 branch: 5 cm clearance (`_BALL_DETOUR_RADIUS_M`, also free kicks and penalties), faces the ball, meets a rolling ball on its path | `test_referee_unit.py` (TestBallPlacementOursApproachAroundBall) |
+| STOP with the ball just out over the goal line: our robot drives into their keeper (field day 2026-10-27) | robot ignoring a robot | the clear-of-the-ball target, clamped back onto the pitch, was 0.23 m from the keeper standing on its line | field-day-20261027 branch: clearing targets keep `_ROBOT_SPACING_M` (2 robot radii + 10 cm) from every robot, moving on round the ball | `test_referee_unit.py` (TestClearingTargetsKeepOffRobots) |
 
 The last row matters on real robots only: in sim matches `StrategyRunner` teleports a placed ball
 to its target (`docs/custom_referee_design_decisions.md`, Ball placement), so our placer never

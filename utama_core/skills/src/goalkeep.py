@@ -53,6 +53,21 @@ _RETRIEVE_BALL_SPEED = 0.3  # m/s — below this, a ball in our box is "at rest,
 _NEAR_LINE_DISTANCE = 0.5  # m
 
 
+def shot_bisector_y(ball: Vector2D, goal_x: float, goal_half_width: float, keeper_x: float) -> float:
+    """Where, on the keeper's line `x = keeper_x`, the bisector of the angle the goal mouth
+    subtends at the ball crosses: the point that leaves equal angles to both posts. Copying
+    the ball's y instead left the far post open whenever the ball was off-centre (2026-10-27
+    field runs). Not clamped to the posts; a ball at or behind the keeper's line gives its y."""
+    if (ball.x - keeper_x) * (keeper_x - goal_x) <= 0:
+        return ball.y
+    to_left = ball.distance_to(Vector2D(goal_x, goal_half_width))
+    to_right = ball.distance_to(Vector2D(goal_x, -goal_half_width))
+    # Angle bisector theorem: it meets the goal line dividing the mouth in the ratio of the
+    # distances to the posts.
+    goal_y = goal_half_width * (to_right - to_left) / (to_left + to_right)
+    return ball.y + (goal_y - ball.y) * (keeper_x - ball.x) / (goal_x - ball.x)
+
+
 def _ball_needs_retrieval(game: Game, robot_id: int) -> bool:
     """A ball at rest inside our own box is not a shot to block — it is a
     ball only the keeper may legally go and clear (`DefenseAreaRule` caps
@@ -143,11 +158,10 @@ def goalkeep(
     ball_pos = game.ball.p.to_2d()
     target = predict_ball_pos_at_x(game, keeper_x)
 
-    stop_y = 0.0
+    # Covering the shot from where the ball is; adjusted below for defenders between ball and goal.
+    stop_y = clamp_y(shot_bisector_y(ball_pos, goal_x, goal_half_width, keeper_x), post_limit)
 
-    if len(game.friendly_robots) == 1:
-        stop_y = clamp_y(ball_pos.y, post_limit)
-    elif len(game.friendly_robots) == 2:
+    if len(game.friendly_robots) == 2:
         try:
             # Check if defender is between ball and goal (side-aware)
             defender_between = (game.my_team_is_right and game.friendly_robots[1].p.x > ball_pos.x) or (

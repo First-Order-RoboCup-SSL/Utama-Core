@@ -7,7 +7,8 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.skills.src.utils.move_utils import turn_on_spot
+from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
+from utama_core.skills.src.utils.move_utils import move, turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
 
@@ -45,6 +46,7 @@ def _game(friendly: dict, enemy: dict, ball_xy: tuple) -> Game:
 
 def _motion_controller(angular_vel: float) -> MagicMock:
     mc = MagicMock()
+    mc.min_turn = None
     mc.calculate.return_value = (Vector2D(0.0, 0.0), angular_vel)
     return mc
 
@@ -135,3 +137,159 @@ def test_turn_on_spot_steers_away_from_a_wedged_teammate():
 
     final_call_kwargs = mc.calculate.call_args_list[-1].kwargs
     assert final_call_kwargs["target_pos"].y > 0.0  # steered away from the teammate at y=-0.15
+
+
+_CARRY_SPEED, _CARRY_TURN = 0.3, 0.6  # REAL_PARAMS's
+
+
+@pytest.mark.parametrize(
+    "velocity, angular_vel, scale",
+    [
+        ((1.0, 0.0), 0.2, _CARRY_SPEED / 1.0),  # too fast: the speed binds
+        ((0.1, 0.0), 4.0, _CARRY_TURN / 4.0),  # turning too hard: the turn binds (2026-10-28: 4 rad/s lost the ball)
+        ((-0.6, 0.8), 3.0, min(_CARRY_SPEED / 1.0, _CARRY_TURN / 3.0)),  # both: the tighter one, for both
+        ((0.1, 0.1), 0.5, 1.0),  # within both: unchanged
+    ],
+)
+def test_move_holds_a_robot_with_the_ball_to_the_carry_limits(velocity, angular_vel, scale):
+    """Dribbling with the ball, `move` scales the whole command down by one factor, so the
+    robot's path and turn keep their shape and only slow down."""
+    cmd = move(**_carry_case(velocity, angular_vel, has_ball=True, dribbling=True))
+    assert cmd.local_forward_vel == pytest.approx(velocity[0] * scale)
+    assert cmd.local_left_vel == pytest.approx(velocity[1] * scale)
+    assert cmd.angular_vel == pytest.approx(angular_vel * scale)
+    assert math.hypot(cmd.local_forward_vel, cmd.local_left_vel) <= _CARRY_SPEED + 1e-9
+    assert abs(cmd.angular_vel) <= _CARRY_TURN + 1e-9
+
+
+@pytest.mark.parametrize(
+    "has_ball, dribbling, limits",
+    [
+        (False, True, (_CARRY_SPEED, _CARRY_TURN)),
+        (True, False, (_CARRY_SPEED, _CARRY_TURN)),
+        (True, True, (None, None)),
+    ],
+)
+def test_move_is_not_limited_without_the_ball_without_dribbling_or_in_the_sims(has_ball, dribbling, limits):
+    """Fetching the ball (no ball yet), moving without the dribbler, and every sim (no limits in
+    `RSIM_PARAMS`/`GRSIM_PARAMS`) keep the full command."""
+    cmd = move(**_carry_case((1.0, 0.0), 4.0, has_ball=has_ball, dribbling=dribbling, limits=limits))
+    assert (cmd.local_forward_vel, cmd.local_left_vel, cmd.angular_vel) == pytest.approx((1.0, 0.0, 4.0))
+
+
+def test_a_robot_with_its_own_carry_limits_is_held_to_those_not_the_teams():
+    """`RobotProfile.carry_speed`/`carry_turn` (via `robot_carry`) replace the team's for that robot only."""
+    case = _carry_case((1.0, 0.0), 0.2, has_ball=True, dribbling=True)
+    case["motion_controller"].robot_carry = {1: (0.6, 2.0), 2: (0.1, 0.1)}
+    cmd = move(**case)
+    assert (cmd.local_forward_vel, cmd.angular_vel) == pytest.approx((0.6, 0.2 * 0.6))
+
+
+def _carry_case(velocity, angular_vel, has_ball, dribbling, limits=(_CARRY_SPEED, _CARRY_TURN)) -> dict:
+    game = _game(
+        {1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=has_ball)}, {}, (ROBOT_RADIUS + BALL_RADIUS, 0.0)
+    )
+    mc = MagicMock()
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed, mc.carry_turn = limits
+    mc.robot_carry = {}
+    mc.min_turn = None
+    mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
+    return dict(
+        game=game,
+        motion_controller=mc,
+        robot_id=1,
+        target_coords=Vector2D(1.0, 0.0),
+        target_oren=0.0,
+        dribbling=dribbling,
+    )
+
+
+def test_real_robots_have_carry_limits_and_the_sims_do_not():
+    from utama_core.config.robot_params import GRSIM_PARAMS, REAL_PARAMS, RSIM_PARAMS
+
+    assert (REAL_PARAMS.CARRY_SPEED, REAL_PARAMS.CARRY_TURN) == (_CARRY_SPEED, _CARRY_TURN)
+    assert (
+        RSIM_PARAMS.CARRY_SPEED is RSIM_PARAMS.CARRY_TURN is GRSIM_PARAMS.CARRY_SPEED is GRSIM_PARAMS.CARRY_TURN is None
+    )
+
+
+@pytest.mark.parametrize("controller", ["fpp", "pid"])
+def test_a_robot_that_loses_the_ball_ramps_from_the_carry_speed_it_was_sent(controller):
+    """Carrying the ball to its right, `move` sends 0.3 m/s although the controller asked for
+    ~1 m/s. When the ball is lost and the target swings ahead, the next command ramps from the
+    0.3 m/s sent: ramping from the 1 m/s never sent lurched the real robot 0.9 m/s sideways
+    (dribble_and_shoot, 2026-10-28)."""
+    from utama_core.config.enums import Mode
+    from utama_core.motion_planning.src.controllers.fastpathplanning import (
+        FastPathPlanningController,
+    )
+    from utama_core.motion_planning.src.controllers.pid_controller import PIDController
+
+    mc = {"fpp": FastPathPlanningController, "pid": PIDController}[controller](Mode.REAL)
+    mc.pose_ahead = PoseAhead(0.0)
+    ball = (ROBOT_RADIUS + BALL_RADIUS, 0.0)
+    with_ball = _game({1: _robot(1, 0.0, 0.0, True, has_ball=True)}, {}, ball)
+    for _ in range(30):  # long enough for the controller's own output to reach full speed
+        carried = move(with_ball, mc, 1, Vector2D(0.0, -2.0), 0.0, dribbling=True)
+    assert math.hypot(carried.local_forward_vel, carried.local_left_vel) == pytest.approx(0.3)
+
+    lost = _game({1: _robot(1, 0.0, 0.0, True, has_ball=False)}, {}, ball)
+    cmd = move(lost, mc, 1, Vector2D(1.0, 0.0), 0.0, dribbling=True)
+
+    assert cmd.local_left_vel >= -0.3 - 1e-9  # no faster to the right than it was going
+
+
+# --- the slowest turn the real robots make ---
+
+_MIN_TURN = 0.3
+
+
+def _turn_case(orientation: float, target_oren: float, angular_vel: float, min_turn) -> dict:
+    game = _game({1: _robot(1, 0.0, 0.0, True, orientation=orientation)}, {}, (1.0, 1.0))
+    mc = MagicMock()
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.carry_speed = mc.carry_turn = None
+    mc.robot_carry = {}
+    mc.min_turn = min_turn
+    mc.calculate.return_value = (Vector2D(0.0, 0.0), angular_vel)
+    return dict(game=game, motion_controller=mc, robot_id=1, target_coords=Vector2D(0.0, 0.0), target_oren=target_oren)
+
+
+@pytest.mark.parametrize(
+    "orientation, target_oren, angular_vel, expected",
+    [
+        (0.0, 0.05, 0.1, _MIN_TURN),  # 0.05 rad short, asked 0.1 rad/s: the slowest real turn
+        (0.0, -0.05, -0.1, -_MIN_TURN),  # the other way
+        (0.0, -0.05, 0.0, -_MIN_TURN),  # asked nothing: towards the target all the same
+        (3.1, -3.1, 0.0, _MIN_TURN),  # across +-pi: the short way round, anticlockwise
+        (0.0, 0.011, 0.0, _MIN_TURN),  # just past the 0.01 rad it may stop within
+        (0.0, 0.009, 0.05, 0.05),  # within it: as asked
+        (0.0, 0.5, 2.0, 2.0),  # asked faster: as asked
+    ],
+)
+def test_a_real_robot_off_its_orientation_turns_at_least_its_slowest_turn(
+    orientation, target_oren, angular_vel, expected
+):
+    """2026-10-28 passing rallies: asked 0.1 rad/s, a passer stood still 3-4 deg short of its
+    aim and kicked at the aim tolerance's edge."""
+    case = _turn_case(orientation, target_oren, angular_vel, _MIN_TURN)
+    assert move(**case).angular_vel == pytest.approx(expected)
+
+
+def test_the_raised_turn_is_what_the_controller_ramps_from():
+    case = _turn_case(0.0, 0.05, 0.1, _MIN_TURN)
+    move(**case)
+    case["motion_controller"].sent.assert_called_once()
+    assert case["motion_controller"].sent.call_args.args[2] == pytest.approx(_MIN_TURN)
+
+
+def test_the_sims_turn_as_asked():
+    assert move(**_turn_case(0.0, 0.05, 0.1, None)).angular_vel == pytest.approx(0.1)
+
+
+def test_only_real_robots_have_a_slowest_turn():
+    from utama_core.config.robot_params import GRSIM_PARAMS, REAL_PARAMS, RSIM_PARAMS
+
+    assert REAL_PARAMS.MIN_TURN == _MIN_TURN
+    assert RSIM_PARAMS.MIN_TURN is GRSIM_PARAMS.MIN_TURN is None

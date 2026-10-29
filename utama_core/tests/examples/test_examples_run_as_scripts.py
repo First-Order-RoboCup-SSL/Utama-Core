@@ -15,7 +15,19 @@ EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
 
 @pytest.mark.parametrize(
     "name",
-    ["real_attacker_defender.py", "real_score_goal.py", "real_dribble_and_shoot.py", "demo_referee_feedback_gui.py"],
+    [
+        "shooting_drill.py",
+        "score_goal.py",
+        "dribble_and_shoot.py",
+        "pass_receive.py",
+        "passing_rally.py",
+        "save_and_counter.py",
+        "calibrate_robot.py",
+        "planner_ab.py",
+        "demos.py",
+        "teleop.py",
+        "demo_referee_feedback_gui.py",
+    ],
 )
 def test_an_example_with_options_prints_its_help_run_by_path(name, tmp_path):
     done = subprocess.run(
@@ -30,7 +42,7 @@ def test_the_field_example_holds_while_its_tactic_does_not_apply():
     raise, stopping the run the first time the defender played it."""
     sys.path.insert(0, str(EXAMPLES))
     try:
-        import real_attacker_defender as example
+        import shooting_drill as example
     finally:
         sys.path.remove(str(EXAMPLES))
     robots = frozenset({1})

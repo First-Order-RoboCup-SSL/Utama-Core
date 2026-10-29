@@ -56,18 +56,21 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
     in_own_defense_area,
     intercept_point,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
     score_pass_setup,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
-from utama_core.tactics._pass_and_score import _pass_exec
+from utama_core.tactics._pass_and_score import _pass_exec, move_for_a_shot
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
 _SUGGEST_HANDOFF_TIME = 2.0  # seconds — see suggest_next below
@@ -565,6 +568,10 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             prev_best_shot_y=mem.prev_best_shot_y,
             switch_margin=_SHOT_SWITCH_MARGIN,
         )
+        if best_shot_y is not None and not shot_heading_reachable(
+            game, carrier_id, carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
+        ):
+            best_shot_y = None  # a gap too narrow for the shot gate: strafe, or the blind shot
         mem.prev_best_shot_y = best_shot_y
 
         if ctx.match_log is not None:
@@ -584,7 +591,8 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
         # round-robin). Once the carry is spent, shoot at the goal centre
         # instead: a blocked shot keeps the ball live, a foul hands it over.
         carry_spent = carry_exhausted(game, mem.carry_origin)
-        if carry_spent and best_shot_y is None:
+        blind_shot = carry_spent and best_shot_y is None
+        if blind_shot:
             best_shot_y = (goal_y1 + goal_y2) / 2.0
         if not carry_spent and (best_shot_y is None or (first_touch_stuck and not force_shot)):
             # No open lane at all — freezing here (the old behaviour) never
@@ -592,20 +600,22 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # goal mouth): nothing about the position changes, so the shot
             # search comes back empty forever. Strafe instead; see
             # `no_shot_reposition_target`'s docstring.
-            reposition = no_shot_reposition_target(
-                carrier_pos, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-            )
-            commands[carrier_id] = move(
-                game=game,
-                motion_controller=ctx.motion_controller,
-                robot_id=carrier_id,
-                target_coords=reposition,
-                target_oren=carrier_pos.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-                dribbling=True,
-            )
+            commands[carrier_id] = move_for_a_shot(game, ctx, carrier_id)
         else:
-            target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
-            if oriented_towards(game, carrier_id, target_oren):
+            bend = kick_bend(game, ctx.motion_controller, carrier_id)
+            target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y)) - bend
+            # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.
+            aimed = (
+                oriented_towards(game, carrier_id, target_oren)
+                if blind_shot
+                else heading_on_target(game, carrier_id, bend)
+            )
+            ctx.trace(
+                game,
+                f"shoot[{carrier_id}]",
+                ("kick" if aimed else "turning to shoot") + (" · blind, carry spent" if blind_shot else ""),
+            )
+            if aimed:
                 commands[carrier_id] = kick()
             else:
                 commands[carrier_id] = turn_on_spot(

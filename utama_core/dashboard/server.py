@@ -122,6 +122,20 @@ class DashboardServer(threading.Thread):
         """Register a `POST path` endpoint; handler receives the parsed JSON body."""
         self._command_handlers[path] = handler
 
+    def views(self) -> tuple[frozenset, frozenset]:
+        """The routes and command handlers registered so far, for `reset_views`."""
+        return frozenset(self._routes), frozenset(self._command_handlers)
+
+    def reset_views(self, views: tuple[frozenset, frozenset]) -> None:
+        """Drops every route and command handler registered since `views()`: a process that
+        builds one match after another (`examples/demos.py`) leaves none of the last one's
+        behind, so the page shows no panel of a match that has ended."""
+        routes, handlers = views
+        for path in set(self._routes) - routes:
+            del self._routes[path]
+        for path in set(self._command_handlers) - handlers:
+            del self._command_handlers[path]
+
     # ---- push state from a view ----
 
     def notify(self, channel: str, state: dict) -> None:

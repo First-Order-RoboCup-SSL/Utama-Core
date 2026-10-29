@@ -6,6 +6,8 @@ otherwise answers by walking the field: is every configured robot seen, under th
 we expect, inside the part of the field in play? Is the camera sending? Is each robot
 still answering on the radio? Any robot seen in play that we did not configure?
 
+A robot inside a keep-out zone fails too.
+
 Each answer is a row with status "ok", "warn" or "fail". `StrategyRunner` shows the
 rows on the dashboard's Live tab and, on real robots, forces HALT while any row
 fails (see `halt_reason`), so a lost robot or a robot leaving the area stops play
@@ -14,16 +16,25 @@ whether or not anyone is watching the page.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
 from utama_core.entities.data.raw_vision import RawVisionData
 
 # A configured robot missing from vision this long fails: a robot we cannot see is
-# driven on a stale position. Several frames at ssl-vision's 60-75 Hz.
-VISION_LOST_S = 0.5
-# No vision packet at all for this long fails (camera or network down).
-CAMERA_SILENT_S = 0.5
+# driven on a stale position. On the 2026-10-27 field test (two cameras, 60-90 Hz) a
+# robot's gaps were p99.9 50-100 ms; every longer one was our own loop stalling (see
+# `StrategyRunner._tick_field_check`), not vision. 0.15 s until 2026-10-28, when a robot
+# lost for 0.2 s halted a field run: the Kalman filter coasts it through such a gap. 0.1 s for
+# a morning on 2026-10-29: that day's feed (50-75 packets/s, not 92) dropped out for over 0.1 s
+# every second, and calibration halted 0.1-0.2 s after each start.
+VISION_LOST_S = 0.3
+# No vision packet at all for this long fails (camera or network down). 0.15 s until 2026-10-28,
+# raised with VISION_LOST_S.
+CAMERA_SILENT_S = 0.3
+# A gap between two ticks of the runner's loop longer than this is the loop stalling (it ticks
+# every 6-17 ms on real robots).
+LOOP_STALL_S = 0.1
 # A robot this far outside the field bounds fails: the camera half is wrong, or the
 # robot is leaving the area the planner keeps it in. Within it, a robot reaching
 # over the line (a defender at the half-way line) is fine.
@@ -46,6 +57,15 @@ def _outside_by(bounds: FieldBounds, x: float, y: float) -> float:
     return max(dx, dy)
 
 
+def _inside(zone: FieldBounds, x: float, y: float) -> bool:
+    return _outside_by(zone, x, y) == 0
+
+
+def _rect(bounds: FieldBounds) -> list[float]:
+    (x1, y1), (x2, y2) = bounds.top_left, bounds.bottom_right
+    return [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
+
+
 class FieldCheck:
     """Tracks what vision and the radio last reported; `rows()` judges it.
 
@@ -53,10 +73,17 @@ class FieldCheck:
     or "blue". Times are the runner's clock (`time.perf_counter()`), not vision's.
     """
 
-    def __init__(self, expected: Iterable[tuple[str, int]], bounds: FieldBounds, field: FieldDimensions):
+    def __init__(
+        self,
+        expected: Iterable[tuple[str, int]],
+        bounds: FieldBounds,
+        field: FieldDimensions,
+        keep_out: Sequence[FieldBounds] = (),
+    ):
         self.expected = sorted(expected)
         self.bounds = bounds
         self.field = field
+        self.keep_out = tuple(keep_out)  # zones no robot may be in (`StrategyRunner(keep_out=...)`)
         self._robot_seen: dict[tuple[str, int], tuple[float, float, float]] = {}  # -> (time, x, y)
         self._ball_seen: Optional[tuple[float, float, float]] = None
         self._packet_times: list[float] = []
@@ -128,6 +155,8 @@ class FieldCheck:
         out = _outside_by(self.bounds, x, y)
         if out > OUT_OF_BOUNDS_MARGIN_M:
             return _row(name, FAIL, f"at ({x:.2f}, {y:.2f}), {out:.2f} m outside the area in play")
+        if any(_inside(zone, x, y) for zone in self.keep_out):
+            return _row(name, FAIL, f"at ({x:.2f}, {y:.2f}), in a keep-out zone")
         return _row(name, OK, f"at ({x:.2f}, {y:.2f})")
 
     def _radio_row(self, colour: str, vision_id: int, feedback: Optional[dict]) -> dict:
@@ -162,10 +191,10 @@ class FieldCheck:
 
     def payload(self, rows: list[dict], auto_halt: Optional[str]) -> dict:
         """What the dashboard draws: the rows, the area in play, and the last auto-HALT."""
-        (x1, y1), (x2, y2) = self.bounds.top_left, self.bounds.bottom_right
         return {
             "rows": rows,
-            "bounds": [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)],
+            "bounds": _rect(self.bounds),
+            "keep_out": [_rect(zone) for zone in self.keep_out],
             "margin": OUT_OF_BOUNDS_MARGIN_M,
             "auto_halt": auto_halt,
         }

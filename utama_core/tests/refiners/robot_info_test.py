@@ -2,6 +2,7 @@ import pytest
 
 from utama_core.data_processing.refiners.robot_info import (
     _BALL_CAPTURE_DIST,
+    CONTACT_GRACE_S,
     RobotInfoRefiner,
 )
 from utama_core.entities.data.command import RobotResponse
@@ -217,6 +218,15 @@ def test_mixed_team_trusted_uses_ir_untrusted_uses_vision():
     assert result.friendly_robots[1].has_ball is True  # from vision (close enough)
 
 
+def test_an_untrusted_sensor_stuck_on_is_ignored_away_from_the_ball():
+    """2026-10-29: radio 1's IR read 'has ball' all the time; its profile's `ir: false` must
+    leave has_ball to vision, false while the ball is far."""
+    refiner = RobotInfoRefiner(trusted_ir_robots=frozenset())
+    frame = _make_frame({1: _make_robot(1, 1.0, 0.0)}, ball_pos=(0.0, 0.0))
+    result = refiner.refine(frame, [RobotResponse(id=1, has_ball=True)])
+    assert result.friendly_robots[1].has_ball is False
+
+
 def test_untrusted_robot_missing_from_responses_uses_vision():
     """Untrusted robot absent from responses this tick must not keep stale has_ball."""
     refiner = RobotInfoRefiner(trusted_ir_robots=frozenset({0}))
@@ -239,3 +249,52 @@ def test_untrusted_robot_missing_from_responses_uses_vision():
     frame_far = _make_frame(robots_far, ball_pos=(0.0, 0.0))
     result_far = refiner.refine(frame_far, [RobotResponse(id=0, has_ball=False)])
     assert result_far.friendly_robots[1].has_ball is False  # stale cleared by vision
+
+
+# ---------------------------------------------------------------------------
+# contact_grace_s: real ball sensors drop out with the ball still on the dribbler (every mode)
+# ---------------------------------------------------------------------------
+
+
+def _at(ts: float, ball_pos=(0.09, 0.0)) -> GameFrame:
+    frame = _make_frame({0: _make_robot(0, 0.0, 0.0)}, ball_pos=ball_pos)
+    return GameFrame(
+        ts=ts,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=frame.friendly_robots,
+        enemy_robots={},
+        ball=frame.ball,
+    )
+
+
+@pytest.mark.parametrize("gap", [-0.01, 0.01])
+def test_a_sensor_dropout_with_the_ball_on_the_dribbler_holds_for_the_grace(gap):
+    """2026-10-27 field run, placement at 77 s: the sensor went off mid-carry, the ball 0.09 m ahead.
+    The default refiner, so the simulators get it too."""
+    refiner = RobotInfoRefiner()
+    refiner.refine(_at(0.0), [RobotResponse(id=0, has_ball=True)])
+    result = refiner.refine(_at(CONTACT_GRACE_S + gap), [RobotResponse(id=0, has_ball=False)])
+    assert result.friendly_robots[0].has_ball is (gap < 0)
+
+
+@pytest.mark.parametrize(
+    "ball_pos", [(_BALL_CAPTURE_DIST + 0.01, 0.0), (-0.09, 0.0)], ids=["out of reach", "behind the robot"]
+)
+def test_a_dropout_is_believed_once_vision_shows_the_ball_gone(ball_pos):
+    refiner = RobotInfoRefiner(contact_grace_s=0.3)
+    refiner.refine(_at(0.0), [RobotResponse(id=0, has_ball=True)])
+    assert (
+        refiner.refine(_at(0.1, ball_pos), [RobotResponse(id=0, has_ball=False)]).friendly_robots[0].has_ball is False
+    )
+
+
+def test_without_a_grace_every_reading_is_taken_as_it_comes():
+    refiner = RobotInfoRefiner(contact_grace_s=0.0)
+    refiner.refine(_at(0.0), [RobotResponse(id=0, has_ball=True)])
+    assert refiner.refine(_at(0.01), [RobotResponse(id=0, has_ball=False)]).friendly_robots[0].has_ball is False
+
+
+def test_a_ball_on_the_dribbler_never_sensed_is_not_held():
+    refiner = RobotInfoRefiner(contact_grace_s=0.3)
+    assert refiner.refine(_at(0.0), [RobotResponse(id=0, has_ball=False)]).friendly_robots[0].has_ball is False

@@ -51,10 +51,11 @@ function renderRefereeHeaderInto(ids, state) {
   }
 }
 
-// `tacticStatus` rows are `[label, tag?]` (see `AbstractStrategy.debug_status`):
-// label is the tactic id, suffixed " (committed)" while its slot is committed;
-// tag is its `TacticTag` value. Returns {robotId: tag} for FieldCanvas's
-// `tactic_tags`.
+// `tacticStatus` rows are `[label, tag?, steps?]` (see `AbstractStrategy.debug_status`):
+// label is the tactic id, suffixed " (committed)" while its slot is committed, or
+// "referee · <job>" while a restart drives the robot; tag is its `TacticTag` value, or
+// "referee"; steps is what its tactic and skills traced this tick. Returns {robotId: tag}
+// for FieldCanvas's `tactic_tags`.
 function tacticTagsFromStatus(tacticStatus) {
   const tags = {};
   for (const robotId in tacticStatus || {}) {
@@ -62,6 +63,10 @@ function tacticTagsFromStatus(tacticStatus) {
     if (tag) tags[robotId] = tag;
   }
   return tags;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 }
 
 function renderTacticStatusInto(containerId, tacticStatus, options) {
@@ -78,7 +83,7 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
 
   let html = "";
   for (const robotId of robotIds) {
-    const [label = "", tag] = status[robotId] || [];
+    const [label = "", tag, steps] = status[robotId] || [];
     const committed = label.includes("committed");
     const tagColor = TACTIC_TAG_COLORS[tag];
     html +=
@@ -91,9 +96,54 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
       (tagColor ? ' <span style="color:' + tagColor + '; font-size:.65rem;">' + tag + "</span>" : "") +
       "</span>" +
       (committed ? '<span class="muted" style="font-size:.65rem;">committed</span>' : "") +
-      "</div>";
+      "</div>" +
+      (steps ? '<div class="ref-row muted tactic-steps">' + escapeHtml(steps) + "</div>" : "");
   }
   c.innerHTML = html;
+}
+
+// The radio's feedback rows (StrategyRunner's `_build_robot_feedback_snapshot`), one robot each:
+// its ball sensor (the IR bit the firmware sends back), how fresh that answer is, and where
+// vision has it. `ballLastOn` is {port_id: seconds since the sensor was last on}, kept by the
+// caller across every state, so a touch shorter than the panel's refresh still shows.
+const LOW_REPLY_RATE = 0.8; // find_robots.py's
+
+function robotFeedbackHtml(d, ballLastOn) {
+  const feedback = d.robot_feedback || [];
+  if (feedback.length === 0) return "";
+  const robots = d.robots || {};
+  const lastOn = ballLastOn || {};
+  let html = '<div class="ref-section-title">Robots (radio)</div>';
+  for (const row of feedback) {
+    const label = row.team_color ? row.team_color + " " + row.vision_id : "radio " + row.port_id;
+    let sensor;
+    if (!row.connected) sensor = '<span class="muted">ball sensor ?</span>';
+    else if (row.has_ball) sensor = '<span class="ball-on">BALL</span>';
+    else if (lastOn[row.port_id] != null) sensor = '<span class="muted">no ball · last ' + lastOn[row.port_id].toFixed(1) + " s ago</span>";
+    else sensor = '<span class="muted">no ball</span>';
+
+    // The share of its commands it answered over the last 2 s; under find_robots' LOW_REPLY_RATE
+    // the link is poor (a flat battery, the radio out of reach) before it goes silent.
+    let rate = "";
+    if (row.reply_rate != null) {
+      const pct = Math.round(row.reply_rate * 100) + "% answered";
+      rate = " · " + (row.reply_rate < LOW_REPLY_RATE ? '<span class="check-fail">' + pct + "</span>" : pct);
+    }
+    let radio;
+    if (row.connected) radio = "fw " + row.port_id + " · " + Math.round(row.age_seconds * 1000) + " ms" + rate;
+    else if (row.age_seconds != null) radio = '<span class="check-fail">fw ' + row.port_id + " silent " + row.age_seconds.toFixed(1) + " s</span>";
+    else radio = '<span class="check-warn">fw ' + row.port_id + " no feedback yet</span>";
+
+    const bot = (robots[row.team] || []).find((r) => r.id === row.vision_id);
+    const where = bot
+      ? "(" + bot.x.toFixed(2) + ", " + bot.y.toFixed(2) + ") · " + Math.hypot(bot.vx, bot.vy).toFixed(2) + " m/s"
+      : '<span class="check-warn">not seen</span>';
+
+    html +=
+      '<div class="ref-row"><span>' + label + "</span><span>" + sensor + "</span></div>" +
+      '<div class="ref-row muted" style="font-size:.68rem; padding-bottom:4px;"><span>' + radio + "</span><span>" + where + "</span></div>";
+  }
+  return html;
 }
 
 function renderRobotStatusInto(containerId, d, options) {
@@ -102,18 +152,10 @@ function renderRobotStatusInto(containerId, d, options) {
   const opts = options || {};
   let html = "";
 
-  if (!opts.hideFeedback) {
-    const feedback = d.robot_feedback || [];
-    html += '<div class="ref-section-title">Controller feedback (' + feedback.length + ")</div>";
-    for (const row of feedback) {
-      const label = row.team_color ? row.team_color + " " + row.vision_id : "port " + row.port_id;
-      html +=
-        '<div class="ref-row"><span>' +
-        label +
-        "</span><span class=\"muted\">" +
-        (row.connected ? (row.has_ball ? "ball" : "connected") : "no data") +
-        "</span></div>";
-    }
+  if (!opts.hideFeedback) html += robotFeedbackHtml(d, opts.ballLastOn);
+  if (opts.hideFriendly) {
+    c.innerHTML = html;
+    return;
   }
 
   html += '<div class="ref-section-title">Friendly</div>';

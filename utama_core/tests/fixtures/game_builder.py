@@ -97,6 +97,7 @@ def build_game(
     referee_command: Optional[RefereeCommand] = None,
     has_ball_robot: Optional[tuple] = None,
     field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
+    defense_area_rules: bool = True,
     ts: float = 0.0,
     history_len: int = 10,
 ) -> Game:
@@ -130,7 +131,12 @@ def build_game(
         ball=ball,
         referee=referee,
     )
-    field = Field(my_team_is_right=my_team_is_right, field_dims=field_dims, field_bounds=field_dims.full_field_bounds)
+    field = Field(
+        my_team_is_right=my_team_is_right,
+        field_dims=field_dims,
+        field_bounds=field_dims.full_field_bounds,
+        defense_area_rules=defense_area_rules,
+    )
     return Game(past=GameHistory(history_len), current=frame, field=field)
 
 

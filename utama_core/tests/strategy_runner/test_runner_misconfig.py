@@ -502,7 +502,7 @@ def test_blue_allowlist_not_set_in_single_team_real_mode():
 
 
 def test_a_blue_team_alone_tracks_only_its_own_robots():
-    # 2026-10-22, real_score_goal.py with our blue 2 alone: misread patterns came through as blue 1
+    # 2026-10-22, score_goal.py with our blue 2 alone: misread patterns came through as blue 1
     # and blue 5, became our robots and lived on in the Kalman filter as ghosts. The allowlists
     # assumed our team was yellow, so a blue team alone was never filtered (and yellow was).
     assert StrategyRunner._roster_allowlists({}, {2: 0}, my_team_is_yellow=False, has_opp=False) == (

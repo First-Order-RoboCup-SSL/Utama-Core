@@ -2,6 +2,7 @@ import cProfile
 import dataclasses
 import json
 import logging
+import math
 import signal
 import sys
 import threading
@@ -10,7 +11,7 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 from rich.live import Live
 
@@ -48,6 +49,7 @@ from utama_core.global_utils.mapping_utils import (
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
 from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
@@ -56,9 +58,10 @@ from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
 from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
 from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.src.Utils.real_kick import RealKick, RealKicks
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
-from utama_core.run.field_check import FieldCheck
+from utama_core.run.field_check import LOOP_STALL_S, FieldCheck
 from utama_core.run.field_fence import FencedRobotController, inner_edges
 from utama_core.run.live_status import LiveStatusMixin
 from utama_core.run.referee_source import OfficialReferee, RefereeSource
@@ -151,6 +154,29 @@ def _record_robot_feedback_responses(
         )
 
 
+class _ReplyRates:
+    """Each robot's share of the radio's commands it answered over the last `window_s`: one
+    command goes to every robot each tick, and a robot answers each one (`find_robots`'
+    `LOW_REPLY_RATE` is where a link is poor)."""
+
+    def __init__(self, window_s: float = 2.0):
+        self.window_s = window_s
+        self._ticks: deque = deque()  # (time, ids that answered)
+
+    def tick(self, now: float, responses: List[RobotResponse]) -> None:
+        self._ticks.append((now, {r.id for r in responses or []}))
+        while self._ticks and self._ticks[0][0] < now - self.window_s:
+            self._ticks.popleft()
+
+    def rates(self) -> dict[int, float]:
+        n = len(self._ticks)
+        counts: dict[int, int] = {}
+        for _, ids in self._ticks:
+            for port_id in ids:
+                counts[port_id] = counts.get(port_id, 0) + 1
+        return {port_id: min(1.0, c / n) for port_id, c in counts.items()}
+
+
 def _build_robot_feedback_snapshot(
     feedback_by_port_id: dict[int, _RobotPortFeedbackState],
     *,
@@ -159,7 +185,10 @@ def _build_robot_feedback_snapshot(
     yellow_cmd_to_vision_mapping: dict[int, int],
     blue_cmd_to_vision_mapping: dict[int, int],
     timeout_seconds: float = ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
+    reply_rates: Optional[dict[int, float]] = None,
 ) -> list[dict]:
+    """`reply_rates` (`_ReplyRates.rates`), when given, adds each robot's `reply_rate` (0 for one
+    that answered nothing)."""
     snapshot = []
     port_ids = set(feedback_by_port_id) | set(yellow_cmd_to_vision_mapping) | set(blue_cmd_to_vision_mapping)
     for port_id in sorted(port_ids):
@@ -179,6 +208,9 @@ def _build_robot_feedback_snapshot(
                 "connected": age_seconds < timeout_seconds,
                 "age_seconds": age_seconds,
             }
+
+        if reply_rates is not None:
+            item["reply_rate"] = reply_rates.get(port_id, 0.0)
 
         yellow_vision_id = yellow_cmd_to_vision_mapping.get(port_id)
         blue_vision_id = blue_cmd_to_vision_mapping.get(port_id)
@@ -212,6 +244,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             field dimensions. For gRSim/Real, this must match the actual field configured in
             gRSim/SSL-Vision — a RuntimeError is raised on the first vision packet if they differ.
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
+        keep_out (Sequence[FieldBounds]): Rectangles no robot may enter (vision coordinates): each
+            robot's speed into them is capped (`field_fence.py`), and on a camera run one inside
+            forces HALT (`field_check.py`). Defaults to none.
+        fence_field_lines (bool): On camera runs, fence the touch and goal lines as well as the edges
+            of `field_bounds` inside the field; off by default, as a robot fetching a ball out of play
+            must cross them. On for a run that never needs to (calibration).
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use. If not set (or None),
             defaults to strategy.control_scheme, falling back to 'fpp'.
@@ -260,7 +298,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             ``NORMAL_START`` once the kicker is in the circle).
         enable_vision_stream (bool, optional): Start a browser stream that renders
             the current game frame using RSim-style graphics without opening RSim.
-            Defaults to True.
+            Defaults to False: the dashboard's Live tab draws the same field, and the
+            stream was one more port and URL at every start.
         yellow_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the yellow team.
             Used only in real mode. In real PVP/shared-transmitter mode, mappings are required for both teams and must include all expected robots.
         blue_vision_to_cmd_mapping (dict[int, int], optional): Mapping from vision robot IDs to command robot IDs for the blue team.
@@ -294,6 +333,8 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         exp_ball: bool = True,
         full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
         field_bounds: Optional[FieldBounds] = None,
+        keep_out: Sequence[FieldBounds] = (),
+        fence_field_lines: bool = False,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: Optional[str] = None,  # If None, resolved from strategy.control_scheme (defaulting to "fpp")
         opp_control_scheme: Optional[str] = None,
@@ -310,7 +351,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         referee: RefereeSource = None,
         referee_initial_command: Optional[RefereeCommand] = None,
         formation_type: Optional[FormationType] = None,
-        enable_vision_stream: bool = True,
+        enable_vision_stream: bool = False,
         vision_stream_http_port: int = 8765,
         yellow_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
         blue_vision_to_cmd_mapping: Optional[dict[int, int]] = None,
@@ -345,6 +386,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._vs_robot_names: dict[tuple[bool, int], str] = {}
         self._robot_feedback_by_port_id: dict[int, _RobotPortFeedbackState] = {}
         self._robot_feedback_snapshot: list[dict] = []
+        self._reply_rates = _ReplyRates()
         self.my_team_is_yellow = my_team_is_yellow
         self.my_team_is_right = my_team_is_right
         self.mode: Mode = self._load_mode(mode)
@@ -354,9 +396,12 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.formation_type = formation_type
         self.full_field_dims = full_field_dims
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
+        self.keep_out = tuple(keep_out)
+        self.fence_field_lines = fence_field_lines
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
         self._stop_event = threading.Event()
+        self._serial_port = None  # real robots: the radio, closed by `close()` for the next runner
         self._vision_receiver: Optional[VisionReceiver] = None
         self.vision_stream: Optional[RSimVisionStreamServer] = None
         self._vision_stream_renderer: Optional[GameFrameRenderer] = None
@@ -369,6 +414,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if game_log_path is not None and self.mode == Mode.RSIM:
             raise ValueError("game_log_path needs vision packets: grsim or real mode, not rsim")
         self.game_log = GameLogWriter(game_log_path) if game_log_path is not None else None
+        self._noted_status: dict[int, list[str]] = {}  # each robot's status as last noted in the game log
         self.vision_buffers, self.ref_buffer = self._setup_vision_and_referee()
 
         assert_valid_bounding_box(
@@ -473,7 +519,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         # Set before `_load_robot_controllers()`, which wires `self.match_log`
         # into the kernel `Strategy` right after `load_motion_controller`.
         self.match_log_path = match_log_path
-        self.match_log = MatchLog() if match_log_path else None
+        # Kept in memory with a dashboard attached or a game log recorded, and no file to write,
+        # too: what each robot's tactic is doing (`MatchLog.current_traces`) is what the Live tab
+        # shows under its tactic and the game log notes (`_push_debug_status_to_referee`).
+        watched = isinstance(self.referee, CustomReferee) and self.referee.has_dashboard
+        self.match_log = MatchLog() if match_log_path or watched or self.game_log is not None else None
         if self.match_log is not None and isinstance(self.referee, CustomReferee):
             self.referee.attach_match_log(self.match_log)
         self.stats_path = stats_path
@@ -668,6 +718,10 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                     )
                 seen.add(v)
 
+    def stop(self) -> None:
+        """Ends `run()` after the current tick, from another thread (`examples/demos.py`)."""
+        self._stop_event.set()
+
     def _handle_sigint(self, sig, frame):
         if self._stop_event.is_set():
             signal.default_int_handler(sig, frame)
@@ -694,6 +748,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if mode is None:
             raise ValueError(f"Unknown mode: {mode_str}. Choose from 'rsim', 'grsim', or 'real'.")
         return mode
+
+    def _defense_area_rules(self) -> bool:
+        """`Field.defense_area_rules`: our referee profile's `defense_area.enabled`; on with the
+        official referee or none, as the rulebook has it."""
+        return self.referee.defense_area_enabled if isinstance(self.referee, CustomReferee) else True
 
     @staticmethod
     def _validate_referee(mode: Mode, referee: RefereeSource) -> RefereeSource:
@@ -865,12 +924,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _update_robot_feedback_snapshot(self, responses: List[RobotResponse], now: float) -> None:
         _record_robot_feedback_responses(self._robot_feedback_by_port_id, responses, now)
+        self._reply_rates.tick(now, responses)
         self._robot_feedback_snapshot = _build_robot_feedback_snapshot(
             self._robot_feedback_by_port_id,
             now=now,
             my_team_is_yellow=self.my_team_is_yellow,
             yellow_cmd_to_vision_mapping=self.yellow_cmd_to_vision_mapping,
             blue_cmd_to_vision_mapping=self.blue_cmd_to_vision_mapping,
+            reply_rates=self._reply_rates.rates(),
         )
 
     def _push_robot_feedback_to_referee(self) -> None:
@@ -934,6 +995,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 vanishing=rsim_vanishing,
                 sim_noise=sim_noise,
             )
+            rsim_env.real_kicks = self._real_kicks(sim_noise)
 
             if self.opp:
                 self.opp.strategy.load_rsim_env(rsim_env)
@@ -1006,7 +1068,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp is None:
             driven["blue" if self.my_team_is_yellow else "yellow"] = ()
         expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
-        return FieldCheck(expected, self.field_bounds, self.full_field_dims)
+        return FieldCheck(expected, self.field_bounds, self.full_field_dims, self.keep_out)
 
     def replace_strategy(self, side: str, strategy: AbstractStrategy, name: str = "") -> None:
         """Run `strategy` for `side` ("my" or "opp") from the next tick, in place of the one
@@ -1024,6 +1086,27 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 f"needs control scheme {strategy.control_scheme!r}, this run uses {runtime.control_scheme!r}"
             )
         self._pending_strategies[side] = (strategy, name)
+
+    @property
+    def auto_halt(self) -> Optional[str]:
+        """The field check's HALT in force, as "time: the failing check", or None."""
+        return self._auto_halt
+
+    def resume_after_auto_halt(self) -> bool:
+        """Force Start once the field check passes again after a HALT it forced, for a run nobody
+        resumes from the dashboard (`examples/calibrate_robot.py`). True when it resumed."""
+        if self._auto_halt is None or self._prev_custom_ref_command != RefereeCommand.HALT:
+            return False
+        if self.field_check.halt_reason(self._field_check_rows) is not None:
+            return False
+        self.referee.force_command(RefereeCommand.FORCE_START, self.my.current_game_frame.ts)
+        self._auto_halt = None
+        return True
+
+    @property
+    def halted(self) -> bool:
+        """Whether the game is in a HALT (safe from any thread: reads the last frame)."""
+        return self._halted(self.my)
 
     @staticmethod
     def _halted(runtime: SideRuntime) -> bool:
@@ -1068,6 +1151,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         rows = self.field_check.rows(now, self._robot_feedback_snapshot if self.mode == Mode.REAL else None)
         self._field_check_rows = rows
         reason = self.field_check.halt_reason(rows)
+        # The first tick after this loop itself stalled (2026-10-27: ~0.55 s every ~33 s) can judge
+        # vision before the receiver thread has caught up: what it misses then is our stall, not
+        # the field. Judged again the next tick, a real loss halts ~17 ms later.
+        prev, self._field_check_at = getattr(self, "_field_check_at", None), now
+        if prev is not None and now - prev > LOOP_STALL_S:
+            self.logger.warning("Control loop stalled %.0f ms", 1000 * (now - prev))
+            if getattr(self, "game_log", None) is not None:
+                self.game_log.note(f"control loop stalled {1000 * (now - prev):.0f} ms")
+            reason = None
         if self._prev_custom_ref_command != RefereeCommand.HALT:
             self._auto_halt = None  # play resumed: the banner was for the HALT that ended
         if (
@@ -1232,6 +1324,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 n_friendly=self.exp_friendly,
                 vision_to_cmd_mapping=my_viz_to_cmd_mapping,
             )
+            self._serial_port = my_robot_controller.serial_port
             if self.opp:
                 serial = my_robot_controller.serial_port  # share serial connection for efficiency
                 opp_robot_controller = RealRobotController(
@@ -1254,7 +1347,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         )
         my_robot_controller = self._wrapped(my_robot_controller, my_profiles, lambda: self.my.game)
         self.my.strategy.load_robot_controller(my_robot_controller)
-        self.my.strategy.load_motion_controller(self.my.motion_controller(self.mode, self.rsim_env))
+        self.my.strategy.load_motion_controller(self._motion_controller(self.my, my_profiles))
         if self.match_log is not None:
             # Reach into the kernel `Strategy` post-construction rather than
             # threading `match_log` through every `build_*_kernel_strategy`
@@ -1268,7 +1361,41 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp:
             opp_robot_controller = self._wrapped(opp_robot_controller, opp_profiles, lambda: self.opp.game)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
-            self.opp.strategy.load_motion_controller(self.opp.motion_controller(self.mode, self.rsim_env))
+            self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
+
+    def _real_kicks(self, sim_noise: Optional[SimNoise]) -> Optional[RealKicks]:
+        """rsim's kicks for the robots given profiles that measured their kick (a rehearsal); None
+        when none did, as in the evaluation's matches."""
+        kicks = {
+            (f"team_{colour}", rid): kick
+            for colour, profiles in (("yellow", self.yellow_robot_profiles), ("blue", self.blue_robot_profiles))
+            for rid, profile in profiles.items()
+            if (kick := RealKick.of(profile)) is not None
+        }
+        return RealKicks(kicks, seed=sim_noise.seed if sim_noise is not None else 0) if kicks else None
+
+    def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
+        """`team`'s motion controller, with its profiled robots' kick bends, biases (real robots and
+        rsim, which kicks them so) and carry caps (`RobotProfile`)."""
+        controller = team.motion_controller(self.mode, self.rsim_env)
+        if self.mode in (Mode.REAL, Mode.RSIM):
+            controller.kick_bend = {
+                rid: math.radians(p.kick_bend_deg_per_cm) * 100.0
+                for rid, p in profiles.items()
+                if p.kick_bend_deg_per_cm
+            }
+            controller.kick_bias = {
+                rid: math.radians(p.kick_bias_deg) for rid, p in profiles.items() if p.kick_bias_deg
+            }
+        controller.robot_carry = {
+            rid: (
+                controller.carry_speed if p.carry_speed is None else p.carry_speed,
+                controller.carry_turn if p.carry_turn is None else p.carry_turn,
+            )
+            for rid, p in profiles.items()
+            if p.carry_speed is not None or p.carry_turn is not None
+        }
+        return controller
 
     def _driven_ids(self, is_yellow: bool) -> set[int]:
         """The IDs the strategy commands for one colour: the mapped vision IDs on real robots."""
@@ -1308,18 +1435,36 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _fenced(self, controller, game):
         """`controller`, its robots kept inside the edges of `field_bounds` that are inside the
-        field when vision comes from a camera (grSim or real): past them nothing sees them
-        (`field_fence.py`)."""
-        bounds = inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
-        if self.mode == Mode.RSIM or bounds is None:
+        field when vision comes from a camera (grSim or real): past them nothing sees them (all of
+        them with `fence_field_lines`); and out of `keep_out` in every mode (`field_fence.py`)."""
+        if self.mode == Mode.RSIM:
+            bounds = None
+        elif getattr(self, "fence_field_lines", False):
+            bounds = self.field_bounds
+        else:
+            bounds = inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
+        keep_out = getattr(self, "keep_out", ())
+        if bounds is None and not keep_out:
             return controller
-        return FencedRobotController(controller, bounds, game)
+        return FencedRobotController(controller, bounds, game, keep_out)
 
     def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
         """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""
         if all(p.kicker and p.dribbler for p in profiles.values()):
             return controller
         return ProfiledRobotController(controller, profiles)
+
+    def _tag_offsets(self) -> dict[tuple[bool, int], tuple[float, float]]:
+        """Where each profiled robot's tag sits on it, for `PositionRefiner`: real robots only (a
+        simulator's tag is its robot)."""
+        if self.mode != Mode.REAL:
+            return {}
+        return {
+            (is_yellow, rid): (p.tag_forward_m, p.tag_left_m)
+            for is_yellow, profiles in ((True, self.yellow_robot_profiles), (False, self.blue_robot_profiles))
+            for rid, p in profiles.items()
+            if p.tag_forward_m or p.tag_left_m
+        }
 
     def _init_refiners(
         self,
@@ -1352,6 +1497,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             exp_ball=exp_ball,
             allowed_yellow_ids=allowed_yellow_ids,
             allowed_blue_ids=allowed_blue_ids,
+            tag_offsets=self._tag_offsets(),
         )
         velocity_refiner = VelocityRefiner()
         robot_info_refiner = RobotInfoRefiner(trusted_ir_robots=trusted_ir_robots)
@@ -1395,13 +1541,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp:
             self.opp.position_refiner.start_filtering()
 
-        my_field = Field(self.my_team_is_right, self.full_field_dims, self.field_bounds)
+        my_field = Field(self.my_team_is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules())
         self.my.game_history = GameHistory(MAX_GAME_HISTORY)
         self.my.game = Game(self.my.game_history, my_current_game_frame, field=my_field)
         self.my.current_game_frame = my_current_game_frame
 
         if self.opp:
-            opp_field = Field(not self.my_team_is_right, self.full_field_dims, self.field_bounds)
+            opp_field = Field(
+                not self.my_team_is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules()
+            )
             self.opp.game_history = GameHistory(MAX_GAME_HISTORY)
             self.opp.game = Game(self.opp.game_history, opp_current_game_frame, field=opp_field)
             self.opp.current_game_frame = opp_current_game_frame
@@ -1464,7 +1612,11 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 side.position_refiner.start_filtering()
             side.current_game_frame = frame
             side.game_history = GameHistory(MAX_GAME_HISTORY)
-            side.game = Game(side.game_history, frame, field=Field(is_right, self.full_field_dims, self.field_bounds))
+            side.game = Game(
+                side.game_history,
+                frame,
+                field=Field(is_right, self.full_field_dims, self.field_bounds, self._defense_area_rules()),
+            )
             side.strategy.load_game(side.game)
 
     # Reset the game state and robot info in buffer
@@ -1528,6 +1680,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.replay_writer.close()
         if getattr(self, "game_log", None) is not None:
             self.game_log.close()  # after the stop commands, so they are in the log
+        if getattr(self, "_serial_port", None) is not None:
+            self._serial_port.close()  # so another runner in this process can open it
+        self._stop_event.set()  # the vision thread stops and closes its socket
         if self.vision_stream:
             self.vision_stream.stop()
         if self.rsim_env:
@@ -1967,11 +2122,22 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
         Every strategy is kernel-based now and exposes
         `debug_status() -> dict[int, list[str]]` to report "what is this
-        robot's tactic doing right now" for the debug GUI panel.
+        robot's tactic doing right now" for the debug GUI panel. A game log
+        gets a note whenever a robot's status changes, so a field log says
+        what each robot was doing, not only where it went.
         """
-        if not isinstance(self.referee, CustomReferee):
+        recording = getattr(self, "game_log", None) is not None
+        if not isinstance(self.referee, CustomReferee) and not recording:
             return
-        self.referee.set_debug_status(self.my.strategy.debug_status())
+        status = self.my.strategy.debug_status()
+        if recording:
+            for robot_id, row in sorted(status.items()):
+                if self._noted_status.get(robot_id) != row:
+                    label, steps = row[0], row[2] if len(row) > 2 else ""
+                    self.game_log.note(f"robot {robot_id}: {label}" + (f" | {steps}" if steps else ""))
+            self._noted_status = status
+        if isinstance(self.referee, CustomReferee):
+            self.referee.set_debug_status(status)
 
     def _robot_tactics(self) -> dict[str, dict[int, str]]:
         """`{"friendly"|"enemy": {robot_id: tactic}}` for `MatchStats`' foul log: the

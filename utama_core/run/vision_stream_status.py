@@ -34,9 +34,16 @@ class VisionStreamStatusMixin:
             return
         if not self.vision_stream.is_due():
             return
-        self.vision_stream.publish_status(self._vision_stream_status())
-        frame = self._vision_stream_renderer.render(self.my.current_game_frame)
-        self.vision_stream.publish_rgb_frame(frame)
+        try:
+            self.vision_stream.publish_status(self._vision_stream_status())
+            frame = self._vision_stream_renderer.render(self.my.current_game_frame)
+            self.vision_stream.publish_rgb_frame(frame)
+        except Exception:
+            # The stream only shows the match: a frame it cannot draw (a robot at an absurd
+            # position) is skipped, never allowed to stop the robots.
+            if not getattr(self, "_vision_stream_failed", False):
+                self._vision_stream_failed = True
+                self.logger.warning("Vision stream could not draw a frame; skipping such frames.", exc_info=True)
 
     _VS_TEAM_NAMES = [
         "FC Recursion",
