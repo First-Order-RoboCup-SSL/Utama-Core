@@ -66,6 +66,14 @@ def test_a_robot_lost_by_vision_fails_only_after_the_grace_period():
     assert _row(fc.rows(VISION_LOST_S + 0.01), "yellow 1")["status"] == "fail"
 
 
+def test_a_robot_lost_for_a_fifth_of_a_second_does_not_halt_the_run():
+    # 2026-10-28: "lost by vision 0.2 s ago" auto-HALTed blue 0 mid-run.
+    fc = _check()
+    fc.observe_vision([_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
+    fc.observe_vision([_frame()], now=0.2)
+    assert _row(fc.rows(0.2), "yellow 1")["status"] == "ok"
+
+
 @pytest.mark.parametrize(
     "x, status",
     [
@@ -234,9 +242,15 @@ def test_the_tick_after_a_loop_stall_does_not_halt_the_next_one_does():
     runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
     seen = _frame(yellow=[(1, 1.0, 0.0)])
     StrategyRunner._tick_field_check(runner, [seen], now=0.0)
-    StrategyRunner._tick_field_check(runner, [None], now=LOOP_STALL_S + 0.1)  # after a stall, not seen
+    t = 0.0
+    while t + 0.05 < VISION_LOST_S:  # normal ticks, unseen but within the grace period
+        t += 0.05
+        StrategyRunner._tick_field_check(runner, [None], now=t)
+    stalled = t + LOOP_STALL_S + 0.1
+    assert stalled > max(VISION_LOST_S, CAMERA_SILENT_S)
+    StrategyRunner._tick_field_check(runner, [None], now=stalled)  # after a stall, not seen
     assert not runner.referee.force_command.called
-    StrategyRunner._tick_field_check(runner, [None], now=LOOP_STALL_S + 0.11)
+    StrategyRunner._tick_field_check(runner, [None], now=stalled + 0.01)
     assert runner.referee.force_command.called
 
 
@@ -246,7 +260,8 @@ def test_ticks_just_under_the_stall_limit_still_halt_a_lost_robot():
     runner = _runner(Mode.REAL, RefereeCommand.FORCE_START)
     step = LOOP_STALL_S - 0.01
     StrategyRunner._tick_field_check(runner, [_frame(yellow=[(1, 1.0, 0.0)])], now=0.0)
-    StrategyRunner._tick_field_check(runner, [None], now=step)
-    StrategyRunner._tick_field_check(runner, [None], now=2 * step)
-    assert 2 * step > VISION_LOST_S
+    n = int(VISION_LOST_S / step) + 1
+    for i in range(1, n + 1):
+        StrategyRunner._tick_field_check(runner, [None], now=i * step)
+    assert n * step > VISION_LOST_S
     assert runner.referee.force_command.called

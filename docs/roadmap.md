@@ -132,8 +132,8 @@ entry by its title, not its number.
     correct what it can and use the rest. One robot measured so far (2026-10-27); nothing per
     robot is built yet: this entry is the plan, with the to-do list below.
     - *Known now:* the kicker is fixed power and will stay so for now (hardware team,
-      2026-10-09), so the sim gets no variable-kick option. Real robots are capped at
-      `MAX_VEL=1` m/s as a safety limit, not their top speed; rsim and grSim run at 2 m/s
+      2026-10-09), so the sim gets no variable-kick option. Real robots were capped at
+      `MAX_VEL=1` m/s as a safety limit until 2026-10-28; now 1.5 m/s and 6 rad/s
       (`config/robot_params.py`). The radio packet has 4-bit kick and chip power fields that
       we always send as full (`real_robot_controller.py`, `kicker_byte`): ask whether the
       firmware reads them.

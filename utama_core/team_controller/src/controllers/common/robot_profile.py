@@ -29,7 +29,7 @@ from utama_core.team_controller.src.controllers.common.robot_controller_abstract
     AbstractRobotController,
 )
 
-PUSH_SPEED = 1.0  # m/s forward for a kick's push; REAL_PARAMS.MAX_VEL, the real robots' cap
+PUSH_SPEED = 1.0  # m/s forward for a kick's push; the real robots' cap until 2026-10-28
 PUSH_SECONDS = 0.3  # about 0.3 m of travel: the ball is struck, the robot does not chase it
 CARRY_SPEED = 0.5  # m/s, the fastest a dribbler-less robot carries the ball
 CARRY_TURN = 2.0  # rad/s, the fastest it turns with the ball
