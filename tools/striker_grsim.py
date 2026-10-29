@@ -14,6 +14,8 @@ and the running goal rate per keeper, and writes them to --out at the end.
   pixi run python -m tools.striker_grsim --weights ... --mode rsim          # the same, without grSim
 
 The same --seed gives the same starts whichever attacker plays, so the two are compared start by start.
+`--record NAME` writes every tick to replays/NAME.npz; an episode is its `t0`-`t1` in --out, to watch with
+`python -m utama_core.analysis.render_clip --replay replays/NAME.npz --t-start T0 --t-end T1 --out ep.mp4`.
 """
 
 from __future__ import annotations
@@ -37,10 +39,11 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=9999, help="9999: the starts the network was evaluated on")
     parser.add_argument("--mode", choices=("grsim", "rsim"), default="grsim")
     parser.add_argument("--out", type=Path, help="the outcomes and goal rates (.json)")
+    parser.add_argument("--record", help="a replay name under replays/: every tick, for render_clip (--out has t0, t1)")
     a = parser.parse_args()
     keepers = a.keepers.split(",")
     params = load_params(a.weights) if a.weights is not None else None
-    duel = Duel(mode=a.mode)
+    duel = Duel(mode=a.mode, record=a.record)
     results = []
     try:
         for i in range(a.episodes):
@@ -51,7 +54,17 @@ def main() -> None:
             else:
                 striker = StrikerTactic(net_chooser(params, True, rng) if params is not None else None)
             outcome = duel.episode(random.Random(seed), striker, keeper)
-            results.append({"seed": seed, "keeper": keeper, "outcome": outcome, "trajectory": striker.trajectory})
+            t1 = duel.runner.my.current_game_frame.ts
+            results.append(
+                {
+                    "seed": seed,
+                    "keeper": keeper,
+                    "outcome": outcome,
+                    "t0": striker.t0,
+                    "t1": t1,
+                    "trajectory": striker.trajectory,
+                }
+            )
             rates = goal_rates(results)
             running = ", ".join(f"{k} {v['goals']}/{v['episodes']}" for k, v in rates.items())
             print(f"episode {i + 1}/{a.episodes} keeper={keeper}: {outcome}  (goals: {running})", flush=True)
@@ -61,7 +74,7 @@ def main() -> None:
     summary.update(goal_rates(results))
     print(json.dumps(summary, indent=1))
     if a.out is not None:
-        per_episode = [{k: r[k] for k in ("seed", "keeper", "outcome")} for r in results]
+        per_episode = [{k: r[k] for k in ("seed", "keeper", "outcome", "t0", "t1")} for r in results]
         a.out.write_text(json.dumps({**summary, "episodes": per_episode}, indent=1))
 
 

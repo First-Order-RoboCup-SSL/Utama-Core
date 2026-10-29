@@ -44,6 +44,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
 from utama_core.replay.scenario import RobotState, Scenario, apply_scenario
 from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
     enable_sim_reuse,
@@ -332,7 +333,9 @@ class Duel:
     """One match, one robot a side, replayed from a fresh start every episode: in rsim, or in an
     external grSim (`mode="grsim"`, real time, `tools/striker_grsim.py`)."""
 
-    def __init__(self, mode: str = "rsim") -> None:
+    def __init__(self, mode: str = "rsim", record: Optional[str] = None) -> None:
+        """`record`: a replay name under `replays/`; every tick is written to `<record>.npz` (watch an
+        episode with `utama_core.analysis.render_clip`, from its `t0` to where it ended)."""
         self.mode = mode
         enable_sim_reuse()
         self.attacker = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
@@ -354,6 +357,11 @@ class Duel:
             enable_vision_stream=False,
             referee_initial_command=RefereeCommand.HALT,
             control_scheme="fpp",
+            **(
+                {"replay_writer_config": ColumnarReplayWriterConfig(replay_name=record, overwrite_existing=True)}
+                if record is not None
+                else {}
+            ),
         )
 
     def episode(self, rng: random.Random, striker: StrikerTactic, keeper: str) -> str:
