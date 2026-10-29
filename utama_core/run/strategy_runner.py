@@ -11,7 +11,7 @@ import warnings
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, FrozenSet, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 from rich.live import Live
 
@@ -244,6 +244,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             field dimensions. For gRSim/Real, this must match the actual field configured in
             gRSim/SSL-Vision — a RuntimeError is raised on the first vision packet if they differ.
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
+        keep_out (Sequence[FieldBounds]): Rectangles no robot may enter (vision coordinates): each
+            robot's speed into them is capped (`field_fence.py`), and on a camera run one inside
+            forces HALT (`field_check.py`). Defaults to none.
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use. If not set (or None),
             defaults to strategy.control_scheme, falling back to 'fpp'.
@@ -327,6 +330,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         exp_ball: bool = True,
         full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
         field_bounds: Optional[FieldBounds] = None,
+        keep_out: Sequence[FieldBounds] = (),
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: Optional[str] = None,  # If None, resolved from strategy.control_scheme (defaulting to "fpp")
         opp_control_scheme: Optional[str] = None,
@@ -388,6 +392,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.formation_type = formation_type
         self.full_field_dims = full_field_dims
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
+        self.keep_out = tuple(keep_out)
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
         self._stop_event = threading.Event()
@@ -1058,7 +1063,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         if self.opp is None:
             driven["blue" if self.my_team_is_yellow else "yellow"] = ()
         expected = [(colour, rid) for colour, ids in driven.items() for rid in ids]
-        return FieldCheck(expected, self.field_bounds, self.full_field_dims)
+        return FieldCheck(expected, self.field_bounds, self.full_field_dims, self.keep_out)
 
     def replace_strategy(self, side: str, strategy: AbstractStrategy, name: str = "") -> None:
         """Run `strategy` for `side` ("my" or "opp") from the next tick, in place of the one
@@ -1409,12 +1414,15 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _fenced(self, controller, game):
         """`controller`, its robots kept inside the edges of `field_bounds` that are inside the
-        field when vision comes from a camera (grSim or real): past them nothing sees them
-        (`field_fence.py`)."""
-        bounds = inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
-        if self.mode == Mode.RSIM or bounds is None:
+        field when vision comes from a camera (grSim or real): past them nothing sees them; and
+        out of `keep_out` in every mode (`field_fence.py`)."""
+        bounds = (
+            None if self.mode == Mode.RSIM else inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
+        )
+        keep_out = getattr(self, "keep_out", ())
+        if bounds is None and not keep_out:
             return controller
-        return FencedRobotController(controller, bounds, game)
+        return FencedRobotController(controller, bounds, game, keep_out)
 
     def _with_profiles(self, controller, profiles: dict[int, RobotProfile]):
         """`controller`, wrapped to fit commands to `profiles` when a kicker or dribbler is missing."""

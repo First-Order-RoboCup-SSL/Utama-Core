@@ -323,6 +323,14 @@ class FieldCanvas {
     ctx.setLineDash([4, 3]);
     ctx.lineWidth = 1.5;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
+    // Keep-out zones (StrategyRunner's keep_out): no robot may enter; one inside forces HALT.
+    ctx.fillStyle = "rgba(224, 106, 96, 0.25)";
+    ctx.strokeStyle = "#e06a60";
+    for (const [kx1, ky1, kx2, ky2] of fieldCheck.keep_out || []) {
+      const k = rectBounds(kx1, ky1, kx2, ky2);
+      ctx.fillRect(k.x, k.y, k.w, k.h);
+      ctx.strokeRect(k.x, k.y, k.w, k.h);
+    }
     ctx.setLineDash([]);
     const ax = toX(0), ay = CH - 6, dir = toX(1) > ax ? 1 : -1;
     ctx.strokeStyle = ctx.fillStyle = FIELD_COLORS.marker;

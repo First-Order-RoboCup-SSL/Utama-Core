@@ -57,6 +57,7 @@ from ball_trials import BallTrialsTactic, at_caps
 from shooting_drill import (
     CAMERA_HALF,
     FIELD,
+    KEEP_OUT,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -194,6 +195,7 @@ def build_runner(args, tactic, name: str, profile: RobotProfile = RobotProfile()
         exp_enemy=0,
         full_field_dims=FIELD,
         field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        keep_out=KEEP_OUT,
         referee=no_rules_referee(int(is_yellow), int(not is_yellow)),
         referee_initial_command=RefereeCommand.FORCE_START,
         show_live_status=False,

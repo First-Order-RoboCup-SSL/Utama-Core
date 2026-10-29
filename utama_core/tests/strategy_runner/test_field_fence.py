@@ -139,3 +139,49 @@ def test_a_kicker_less_robots_push_is_fenced_too():
 def test_no_fence_in_rsim_or_when_the_cameras_see_the_whole_field(mode, bounds):
     inner = SimpleNamespace(add_robot_commands=lambda commands: None)
     assert _runner(mode, bounds)._fenced(inner, _robot_on_the_half_way_line) is inner
+
+
+# The lab field's bottom half of its bottom-right quarter (examples/shooting_drill.py, KEEP_OUT).
+ZONE = FieldBounds(top_left=(0.0, -0.5625), bottom_right=(1.5, -1.125))
+
+
+def test_a_robot_driving_down_at_a_keep_out_zone_stops_its_body_outside_it():
+    y = -0.5625 + MARGIN
+    assert fence(0.7, y, 0.0, _cmd(left=-1.0), None, keep_out=(ZONE,)).local_left_vel == 0.0
+    near = fence(0.7, y + 0.2, 0.0, _cmd(left=-1.0), None, keep_out=(ZONE,)).local_left_vel
+    assert near == pytest.approx(-_max_speed_towards(0.2))
+
+
+def test_a_robot_driving_across_into_a_keep_out_zone_is_stopped_at_its_side():
+    # From the left half, along the bottom touch line, towards the half-way line.
+    assert fence(-MARGIN, -0.9, 0.0, _cmd(1.0), None, keep_out=(ZONE,)).local_forward_vel == 0.0
+
+
+def test_a_robot_beside_a_keep_out_zone_drives_past_it_freely():
+    command = _cmd(1.0)
+    assert fence(0.2, 0.3, 0.0, command, None, keep_out=(ZONE,)) is command  # above it, driving along
+    assert fence(0.7, 0.3, 0.0, _cmd(left=1.0), None, keep_out=(ZONE,)).local_left_vel == 1.0  # driving away
+
+
+def test_a_robot_cutting_the_corner_of_a_keep_out_zone_is_slowed_before_it_lines_up():
+    # Diagonally at the zone's top-left corner, 0.2 m off each side: not yet beside either side,
+    # but within the distance it travels before stopping, so both sides fence it.
+    out = fence(-0.2, -0.3625, 0.0, _cmd(0.7, -0.7), None, keep_out=(ZONE,))
+    assert out.local_forward_vel < 0.7 and out.local_left_vel > -0.7
+
+
+def test_a_robot_inside_a_keep_out_zone_may_drive_out():
+    command = _cmd(1.0, 1.0)
+    assert fence(0.7, -0.9, 0.0, command, None, keep_out=(ZONE,)) is command
+
+
+def test_the_keep_out_zone_is_fenced_in_rsim_too():
+    runner = _runner(Mode.RSIM, FieldBounds(top_left=(-4.5, 3.0), bottom_right=(0.0, -3.0)))
+    runner.keep_out = (ZONE,)
+    sent = {}
+    robot = SimpleNamespace(p=Vector2D(0.7, -0.5625 + MARGIN), v=Vector2D(0.0, 0.0), orientation=0.0)
+    controller = runner._fenced(
+        SimpleNamespace(add_robot_commands=sent.update), lambda: SimpleNamespace(friendly_robots={0: robot})
+    )
+    controller.add_robot_commands({0: _cmd(left=-1.0)})
+    assert sent[0].local_left_vel == 0.0

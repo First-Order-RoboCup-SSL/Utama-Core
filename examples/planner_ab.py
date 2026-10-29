@@ -39,6 +39,7 @@ from pass_receive import ROBOT_A, ROBOT_B
 from shooting_drill import (
     CAMERA_HALF,
     FIELD,
+    KEEP_OUT,
     _field_bounds,
     _one_robot_strategy,
     no_rules_referee,
@@ -178,6 +179,7 @@ def run_block(mode: str, scheme: str, legs: int, block: int, stamp: str) -> list
         exp_ball=False,
         full_field_dims=FIELD,
         field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        keep_out=KEEP_OUT,
         referee=no_rules_referee(1, 1),
         referee_initial_command=RefereeCommand.FORCE_START,
         show_live_status=False,

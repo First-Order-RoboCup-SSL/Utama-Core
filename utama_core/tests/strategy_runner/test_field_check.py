@@ -257,3 +257,15 @@ def test_ticks_just_under_the_stall_limit_still_halt_a_lost_robot():
         StrategyRunner._tick_field_check(runner, [None], now=i * step)
     assert n * step > VISION_LOST_S
     assert runner.referee.force_command.called
+
+
+def test_a_robot_in_a_keep_out_zone_fails_and_the_page_gets_the_zone():
+    zone = FieldBounds(top_left=(0.0, -0.5), bottom_right=(1.0, -1.0))
+    fc = FieldCheck([("yellow", 1)], RIGHT_HALF, FIELD, keep_out=(zone,))
+    fc.observe_vision([_frame(yellow=[(1, 0.5, -0.45)])], now=0.0)  # just above it
+    assert _row(fc.rows(0.0), "yellow 1")["status"] == "ok"
+    fc.observe_vision([_frame(yellow=[(1, 0.5, -0.55)])], now=0.01)
+    rows = fc.rows(0.01)
+    assert _row(rows, "yellow 1")["status"] == "fail"
+    assert "keep-out" in fc.halt_reason(rows)
+    assert fc.payload(rows, None)["keep_out"] == [[0.0, -1.0, 1.0, -0.5]]

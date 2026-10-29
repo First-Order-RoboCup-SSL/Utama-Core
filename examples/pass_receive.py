@@ -58,6 +58,7 @@ from typing import Optional
 
 from shooting_drill import (
     FIELD,
+    KEEP_OUT,
     RADIO_0,
     RADIO_1,
     TestRobot,
@@ -375,6 +376,7 @@ def build_runner(
         exp_enemy=1,
         full_field_dims=FIELD,
         field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        keep_out=KEEP_OUT,
         referee=referee,
         referee_initial_command=RefereeCommand.HALT,
         show_live_status=not real,
