@@ -141,7 +141,10 @@ _LINE_UP_FACING_RAD = 0.15
 # the ball for seconds while it crept round.
 _ORBIT_RANGE_M = 0.25
 _ORBIT_M = ROBOT_RADIUS + 0.07  # orbit radius, clear of the ball; spirals in to _APPROACH_M near the line-up
-_ORBIT_STEP_RAD = math.radians(30)  # how far round the ball each target lies
+# How far round the ball each target lies. The robot drives at about 1.8 x its target's distance,
+# so a longer step orbits faster: 30 deg crept round at ~0.15 m/s (2026-10-28), 60 deg ~0.3 m/s,
+# the straight line to the target still clear of the ball.
+_ORBIT_STEP_RAD = math.radians(60)
 _OPEN_MIN_M = 0.8  # a receiver spot nearer the ball than this is turned away from, keeping its side
 # How far off either defense area a robot keeps. The shared default (0.57 m, sized for the 9 x 6 m
 # field) kept the right-hand robot at x <= 0.43 on this one: on the 2026-10-27 field run blue stood

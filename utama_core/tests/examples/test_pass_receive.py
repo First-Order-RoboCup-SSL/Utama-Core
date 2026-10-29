@@ -230,3 +230,21 @@ def test_the_passer_kicks_only_once_the_partner_is_set(partner_moving, kicks):
     if not kicks:
         assert commands[0].dribble  # holds the ball meanwhile
     ctx.motion_controller.calculate.assert_not_called()
+
+
+@pytest.mark.parametrize("start_deg", [0, 30, 60, 90, 120, -90])  # a full step or more from the line-up at 180
+def test_an_orbit_step_is_long_and_its_straight_line_clears_the_ball(start_deg):
+    """The robot drives straight at each orbit target: the step is long enough to orbit at speed
+    (30 deg crept round at ~0.15 m/s on the field), and the line to it never touches the ball."""
+    from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+    from utama_core.entities.data.vector import Vector2D
+
+    ball = Vector2D(0.0, 0.0)
+    a = math.radians(start_deg)
+    robot = Vector2D(math.cos(a), math.sin(a)) * ex._ORBIT_M
+    target = ex.orbit_point(ball, robot, 0.0)  # line-up at 180 deg
+    assert robot.distance_to(target) >= 0.15
+    d = target - robot
+    t = max(0.0, min(1.0, -(robot.x * d.x + robot.y * d.y) / (d.x**2 + d.y**2)))
+    nearest = robot + d * t
+    assert nearest.distance_to(ball) > ROBOT_RADIUS + BALL_RADIUS
