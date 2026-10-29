@@ -53,10 +53,13 @@ def move(
         # Slowed together to what the robot can carry the ball at, so the path keeps its shape: at
         # full speed (1 m/s, 4 rad/s) the real robots lost the ball within 0.2 s (2026-10-28).
         speed = math.hypot(forward_vel, left_vel)
-        if motion_controller.carry_speed is not None and speed > motion_controller.carry_speed:
-            scale = motion_controller.carry_speed / speed
-        if motion_controller.carry_turn is not None and abs(angular_vel) * scale > motion_controller.carry_turn:
-            scale = motion_controller.carry_turn / abs(angular_vel)
+        carry_speed, carry_turn = motion_controller.robot_carry.get(
+            robot_id, (motion_controller.carry_speed, motion_controller.carry_turn)
+        )
+        if carry_speed is not None and speed > carry_speed:
+            scale = carry_speed / speed
+        if carry_turn is not None and abs(angular_vel) * scale > carry_turn:
+            scale = carry_turn / abs(angular_vel)
         if scale < 1.0:
             forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
             adjusted = True

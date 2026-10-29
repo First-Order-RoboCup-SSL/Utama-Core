@@ -11,7 +11,12 @@ one placing the ball on its dribbler:
   `SENSOR_OFF_S`. A direction stops at the first speed that loses the ball: the speed below is
   what the robot carries at (`RobotParams.CARRY_SPEED`, `CARRY_TURN`).
 - **Kicks**: `kicks` kicks along the field from the ball wherever it lies, for kick speed and the
-  kick's bend (`analysis/robot_calibration.py` fits it from the recorded log).
+  kick's bend (`analysis/robot_calibration.py` fits it from the recorded log). With `aim`, each
+  is aimed instead at the middle of the far end of `bounds`, against the robot's kick bend and
+  bias (`kick_bend`), turned to within `AIM_RAD` first; `kick_results` has how far each missed.
+  Every kick comes charged: within `CHARGE_KEEPS_S` of the kicker's last kick (it runs flat
+  after), else the robot lets go of the ball and kicks once with none first, and at least
+  `RECHARGE_S` after the last.
 
 Before every trial and kick it fetches the ball (`pass_receive.take_ball_facing`), lined up so
 the carry runs towards the middle of `bounds`, and lets it go after. It asks for the ball back
@@ -35,6 +40,8 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import FieldBounds, Game
+from utama_core.shared.pass_and_score_geometry import kick_bend
+from utama_core.skills.src.utils.move_utils import turn_on_spot
 
 CARRY_M = 0.5  # how far a carry goes
 TURN_RAD = math.pi  # how far a turn goes
@@ -42,8 +49,14 @@ HOLD_S = 0.5  # standing with the ball after a carry, before it counts as kept
 SETTLE_S = 0.5  # standing with the ball after fetching it, before the carry starts
 RELEASE_S = 0.75  # backing off the ball, dribbler off, after a trial or a kick
 RELEASE_SPEED = 0.2
-KICK_S = 0.3  # one kick: the kicker's cooldown is 1 s
+KICK_S = 0.3  # one kick
 AFTER_KICK_S = 1.5
+RECHARGE_S = 1.2  # the kicker recharges in about 1 s after a kick
+CHARGE_KEEPS_S = 30.0  # unused this long, the kicker's capacitor runs down and the kick is weak
+AIM_RAD = math.radians(1.5)  # an aimed kick waits until the robot faces its aim this near
+AIM_HOLD_S = 0.2  # for this long
+AIM_TIMEOUT_S = 4.0  # or kicks anyway after this long turning
+MISS_FROM_M = 0.3  # the kick's direction: from the ball at the kick to where it is this far on
 FETCH_TIMEOUT_S = 20.0  # fetching longer than this asks for the ball to be put back
 BALL_LOST_M = 0.15  # ball centre this far from the robot's: off the dribbler (held, ~0.09 m)
 SENSOR_OFF_S = 0.3
@@ -96,6 +109,17 @@ def kick_heading(ball: Vector2D, bounds: FieldBounds) -> float:
     """Along the field, towards the end further from the ball."""
     (x0, _), (x1, _) = bounds.top_left, bounds.bottom_right
     return 0.0 if ball.x < (x0 + x1) / 2 else math.pi
+
+
+def kick_target(ball: Vector2D, bounds: FieldBounds) -> Vector2D:
+    """The middle of the end of `bounds` further from the ball: what an aimed kick aims at."""
+    (x0, y0), (x1, y1) = bounds.top_left, bounds.bottom_right
+    return Vector2D(x1 if ball.x < (x0 + x1) / 2 else x0, (y0 + y1) / 2)
+
+
+def at_caps(speed: float, turn: float) -> tuple[Direction, ...]:
+    """Every direction at one speed: a robot's carry caps, for checking them."""
+    return tuple(d._replace(speeds=(turn if d.turn else speed,)) for d in DIRECTIONS)
 
 
 def in_reach(game: Game, bounds: FieldBounds) -> bool:
@@ -169,6 +193,7 @@ class BallTrialsTactic(BaseTactic[None]):
         repeats: int = 2,
         kicks: int = 10,
         directions: tuple[Direction, ...] = DIRECTIONS,
+        aim: bool = False,
         accel: float = REAL_PARAMS.MAX_ACCELERATION,
         turn_accel: float = REAL_PARAMS.MAX_ANGULAR_ACCELERATION,
     ):
@@ -176,6 +201,10 @@ class BallTrialsTactic(BaseTactic[None]):
         self.ladder = Ladder(directions, repeats)
         self.kicks_left = kicks
         self.kicks_done = 0
+        self.aim = aim
+        # Per kick: its time and how far the ball left off the aim (aim) or heading, degrees
+        # anticlockwise +; None if the ball never got `MISS_FROM_M` away.
+        self.kick_results: list[dict] = []
         self.accel = accel
         self.turn_accel = turn_accel
         # Progress lives here, not in `mem`: the kernel may reset `mem` when play resumes.
@@ -186,6 +215,12 @@ class BallTrialsTactic(BaseTactic[None]):
         self._sensor_off = 0.0
         self._asking: Optional[str] = None
         self._proceed = False
+        self._last_kick: Optional[float] = None
+        self._fired_at: Optional[float] = None  # this phase's kick
+        self._kick_from: Optional[Vector2D] = None
+        self._kick_bearing = 0.0
+        self._miss: Optional[float] = None
+        self._aimed = 0.0
 
     def initial_mem(self) -> None:
         return None
@@ -206,7 +241,7 @@ class BallTrialsTactic(BaseTactic[None]):
         """What it is doing, for the operator; changes only when the step does."""
         if self.done:
             return "done"
-        if self._phase == "charge":
+        if self._phase in ("charge", "recharge"):
             return "charge the kicker (no ball)"
         if self._phase == "release":
             return "let go of the ball"
@@ -218,6 +253,22 @@ class BallTrialsTactic(BaseTactic[None]):
 
     def _to(self, phase: str) -> None:
         self._phase, self._elapsed, self._sensor_off = phase, 0.0, 0.0
+        self._fired_at, self._aimed = None, 0.0
+
+    def _fire(self, ts: float) -> bool:
+        """Kicks now if the kicker has recharged since its last kick; False while it has not."""
+        if self._fired_at is None:
+            if self._last_kick is not None and ts - self._last_kick < RECHARGE_S:
+                return False
+            self._fired_at = self._last_kick = ts
+        return ts - self._fired_at < KICK_S
+
+    def _charged(self, ts: float) -> bool:
+        return self._last_kick is not None and ts - self._last_kick < CHARGE_KEEPS_S
+
+    def _aim(self, game: Game, mc, robot_id: int) -> float:
+        ball = game.ball.p.to_2d()
+        return ball.angle_to(kick_target(ball, self.bounds)) - kick_bend(game, mc, robot_id)
 
     def _next(self, game: Game) -> None:
         """After a trial or a kick: fetch for the next, or done."""
@@ -230,6 +281,8 @@ class BallTrialsTactic(BaseTactic[None]):
         ball = game.ball.p.to_2d()
         if not self.ladder.done:
             return carry_heading(ball, self.bounds, self.ladder.current()[0])
+        if self.aim:
+            return ball.angle_to(kick_target(ball, self.bounds))
         return kick_heading(ball, self.bounds)
 
     def _lost(self, game: Game, robot_id: int, dt: float) -> bool:
@@ -250,7 +303,7 @@ class BallTrialsTactic(BaseTactic[None]):
         self._last_ts = game.ts
         if dt > _GAP_S:
             dt = 0.0
-            if self._phase in ("carry", "hold", "settle"):
+            if self._phase in ("carry", "hold", "settle", "aim"):
                 self._to("release")  # paused mid-trial: let go and fetch again
         self._elapsed += dt
         robot = game.friendly_robots.get(rid)
@@ -259,10 +312,19 @@ class BallTrialsTactic(BaseTactic[None]):
 
         if self._phase == "charge":
             # Left unused, the kicker's capacitor runs flat and its first kick barely moves the ball.
-            if self._elapsed < KICK_S:
+            if self._fire(game.ts):
                 commands[rid] = still._replace(kick=True)
                 return commands, mem
             self._to("fetch")
+
+        if self._phase == "recharge":  # the ball let go of first: back off, kick at nothing, wait
+            if self._elapsed < RELEASE_S:
+                commands[rid] = still._replace(local_forward_vel=-RELEASE_SPEED)
+            elif self._fire(game.ts):
+                commands[rid] = still._replace(kick=True)
+            elif self._fired_at is not None and game.ts - self._fired_at >= RECHARGE_S:
+                self._to("fetch")
+            return commands, mem
 
         if self._phase == "fetch":
             if self._asking is not None:
@@ -286,7 +348,24 @@ class BallTrialsTactic(BaseTactic[None]):
             if self._lost(game, rid, dt):
                 self._to("fetch")
             elif self._elapsed >= SETTLE_S:
-                self._to("carry" if not self.ladder.done else "kick")
+                if not self.ladder.done:
+                    self._to("carry")
+                elif not self._charged(game.ts):
+                    self._to("recharge")
+                else:
+                    self._to("aim" if self.aim else "kick")
+            return commands, mem
+
+        if self._phase == "aim":
+            heading = self._aim(game, ctx.motion_controller, rid)
+            commands[rid] = turn_on_spot(game, ctx.motion_controller, rid, heading, dribbling=True)
+            if self._lost(game, rid, dt):
+                self._to("fetch")
+                return commands, mem
+            off = abs(math.remainder(robot.orientation - heading, 2 * math.pi))
+            self._aimed = self._aimed + dt if off <= AIM_RAD else 0.0
+            if self._aimed >= AIM_HOLD_S or self._elapsed >= AIM_TIMEOUT_S:
+                self._to("kick" if self._charged(game.ts) else "recharge")
             return commands, mem
 
         if self._phase in ("carry", "hold"):
@@ -315,9 +394,25 @@ class BallTrialsTactic(BaseTactic[None]):
             return commands, mem
 
         if self._phase == "kick":
-            if self._elapsed < KICK_S:
+            if self._fired_at is None:
+                ball = game.ball.p.to_2d() if game.ball is not None else robot.p
+                self._kick_from, self._miss = ball, None
+                self._kick_bearing = ball.angle_to(kick_target(ball, self.bounds)) if self.aim else robot.orientation
+            if self._fire(game.ts):
                 commands[rid] = dribble._replace(kick=True)
-            elif self._elapsed >= KICK_S + AFTER_KICK_S:
+                return commands, mem
+            if self._fired_at is None:  # still recharging
+                commands[rid] = dribble
+                return commands, mem
+            if self._miss is None and game.ball is not None:
+                b = game.ball.p.to_2d()
+                if b.distance_to(self._kick_from) >= MISS_FROM_M:
+                    self._miss = math.degrees(
+                        math.remainder(self._kick_from.angle_to(b) - self._kick_bearing, 2 * math.pi)
+                    )
+            if game.ts - self._fired_at >= KICK_S + AFTER_KICK_S:
+                miss = None if self._miss is None else round(self._miss, 1)
+                self.kick_results.append({"t": round(self._fired_at, 2), "miss_deg": miss})
                 self.kicks_left -= 1
                 self.kicks_done += 1
                 self._next(game)

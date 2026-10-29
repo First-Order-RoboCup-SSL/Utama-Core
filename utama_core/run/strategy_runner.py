@@ -1293,7 +1293,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
 
     def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
-        """`team`'s motion controller, with its real robots' kick bends and biases (`RobotProfile`)."""
+        """`team`'s motion controller, with its real robots' kick bends, biases and carry caps (`RobotProfile`)."""
         controller = team.motion_controller(self.mode, self.rsim_env)
         if self.mode == Mode.REAL:
             controller.kick_bend = {
@@ -1303,6 +1303,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             }
             controller.kick_bias = {
                 rid: math.radians(p.kick_bias_deg) for rid, p in profiles.items() if p.kick_bias_deg
+            }
+            controller.robot_carry = {
+                rid: (
+                    controller.carry_speed if p.carry_speed is None else p.carry_speed,
+                    controller.carry_turn if p.carry_turn is None else p.carry_turn,
+                )
+                for rid, p in profiles.items()
+                if p.carry_speed is not None or p.carry_turn is not None
             }
         return controller
 
@@ -1357,16 +1365,16 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             return controller
         return ProfiledRobotController(controller, profiles)
 
-    def _tag_offsets(self) -> dict[tuple[bool, int], tuple[float, float, float]]:
+    def _tag_offsets(self) -> dict[tuple[bool, int], tuple[float, float]]:
         """Where each profiled robot's tag sits on it, for `PositionRefiner`: real robots only (a
         simulator's tag is its robot)."""
         if self.mode != Mode.REAL:
             return {}
         return {
-            (is_yellow, rid): (p.tag_forward_m, p.tag_left_m, math.radians(p.tag_heading_deg))
+            (is_yellow, rid): (p.tag_forward_m, p.tag_left_m)
             for is_yellow, profiles in ((True, self.yellow_robot_profiles), (False, self.blue_robot_profiles))
             for rid, p in profiles.items()
-            if p.tag_forward_m or p.tag_left_m or p.tag_heading_deg
+            if p.tag_forward_m or p.tag_left_m
         }
 
     def _init_refiners(

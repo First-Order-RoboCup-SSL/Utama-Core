@@ -138,11 +138,12 @@ robot was trying to do.
 
 ### 5. Measuring a robot
 
-Measure where its tag sits first (below), once per lid. Then:
+One command measures a robot and writes its profile:
 
 ```
 pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
 pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
+pixi run calibrate --robot yellow:0 --radio 0 --check       # the new profile against the committed one
 ```
 
 No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
@@ -155,37 +156,42 @@ Then the ball part (`examples/ball_trials.py`), where **the robot fetches the ba
   standing, then stands 0.5 s with it. A direction stops at the first speed that loses the ball
   (off the robot by 15 cm, or its ball sensor off 0.3 s). The carry runs towards the middle of
   the field, and the robot lets go and fetches the ball again before each trial.
-- **Kicks**: one with no ball to charge the kicker, then 10 (`--kicks`) along the field.
+- **Kicks**: 10 (`--kicks`) along the field. Every kick comes charged: the kicker holds its
+  charge about 30 s and recharges in about 1 s, so a kick more than 30 s after the last one is
+  preceded by a kick with no ball (the robot lets go of the ball first).
 
 It asks only when the ball is out of view or within 25 cm of the edge, as after most kicks:
 roll the ball back towards the middle and press Enter. Every step is printed as it starts; Ctrl+C
-halts the robot. At the end it prints DONE and the **carry ladder**, the fastest speed each way
-that kept the ball every time: what `RobotParams.CARRY_SPEED` and `CARRY_TURN`
-(`config/robot_params.py`) may be raised to, by the slowest direction the tactics use. Then the
-robot's numbers from the log, written beside it as `.calibration.json`: loop delay, speed gain and
-acceleration per axis, vision noise at rest, kick speed, and the **kick bend**, degrees per cm the
-ball sat off-centre: the robot's `kick_bend_deg_per_cm`. The robot's profile (`ROBOTS` in
-`shooting_drill.py`, found by radio ID) corrects the log by its tag first. `--mode rsim --yes`
-rehearses it in the simulator (its dribbler holds at every speed).
+halts the robot. At the end it prints DONE, analyses the log (loop delay, speed gain and
+acceleration per axis, vision noise at rest, kick speed; written beside the log as
+`.calibration.json`) and **writes the robot's profile**, `utama_core/config/robots/radio_<radio>.json`,
+which every example reads (`load_profile`). Nothing to copy by hand:
+
+- `tag_forward_m`, `tag_left_m`: where its tag sits on it, from its turns on the spot. A lid's tag
+  is a sticker, rarely centred; on real robots vision then reports the robot, not its tag.
+- `kick_bend_deg_per_cm`, `kick_bias_deg`: how far its kicks leave the heading per cm the ball
+  sat off-centre, and with it centred, fitted together. The heading is the tag's, so a tag stuck
+  on turned (yellow 0's reads 3.5° clockwise) shows in the bias: no straight edge needed.
+- `carry_speed`, `carry_turn`: the carry ladder's slowest direction, the fastest speed it kept
+  the ball every time; `move()` holds this robot to them (`RobotParams.CARRY_*` otherwise).
+
+What it could not measure stays as it was; hardware that breaks (`kicker`, `dribbler`, `ir`) is
+set in the file by hand. `--mode rsim --yes` rehearses it in the simulator (its dribbler holds at
+every speed) and writes nothing.
+
+**Is the new profile better?** `git diff` shows what changed. `--check` tries it against the
+committed one, on the field, same session: 4 blocks (`--blocks`) alternating the two, committed
+first, so battery and floor fall on both alike. In each the robot carries the ball every way at
+that profile's caps (`--repeats`, default 2) and kicks 5 times (`--kicks`) at the middle of the far
+end, aimed against that profile's bend and bias. It prints per profile how often each carry kept
+the ball and how far the kicks missed (mean of |miss| ± its standard error). Commit the file if
+the new profile is no worse. Ten kicks a side tell apart only differences of a few degrees; more
+`--kicks` for finer.
 
 Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
 far to trust them. An older log is measured again with
-`pixi run python tools/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002 -3.5`
-(`--tag` per robot: its `tag_forward_m`, `tag_left_m`, `tag_heading_deg`).
-
-**Where the tag sits.** A lid's tag is a sticker, rarely centred or square on the robot. Measure
-it once per lid:
-
-```
-pixi run calibrate-tag --robot yellow:0 --radio 0
-```
-
-The robot turns on the spot and drives straight (about 70 s), then you press its front against a
-straight edge along a cross-field line. It prints the tag's offset from the robot's centre, its
-heading offset, and the `RobotProfile` fields to paste into the robot's profile
-(`examples/shooting_drill.py`): `tag_forward_m`, `tag_left_m`, `tag_heading_deg`. On real robots
-vision then reports the robot, not its tag. Yellow 0's tag (2026-10-28) reads 3.5° clockwise of
-the robot: uncorrected, every aim and kick-direction measurement is off by that much.
+`pixi run python tools/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002`
+(`--tag` per robot: its `tag_forward_m`, `tag_left_m`).
 
 
 | Symptom | Cause |

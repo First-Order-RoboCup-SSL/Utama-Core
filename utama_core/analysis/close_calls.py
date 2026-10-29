@@ -23,14 +23,13 @@ restart fixes of 75674c65. `examples/planner_ab.py` measures the planners alone.
 
 from __future__ import annotations
 
-import math
 from collections import Counter
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-from utama_core.analysis.robot_calibration import FieldLog, _main_camera
+from utama_core.analysis.robot_calibration import FieldLog, _main_camera, tag_offsets
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.replay.ssl_log import REFEREE, read_records
 from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
@@ -127,14 +126,6 @@ def _command_at(commands, t: float) -> dict:
     return {"command": latest[1], "after_command_s": round(t - latest[0], 2)}
 
 
-def _tag_offsets(tags: list[list[str]]) -> dict[tuple[str, int], tuple[float, float, float]]:
-    out = {}
-    for robot, forward, left, heading in tags:
-        colour, _, vision_id = robot.partition(":")
-        out[(colour, int(vision_id))] = (float(forward), float(left), math.radians(float(heading)))
-    return out
-
-
 def scan(paths, tags: Optional[dict] = None, close_m: float = CLOSE_M) -> list[dict]:
     rows = []
     for path in paths:
@@ -178,15 +169,15 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser.add_argument("--close", type=float, default=CLOSE_M, help="metres, centre to centre (default %(default)s)")
     parser.add_argument(
         "--tag",
-        nargs=4,
+        nargs=3,
         action="append",
         default=[],
-        metavar=("COLOUR:ID", "FORWARD_M", "LEFT_M", "HEADING_DEG"),
+        metavar=("COLOUR:ID", "FORWARD_M", "LEFT_M"),
         help="where a robot's tag sits on it (RobotProfile.tag_*); repeatable",
     )
     parser.add_argument("--json", type=Path, help="also write the close calls here")
     args = parser.parse_args(argv)
-    rows = scan(args.logs, _tag_offsets(args.tag), args.close)
+    rows = scan(args.logs, tag_offsets(args.tag), args.close)
     print(report(rows))
     if args.json:
         args.json.write_text(json.dumps(rows, indent=1))

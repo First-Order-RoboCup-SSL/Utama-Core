@@ -1,32 +1,38 @@
 # ruff: noqa: E402
-"""examples/calibrate_robot.py — measure one real robot from the terminal: no dashboard.
+"""examples/calibrate_robot.py — measure one real robot and write its profile: no dashboard.
 
 Run:
     pixi run calibrate --robot yellow:0 --radio 0     # colour:vision id (its pattern), radio id
     pixi run calibrate --robot yellow:0 --radio 0 --ball-only   # the ball part again, no driving
+    pixi run calibrate --robot yellow:0 --radio 0 --check       # is the new profile better?
     pixi run calibrate --robot yellow:0 --radio 0 --mode rsim --yes   # rehearse it in the simulator
 
 It waits until vision sees the robot, then asks you once to put it near the middle of the
 camera's view facing +x (0.8 m clear ahead, 0.6 m to its left) with a ball at rest in view.
 It plays fixed moves first (`tactics/scripted_moves.py`, `CALIBRATION_SCRIPT`): about 65 s of
-driving and turning. Then the ball part (`ball_trials.py`), where it fetches the ball itself:
+driving and turning, its turns on the spot also showing where its tag sits. Then the ball part
+(`ball_trials.py`), where it fetches the ball itself:
 - a carry ladder: forward, backward, sideways and turning with the ball at rising speeds,
   `--repeats` times each, a direction ending at the first speed that loses the ball;
-- `--kicks` kicks along the field, after one with no ball (a kicker left unused runs flat).
+- `--kicks` kicks along the field, each with the kicker charged.
 It asks only when the ball is out of view or near the edge, as after most kicks: roll it back
 towards the middle and press Enter. Each step is printed as it starts. Ctrl+C stops the robot
 and exits at any time.
 
-When it ends it says DONE, prints the carry ladder (the fastest speed each way that kept the
-ball: what `RobotParams.CARRY_SPEED`/`CARRY_TURN` may be) and analyses the recorded log
-(`analysis/robot_calibration.py`): loop delay, speed gain and acceleration per axis, vision noise,
-kick speed, the kick's bend per cm the ball sits off-centre, and how it holds the ball. They are
-written beside the log as `<log>.calibration.json`. Calibrate every robot, twice (early and late
-in a session): how far two runs disagree is how far to trust them.
+When it ends it says DONE, analyses the recorded log (`analysis/robot_calibration.py`: loop
+delay, speed gain and acceleration per axis, vision noise, kicks, how it holds the ball; written
+beside the log as `<log>.calibration.json`) and writes what it measured into the robot's profile
+file, `utama_core/config/robots/radio_<radio>.json` (`RobotProfile`):
+- `tag_forward_m`, `tag_left_m`: where its tag sits (`analysis/tag_calibration.py`);
+- `kick_bend_deg_per_cm`, `kick_bias_deg`: its kicks' bend and bias, fitted together;
+- `carry_speed`, `carry_turn`: the slowest direction's fastest speed that kept the ball.
+What it could not measure stays as it was. Review the change with `git diff`.
 
-The robot's profile (`ROBOTS` in `shooting_drill.py`, by radio ID) corrects vision by where its
-tag sits; measure that first (`pixi run calibrate-tag`). The field and camera view are `FIELD`
-and `CAMERA_HALF` there.
+`--check` then says whether the new profile does better than the committed one (`git show
+HEAD:...`): `--blocks` blocks alternating the two (committed first), each carrying the ball every
+way at that profile's caps `--repeats` times and kicking `--kicks` times at the middle of the far
+end, aimed against its kick bend and bias. It prints per profile how often each carry kept the
+ball and how far the kicks missed. Commit the file if the new one is no worse.
 """
 
 import sys
@@ -37,15 +43,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 import json
 import math
+import subprocess
 import threading
 import time
+from dataclasses import replace
 from typing import Optional
 
-from ball_trials import BallTrialsTactic
+from ball_trials import BallTrialsTactic, at_caps
 from shooting_drill import (
     CAMERA_HALF,
     FIELD,
-    ROBOTS,
     TestRobot,
     _field_bounds,
     _one_robot_strategy,
@@ -58,6 +65,8 @@ from utama_core.analysis.robot_calibration import (
     calibrate,
     report,
 )
+from utama_core.analysis.tag_calibration import tag_calibration
+from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
@@ -66,7 +75,12 @@ from utama_core.tactics.scripted_moves import (
     Move,
     ScriptedMovesTactic,
 )
-from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.src.controllers.common.robot_profile import (
+    RobotProfile,
+    load_profile,
+    profile_path,
+    save_profile,
+)
 
 _START = (
     "Robot near the middle of the camera's view facing +x, 0.8 m clear ahead and 0.6 m to its left, "
@@ -149,11 +163,6 @@ def _wait_until_seen(runner: StrategyRunner, robot_id: int, label: str) -> None:
                 f"Seen {label} at ({robot.p.x:.2f}, {robot.p.y:.2f}) facing {math.degrees(robot.orientation):.0f}°; {ball}"
             )
             return
-
-
-def profile_of(radio: int) -> RobotProfile:
-    """The profile of our robot on `radio` (`ROBOTS` in `shooting_drill.py`); a blank one if none is."""
-    return next((r.profile for r in ROBOTS if r.firmware_id == radio), RobotProfile())
 
 
 def build_runner(args, tactic, name: str, profile: RobotProfile = RobotProfile()):
@@ -241,8 +250,10 @@ def parse_args(description: str, ball: bool = False):
     parser.add_argument("--yes", action="store_true", help="answer every question at once (a rehearsal)")
     if ball:
         parser.add_argument("--ball-only", action="store_true", help="skip the driving: the ball part alone")
+        parser.add_argument("--check", action="store_true", help="compare the profile file with the committed one")
+        parser.add_argument("--blocks", type=int, default=4, help="--check: blocks, alternating (default 4)")
         parser.add_argument("--repeats", type=int, default=2, help="carry trials per speed (default 2)")
-        parser.add_argument("--kicks", type=int, default=10, help="kicks (default 10)")
+        parser.add_argument("--kicks", type=int, help="kicks (default 10; --check: per block, default 5)")
     return parser.parse_args()
 
 
@@ -256,11 +267,62 @@ def carry_report(trials: BallTrialsTactic) -> str:
     return "\n".join(lines)
 
 
-def _analyse(log_path: str, robot: tuple[str, int], profile: RobotProfile, trials: BallTrialsTactic) -> None:
+CARRY_TRANSLATIONS = ("forward", "backward", "left", "right")
+CARRY_TURNS = ("turn anticlockwise", "turn clockwise")
+
+
+def carry_caps(kept: dict[str, Optional[float]]) -> tuple[Optional[float], Optional[float]]:
+    """(carry speed, carry turn) from a ladder's `summary()`: the slowest direction's fastest
+    speed that kept the ball; None where a direction was not tried or lost it at its slowest."""
+
+    def slowest(names):
+        speeds = [kept.get(n) for n in names]
+        return None if any(v is None for v in speeds) else min(speeds)
+
+    return slowest(CARRY_TRANSLATIONS), slowest(CARRY_TURNS)
+
+
+def measured_profile(
+    old: RobotProfile, tag: Optional[dict], bend: Optional[dict], kept: dict
+) -> tuple[RobotProfile, dict]:
+    """`old` with what this run measured in place of its numbers, and a note per part saying where
+    each came from (or that it was not measured and is kept)."""
+    changes, notes = {}, {}
+    if tag is not None and tag["tag_forward_m"] is not None:
+        changes.update(tag_forward_m=round(tag["tag_forward_m"], 3), tag_left_m=round(tag["tag_left_m"], 3))
+        notes["tag"] = f"{len(tag['spins'])} turns on the spot"
+    if bend is not None:
+        changes.update(kick_bend_deg_per_cm=round(bend["deg_per_cm"], 1), kick_bias_deg=round(bend["bias_deg"], 1))
+        notes["kick"] = (
+            f"{bend['kicks']} kicks: {bend['deg_per_cm']} +/- {bend['deg_per_cm_se']} deg/cm, "
+            f"{bend['bias_deg']:+} +/- {bend['bias_se_deg']} deg, rms {bend['rms_deg']}"
+        )
+    speed, turn = carry_caps(kept)
+    if speed is not None:
+        changes["carry_speed"] = speed
+    if turn is not None:
+        changes["carry_turn"] = turn
+    if kept:
+        notes["carry"] = ", ".join(f"{name} {'-' if v is None else f'{v:g}'}" for name, v in kept.items())
+    return replace(old, **changes), notes
+
+
+def profile_diff(old: RobotProfile, new: RobotProfile) -> str:
+    rows = [f"  {f}: {getattr(old, f)} -> {getattr(new, f)}" for f in vars(old) if getattr(old, f) != getattr(new, f)]
+    return "\n".join(rows) if rows else "  (unchanged)"
+
+
+def _analyse(log_path: str, robot: tuple[str, int], radio: int, old: RobotProfile, trials: BallTrialsTactic) -> None:
+    """Analyses the run's log and writes what it measured into the robot's profile file."""
     log = FieldLog(log_path)
-    log.correct_tags({robot: (profile.tag_forward_m, profile.tag_left_m, math.radians(profile.tag_heading_deg))})
+    tag = next((r for r in tag_calibration(log) if r["firmware_id"] == radio), None)  # from the raw tag
+    offset = (old.tag_forward_m, old.tag_left_m)
+    if tag is not None and tag["tag_forward_m"] is not None:
+        offset = (tag["tag_forward_m"], tag["tag_left_m"])
+    log.correct_tags({robot: offset})
     results, ball = calibrate(log), ball_noise(log.balls)
     print(report(results, ball))
+    kept = trials.ladder.summary()
     out = Path(log_path).with_suffix(".calibration.json")
     out.write_text(
         json.dumps(
@@ -269,18 +331,100 @@ def _analyse(log_path: str, robot: tuple[str, int], profile: RobotProfile, trial
                 "run_info": log.info,
                 "robots": results,
                 "ball": ball,
-                "carry_ladder": {"kept": trials.ladder.summary(), "trials": trials.ladder.results},
+                "tag": tag,
+                "carry_ladder": {"kept": kept, "trials": trials.ladder.results},
             },
             indent=1,
         )
     )
     print(f"\nWritten {out}")
 
+    bend = next((r.get("kick_bend") for r in results if r.get("firmware_id") == radio), None)
+    new, notes = measured_profile(old, tag, bend, kept)
+    path = profile_path(radio)
+    calibrated = json.loads(path.read_text()).get("calibrated", {}) if path.exists() else {}
+    calibrated.update({"lid": f"{robot[0]} {robot[1]}", "log": Path(log_path).name, **notes})
+    save_profile(radio, new, calibrated)
+    print(f"\nRadio {radio}'s profile, {path}:\n{profile_diff(old, new)}")
+    print("Review it with `git diff`; `pixi run calibrate ... --check` tries it against the committed one.")
+
+
+def committed_profile(radio: int) -> Optional[RobotProfile]:
+    """The robot's profile as last committed (`git show HEAD:...`); None if it has none."""
+    path = profile_path(radio)
+    rel = path.relative_to(Path(__file__).resolve().parents[1]).as_posix()
+    shown = subprocess.run(["git", "show", f"HEAD:{rel}"], capture_output=True, text=True)
+    return RobotProfile(**json.loads(shown.stdout)["profile"]) if shown.returncode == 0 else None
+
+
+def check_summary(blocks: list[dict]) -> str:
+    """Per profile: how often each carry kept the ball, and how far the kicks missed."""
+    lines = []
+    for which in ("committed", "new"):
+        rows = [b for b in blocks if b["profile"] == which]
+        if not rows:
+            continue
+        p = rows[0]["caps"]
+        lines.append(f"{which}: carry caps {p[0]:g} m/s, {p[1]:g} rad/s")
+        carries = [t for b in rows for t in b["carry"]]
+        for name in dict.fromkeys(t["direction"] for t in carries):
+            held = [t["held"] for t in carries if t["direction"] == name]
+            lines.append(f"  carry {name:<19} kept {sum(held)}/{len(held)}")
+        misses = [k["miss_deg"] for b in rows for k in b["kicks"]]
+        seen = [m for m in misses if m is not None]
+        if seen:
+            mean_abs = sum(abs(m) for m in seen) / len(seen)
+            se = (sum((abs(m) - mean_abs) ** 2 for m in seen) / max(len(seen) - 1, 1) / len(seen)) ** 0.5
+            lines.append(
+                f"  kicks {len(misses)}: missed by {mean_abs:.1f} ± {se:.1f}° on average (mean of |miss|), "
+                f"{sum(seen) / len(seen):+.1f}° to the left on average"
+                + (f", {len(misses) - len(seen)} never left" if len(seen) < len(misses) else "")
+            )
+    return "\n".join(lines)
+
+
+def run_check(args, bounds) -> None:
+    """`--check`: blocks alternating the committed and the new profile; see the module."""
+    new = load_profile(args.radio)
+    old = committed_profile(args.radio)
+    if old is None or old == new:
+        print("Nothing to check: the profile file is " + ("not committed." if old is None else "as committed."))
+        return
+    print(f"Checking radio {args.radio}'s profile; changed from the committed one:\n{profile_diff(old, new)}")
+    kicks = 5 if args.kicks is None else args.kicks
+    blocks: list[dict] = []
+    for block in range(args.blocks):
+        which, profile = ("committed", old) if block % 2 == 0 else ("new", new)
+        caps = (
+            REAL_PARAMS.CARRY_SPEED if profile.carry_speed is None else profile.carry_speed,
+            REAL_PARAMS.CARRY_TURN if profile.carry_turn is None else profile.carry_turn,
+        )
+        trials = BallTrialsTactic(bounds, repeats=args.repeats, kicks=kicks, directions=at_caps(*caps), aim=True)
+        runner, robot_id, label, game_log = build_runner(args, trials, f"calibrate_check_{which}", profile)
+        print(
+            f"\nblock {block + 1}/{args.blocks}: the {which} profile"
+            + (f", recording to {game_log}" if game_log else "")
+        )
+        if not play(runner, trials, robot_id, label, args.yes):
+            break
+        blocks.append({"profile": which, "caps": caps, "carry": trials.ladder.results, "kicks": trials.kick_results})
+    if not blocks:
+        return
+    print("\n" + check_summary(blocks))
+    out = Path(f"replays/field/{time.strftime('%Y%m%d_%H%M%S')}_{args.mode}_calibrate_check_radio{args.radio}.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"committed": vars(old), "new": vars(new), "blocks": blocks}, indent=1))
+    print(f"\nWritten {out}")
+
 
 def main() -> None:
     args = parse_args(__doc__, ball=True)
-    profile = profile_of(args.radio)
-    trials = BallTrialsTactic(_field_bounds(FIELD, CAMERA_HALF), repeats=args.repeats, kicks=args.kicks)
+    bounds = _field_bounds(FIELD, CAMERA_HALF)
+    if args.check:
+        run_check(args, bounds)
+        return
+    profile = load_profile(args.radio)
+    trials = BallTrialsTactic(bounds, repeats=args.repeats, kicks=10 if args.kicks is None else args.kicks)
     script = (Move("start", 0.0, prompt=_START),) + (() if args.ball_only else CALIBRATION_SCRIPT)
     tactic = _InTurn(ScriptedMovesTactic(script), trials)
     runner, robot_id, label, game_log = build_runner(args, tactic, "calibrate", profile)
@@ -291,7 +435,10 @@ def main() -> None:
         print(carry_report(trials))
         if game_log:
             print(f"\nAnalysing {game_log} ...\n")
-            _analyse(game_log, args.robot, profile, trials)
+            _analyse(game_log, args.robot, args.radio, profile, trials)
+        else:
+            new, _ = measured_profile(profile, None, None, trials.ladder.summary())
+            print(f"\nA rehearsal: nothing written. From the ladder alone it would be:\n{profile_diff(profile, new)}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 """Where a robot's vision tag sits on it, from a recorded field test: its offset from the robot's
 centre and how far its heading is off the robot's forward direction.
 
-Reads an SSL game log written on real robots (`StrategyRunner(game_log_path=...)`), best from an
-`examples/calibrate_tag.py` run; the turns and straight drives of an `examples/calibrate_robot.py`
-run work too.
+Reads an SSL game log written on real robots (`StrategyRunner(game_log_path=...)`): the turns
+and straight drives of an `examples/calibrate_robot.py` run, which writes the offset into the
+robot's profile.
 
 - **Tag offset**: a robot turning on the spot turns about its own centre, so its tag traces a
   circle round that centre. Per turn on the spot held at least `MIN_SPIN_S`, after `SETTLE_S`, a
@@ -13,9 +13,8 @@ run work too.
 - **Drive direction**: per straight drive (forward or backward only) held at least `MIN_DRIVE_S`,
   after `SETTLE_S`, the direction the tag travelled against its reported heading (degrees,
   anticlockwise +). It is the tag's heading offset plus any sideways pull of the wheels; the two
-  cannot be told apart by driving.
-- **Heading offset** proper needs the robot set by hand against a straight edge: see
-  `examples/calibrate_tag.py`.
+  cannot be told apart by driving. A tag's heading offset needs no measuring of its own: the
+  kicks' bias is fitted against the tag's heading (`RobotProfile.kick_bias_deg`).
 
     pixi run python -m utama_core.analysis.tag_calibration replays/field/<run>.log
 """

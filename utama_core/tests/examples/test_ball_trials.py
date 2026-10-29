@@ -1,6 +1,6 @@
 """`examples/ball_trials.py`, the ball part of `pixi run calibrate`: each carry is the distance it
 says from standing to standing, runs towards the middle of the field, and the ladder stops a
-direction at the first speed that loses the ball."""
+direction at the first speed that loses the ball; every kick comes charged."""
 
 from __future__ import annotations
 
@@ -77,3 +77,35 @@ def test_a_direction_losing_at_its_slowest_speed_carries_nothing():
     ladder = ex.Ladder((ex.Direction("left", math.pi / 2, 0, (0.2, 0.3)),), repeats=1)
     ladder.record(False, 0.0)
     assert ladder.done and ladder.summary() == {"left": None}
+
+
+def test_a_kick_waits_for_the_kicker_to_recharge_after_the_last():
+    trials = ex.BallTrialsTactic(BOUNDS)
+    trials._last_kick = 10.0
+
+    fired = 10.0 + ex.RECHARGE_S + 0.01
+    assert not trials._fire(fired - 0.02)
+    assert trials._fire(fired)  # fires, and keeps kicking for KICK_S
+    assert trials._fire(fired + ex.KICK_S - 0.01)
+    assert not trials._fire(fired + ex.KICK_S + 0.01)
+    assert trials._last_kick == fired
+
+
+def test_the_kicker_counts_as_charged_only_within_charge_keeps_s_of_its_last_kick():
+    trials = ex.BallTrialsTactic(BOUNDS)
+    assert not trials._charged(0.0)  # never kicked: flat
+    trials._last_kick = 5.0
+    assert trials._charged(5.0 + ex.CHARGE_KEEPS_S - 0.01)
+    assert not trials._charged(5.0 + ex.CHARGE_KEEPS_S)
+
+
+def test_aimed_kicks_aim_at_the_middle_of_the_far_end():
+    assert ex.kick_target(Vector2D(-0.4, 0.5), BOUNDS) == Vector2D(1.5, 0.0)
+    assert ex.kick_target(Vector2D(0.4, -0.5), BOUNDS) == Vector2D(-1.5, 0.0)
+
+
+def test_checking_carry_caps_tries_each_direction_at_its_cap_only():
+    directions = ex.at_caps(0.7, 3.0)
+    assert [d.name for d in directions] == [d.name for d in ex.DIRECTIONS]
+    assert {d.speeds for d in directions if d.turn} == {(3.0,)}
+    assert {d.speeds for d in directions if not d.turn} == {(0.7,)}

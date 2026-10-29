@@ -22,6 +22,8 @@ class MotionController(ABC):
         self.carry_speed: float | None = params.CARRY_SPEED
         self.carry_turn: float | None = params.CARRY_TURN
         self.min_turn: float | None = params.MIN_TURN
+        # A robot's own (speed, turn) in place of those (`RobotProfile.carry_*`); set by `StrategyRunner`.
+        self.robot_carry: dict[int, tuple[float | None, float | None]] = {}
         # Each robot's kick bend, rad per metre the ball sits left of centre on the dribbler
         # (`RobotProfile.kick_bend_deg_per_cm`); set by `StrategyRunner` on real robots.
         self.kick_bend: dict[int, float] = {}

@@ -1,0 +1,20 @@
+{
+ "radio_id": 0,
+ "profile": {
+  "kicker": true,
+  "dribbler": true,
+  "ir": true,
+  "kick_bend_deg_per_cm": 4.2,
+  "kick_bias_deg": 2.7,
+  "tag_forward_m": 0.0,
+  "tag_left_m": -0.002,
+  "carry_speed": null,
+  "carry_turn": null
+ },
+ "calibrated": {
+  "lid": "yellow 0",
+  "tag": "calibrate-tag 2026-10-28 22:33 (spins): 0.0 cm forward, -0.2 cm left",
+  "kick": "2026-10-28 rallies and drills, 21 logs, 55 kicks: 4.19 +/- 0.56 deg/cm, +2.7 +/- 0.9 deg, rms 5.9 (bias includes the tag's -3.5 deg heading)",
+  "carry": "not measured: the team's 0.3 m/s, 1 rad/s"
+ }
+}

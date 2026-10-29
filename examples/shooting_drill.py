@@ -92,6 +92,9 @@ from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.src.controllers.common.robot_profile import (
+    load_profile as robot_profile,
+)
 
 # The keeper kicks the ball back within this of the attacker's direction: at 1.5 m the ball
 # passes within 0.25 m, a step for the attacker. Real keepers barely turn finely with the ball
@@ -164,24 +167,12 @@ class TestRobot(NamedTuple):
     profile: RobotProfile = RobotProfile(kicker=True, dribbler=True, ir=True)
 
 
-# Our robots. The kick bend (`RobotProfile.kick_bend_deg_per_cm`, `kick_bias_deg`) is each one's
-# own; measure it again after any dribbler or kicker change. The tag offset (`tag_*`) is its lid's,
-# from `pixi run calibrate-tag`; measure it again for a new lid.
+# Our robots. Each one's profile (kick bend and bias, tag offset, carry caps) is its own file,
+# `utama_core/config/robots/radio_<radio id>.json`, written by `pixi run calibrate`; hardware
+# that breaks (kicker, dribbler, ir) is set there by hand.
 # YELLOW_1 is the robot on radio 0, measured as yellow 1; since 2026-10-28 its lid reads as yellow 0.
-# That lid's tag reads 3.5 deg clockwise of the robot (calibrate-tag 2026-10-28 22:33). With the
-# tag corrected, `robot_calibration`'s fit over its 57 full kicks of 2026-10-28 is 4.8 deg/cm
-# through zero, rms 6.2, 1.3 deg left over at the centre: no bias (the +2.3 deg fitted before
-# was mostly the tag).
-# BLUE_0: 2026-10-28 rallies 1.9 deg/cm +0.5 (27 kicks, rms 5.8: kept at 2.1, no bias); tag not measured.
-YELLOW_1 = TestRobot(
-    vision_id=0,
-    firmware_id=0,
-    profile=RobotProfile(kick_bend_deg_per_cm=4.8, tag_left_m=-0.002, tag_heading_deg=-3.5),
-)
-BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=RobotProfile(kick_bend_deg_per_cm=2.1))
-
-# Every robot we have, for scripts that pick one by its radio ID (`pixi run calibrate`).
-ROBOTS = (YELLOW_1, BLUE_0)
+YELLOW_1 = TestRobot(vision_id=0, firmware_id=0, profile=robot_profile(0))
+BLUE_0 = TestRobot(vision_id=0, firmware_id=1, profile=robot_profile(1))
 
 # Swapping a robot is a change here only.
 ATTACKER = YELLOW_1

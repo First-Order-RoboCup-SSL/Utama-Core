@@ -78,6 +78,7 @@ def _motion_controller() -> MagicMock:
     mc.calculate.return_value = (Vector2D(0.0, 0.0), 0.0)
     mc.pose_ahead = PoseAhead(0.0)
     mc.carry_speed = mc.carry_turn = mc.min_turn = None
+    mc.robot_carry = {}
     return mc
 
 

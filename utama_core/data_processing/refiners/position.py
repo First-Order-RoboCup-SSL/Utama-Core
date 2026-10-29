@@ -33,18 +33,14 @@ def _in_field_or_goal(x: float, y: float, dimensions: FieldDimensions) -> bool:
     return abs(y) <= dimensions.half_goal_width and abs(x) <= dimensions.full_field_half_length + dimensions.goal_depth
 
 
-def on_robot(robot: RawRobotData, offset: Tuple[float, float, float]) -> RawRobotData:
+def on_robot(robot: RawRobotData, offset: Tuple[float, float]) -> RawRobotData:
     """`robot`, a detection of its tag, moved to the robot itself: `offset` is (forward, left) of the
-    tag from the robot's centre in metres, in the frame of the tag's heading, and the tag's heading
-    minus the robot's in radians (`analysis/tag_calibration.py` measures all three)."""
-    forward, left, heading = offset
+    tag from the robot's centre in metres, in the frame of the tag's heading
+    (`analysis/tag_calibration.py` measures it). The heading stays the tag's: a kick's aim is
+    fitted against it (`RobotProfile.kick_bias_deg`)."""
+    forward, left = offset
     c, s = math.cos(robot.orientation), math.sin(robot.orientation)
-    return replace(
-        robot,
-        x=robot.x - (c * forward - s * left),
-        y=robot.y - (s * forward + c * left),
-        orientation=math.atan2(math.sin(robot.orientation - heading), math.cos(robot.orientation - heading)),
-    )
+    return replace(robot, x=robot.x - (c * forward - s * left), y=robot.y - (s * forward + c * left))
 
 
 @dataclass
@@ -86,7 +82,7 @@ class PositionRefiner(BaseRefiner):
         allowed_blue_ids: Optional[frozenset[int]] = None,
         smooth_positions: Optional[bool] = None,
         impute_vanished: Optional[bool] = None,
-        tag_offsets: Optional[Dict[Tuple[bool, int], Tuple[float, float, float]]] = None,
+        tag_offsets: Optional[Dict[Tuple[bool, int], Tuple[float, float]]] = None,
     ):
         top_left = full_field_dims.full_field_bounds.top_left
         bottom_right = full_field_dims.full_field_bounds.bottom_right

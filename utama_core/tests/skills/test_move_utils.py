@@ -177,6 +177,14 @@ def test_move_is_not_limited_without_the_ball_without_dribbling_or_in_the_sims(h
     assert (cmd.local_forward_vel, cmd.local_left_vel, cmd.angular_vel) == pytest.approx((1.0, 0.0, 4.0))
 
 
+def test_a_robot_with_its_own_carry_limits_is_held_to_those_not_the_teams():
+    """`RobotProfile.carry_speed`/`carry_turn` (via `robot_carry`) replace the team's for that robot only."""
+    case = _carry_case((1.0, 0.0), 0.2, has_ball=True, dribbling=True)
+    case["motion_controller"].robot_carry = {1: (0.6, 2.0), 2: (0.1, 0.1)}
+    cmd = move(**case)
+    assert (cmd.local_forward_vel, cmd.angular_vel) == pytest.approx((0.6, 0.2 * 0.6))
+
+
 def _carry_case(velocity, angular_vel, has_ball, dribbling, limits=(_CARRY_SPEED, _CARRY_TURN)) -> dict:
     game = _game(
         {1: _robot(1, 0.0, 0.0, True, orientation=0.0, has_ball=has_ball)}, {}, (ROBOT_RADIUS + BALL_RADIUS, 0.0)
@@ -184,6 +192,7 @@ def _carry_case(velocity, angular_vel, has_ball, dribbling, limits=(_CARRY_SPEED
     mc = MagicMock()
     mc.pose_ahead = PoseAhead(0.0)
     mc.carry_speed, mc.carry_turn = limits
+    mc.robot_carry = {}
     mc.min_turn = None
     mc.calculate.return_value = (Vector2D(*velocity), angular_vel)
     return dict(
@@ -241,6 +250,7 @@ def _turn_case(orientation: float, target_oren: float, angular_vel: float, min_t
     mc = MagicMock()
     mc.pose_ahead = PoseAhead(0.0)
     mc.carry_speed = mc.carry_turn = None
+    mc.robot_carry = {}
     mc.min_turn = min_turn
     mc.calculate.return_value = (Vector2D(0.0, 0.0), angular_vel)
     return dict(game=game, motion_controller=mc, robot_id=1, target_coords=Vector2D(0.0, 0.0), target_oren=target_oren)

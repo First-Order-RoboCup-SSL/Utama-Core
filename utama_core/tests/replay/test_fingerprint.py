@@ -382,7 +382,9 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
 #   opens files: profile_loader reads profiles/*.yaml -> data_files. The rest write a
 #     match's outputs (match log, stats, replays, a camera run's game log) or read old ones for
-#     analysis, never during play.
+#     analysis, never during play. robot_profile reads config/robots/*.json only when an
+#     example asks for a real robot's profile (`load_profile`), and profiles act on real robots
+#     only, so no match result depends on them.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
 #     game_log_writer asks git for the commit it records, only for a camera run's game log
@@ -414,6 +416,7 @@ AUDIT = {
         "utama_core.replay.columnar_writer",
         "utama_core.replay.game_log_writer",
         "utama_core.replay.replay_writer",
+        "utama_core.team_controller.src.controllers.common.robot_profile",
     ],
     "subprocess": [
         "utama_core.replay.game_log_writer",

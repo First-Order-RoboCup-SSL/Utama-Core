@@ -129,18 +129,17 @@ class FieldLog:
         self.robots = {key: np.array(rows) for key, rows in robots.items()}
         self.balls = np.array(balls).reshape(-1, 4)
 
-    def correct_tags(self, offsets: dict[tuple[str, int], tuple[float, float, float]]) -> None:
+    def correct_tags(self, offsets: dict[tuple[str, int], tuple[float, float]]) -> None:
         """Each robot's detections moved from its tag to the robot itself, as on real robots
-        (`PositionRefiner`): `offsets` by (colour, vision id), each the tag's (forward m, left m,
-        heading rad) on the robot, `RobotProfile.tag_*`. A log holds what the camera saw, the tag."""
-        for key, (forward, left, heading) in offsets.items():
+        (`PositionRefiner`): `offsets` by (colour, vision id), each the tag's (forward m, left m)
+        on the robot, `RobotProfile.tag_*`. A log holds what the camera saw, the tag."""
+        for key, (forward, left) in offsets.items():
             rows = self.robots.get(key)
             if rows is None:
                 continue
             th = rows[:, 4].astype(float)
             rows[:, 2] -= np.cos(th) * forward - np.sin(th) * left
             rows[:, 3] -= np.sin(th) * forward + np.cos(th) * left
-            rows[:, 4] = np.arctan2(np.sin(th - heading), np.cos(th - heading))
 
     def robot_of(self, firmware_id: int) -> Optional[tuple[str, int]]:
         """(colour, vision id) driven through `firmware_id`, from the run info."""
@@ -386,9 +385,11 @@ def kick_direction_offset(balls: np.ndarray, t_kick: float, heading: float) -> O
 
 
 def kick_bend(robot_kicks: list[dict]) -> Optional[dict]:
-    """The kick's bend towards the side the ball sits on the dribbler, degrees per cm through
-    zero (`RobotProfile.kick_bend_deg_per_cm`), over full kicks with the ball on the dribbler
-    (within `BEND_BALL_LEFT_CM`); with the fit's rms and the median left over at the centre."""
+    """The kick's bend towards the side the ball sits on the dribbler, degrees per cm
+    (`RobotProfile.kick_bend_deg_per_cm`), and its direction off the heading with the ball
+    centred (`kick_bias_deg`), fitted together over full kicks with the ball on the dribbler
+    (within `BEND_BALL_LEFT_CM`); with each one's standard error and the fit's rms. The heading
+    is the tag's, so a tag stuck on turned shows in the bias."""
     rows = [
         (k["ball_left_cm"], k["direction_offset_deg"])
         for k in robot_kicks
@@ -397,16 +398,30 @@ def kick_bend(robot_kicks: list[dict]) -> Optional[dict]:
     if len(rows) < BEND_MIN_KICKS:
         return None
     left, off = np.array(rows).T
-    if not np.any(left):
+    if np.ptp(left) == 0:
         return None
-    k = float(left @ off / (left @ left))
-    residual = off - k * left
+    a = np.column_stack([left, np.ones_like(left)])
+    (k, bias), *_ = np.linalg.lstsq(a, off, rcond=None)
+    residual = off - a @ (k, bias)
+    var = residual @ residual / max(len(rows) - 2, 1)
+    se_k, se_bias = np.sqrt(np.diag(var * np.linalg.inv(a.T @ a)))
     return {
-        "deg_per_cm": round(k, 2),
+        "deg_per_cm": round(float(k), 2),
+        "deg_per_cm_se": round(float(se_k), 2),
+        "bias_deg": round(float(bias), 1),
+        "bias_se_deg": round(float(se_bias), 1),
         "rms_deg": round(float(np.sqrt(np.mean(residual**2))), 1),
-        "residual_median_deg": round(float(np.median(residual)), 1),
         "kicks": len(rows),
     }
+
+
+def tag_offsets(tags: list[list[str]]) -> dict[tuple[str, int], tuple[float, float]]:
+    """`--tag COLOUR:ID FORWARD_M LEFT_M` arguments as `FieldLog.correct_tags` takes them."""
+    out = {}
+    for robot, forward, left in tags:
+        colour, _, vision_id = robot.partition(":")
+        out[(colour, int(vision_id))] = (float(forward), float(left))
+    return out
 
 
 def _move_name(fwd: float, left: float, turn: float) -> str:
@@ -533,9 +548,9 @@ def report(results: list[dict], ball: dict) -> str:
             bend = r.get("kick_bend")
             if bend is not None:
                 lines.append(
-                    f"  kick bend         {bend['deg_per_cm']}°/cm off-centre (kick_bend_deg_per_cm), "
-                    f"rms {bend['rms_deg']}°, {bend['residual_median_deg']}° left over at the centre "
-                    f"({bend['kicks']} kicks)"
+                    f"  kick bend         {bend['deg_per_cm']} ± {bend['deg_per_cm_se']}°/cm off-centre "
+                    f"(kick_bend_deg_per_cm), {bend['bias_deg']:+} ± {bend['bias_se_deg']}° with the ball "
+                    f"centred (kick_bias_deg), rms {bend['rms_deg']}° ({bend['kicks']} kicks)"
                 )
             for k in r["kicks"]:
                 lines.append(
@@ -564,19 +579,15 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser.add_argument("--json", type=Path, help="default: <log>.calibration.json beside the log")
     parser.add_argument(
         "--tag",
-        nargs=4,
+        nargs=3,
         action="append",
         default=[],
-        metavar=("COLOUR:ID", "FORWARD_M", "LEFT_M", "HEADING_DEG"),
-        help="where a robot's tag sits on it (RobotProfile.tag_*), e.g. --tag yellow:0 0 -0.002 -3.5; repeatable",
+        metavar=("COLOUR:ID", "FORWARD_M", "LEFT_M"),
+        help="where a robot's tag sits on it (RobotProfile.tag_*), e.g. --tag yellow:0 0 -0.002; repeatable",
     )
     args = parser.parse_args(argv)
     log = FieldLog(args.log)
-    offsets = {}
-    for robot, forward, left, heading in args.tag:
-        colour, _, vision_id = robot.partition(":")
-        offsets[(colour, int(vision_id))] = (float(forward), float(left), math.radians(float(heading)))
-    log.correct_tags(offsets)
+    log.correct_tags(tag_offsets(args.tag))
     results = calibrate(log)
     ball = ball_noise(log.balls)
     print(report(results, ball))

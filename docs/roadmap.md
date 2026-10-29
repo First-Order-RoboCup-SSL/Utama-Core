@@ -178,7 +178,10 @@ entry by its title, not its number.
          `pixi run calibrate`, read by the controller, planner limits, kick aim, vision filter,
          sim noise and offline replay. Covers everything below plus the setup errors in
          [`field_log_replay.md`](field_log_replay.md) (tag yaw and centre offset, kicker offset).
-         Tag offset done 2026-10-29: `pixi run calibrate-tag` → `RobotProfile.tag_*` → vision.
+         Done 2026-10-29: `pixi run calibrate` writes `utama_core/config/robots/radio_<n>.json`
+         (tag offset → vision, kick bend and bias → aim, carry caps → `move()`), every example
+         reads it, `--check` compares it with the committed one on the field. Tag heading is not
+         measured: the kick bias, fitted against the tag's heading, takes it in.
       2. **Driving**: speed gain and acceleration per axis *and diagonally* (forward, sideways,
          45°): the top speed and acceleration a robot actually holds in each direction, not one
          `MAX_ACCELERATION`; braking; drift over 3 m; turn rate and turn gain.
