@@ -185,3 +185,16 @@ def test_the_keep_out_zone_is_fenced_in_rsim_too():
     )
     controller.add_robot_commands({0: _cmd(left=-1.0)})
     assert sent[0].local_left_vel == 0.0
+
+
+def test_calibration_fences_the_field_lines_too():
+    # 2026-10-29: calibration drove a robot 0.14 m past the goal line; on the full field nothing fenced it.
+    full = STANDARD_FIELD_DIMS.full_field_bounds
+    runner = _runner(Mode.REAL, full)
+    sent = {}
+    robot = SimpleNamespace(p=Vector2D(-4.5 + MARGIN, 0.0), v=Vector2D(0.0, 0.0), orientation=0.0)
+    game = lambda: SimpleNamespace(friendly_robots={0: robot})  # noqa: E731
+    assert runner._fenced(SimpleNamespace(add_robot_commands=sent.update), game).add_robot_commands is not None
+    runner.fence_field_lines = True
+    runner._fenced(SimpleNamespace(add_robot_commands=sent.update), game).add_robot_commands({0: _cmd(-1.0)})
+    assert sent[0].local_forward_vel == 0.0

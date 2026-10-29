@@ -247,6 +247,9 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         keep_out (Sequence[FieldBounds]): Rectangles no robot may enter (vision coordinates): each
             robot's speed into them is capped (`field_fence.py`), and on a camera run one inside
             forces HALT (`field_check.py`). Defaults to none.
+        fence_field_lines (bool): On camera runs, fence the touch and goal lines as well as the edges
+            of `field_bounds` inside the field; off by default, as a robot fetching a ball out of play
+            must cross them. On for a run that never needs to (calibration).
         opp_strategy (AbstractStrategy, optional): Opponent strategy for pvp. Defaults to None for single player.
         control_scheme (str, optional): Name of the motion control scheme to use. If not set (or None),
             defaults to strategy.control_scheme, falling back to 'fpp'.
@@ -331,6 +334,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         full_field_dims: FieldDimensions = STANDARD_FIELD_DIMS,
         field_bounds: Optional[FieldBounds] = None,
         keep_out: Sequence[FieldBounds] = (),
+        fence_field_lines: bool = False,
         opp_strategy: Optional[AbstractStrategy] = None,
         control_scheme: Optional[str] = None,  # If None, resolved from strategy.control_scheme (defaulting to "fpp")
         opp_control_scheme: Optional[str] = None,
@@ -393,6 +397,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self.full_field_dims = full_field_dims
         self.field_bounds = field_bounds if field_bounds else full_field_dims.full_field_bounds
         self.keep_out = tuple(keep_out)
+        self.fence_field_lines = fence_field_lines
         self.referee: RefereeSource = self._validate_referee(self.mode, referee)
 
         self._stop_event = threading.Event()
@@ -1430,11 +1435,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def _fenced(self, controller, game):
         """`controller`, its robots kept inside the edges of `field_bounds` that are inside the
-        field when vision comes from a camera (grSim or real): past them nothing sees them; and
-        out of `keep_out` in every mode (`field_fence.py`)."""
-        bounds = (
-            None if self.mode == Mode.RSIM else inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
-        )
+        field when vision comes from a camera (grSim or real): past them nothing sees them (all of
+        them with `fence_field_lines`); and out of `keep_out` in every mode (`field_fence.py`)."""
+        if self.mode == Mode.RSIM:
+            bounds = None
+        elif getattr(self, "fence_field_lines", False):
+            bounds = self.field_bounds
+        else:
+            bounds = inner_edges(self.field_bounds, self.full_field_dims.full_field_bounds)
         keep_out = getattr(self, "keep_out", ())
         if bounds is None and not keep_out:
             return controller

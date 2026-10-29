@@ -60,3 +60,63 @@ def test_dribble_and_kick_moves_reach_the_robot():
     tactic = ScriptedMovesTactic((Move("dribble", 0.5, turn=1.0, dribble=True),))
     command = _tick(tactic, 0.0)[4]
     assert command.dribble and command.angular_vel == 1.0 and not command.kick
+
+
+# A there-and-back as the calibration script has it: go, rest, back, rest.
+PAIR = (
+    Move("go", 1.0, forward=0.5, home=True),
+    Move("rest", 0.5),
+    Move("go back", 1.0, forward=-0.5),
+    Move("rest", 0.5),
+    Move("turn", 0.5, turn=1.0),
+)
+
+
+class _Robot:
+    """A robot that does what it is told at once, along the x axis facing +x."""
+
+    def __init__(self, x: float = 0.0):
+        self.x, self.heading = x, 0.0
+
+    def game(self, ts: float):
+        robot = SimpleNamespace(p=SimpleNamespace(x=self.x, y=0.0), orientation=self.heading)
+        return SimpleNamespace(ts=ts, friendly_robots={4: robot})
+
+    def play(self, tactic, t0: float, seconds: float) -> dict:
+        commands = None
+        for k in range(round(seconds * 60)):
+            commands, _ = tactic.tick(self.game(t0 + k / 60), None, (4,), None)
+            self.x += commands[4].local_forward_vel / 60
+            self.heading += commands[4].angular_vel / 60
+        return commands
+
+
+def test_a_pause_in_the_back_half_drives_the_robot_home_and_replays_the_pair():
+    # 2026-10-29: each auto-HALT restarted the "back" move where the robot stood; three of them
+    # drove it past the goal line. Now it drives back to where "go" began and replays the pair.
+    robot, tactic = _Robot(x=0.0), ScriptedMovesTactic(PAIR)
+    robot.play(tactic, 0.0, 1.5)  # go 0.5 m, rest
+    robot.play(tactic, 1.5, 0.6)  # 0.6 s into "go back": x ~0.2
+    assert 0.15 < robot.x < 0.25
+    robot.play(tactic, 5.0, 3.0)  # paused 2.4 s, then on: home, rest, "go" again
+    assert tactic.step <= 1  # replaying the pair
+    robot.play(tactic, 8.0, 3.0)
+    assert tactic.step == 4 and abs(robot.x) < 0.06  # the pair done, back where it began
+
+
+def test_repeated_pauses_never_take_the_robot_further_than_the_pair_does():
+    robot, tactic = _Robot(x=0.0), ScriptedMovesTactic(PAIR)
+    t = 0.0
+    for _ in range(6):  # a pause every 1.7 s, as on 2026-10-29's feed
+        robot.play(tactic, t, 1.7)
+        assert -0.06 < robot.x < 0.56
+        t += 2.0
+    robot.play(tactic, t, 20.0)
+    assert tactic.done and abs(robot.x) < 0.06
+
+
+def test_the_pairs_halves_are_named_apart():
+    from utama_core.tactics.scripted_moves import CALIBRATION_SCRIPT
+
+    names = [m.name for m in CALIBRATION_SCRIPT if m.name != "rest"]
+    assert "forward 0.3 m/s back" in names and names.count("forward 0.3 m/s") == 1
