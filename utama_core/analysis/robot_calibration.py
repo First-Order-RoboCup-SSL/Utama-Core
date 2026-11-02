@@ -593,7 +593,14 @@ def main(argv: Optional[list[str]] = None) -> None:
     results = calibrate(log)
     ball = ball_noise(log.balls)
     print(report(results, ball))
-    out = args.json or args.log.with_suffix(".calibration.json")
+    if args.json:
+        out = args.json
+    else:
+        name = args.log.name
+        for ext in (".gz", ".log"):
+            if name.endswith(ext):
+                name = name[: -len(ext)]
+        out = args.log.with_name(f"{name}.calibration.json")
     out.write_text(json.dumps({"log": str(args.log), "run_info": log.info, "robots": results, "ball": ball}, indent=1))
     print(f"written {out}")
 

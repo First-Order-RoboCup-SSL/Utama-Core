@@ -283,3 +283,23 @@ def test_correcting_a_tag_moves_that_robots_detections_onto_the_robot():
 
     assert log.robots[("yellow", 0)][0, 2:] == pytest.approx([1.0, 0.99, math.pi / 2])
     assert log.robots[("blue", 0)][0, 2:].tolist() == [0.0, 0.0, 0.0]
+
+
+def test_field_log_reads_gzipped_log_and_names_output_cleanly(synthetic_log, tmp_path):
+    import gzip
+
+    from utama_core.analysis.robot_calibration import main
+
+    gz_path = tmp_path / "compressed.log.gz"
+    with open(synthetic_log, "rb") as f_in, gzip.open(gz_path, "wb") as f_out:
+        f_out.writelines(f_in)
+
+    # FieldLog reads both identically
+    raw = FieldLog(synthetic_log)
+    gzipped = FieldLog(gz_path)
+    assert len(raw.camera_frames) == len(gzipped.camera_frames)
+
+    # Default output path strips .log.gz cleanly
+    main([str(gz_path)])
+    assert (tmp_path / "compressed.calibration.json").exists()
+    assert not (tmp_path / "compressed.log.calibration.json").exists()

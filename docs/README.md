@@ -14,6 +14,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [visual_guide.md](visual_guide.md): the game drawn on the pitch from real replays (how each strategy plays, one match over time, a restart, the motion planner), what each picture has shown us, and how to draw it.
 - [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee.
 - [real_robot_setup.md](real_robot_setup.md): a test day with real robots: ssl-vision on its own laptop, WSL networking and USB, the radio, and the checks before a robot moves.
+- [field_logs.md](field_logs.md): real robot game logs: format, record types, calibration analysis, dead-time trimming, and release packaging.
 - [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
 
 ## Design rationale

@@ -78,3 +78,23 @@ def test_paired_differences_use_same_seed_and_colour_and_orient_head_to_head():
 def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
     ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "3": {"seed": None}}
     assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
+
+
+def test_pools_are_valid_and_load_cleanly():
+    import json
+    from pathlib import Path
+
+    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+
+    pools_dir = Path(__file__).resolve().parents[3] / "tools" / "evaluation" / "pools"
+    pool_files = list(pools_dir.glob("pool_v*.json"))
+    assert len(pool_files) >= 1  # pool_v1.json
+
+    for path in pool_files:
+        data = json.loads(path.read_text())
+        assert "version" in data and "champion" in data and "opponents" in data
+        assert "held_out" in data and "sim_noise" in data
+        assert len(data["opponents"]) > 0
+        assert len(data["held_out"]) > 0
+        noise = SimNoise.from_dict(data["sim_noise"])
+        assert noise.vanishing >= 0

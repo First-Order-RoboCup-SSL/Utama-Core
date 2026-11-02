@@ -119,6 +119,8 @@ class SimNoise:
     @classmethod
     def from_dict(cls, d: dict) -> "SimNoise":
         d = dict(d)
+        if "sim_noise" in d and isinstance(d["sim_noise"], dict):
+            d = dict(d["sim_noise"])
         if "latency_s" in d:
             d["latency_s"] = tuple(d["latency_s"])
         if "vision" in d:
