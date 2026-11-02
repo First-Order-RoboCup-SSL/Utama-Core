@@ -8,10 +8,12 @@ for the end-to-end behavior these enable.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
@@ -27,6 +29,7 @@ from utama_core.shared.pass_and_score_geometry import (
     _RELEASE_FORWARD_MAX,
     _RELEASE_LATERAL_MAX,
     ORIENTATION_TOLERANCE_RAD,
+    SHOT_AIM_ERROR_RAD,
     ball_in_enemy_defense_area,
     ball_is_loose,
     ball_line_receive_point,
@@ -35,9 +38,14 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_defense_area_hold_point,
     enemy_goal_line,
     has_ball,
+    heading_on_target,
+    kick_bend,
     no_shot_reposition_target,
+    oriented_towards,
+    own_defense_area_exit_point,
     reset_possession_state,
     score_pass_setup,
+    shot_heading_reachable,
 )
 
 _FIELD = Field(
@@ -145,6 +153,20 @@ def test_enemy_defense_area_hold_point_clamps_y_inside_box_width():
     half_width = STANDARD_FIELD_DIMS.half_defense_area_width
     hold = enemy_defense_area_hold_point(game, at_y=half_width + 5.0)
     assert hold.y < half_width + 5.0
+
+
+@pytest.mark.parametrize("hold_point", [enemy_defense_area_hold_point, own_defense_area_exit_point])
+@pytest.mark.parametrize("extra", [-0.01, 0.01])
+def test_box_hold_point_keeps_the_balls_side_when_the_margin_is_about_the_box_width(hold_point, extra):
+    """2026-10-27 field run: a 1 m wide box and the 0.57 m margin made the limit negative, and the
+    attacker waiting for a ball the keeper held at y = -0.36 drove to y = +0.07 instead."""
+    game = _game((0.0, 0.0))
+    half_width = STANDARD_FIELD_DIMS.half_defense_area_width
+    margin = half_width + extra
+    hold = hold_point(game, at_y=-0.5 * half_width, margin=margin)
+    assert hold.y == pytest.approx(-0.5 * half_width if extra > 0 else -min(0.5 * half_width, -extra))
+    far = hold_point(game, at_y=-2 * half_width, margin=margin)
+    assert far.y == pytest.approx(-half_width if extra > 0 else -(half_width - margin))
 
 
 def test_clamp_outside_enemy_defense_area_clears_planners_obstacle_ring():
@@ -819,3 +841,141 @@ def test_both_clamps_still_apply_just_inside_the_band():
     assert (
         clamp_outside_own_defense_area(_game((0.0, 0.0)), Vector2D(_MY_BOX_FRONT_X + 0.3, -inside)).x < _MY_BOX_FRONT_X
     )
+
+
+# `heading_on_target`: our goal is at +x (`_game`'s my_team_is_right), the enemy goal at -x.
+_SHOOTER = Vector2D(-2.5, 0.0)
+_REACH = STANDARD_FIELD_DIMS.full_field_half_length + _SHOOTER.x  # 2.0 m to the goal line
+
+
+def _shot(orientation: float, others: tuple = ()) -> Game:
+    game = _game((_SHOOTER.x - 0.09, 0.0))
+    frame = game.current
+    enemies = {i: _robot(i, x, y, False) for i, (x, y) in enumerate(others)}
+    shooter = _robot(1, _SHOOTER.x, _SHOOTER.y, True, orientation=orientation)
+    current = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots={1: shooter},
+        enemy_robots=enemies,
+        ball=frame.ball,
+    )
+    return Game(past=GameHistory(10), current=current, field=game.field)
+
+
+def _crossing_orientation(y: float) -> float:
+    return math.atan2(y - _SHOOTER.y, -_REACH)
+
+
+@pytest.mark.parametrize("inside", [0.001, -0.001])
+def test_a_shot_kicks_only_while_its_line_crosses_the_goal_room_inside_the_post(inside):
+    """The line may cross at most ball radius + aim error at its length inside the post."""
+    edge_y = STANDARD_FIELD_DIMS.half_goal_width
+    for _ in range(50):  # the room depends on the line's length, which depends on the crossing
+        edge_y = (
+            STANDARD_FIELD_DIMS.half_goal_width
+            - BALL_RADIUS
+            - math.hypot(_REACH, edge_y) * math.tan(SHOT_AIM_ERROR_RAD)
+        )
+    assert heading_on_target(_shot(_crossing_orientation(edge_y - inside)), 1) is (inside > 0)
+
+
+def test_a_shot_kicks_well_off_the_best_heading_while_its_line_is_in_the_open_goal():
+    """2026-10-27 field runs: the fixed 0.06 rad tolerance kept a robot turning at an open goal.
+    0.15 rad off the goal's centre still crosses 0.3 m inside a 1 m goal from 2 m."""
+    assert heading_on_target(_shot(math.pi + 0.15), 1)
+
+
+def test_a_shot_facing_away_from_the_goal_never_kicks():
+    assert not heading_on_target(_shot(0.0), 1)
+
+
+@pytest.mark.parametrize("clear", [0.001, -0.001])
+def test_a_shot_kicks_only_while_its_line_clears_the_keeper_by_robot_ball_and_aim_room(clear):
+    """2026-10-27 field run: a shot kicked within tolerance of the open corner went at the keeper."""
+    along = 1.5
+    need = ROBOT_RADIUS + BALL_RADIUS + along * math.tan(SHOT_AIM_ERROR_RAD)
+    keeper = (_SHOOTER.x - along, need + clear)
+    assert heading_on_target(_shot(math.pi, (keeper,)), 1) is (clear > 0)
+
+
+def test_a_robot_behind_the_shooter_or_past_the_goal_line_does_not_block():
+    behind = (_SHOOTER.x + 0.5, 0.0)
+    past_line = (-STANDARD_FIELD_DIMS.full_field_half_length - 0.1, 0.0)
+    assert heading_on_target(_shot(math.pi, (behind, past_line)), 1)
+
+
+@pytest.mark.parametrize("clear", [0.001, -0.001])
+def test_a_shot_gap_is_reachable_only_with_room_for_twice_the_aim_error(clear):
+    """A gap `find_best_shot` returns but the gate never opens on: the robot turned to it and
+    held the ball, turning on the spot forever. Reachable means clear with twice the aim error,
+    so a robot within `SHOT_AIM_ERROR_RAD` of the heading still passes `heading_on_target`."""
+    along = 1.5
+    need = ROBOT_RADIUS + BALL_RADIUS + along * math.tan(2.0 * SHOT_AIM_ERROR_RAD)
+    keeper = (_SHOOTER.x - along, need + clear)
+    assert shot_heading_reachable(_shot(math.pi, (keeper,)), 1, math.pi) is (clear > 0)
+
+
+def test_a_reachable_shot_heading_kicks_from_anywhere_within_the_aim_error_of_it():
+    """The gap is judged by its heading; the gate by where the robot ends up. Just reachable,
+    the robot off by up to the aim error on either side must still kick."""
+    along = 1.5
+    keeper = (_SHOOTER.x - along, ROBOT_RADIUS + BALL_RADIUS + along * math.tan(2.0 * SHOT_AIM_ERROR_RAD) + 0.001)
+    assert shot_heading_reachable(_shot(math.pi, (keeper,)), 1, math.pi)
+    for off in (-SHOT_AIM_ERROR_RAD * 0.99, 0.0, SHOT_AIM_ERROR_RAD * 0.99):
+        assert heading_on_target(_shot(math.pi + off, (keeper,)), 1)
+
+
+def _ball_on_dribbler(left: float) -> Game:
+    """The shooter at `_SHOOTER` facing the enemy goal (-x), the ball on its dribbler `left` m
+    to its left (towards -y, as it faces -x)."""
+    game = _shot(math.pi)
+    zv = Vector3D(0.0, 0.0, 0.0)
+    ball = Ball(p=Vector3D(_SHOOTER.x - 0.09, _SHOOTER.y - left, 0.0), v=zv, a=zv)
+    current = GameFrame(
+        ts=0.0,
+        my_team_is_yellow=True,
+        my_team_is_right=True,
+        friendly_robots=game.current.friendly_robots,
+        enemy_robots={},
+        ball=ball,
+    )
+    return Game(past=GameHistory(10), current=current, field=game.field)
+
+
+@pytest.mark.parametrize(
+    "left, bends, expected",
+    [
+        (0.01, {1: 8.0}, 0.08),  # 1 cm left: the kick leaves 0.08 rad to the left
+        (-0.01, {1: 8.0}, -0.08),
+        (0.0, {1: 8.0}, 0.0),  # centred: straight
+        (0.2, {1: 8.0}, 8.0 * 0.05),  # off the dribbler's width: no more than at its edge
+        (0.01, {}, 0.0),  # no bend for this robot (the sims)
+    ],
+)
+def test_kick_bend_is_the_robots_bend_per_metre_times_the_balls_offset(left, bends, expected):
+    controller = SimpleNamespace(kick_bend=bends, kick_bias={})
+    assert kick_bend(_ball_on_dribbler(left), controller, 1) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    "left, bends, expected",
+    [
+        (0.0, {1: 8.0}, 0.04),  # centred: the bias alone
+        (0.01, {1: 8.0}, 0.12),  # added to the bend
+        (0.01, {}, 0.04),  # a robot with a bias and no bend still gets it
+    ],
+)
+def test_kick_bend_adds_the_robots_bias(left, bends, expected):
+    """Yellow's passes left its heading 2.3 deg anticlockwise with the ball centred (51 kicks,
+    2026-10-28 rallies); a bias counted only with a bend would drop for a bend-less robot."""
+    controller = SimpleNamespace(kick_bend=bends, kick_bias={1: 0.04})
+    assert kick_bend(_ball_on_dribbler(left), controller, 1) == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("bend, scores", [(0.0, True), (0.35, False), (-0.15, True)])
+def test_the_shot_gate_checks_the_line_the_bent_kick_takes(bend, scores):
+    """0.15 rad off the goal's centre scores from 2 m; a kick bending 0.35 rad further misses
+    the goal, and one bending back 0.15 rad goes through its centre."""
+    assert heading_on_target(_shot(math.pi + 0.15), 1, bend) is scores

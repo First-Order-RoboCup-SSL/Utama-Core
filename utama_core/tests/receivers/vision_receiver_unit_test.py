@@ -1,5 +1,7 @@
+import threading
 from collections import deque
 from dataclasses import dataclass, replace
+from types import SimpleNamespace
 
 from utama_core.data_processing.receivers.vision_receiver import (
     RawBallData,
@@ -189,3 +191,20 @@ def test_a_camera_at_no_height_counts_as_unknown():
     # An uncalibrated camera's height of 0 weighs every robot it sees at 0: one only it saw
     # divided by zero in CameraCombiner.
     assert _frames_after_geometry(0)[0].camera_position is None
+
+
+def test_the_receiver_stops_once_its_runner_stops_and_closes_its_socket():
+    """`examples/demos.py` runs one runner after another in one process: a stopped runner's
+    vision thread must end and let go of the socket, not pile up behind the next one."""
+    stop = threading.Event()
+    closed = []
+
+    def receive():
+        stop.set()  # the runner stops while a packet is awaited
+        return None
+
+    receiver = VisionReceiver.__new__(VisionReceiver)
+    receiver._stop_event = stop
+    receiver.net = SimpleNamespace(receive_data=receive, close=lambda: closed.append(True))
+    receiver.pull_game_data()  # returns, rather than looping for ever
+    assert closed == [True]

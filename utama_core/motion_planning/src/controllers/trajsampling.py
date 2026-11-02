@@ -56,7 +56,9 @@ class TrajectorySamplingController(MotionController):
     def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
         super().__init__(mode, rsim_env)
         params = _PARAMS_BY_MODE[mode]
-        self.planner = TrajectorySamplingPlanner(v_max=params.MAX_VEL, a_max=params.MAX_ACCELERATION)
+        self.planner = TrajectorySamplingPlanner(
+            v_max=params.MAX_VEL, a_max=params.MAX_ACCELERATION, a_sideways=params.MAX_SIDEWAYS_ACCELERATION
+        )
         self._brake_acceleration = params.MAX_ACCELERATION * config.BRAKE_ACCELERATION_MULTIPLIER
         # Orientation is a separate concern from translation in this
         # codebase (see FastPathPlanningController) -- reused as-is rather

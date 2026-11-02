@@ -22,6 +22,7 @@ across individual receiver attempts, unlike `hop_ticks`).
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from typing import Optional
 
@@ -168,7 +169,11 @@ def test_carrier_does_not_hold_again_after_the_first_touch_hold_times_out():
             ts=0.0,
             my_team_is_yellow=True,
             my_team_is_right=True,
-            friendly_robots=frame.friendly_robots,
+            # facing the enemy goal (-x): it slides for a lane, it does not pivot to face it first
+            friendly_robots={
+                **frame.friendly_robots,
+                1: dataclasses.replace(frame.friendly_robots[1], orientation=math.pi),
+            },
             enemy_robots=enemy,
             ball=frame.ball,
         ),
@@ -591,6 +596,7 @@ def test_hold_does_not_come_back_when_a_robot_leaves_the_slot():
         return Robot(id=rid, is_friendly=friendly, has_ball=has_ball, p=Vector2D(x, y), v=z, a=z, orientation=0.0)
 
     friendly = {1: robot(1, 0.0, 0.0, True, True), 2: robot(2, 1.0, 0.0, True), 5: robot(5, -1.0, 0.0, True)}
+    friendly[1] = dataclasses.replace(friendly[1], orientation=math.pi)  # facing the enemy goal (-x): it slides
     enemy = {3: robot(3, 0.5, 0.0, False), 4: robot(4, -0.3, 0.0, False)}  # both lanes and the shot blocked
     ball = Ball(Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0), Vector3D(0.0, 0.0, 0.0))
     frame = GameFrame(

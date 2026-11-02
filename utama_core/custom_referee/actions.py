@@ -23,6 +23,7 @@ from utama_core.config.referee_constants import (
     PENALTY_MARK_HALF_FIELD_RATIO,
 )
 from utama_core.custom_referee.geometry import RefereeGeometry
+from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.global_utils.math_utils import (
     detour_around_circle,
@@ -180,8 +181,28 @@ def _clamp_to_field_or_ball(point: Vector2D, game, ball_pos: Vector2D) -> Vector
     return point
 
 
+# Going round a ball to get behind it, the robot's centre keeps this far from the ball's: its
+# edge stays `_BALL_CLEARANCE_M` off the ball's. Robot plus ball radius alone left ~1 cm on the
+# real robots (2026-10-27): vision error and overshoot were enough to touch the ball on the way.
+_BALL_CLEARANCE_M = 0.05
+_BALL_DETOUR_RADIUS_M = ROBOT_RADIUS + BALL_RADIUS + _BALL_CLEARANCE_M
+
+
+def _round_ball_to(robot_pos: Vector2D, ball_pos: Vector2D, direction: Vector2D, approach: Vector2D):
+    """(target, straight) for reaching `approach`, behind the ball for pushing or kicking it
+    along `direction` (unit). At least as far behind the ball as `approach` (along
+    `direction`): straight there, the closest it gets to the ball being `approach` itself.
+    Otherwise a waypoint round the ball, `_BALL_DETOUR_RADIUS_M` from it, until it is."""
+    behind = (ball_pos - robot_pos).dot(direction)
+    if behind >= (ball_pos - approach).dot(direction):
+        return approach, True
+    return detour_around_circle(robot_pos, approach, ball_pos, _BALL_DETOUR_RADIUS_M), False
+
+
 def _is_in_own_defense_area(game, x: float, y: float) -> bool:
-    """Return True if (x, y) is inside our own defense area."""
+    """Return True if (x, y) is inside our own defense area. Never without `defense_area_rules`."""
+    if not game.field.defense_area_rules:
+        return False
     own_goal_sign = 1.0 if game.my_team_is_right else -1.0
     field_half_length = _field_half_length(game)
     depth = game.field.half_defense_area_depth
@@ -205,7 +226,10 @@ def _own_defense_area_exit_x(game) -> float:
 
 
 def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -> Vector2D:
-    """Project a point out of the opponent defense area plus the required keep distance."""
+    """Project a point out of the opponent defense area plus the required keep distance.
+    Unchanged without `defense_area_rules`."""
+    if not game.field.defense_area_rules:
+        return point
     field_half_length = _field_half_length(game)
     opp_goal_sign = -1.0 if game.my_team_is_right else 1.0
     defense_width = game.field.half_defense_area_width + keep_dist
@@ -228,33 +252,56 @@ def _project_outside_opp_defense_area(game, point: Vector2D, keep_dist: float) -
 def _in_planner_opp_defense_margin(game, point: Vector2D) -> bool:
     """True when the planner would push a target at `point` out of the opponent
     defense area's margin (keep distance plus its own clearance ring)."""
+    if not game.field.defense_area_rules:
+        return False
     margin = OPPONENT_DEFENSE_AREA_KEEP_DISTANCE + RefereeGeometry._PLANNER_CLEARANCE_BUFFER_M
     opp_goal_sign = -1.0 if game.my_team_is_right else 1.0
     inner_x = opp_goal_sign * (_field_half_length(game) - 2.0 * game.field.half_defense_area_depth)
     return abs(point.y) < game.field.half_defense_area_width + margin and opp_goal_sign * (point.x - inner_x) > -margin
 
 
-def _reachable_on_circle(game, point: Vector2D, center: Vector2D, radius: float) -> Vector2D:
+# A robot sent clear of the ball or the placement keeps its target this far (centre to centre)
+# from every other robot: two robot radii and 10 cm. Field day 2026-10-27, STOP with the ball
+# out past the goal line: yellow's target, clamped back onto the pitch, was 0.23 m from blue's
+# keeper standing on its line, and yellow drove into it and pushed it 0.3 m.
+_ROBOT_SPACING_M = 2 * ROBOT_RADIUS + 0.10
+
+
+def _clear_of_robots(game, point: Vector2D, robot_id: int | None) -> bool:
+    """No robot but `robot_id` within `_ROBOT_SPACING_M` of `point`."""
+    if robot_id is None:
+        return True
+    others = [r for rid, r in game.friendly_robots.items() if rid != robot_id] + list(game.enemy_robots.values())
+    return all(math.hypot(r.p.x - point.x, r.p.y - point.y) >= _ROBOT_SPACING_M for r in others)
+
+
+def _reachable_on_circle(
+    game, point: Vector2D, center: Vector2D, radius: float, robot_id: int | None = None
+) -> Vector2D:
     """`point` (on the circle round `center`), or the nearest point of that circle
-    on the pitch that the planner will drive to.
+    on the pitch that the planner will drive to, clear of every robot but `robot_id` when given.
 
     A free kick 1 m in front of the opponent box pushed a robot between the ball and
     the box straight toward the box; the planner stopped it 0.48 m from the ball, a
     Defender Too Close foul every free kick. A placement near a corner pushed a robot
     off the pitch; clamped back on, its target was still inside the circle and it never
     left (moment placement_in_corner_traps_defender)."""
-    if (
-        abs((point - center).mag() - radius) <= 1e-3
-        and not _in_planner_opp_defense_margin(game, point)
-        and _clamp_to_field(point, game) == point
-    ):
+
+    def usable(candidate: Vector2D) -> bool:
+        return (
+            not _in_planner_opp_defense_margin(game, candidate)
+            and _clamp_to_field(candidate, game) == candidate
+            and _clear_of_robots(game, candidate, robot_id)
+        )
+
+    if abs((point - center).mag() - radius) <= 1e-3 and usable(point):
         return point
     base = math.atan2(point.y - center.y, point.x - center.x)
     for step in range(0, 37):
         for sign in (1.0, -1.0):
             angle = base + sign * step * math.pi / 36
             candidate = Vector2D(center.x + radius * math.cos(angle), center.y + radius * math.sin(angle))
-            if not _in_planner_opp_defense_margin(game, candidate) and _clamp_to_field(candidate, game) == candidate:
+            if usable(candidate):
                 return candidate
     return point
 
@@ -372,6 +419,10 @@ def _clear_to_legal_positions(
         if math.isclose(target.x, robot.p.x) and math.isclose(target.y, robot.p.y):
             blackboard.cmd_map[robot_id] = empty_command(False)
             continue
+        if ball_center is not None and not _clear_of_robots(game, target, robot_id):
+            # On round the ball, at the same distance, to the nearest spot no robot stands on.
+            radius = max(ball_keep_dist, (target - ball_center).mag())
+            target = _reachable_on_circle(game, target, ball_center, radius, robot_id)
 
         oren = robot.p.angle_to(target)
         blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, target, oren)
@@ -416,6 +467,17 @@ class StopStep:
 # ---------------------------------------------------------------------------
 
 
+def _capped_speed(command: RobotCommand, max_speed: float) -> RobotCommand:
+    """`command` with its driving speed scaled down to at most `max_speed`, direction kept."""
+    speed = math.hypot(command.local_forward_vel, command.local_left_vel)
+    if speed <= max_speed:
+        return command
+    scale = max_speed / speed
+    return command._replace(
+        local_forward_vel=command.local_forward_vel * scale, local_left_vel=command.local_left_vel * scale
+    )
+
+
 class BallPlacementOursStep:
     """Moves the closest friendly robot to place the ball at designated_position.
 
@@ -441,6 +503,27 @@ class BallPlacementOursStep:
     # latched, freezing placement the same way driving straight to ball_pos
     # did (rel_fwd/rel_lat both 0.000, chassis overshooting onto the ball).
     _APPROACH_OFFSET = 0.10
+
+    # Lined up behind the ball within _CREEP_RANGE_M of the approach point and still no ball
+    # sensor: aim _CREEP_M further forward. On real robots the placer parked 0.10-0.11 m from
+    # the ball, ~1 cm short of dribbler contact, its sensor off for 15-20 s (2026-10-27 field
+    # test): vision error and the controller settling short ate the margin.
+    _CREEP_RANGE_M = 0.03
+    _CREEP_M = 0.03
+
+    # A rolling ball is met, not chased: the placer heads for where the ball will be when it can
+    # get there at this speed (the real cap), facing it, dribbler on. Chasing it to get behind
+    # it, facing the spot, a real placer followed a ball rolling out of the field with its back
+    # to it and never caught it (2026-10-27). Ball friction is left out, so the placer gets
+    # there early and waits on the ball's path.
+    _INTERCEPT_SPEED_MPS = 1.0
+    _INTERCEPT_MAX_S = 2.0
+
+    # Carrying, at most _CARRY_SPEED_MPS, slowing as if braking at _CARRY_DECEL_MPS2 to stop at
+    # the spot. At full speed (1 m/s real) a sudden slow-down left the ball rolling on at 1 m/s off
+    # the dribbler and out of the field (2026-10-27 field run, blue placement at 77 s).
+    _CARRY_SPEED_MPS = 0.5
+    _CARRY_DECEL_MPS2 = 1.0
 
     # Ball speed below which placement is considered settled enough to
     # start releasing. Without this, "close enough" (BALL_PLACEMENT_DONE_
@@ -472,6 +555,15 @@ class BallPlacementOursStep:
         self._release_started_at = None
         self._placer_id = None
         self._placer_sticky.current = None
+
+    def _meeting_point(self, robot_pos: Vector2D, ball) -> Vector2D:
+        """Where the rolling ball will be when the placer can reach it at `_INTERCEPT_SPEED_MPS`
+        (a few fixed-point steps; at most `_INTERCEPT_MAX_S` ahead)."""
+        t = 0.0
+        for _ in range(5):
+            at = Vector2D(ball.p.x + ball.v.x * t, ball.p.y + ball.v.y * t)
+            t = min(self._INTERCEPT_MAX_S, robot_pos.distance_to(at) / self._INTERCEPT_SPEED_MPS)
+        return Vector2D(ball.p.x + ball.v.x * t, ball.p.y + ball.v.y * t)
 
     def update(self) -> None:
         game = self.blackboard.game
@@ -553,9 +645,24 @@ class BallPlacementOursStep:
                             game, motion_controller, robot_id, oren, dribbling=True
                         )
                     else:
-                        self.blackboard.cmd_map[robot_id] = move(
-                            game, motion_controller, robot_id, target_pos, oren, dribbling=True
+                        carry_speed = min(
+                            self._CARRY_SPEED_MPS,
+                            math.sqrt(2 * self._CARRY_DECEL_MPS2 * ball.p.distance_to(target_pos)),
                         )
+                        self.blackboard.cmd_map[robot_id] = _capped_speed(
+                            move(game, motion_controller, robot_id, target_pos, oren, dribbling=True), carry_speed
+                        )
+                elif not ball_settled:
+                    meet = self._meeting_point(robot.p, ball)
+                    target_for_move = _clamp_to_field_or_ball(meet, game, Vector2D(ball.p.x, ball.p.y))
+                    self.blackboard.cmd_map[robot_id] = move(
+                        game,
+                        motion_controller,
+                        robot_id,
+                        target_for_move,
+                        target_for_move.angle_to(Vector2D(ball.p.x, ball.p.y)),
+                        dribbling=True,
+                    )
                 else:
                     ball_pos_for_clamp = Vector2D(ball.p.x, ball.p.y)
                     oren = ball_pos_for_clamp.angle_to(target_pos)
@@ -578,18 +685,22 @@ class BallPlacementOursStep:
                         ball_pos_for_clamp.x - approach_dir.x * self._APPROACH_OFFSET,
                         ball_pos_for_clamp.y - approach_dir.y * self._APPROACH_OFFSET,
                     )
-                    target_for_move = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
-                    # Still on the designated side of the ball: go round it, not through it, to
-                    # the approach point (a hand-made moment: the straight run passed 0.03 m
-                    # from the ball, and the placer pushed it off the spot). Once behind the ball
-                    # the run to the approach point is the final approach and stays straight.
-                    robot_rel = robot.p - ball_pos_for_clamp
-                    if robot_rel.x * approach_dir.x + robot_rel.y * approach_dir.y > 0.0:
-                        target_for_move = detour_around_circle(
-                            robot.p, target_for_move, ball_pos_for_clamp, ROBOT_RADIUS + BALL_RADIUS
+                    approach = _clamp_to_field_or_ball(approach, game, ball_pos_for_clamp)
+                    # Not yet behind the ball: round it, not through it (a hand-made moment: the
+                    # straight run passed 0.03 m from the ball, and the placer pushed it off the
+                    # spot). Facing the ball all the way, so the dribbler meets it and the robot
+                    # faces the spot once at the approach point; facing the spot from the start
+                    # looked wrong on the real robots, most of all for a ball right beside the
+                    # robot (2026-10-27). With the ball, it turns to the spot on the spot.
+                    target_for_move, straight = _round_ball_to(robot.p, ball_pos_for_clamp, approach_dir, approach)
+                    if straight and robot.p.distance_to(target_for_move) <= self._CREEP_RANGE_M:
+                        target_for_move = Vector2D(
+                            target_for_move.x + approach_dir.x * self._CREEP_M,
+                            target_for_move.y + approach_dir.y * self._CREEP_M,
                         )
+                    face = robot.p.angle_to(ball_pos_for_clamp) if robot.p.distance_to(ball_pos_for_clamp) else oren
                     self.blackboard.cmd_map[robot_id] = move(
-                        game, motion_controller, robot_id, target_for_move, oren, dribbling=True
+                        game, motion_controller, robot_id, target_for_move, face, dribbling=True
                     )
         # Teammates keep off the ball's path to the spot too, as the other team's do: one
         # parked on the spot blocks the placement itself, and in the sim the teleport, which
@@ -763,7 +874,7 @@ class PreparePenaltyOursStep:
         target = kicker_spot
         if game.ball is not None:
             ball_pos = Vector2D(game.ball.p.x, game.ball.p.y)
-            target = detour_around_circle(kicker.p, kicker_spot, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+            target, _ = _round_ball_to(kicker.p, ball_pos, Vector2D(sign, 0.0), kicker_spot)
         self.blackboard.cmd_map[kicker_id] = move(game, motion_controller, kicker_id, target, goal_oren)
 
         # Goalkeeper remains on own goal line (not pulled into enemy half)
@@ -979,7 +1090,7 @@ class DirectFreeOursStep:
                     # Round the ball, not through it, to an approach point on its far side:
                     # driving through pushed free kicks placed 0.25 m inside the line back
                     # onto it (tournament_20260927_223257).
-                    waypoint = detour_around_circle(robot.p, approach, ball_pos, ROBOT_RADIUS + BALL_RADIUS)
+                    waypoint, _ = _round_ball_to(robot.p, ball_pos, kick_dir, approach)
                     self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, waypoint, target_oren)
                 elif abs(face_error) > self._FACE_READY_ANGLE:
                     self.blackboard.cmd_map[robot_id] = turn_on_spot(

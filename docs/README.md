@@ -14,6 +14,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [visual_guide.md](visual_guide.md): the game drawn on the pitch from real replays (how each strategy plays, one match over time, a restart, the motion planner), what each picture has shown us, and how to draw it.
 - [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee.
 - [real_robot_setup.md](real_robot_setup.md): a test day with real robots: ssl-vision on its own laptop, WSL networking and USB, the radio, and the checks before a robot moves.
+- [field_logs.md](field_logs.md): real robot game logs: format, record types, calibration analysis, dead-time trimming, and release packaging.
 - [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
 
 ## Design rationale
@@ -36,6 +37,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [roadmap.md](roadmap.md): larger open workstreams, and one-line pointers to finished ones.
 - [sim_realism.md](sim_realism.md): how far rsim is from real matches, the realism scorecard, and the plan to close the gap with measured, randomized physics.
 - [in_house_vision.md](in_house_vision.md): our own vision stack for lab days (per-session tag calibration, tags on robots), the experiments that decide it, and the 2026-10-22 test day's vision findings.
+- [field_log_replay.md](field_log_replay.md): design for finding a moment in a field log and rerunning the decision code on its recorded inputs, and the physical setup's own errors (tag yaw and offset, kicker offset, cameras) as per-robot profiles.
 - [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
 - [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
 - [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.

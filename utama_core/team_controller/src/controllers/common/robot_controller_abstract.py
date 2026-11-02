@@ -6,6 +6,8 @@ from utama_core.entities.data.command import RobotCommand, RobotResponse
 
 
 class AbstractRobotController:
+    keeps_kickers_charged = False  # real kickers lose their charge when idle (`kicker_charge.py`)
+
     def __init__(self, is_team_yellow: bool, n_friendly: int):
         self._is_team_yellow = is_team_yellow
         self._n_friendly = n_friendly

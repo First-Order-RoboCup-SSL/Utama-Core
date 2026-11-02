@@ -108,6 +108,11 @@ class MatchLog:
             self._last_trace_value[key] = value
             self.trace(tick, sim_time, key, value)
 
+    def current_traces(self) -> dict[str, Any]:
+        """Each key's value as last traced, for keys traced on the last tick (`clear_untraced`
+        sets the others to None): what the tactics are doing now, for the dashboard."""
+        return {key: value for key, value in self._last_trace_value.items() if value is not None}
+
     def clear_untraced(self, tick: int, sim_time: float) -> None:
         """Record `None` for every key not passed to `trace_if_changed` since the last call, so a
         replay stops drawing a tactic's overlay once the tactic stops tracing it (it stopped

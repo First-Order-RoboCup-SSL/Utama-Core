@@ -204,8 +204,17 @@ class Trajectory2D:
         p1: tuple[float, float],
         v_max: float,
         a_max: float,
+        a_sideways: float | None = None,
+        heading: float = 0.0,
     ) -> "Trajectory2D":
-        """Straight-line bang-bang trajectory from (p0, v0) to (p1, v=0)."""
+        """Straight-line bang-bang trajectory from (p0, v0) to (p1, v=0).
+
+        With `a_sideways`, a robot facing `heading` accelerates along the line at most as hard as
+        its sideways axis allows for the line's share across it: `a_sideways / |sin|` of the angle
+        between the line and the heading, capped at `a_max`. A sidestep is planned as slow as the
+        robot really makes it (real robots: 1.8 m/s^2 sideways against 4 forward), so a candidate
+        that only clears an obstacle by an impossible swerve is seen to collide.
+        """
         dx = p1[0] - p0[0]
         dy = p1[1] - p0[1]
         dist = math.hypot(dx, dy)
@@ -233,6 +242,11 @@ class Trajectory2D:
                 ux, uy = v0[0] / speed, v0[1] / speed
         else:
             ux, uy = dx / dist, dy / dist
+
+        if a_sideways is not None and a_sideways < a_max:
+            across = abs(math.sin(math.atan2(uy, ux) - heading))
+            if across * a_max > a_sideways:
+                a_max = a_sideways / across
 
         v0_along = v0[0] * ux + v0[1] * uy
         along = BangBang1D.compute(0.0, v0_along, dist, v_max, a_max)

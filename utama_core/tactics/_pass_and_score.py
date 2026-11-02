@@ -35,11 +35,14 @@ from utama_core.shared.pass_and_score_geometry import (
     enemy_positions,
     find_best_shot,
     has_ball,
+    heading_on_target,
     intercept_point,
+    kick_bend,
     no_shot_reposition_target,
     oriented_towards,
     score_pass_setup,
     segment_blocked,
+    shot_heading_reachable,
 )
 from utama_core.skills.src.go_to_ball import go_to_ball
 from utama_core.skills.src.utils.move_utils import (
@@ -322,7 +325,8 @@ def _pass_exec(
     # from wherever it sits on the dribbler, often 2-4 cm off-centre. Aimed from the centre,
     # that offset and the heading tolerance added on the same side in 27 of 29 missed short
     # passes, which passed ~7 cm beside the receiver (tournament_20260928_221404).
-    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point)
+    # And against the kick's bend on a real robot (`kick_bend`).
+    passer_target_oren = game.ball.p.to_2d().angle_to(aim_point) - kick_bend(game, ctx.motion_controller, passer_id)
     passer_aimed = oriented_towards(game, passer_id, passer_target_oren)
     # visual=True: see run_setup_phase's comment — the strict sensor can
     # stay False while the robot is visually on the ball, which would
@@ -436,6 +440,43 @@ _SHOT_SWITCH_MARGIN = (
 )
 
 
+# Facing the goal centre within this, a robot with the ball slides for a better shot; further off
+# it pivots on the ball first (`turn_on_spot`).
+FACE_GOAL_RAD = 0.3
+
+
+def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
+    """No clear shot: with the ball, slide sideways for one (`no_shot_reposition_target`),
+    facing the goal. A robot that took the ball facing elsewhere pivots on it to face the goal
+    first: turning while sliding lost the ball every time on the real robots (shooting drill,
+    2026-10-28), while the pivot is what pass_receive turns with. It pivots only with the ball
+    sensor on: seen on the dribbler's edge but not on the sensor, the pivot turned away from
+    the ball and pushed it off (save_and_counter, 2026-10-28), so it settles the ball first."""
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    robot = game.friendly_robots[robot_id]
+    goal_oren = robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
+    if not oriented_towards(game, robot_id, goal_oren, FACE_GOAL_RAD):
+        if not has_ball(game, robot_id):
+            ctx.trace(game, f"shoot[{robot_id}]", "settling the ball before turning")
+            return go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx)
+        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · facing the goal")
+        return turn_on_spot(
+            game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, target_oren=goal_oren, dribbling=True
+        )
+    ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · moving for one")
+    reposition = no_shot_reposition_target(
+        robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
+    )
+    return move(
+        game=game,
+        motion_controller=ctx.motion_controller,
+        robot_id=robot_id,
+        target_coords=reposition,
+        target_oren=goal_oren,
+        dribbling=True,
+    )
+
+
 def _score_goal(
     game: Game, ctx: TickContext, robot_id: int, prev_best_shot_y: Optional[float] = None
 ) -> tuple[RobotCommand, bool, Optional[float]]:
@@ -450,35 +491,34 @@ def _score_goal(
         prev_best_shot_y=prev_best_shot_y,
         switch_margin=_SHOT_SWITCH_MARGIN,
     )
+    if best_shot_y is not None and not shot_heading_reachable(
+        game, robot_id, robot.p.angle_to(Vector2D(goal_x, best_shot_y))
+    ):
+        best_shot_y = None  # a gap too narrow for the shot gate: move for a better one
+    # The ball first: moving for a shot without it left the ball behind, and a robot that had
+    # just lost it strafed away from it (shooting drill, 2026-10-28).
+    # visual=True: see run_setup_phase's comment on the strict sensor's
+    # unreliability — without this the shooter can stall on the ball
+    # forever if the IR/contact flag never fires.
+    if not has_ball(game, robot_id, visual=True):
+        ctx.trace(game, f"shoot[{robot_id}]", "fetching the ball")
+        return (
+            go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx),
+            False,
+            best_shot_y if best_shot_y is not None else prev_best_shot_y,
+        )
     if best_shot_y is None:
         # See `no_shot_reposition_target`'s docstring: freezing here never
         # resolves against a stationary blocker (e.g. a keeper at the goal
         # mouth) — nothing about a stationary position changes the shot
         # search's inputs, so it never comes back non-None on its own.
-        reposition = no_shot_reposition_target(
-            robot.p, enemy_positions(game), goal_x, goal_y1, goal_y2, game.field.half_width
-        )
-        cmd = move(
-            game=game,
-            motion_controller=ctx.motion_controller,
-            robot_id=robot_id,
-            target_coords=reposition,
-            target_oren=robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)),
-            dribbling=True,
-        )
+        cmd = move_for_a_shot(game, ctx, robot_id)
         return cmd, False, prev_best_shot_y
 
-    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y))
-    # visual=True: see run_setup_phase's comment on the strict sensor's
-    # unreliability — without this the shooter can stall on the ball
-    # forever if the IR/contact flag never fires.
-    if not has_ball(game, robot_id, visual=True):
-        return (
-            go_to_ball(game=game, motion_controller=ctx.motion_controller, robot_id=robot_id, ctx=ctx),
-            False,
-            best_shot_y,
-        )
-    if not oriented_towards(game, robot_id, target_oren):
+    bend = kick_bend(game, ctx.motion_controller, robot_id)
+    target_oren = robot.p.angle_to(Vector2D(goal_x, best_shot_y)) - bend
+    if not heading_on_target(game, robot_id, bend):
+        ctx.trace(game, f"shoot[{robot_id}]", "turning to shoot")
         return (
             turn_on_spot(
                 game=game,
@@ -490,4 +530,5 @@ def _score_goal(
             False,
             best_shot_y,
         )
+    ctx.trace(game, f"shoot[{robot_id}]", "kick")
     return kick(), True, best_shot_y

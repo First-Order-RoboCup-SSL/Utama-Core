@@ -88,7 +88,9 @@ def get_pid_configs(mode: Mode) -> PIDConfigs:
             orientation=OrientationPIDConfigs(
                 max_output=REAL_PARAMS.MAX_ANGULAR_VEL,
                 min_output=-REAL_PARAMS.MAX_ANGULAR_VEL,
-                kp=1.4,
+                # 1.4 until 2026-10-28: a 90 deg turn started at 2.2 rad/s and crawled in. 3.5 keeps
+                # kp x the ~80 ms loop delay near 0.3, inside stable (the sims' 4.5 has no delay).
+                kp=3.5,
                 kd=0.075,
                 ki=0.0,
                 max_acceleration=REAL_PARAMS.MAX_ANGULAR_ACCELERATION,

@@ -1,13 +1,13 @@
 # ruff: noqa: E402
-"""examples/real_dribble_and_shoot.py — one robot dribbles a lap of the field, then scores.
+"""examples/dribble_and_shoot.py — one robot dribbles a lap of the field, then scores.
 
 Run:
-    pixi run python examples/real_dribble_and_shoot.py            # real robot
-    pixi run python examples/real_dribble_and_shoot.py --mode rsim
+    pixi run python examples/dribble_and_shoot.py            # real robot
+    pixi run python examples/dribble_and_shoot.py --mode rsim
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
-Everything else is `real_score_goal.py`: the robot set there (`SHOOTER`), the field and camera
-view from `real_attacker_defender.py`, HALT at start, the field check. The robot fetches the
+Everything else is `score_goal.py`: the robot set there (`SHOOTER`), the field and camera
+view from `shooting_drill.py`, HALT at start, the field check. The robot fetches the
 ball and dribbles it corner to corner round a rectangle at 55% of the field (`DribbleTactic`,
 letting go and taking the ball back every 0.8 m, inside the 1 m dribbling rule), and after
 `LAPS` laps shoots at the goal at +x (`LeadAndSupportTactic`). For another go: Halt, put the
@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 from dataclasses import dataclass, field
 
-from real_score_goal import build_runner
+from score_goal import build_runner
 
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.tactics.dribble import DribbleMem, DribbleTactic

@@ -127,7 +127,7 @@ declarations) — check there before reintroducing one of them.
   those parameters today, so both levels run the same tests. CI runs `--level quick` on
   PRs, `--level full` on push to a branch, both with `--ignore-glob "**/*grsim*"` (grsim
   tests need an external grsim process CI can't provide).
-- The root `conftest.py` turns off `StrategyRunner`'s browser vision stream for every test.
+- `StrategyRunner`'s browser vision stream is off unless `enable_vision_stream=True`.
   In rsim, `run_test`'s `episode_timeout` is game time (rsim runs several times faster than
   real time), so a test's budget doesn't depend on machine load.
 - A known defect is a `strict=True` xfail on exactly the cases that hit it (see

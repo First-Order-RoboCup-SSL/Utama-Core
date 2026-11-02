@@ -51,10 +51,15 @@ class VisionReceiver:
         This method runs indefinitely and should be started in a separate thread.
         """
         vision_packet = SSL_WrapperPacket()
-        while True:
-            data = self.net.receive_data()
-            if data is not None and not self._handle_packet(vision_packet, data):
-                return
+        try:
+            # Stops once its runner stops (the next packet after), its socket closed, so the
+            # next runner in this process (`examples/demos.py`) gets the packets.
+            while self._stop_event is None or not self._stop_event.is_set():
+                data = self.net.receive_data()
+                if data is not None and not self._handle_packet(vision_packet, data):
+                    return
+        finally:
+            self.net.close()
 
     def _handle_packet(self, vision_packet: SSL_WrapperPacket, data: bytes) -> bool:
         """Parse one wrapper packet into `vision_packet` and buffer its detection. Returns False

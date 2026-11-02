@@ -1,3 +1,4 @@
+import math
 from dataclasses import replace
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.settings import BALL_ROLL_DECEL
 from utama_core.data_processing.refiners import PositionRefiner
+from utama_core.data_processing.refiners.position import on_robot
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionRobotData
@@ -208,6 +210,30 @@ def test_allowlist_filters_stray_yellow_robot():
 
     assert 0 in result.friendly_robots
     assert 1 not in result.friendly_robots
+
+
+def test_a_tag_off_the_robot_is_moved_back_onto_it():
+    # The tag 2 cm ahead of and 1 cm left of the centre of a robot facing +y: its centre is 2 cm
+    # behind (-y) and 1 cm right (+x) of the tag. Its heading stays the tag's.
+    tag = RawRobotData(0, 1.0, 1.0, math.pi / 2, 1)
+
+    robot = on_robot(tag, (0.02, 0.01))
+
+    assert (robot.x, robot.y) == pytest.approx((1.01, 0.98))
+    assert robot.orientation == pytest.approx(math.pi / 2)
+
+
+def test_tag_offsets_move_only_the_robot_of_their_colour_and_id():
+    raw_yellow = [RawRobotData(0, -1, -1, 0, 1), RawRobotData(1, -2, -2, 0, 1)]
+    raw_blue = [RawRobotData(0, 1, 1, 0, 1)]
+    frames = [RawVisionData(0, raw_yellow, raw_blue, [RawBallData(0, 0, 0, 0)], 0)]
+
+    p = PositionRefiner(full_field_dims, filtering=False, tag_offsets={(True, 0): (0.02, 0.0)})
+    result = p.refine(GameFrame(0, True, True, {}, {}, bfac(0, 0)), frames)
+
+    assert (result.friendly_robots[0].p.x, result.friendly_robots[0].orientation) == pytest.approx((-1.02, 0.0))
+    assert (result.friendly_robots[1].p.x, result.friendly_robots[1].orientation) == (-2, 0)
+    assert (result.enemy_robots[0].p.x, result.enemy_robots[0].orientation) == (1, 0)
 
 
 def test_no_allowlist_passes_all_robots():

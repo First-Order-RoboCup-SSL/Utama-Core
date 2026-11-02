@@ -86,17 +86,8 @@ def headless(pytestconfig):
 
 
 @pytest.fixture(autouse=True)
-def _no_vision_stream(monkeypatch):
-    """Every StrategyRunner starts a browser vision stream by default: a frame rendered
-    each step and about 0.4 s to shut its HTTP server down. No test watches it, and it was
-    a third of the suite's time."""
-    from utama_core.run.strategy_runner import StrategyRunner
+def _reset_picker_state():
+    """Pickers keep module-level state between calls; each test starts without it."""
     from utama_core.strategy.pickers import reset_closer_to_ball_state
 
     reset_closer_to_ball_state()
-
-    def _skip(self, http_port):  # noqa: ARG001
-        self.vision_stream = None
-        self._vision_stream_renderer = None
-
-    monkeypatch.setattr(StrategyRunner, "_start_vision_stream", _skip)

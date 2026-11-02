@@ -181,8 +181,11 @@
   }
 
   // A live tactic status entry ["<slot>[ (committed)]", "<tag>"] as a lane label.
+  // A robot the referee drives (a restart, HALT) is one "referee" span: its job is in the Tactics
+  // panel, and which restart it was is the referee lane above, so jobs don't each take a colour.
   function liveLabel(status) {
-    return status ? status[0].replace(/ \(committed\)$/, "") : null;
+    if (!status) return null;
+    return status[1] === "referee" ? "referee" : status[0].replace(/ \(committed\)$/, "");
   }
 
   class Timeline {

@@ -36,6 +36,10 @@ class AccelerationLimiter:
     def reset(self, robot_id: int) -> None:
         self._last_values.pop(robot_id, None)
 
+    def set_last(self, robot_id: int, value: LimitedValue) -> None:
+        """Ramp the next value from `value`, the value actually used, not the last returned."""
+        self._last_values[robot_id] = value
+
     def _limit_scalar(
         self,
         value: float,

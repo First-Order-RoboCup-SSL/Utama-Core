@@ -177,6 +177,8 @@ class Strategy:
         self._their_restart: Optional[tuple[RefereeCommand, float, float]] = None
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
+        # Robots the referee, not a tactic, drives this tick, with their job (see `referee_control`).
+        self._referee_control: dict[RobotId, str] = {}
 
         # The goalkeeper (see `set_goalkeeper`): a permanently pinned slot,
         # entirely outside `_outfield_robot_ids`/`_slots` — no `Partitioner`
@@ -352,7 +354,15 @@ class Strategy:
             self.match_log.clear_untraced(self._tick_count, getattr(game, "ts", 0.0))
         return commands
 
+    @property
+    def referee_control(self) -> dict[RobotId, str]:
+        """Robots a restart or HALT drives this tick instead of their tactic, with their job in words
+        ("ball placement · placer", "halted"); empty in live play. Their slots keep the robots
+        through a restart, so the slot alone made a placer look like it was going to the ball."""
+        return dict(self._referee_control)
+
     def _tick(self, game: Game) -> dict[RobotId, RobotCommand]:
+        self._referee_control = {}
         referee = getattr(game, "referee", None)
         current_command = getattr(referee, "referee_command", None) if referee is not None else None
 
@@ -388,6 +398,7 @@ class Strategy:
                 # those two commands specifically, and the pinned tactic
                 # should tick normally to fill the gap — hence gating on
                 # absence from the result rather than only on the command.
+                self._referee_control = self._referee_override.jobs
                 if self._pinned_slot is not None and self._pinned_robot_id not in override_commands:
                     override_commands.update(self._tick_pinned(game))
                 return override_commands
@@ -396,6 +407,8 @@ class Strategy:
                 # HALT: mem and commitments survive untouched, but no tactic
                 # issues motion commands while play is stopped — including
                 # the pinned slot, for the same reason.
+                halted = self._outfield_robot_ids | {self._pinned_robot_id} - {None}
+                self._referee_control = {rid: "halted" for rid in halted}
                 return {}
 
         partition = self._choose_partition(game)

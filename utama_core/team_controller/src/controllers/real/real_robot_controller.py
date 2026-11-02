@@ -62,6 +62,8 @@ class RealRobotController(AbstractRobotController):
         n_robots (int): The number of robots in the team. Directly affects output buffer size. Default is 6.
     """
 
+    keeps_kickers_charged = True
+
     def __init__(
         self,
         is_team_yellow: bool,

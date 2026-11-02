@@ -60,7 +60,7 @@ strategy_view.attach(server, runner,
 
 The Live tab then lists the choices per side with a Run button; Run on the one running restarts
 it. `StrategyRunner.replace_strategy` takes the new strategy at the next tick and only while
-halted, so the page refuses otherwise. `examples/real_attacker_defender.py` offers its attacker
+halted, so the page refuses otherwise. `examples/shooting_drill.py` offers its attacker
 and defender tactics this way.
 
 ## Commands and what robots do

@@ -1,12 +1,15 @@
 # ruff: noqa: E402
-"""examples/real_attacker_defender.py — one attacker against one defender on a small field.
+"""examples/shooting_drill.py — one robot shoots at a goal the other defends, on a small field.
+
+The keeper feeds a ball it holds back to the attacker, so the drill loops; it is also where a
+test day's field, camera half and robot hardware are set (the other examples import them).
 
 Run:
-    pixi run python examples/real_attacker_defender.py            # real robots (MODE below)
-    pixi run python examples/real_attacker_defender.py --mode rsim
-    pixi run python examples/real_attacker_defender.py --mode grsim   # grSim must be running
+    pixi run python examples/shooting_drill.py            # real robots (MODE below)
+    pixi run python examples/shooting_drill.py --mode rsim
+    pixi run python examples/shooting_drill.py --mode grsim   # grSim must be running
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
-    pixi run python examples/real_attacker_defender.py --calibrate attacker   # or defender
+    pixi run python examples/shooting_drill.py --calibrate attacker   # or defender
 
 What it does:
   - Two robots, one per team, both ours on one radio: the attacker attacks the goal in
@@ -71,20 +74,66 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RulesConfig,
     load_profile,
 )
-from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
+from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
+from utama_core.shared.pass_and_score_geometry import has_ball, oriented_towards
+from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
+from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.src.controllers.common.robot_profile import (
+    load_profile as robot_profile,
+)
+from utama_core.team_controller.src.controllers.real.find_robots import (
+    confirm as confirm_lids,
+)
+
+# The keeper kicks the ball back within this of the attacker's direction: at 1.5 m the ball
+# passes within 0.25 m, a step for the attacker. Real keepers barely turn finely with the ball
+# on the dribbler (see `kick_upfield.CLEARANCE_TOLERANCE_RAD`).
+FEED_TOLERANCE_RAD = 0.15
+
+
+class FeedingKeeperTactic(BaseTactic[None]):
+    """Keeps goal as `GoalkeeperTactic` does, but a ball it holds goes back to the attacker (the
+    nearest opponent) instead of upfield, so the demo loops: the kick is always full strength,
+    and upfield it left the small field every time (2026-10-27 field runs)."""
+
+    tag = TacticTag.DEFENSE
+
+    def __init__(self):
+        self._keeper: Optional[GoalkeeperTactic] = None
+        self._keeper_mem = None
+
+    def initial_mem(self) -> None:
+        return None
+
+    def tick(self, game, ctx, robot_ids, mem):
+        rid = robot_ids[0]
+        if self._keeper is None or self._keeper.robot_id != rid:
+            self._keeper = GoalkeeperTactic(rid)
+            self._keeper_mem = self._keeper.initial_mem()
+        me = game.friendly_robots[rid]
+        attacker = min(game.enemy_robots.values(), key=lambda r: r.p.distance_to(me.p), default=None)
+        if attacker is not None and has_ball(game, rid):
+            aim = me.p.angle_to(attacker.p)
+            if oriented_towards(game, rid, aim, FEED_TOLERANCE_RAD):
+                return {rid: kick()}, mem
+            return {rid: turn_on_spot(game, ctx.motion_controller, rid, aim, dribbling=True)}, mem
+        commands, self._keeper_mem = self._keeper.tick(game, ctx, (rid,), self._keeper_mem)
+        return commands, mem
+
 
 # ---------------------------------------------------------------------------
 # Test-day configuration
@@ -106,31 +155,63 @@ FIELD = FieldDimensions(
 
 # The part of the field the camera sees: "left" or "right" half (x < 0 or x > 0 in
 # ssl-vision's coordinates), or "full". The goal in that half is the one in play.
-CAMERA_HALF = "right"
+CAMERA_HALF = "full"
 
-ATTACKER_COLOUR = "yellow"  # the defender is the other colour
+# Parts of the field no robot may enter, in ssl-vision's coordinates (+x right, +y up, as on
+# ssl-vision's own view): the fence slows each robot to stop 0.1 m before one, and on real robots
+# one found inside forces HALT (`StrategyRunner(keep_out=...)`). None now; on 2026-10-29 the
+# bottom half of the bottom-right quarter was kept out:
+#   (FieldBounds(top_left=(0.0, -FIELD.full_field_half_width / 2),
+#                bottom_right=(FIELD.full_field_half_length, -FIELD.full_field_half_width)),)
+KEEP_OUT: tuple[FieldBounds, ...] = ()
 
 
 class TestRobot(NamedTuple):
-    vision_id: int  # its pattern on top
+    vision_id: int  # the pattern on its lid
     firmware_id: int  # its radio ID; the two robots' must differ, one radio sends both
     # What works on it. A robot without a kicker pushes the ball instead of kicking; one
     # without a dribbler carries the ball slowly and never backs up; one without a ball
     # sensor (ir) has the ball once its centre is within 13 cm of it, whatever way it faces,
     # so it can stop ~2 cm short and kick at nothing (seen in grSim).
     profile: RobotProfile = RobotProfile(kicker=True, dribbler=True, ir=True)
+    colour: str = "yellow"  # its lid's
 
 
-# Swapping a robot is a change here only.
-ATTACKER = TestRobot(vision_id=0, firmware_id=0)
-DEFENDER = TestRobot(vision_id=1, firmware_id=1)
+# Our robots, by radio ID: the radio stays with the robot, the lid (colour and pattern) can be
+# swapped. On real robots each one's lid is looked up when an example starts (`on_field`); those
+# written here are for the simulators. Each one's profile is its own file,
+# `utama_core/config/robots/radio_<radio id>.json`, written by `pixi run calibrate`; hardware that
+# breaks (kicker, dribbler, ir) is set there by hand.
+RADIO_0 = TestRobot(vision_id=0, firmware_id=0, profile=robot_profile(0), colour="yellow")
+RADIO_1 = TestRobot(vision_id=0, firmware_id=1, profile=robot_profile(1), colour="blue")
+
+# Swapping a robot is a change here only; they must wear different colours.
+ATTACKER = RADIO_0
+DEFENDER = RADIO_1
+
+
+def on_field(*robots: TestRobot) -> tuple[TestRobot, ...]:
+    """`robots` wearing the lids they wear now: those `pixi run find-robots` saved when all are in
+    view, else found again (`find_robots.confirm`). Two robots must wear different colours (one
+    per team)."""
+    lids = confirm_lids([r.firmware_id for r in robots])
+    robots = tuple(r._replace(colour=lids[r.firmware_id][0], vision_id=lids[r.firmware_id][1]) for r in robots)
+    if len(robots) == 2 and robots[0].colour == robots[1].colour:
+        raise SystemExit(f"Both robots wear {robots[0].colour} lids: one per colour; swap a lid.")
+    return robots
+
+
+# With CAMERA_HALF "full", the goal the attacker shoots at: "left" (x < 0) or "right". A half
+# field's is the goal in that half.
+DRILL_GOAL = "left"
 
 ATTACKER_TACTIC = "lead"  # see ATTACKER_TACTICS
-DEFENDER_TACTIC = "goalkeeper"  # see DEFENDER_TACTICS
+DEFENDER_TACTIC = "keeper_feed"  # see DEFENDER_TACTICS
 
 # "off": only goals are detected. "on": the `human` referee profile's rules (fouls, out of
-# bounds, defense area ...) stop play and set up restarts; the operator still starts each
-# restart, nothing advances on its own.
+# bounds ...) stop play and set up restarts; the operator still starts each restart, nothing
+# advances on its own. Neither has the defense-area rule, so robots ignore the boxes too
+# (`Field.defense_area_rules`): with two or three robots the boxes only got in the way.
 RULES = "off"
 
 # With a camera (real, grsim), record every run as an SSL game log in replays/field/: raw
@@ -146,7 +227,8 @@ ATTACKER_TACTICS = {
     "give_and_go": GiveAndGoTactic,  # built to pass first; alone it plays like "lead"
 }
 DEFENDER_TACTICS = {
-    "goalkeeper": None,  # the pinned GoalkeeperTactic: stays on the goal line
+    "keeper_feed": FeedingKeeperTactic,  # keeps goal, and kicks a ball it holds back to the attacker (the demo loops)
+    "goalkeeper": None,  # the pinned GoalkeeperTactic: stays on the goal line, clears upfield
     "defense": DefenseTactic,  # shadows the shot from in front of the defense area
     "press": PressAndContainTactic,  # goes at the ball carrier
 }
@@ -192,27 +274,31 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
     )
 
 
-def _referee_profile() -> RefereeProfile:
-    """`RULES`' profile; every transition is left to the operator either way."""
-    if RULES == "on":
+def _referee_profile(rules_on: bool | None = None, goals: bool = True, kickoff: str = "yellow") -> RefereeProfile:
+    """`RULES`' profile (`rules_on` overrides it), `kickoff` the colour kicking off; every
+    transition is left to the operator either way. With the rules off, `goals=False` turns goal
+    detection off too: nothing ever stops play."""
+    if rules_on is None:
+        if RULES not in ("on", "off"):
+            raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
+        rules_on = RULES == "on"
+    if rules_on:
         human = load_profile("human")
-        game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=ATTACKER_COLOUR)
-        return dataclasses.replace(human, profile_name="attacker_defender_test (rules on)", game=game)
-    if RULES != "off":
-        raise ValueError(f"RULES must be 'on' or 'off', got {RULES!r}")
+        game = dataclasses.replace(human.game, half_duration_seconds=3600.0, kickoff_team=kickoff)
+        return dataclasses.replace(human, profile_name="shooting_drill_test (rules on)", game=game)
     defaults = RulesConfig()
     rules = RulesConfig(
         **{
-            f.name: dataclasses.replace(getattr(defaults, f.name), enabled=(f.name == "goal_detection"))
+            f.name: dataclasses.replace(getattr(defaults, f.name), enabled=(goals and f.name == "goal_detection"))
             for f in dataclasses.fields(RulesConfig)
         }
     )
     return RefereeProfile(
-        profile_name="attacker_defender_test",
+        profile_name="shooting_drill_test",
         rules=rules,
         game=GameConfig(
             half_duration_seconds=3600.0,
-            kickoff_team=ATTACKER_COLOUR,
+            kickoff_team=kickoff,
             force_start_after_goal=False,
             auto_advance=AutoAdvanceConfig(
                 stop_to_next_command=False,
@@ -226,28 +312,42 @@ def _referee_profile() -> RefereeProfile:
     )
 
 
-def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
+def no_rules_referee(n_yellow: int, n_blue: int) -> CustomReferee:
+    """A referee that never stops play: no rules, not even goals, so no defense-area keep-out
+    either (`Field.defense_area_rules`). For drills and calibration, which start at once
+    (`referee_initial_command=RefereeCommand.FORCE_START`); without a referee the box rules are on,
+    and on this small field they keep a robot 0.57 m off either box."""
+    return CustomReferee(_referee_profile(rules_on=False, goals=False), n_robots_yellow=n_yellow, n_robots_blue=n_blue)
+
+
+def build_runner(
+    mode: str, calibrate: Optional[str] = None, server: Optional[DashboardServer] = None
+) -> StrategyRunner:
     real = mode == "real"
     # In the simulators each team's robots are numbered from 0.
-    attacker_id = ATTACKER.vision_id if real else 0
-    defender_id = DEFENDER.vision_id if real else 0
-    attacker_is_yellow = ATTACKER_COLOUR == "yellow"
-    if ATTACKER_COLOUR not in ("yellow", "blue"):
-        raise ValueError(f"ATTACKER_COLOUR must be 'yellow' or 'blue', got {ATTACKER_COLOUR!r}")
+    attacker, defender = on_field(ATTACKER, DEFENDER) if real else (ATTACKER, DEFENDER)
+    attacker_id = attacker.vision_id if real else 0
+    defender_id = defender.vision_id if real else 0
+    attacker_is_yellow = attacker.colour == "yellow"
 
     # The defender's goal is the one in the camera's half, so the attacker's own goal
-    # is on the other side. With the full field, the attacker attacks the right goal.
-    attacker_is_right = CAMERA_HALF == "left"
+    # is on the other side. With the full field, the attacker attacks DRILL_GOAL.
+    if CAMERA_HALF == "full":
+        if DRILL_GOAL not in ("left", "right"):
+            raise ValueError(f"DRILL_GOAL must be 'left' or 'right', got {DRILL_GOAL!r}")
+        attacker_is_right = DRILL_GOAL == "left"
+    else:
+        attacker_is_right = CAMERA_HALF == "left"
 
-    attacker_map = {ATTACKER.vision_id: ATTACKER.firmware_id}
-    defender_map = {DEFENDER.vision_id: DEFENDER.firmware_id}
+    attacker_map = {attacker.vision_id: attacker.firmware_id}
+    defender_map = {defender.vision_id: defender.firmware_id}
     # The profiles apply in the simulators too, to rehearse a test with a broken robot.
-    attacker_profiles = {attacker_id: ATTACKER.profile}
-    defender_profiles = {defender_id: DEFENDER.profile}
+    attacker_profiles = {attacker_id: attacker.profile}
+    defender_profiles = {defender_id: defender.profile}
 
-    profile = _referee_profile()
+    profile = _referee_profile(kickoff=attacker.colour)
     referee = CustomReferee(profile, n_robots_yellow=1, n_robots_blue=1)
-    server = attach_dashboard(port=DASHBOARD_PORT)
+    server = server or attach_dashboard(port=DASHBOARD_PORT)  # `demos.py` passes its own
     referee_view.attach(server, referee, profile)
 
     attacker_tactic, defender_tactic = ATTACKER_TACTICS[ATTACKER_TACTIC], DEFENDER_TACTICS[DEFENDER_TACTIC]
@@ -272,6 +372,7 @@ def build_runner(mode: str, calibrate: Optional[str] = None) -> StrategyRunner:
         exp_enemy=1,
         full_field_dims=FIELD,
         field_bounds=_field_bounds(FIELD, CAMERA_HALF),
+        keep_out=KEEP_OUT,
         referee=referee,
         referee_initial_command=RefereeCommand.HALT,
         show_live_status=not real,

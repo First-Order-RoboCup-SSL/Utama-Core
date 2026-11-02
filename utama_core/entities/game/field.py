@@ -16,10 +16,12 @@ class Field:
         my_team_is_right: bool,
         field_dims: FieldDimensions,
         field_bounds: FieldBounds,
+        defense_area_rules: bool = True,
     ):
         self.my_team_is_right = my_team_is_right
         self._field_dims = field_dims
         self._field_bounds = field_bounds
+        self._defense_area_rules = defense_area_rules
 
         self._half_length = (field_bounds.bottom_right[0] - field_bounds.top_left[0]) / 2
         self._half_width = (field_bounds.top_left[1] - field_bounds.bottom_right[1]) / 2
@@ -133,6 +135,13 @@ class Field:
     @property
     def full_field(self) -> np.ndarray:
         return self._field_dims.full_field
+
+    @property
+    def defense_area_rules(self) -> bool:
+        """Whether outfield robots keep out of the defense areas: the referee profile's
+        `defense_area.enabled` (`StrategyRunner`). Without it (`human`, or every rule off) the
+        opponent's box stops nothing, and our own box only keeps a ball resting in it for the keeper."""
+        return self._defense_area_rules
 
     @property
     def half_defense_area_depth(self) -> float:

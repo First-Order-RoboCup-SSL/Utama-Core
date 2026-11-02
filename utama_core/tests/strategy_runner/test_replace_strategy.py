@@ -80,7 +80,11 @@ def test_a_recorded_run_notes_each_strategy_change_and_each_dropped_one(runner):
     # A field test's log said nothing of a strategy changed from the dashboard, so its tests
     # couldn't be told apart; a dropped change looked like one that ran.
     notes = []
-    runner.game_log = type("Log", (), {"note": lambda self, text: notes.append(text), "close": lambda self: None})()
+    runner.game_log = type(
+        "Log",
+        (),
+        {"note": lambda self, text: text.startswith("robot ") or notes.append(text), "close": lambda self: None},
+    )()
     runner._run_step()
     runner.replace_strategy("my", _strategy([]), "press")
     runner._run_step()
@@ -95,7 +99,11 @@ def test_a_swap_between_the_dashboards_writes_still_takes_the_chosen_name(runner
     # The dashboard's thread queued the strategy, then its name, in two writes; the control loop
     # swapping in between noted the class name, and the chosen name labelled the next change.
     notes = []
-    runner.game_log = type("Log", (), {"note": lambda self, text: notes.append(text), "close": lambda self: None})()
+    runner.game_log = type(
+        "Log",
+        (),
+        {"note": lambda self, text: text.startswith("robot ") or notes.append(text), "close": lambda self: None},
+    )()
     runner._run_step()
 
     class SwapOnWrite(dict):  # the control loop takes its turn right after each write

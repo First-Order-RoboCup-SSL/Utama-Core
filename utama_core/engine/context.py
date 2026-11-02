@@ -13,12 +13,13 @@ per-tick auxiliary inputs a `Tactic.tick()` call needs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 
 if TYPE_CHECKING:
     from utama_core.engine.match_log import MatchLog
+    from utama_core.entities.game import Game
 
 
 @dataclass
@@ -30,3 +31,9 @@ class TickContext:
     # match logging is disabled (the common case — tournament/CI runs) so
     # tracing a tick is a single `is not None` check, not a real cost.
     match_log: Optional["MatchLog"] = None
+
+    def trace(self, game: "Game", key: str, value: Any) -> None:
+        """`match_log.trace_if_changed` at this tick's time; nothing without a match log. A key
+        naming a robot (`shoot[3]`) shows under that robot on the Live tab."""
+        if self.match_log is not None:
+            self.match_log.trace_if_changed(tick=0, sim_time=getattr(game, "ts", 0.0), key=key, value=value)

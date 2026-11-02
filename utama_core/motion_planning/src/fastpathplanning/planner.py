@@ -109,6 +109,19 @@ _TEAM_RESTART_COMMANDS = {
 _PUSH_OUT_MARGIN = 0.05
 
 
+# How far inside the field lines a pushed-out robot's target stays: its body on the field (the
+# referee step's `_clamp_to_field` margin).
+_FIELD_INSET = 0.1
+
+
+def _inside_field(point: np.ndarray, field_bounds: FieldBounds) -> np.ndarray:
+    """`point` clamped to `_FIELD_INSET` inside `field_bounds`."""
+    (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+    lo = np.array([min(x0, x1), min(y0, y1)]) + _FIELD_INSET
+    hi = np.array([max(x0, x1), max(y0, y1)]) - _FIELD_INSET
+    return np.clip(point, lo, hi)
+
+
 def _keeps_off_ball(game: Game) -> bool:
     """True during STOP and the other team's restarts, when every robot of ours must
     stay out of the ball's keep-out circle."""
@@ -375,6 +388,8 @@ class FastPathPlanner:
         check alone only covers the *retrieval* half of placement, not the
         *delivery* half.
         """
+        if not game.field.defense_area_rules:
+            return True  # the box is no obstacle at all
         referee = game.referee
         command = getattr(referee, "referee_command", None) if referee is not None else None
         if command in _ACTIVE_PLAY_COMMANDS:
@@ -385,6 +400,16 @@ class FastPathPlanner:
         min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=0.0)
         if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
             return True
+        # Our placement of a ball just outside the box: the placer's approach point, behind the
+        # ball, is inside the box or its keep-out (2026-10-27 field test: ball 1 cm outside, the
+        # placer parked behind the keep-out, 0.25 m short, for the whole placement).
+        ours = RefereeCommand.BALL_PLACEMENT_YELLOW if game.my_team_is_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
+        if command is ours:
+            k_min_x, k_max_x, k_min_y, k_max_y = self._enemy_defense_rect(
+                game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+            )
+            if k_min_x <= ball.p.x <= k_max_x and k_min_y <= ball.p.y <= k_max_y:
+                return True
         if robot_id is not None:
             robot = game.friendly_robots.get(robot_id)
             designated = getattr(referee, "designated_position", None) if referee is not None else None
@@ -1505,8 +1530,18 @@ class FastPathPlanner:
         if not self.is_point_in_field(raw_target, field_bounds):
             obstacles = [o for o in obstacles if _segment_key(o) not in boundary_segments]
         else:
+            # A wall the robot already stands within clearance of, too: a straight run to an
+            # in-field target never gets nearer the wall than its nearer end, and the wall
+            # otherwise sent the robot on a 0.7 m detour away from a ball 0.3 m from the
+            # touchline (2.25 m-wide lab field, 2026-10-28: it backed off the ball forever).
             near_boundary = {
-                _segment_key(b) for b in boundary_list if distance_point_to_segment(raw_target, b[0], b[1]) < clearance
+                _segment_key(b)
+                for b in boundary_list
+                if min(
+                    distance_point_to_segment(raw_target, b[0], b[1]),
+                    distance_point_to_segment(our_pos, b[0], b[1]),
+                )
+                < clearance
             }
             if near_boundary:
                 obstacles = [o for o in obstacles if _segment_key(o) not in near_boundary]
@@ -1740,7 +1775,13 @@ class FastPathPlanner:
                 new_target = np.array([waypoint.x, waypoint.y])
             elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
                 away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
-                new_target = ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN)
+                ray = _inside_field(ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN), field_bounds)
+                # The ray kept on the field. Where that brings the robot closer to the ball (a ball
+                # near the line, the robot between them), it follows the referee step's target, a
+                # point of the circle on the field: the ray alone drove a keeper 0.2 m out over
+                # its goal line at STOP (3 m lab field, 0.8 m keep-out, 2026-10-28).
+                if not _approaches(our_pos, ray, ball_np):
+                    new_target = ray
 
         if self._should_draw:
             self._env.draw_line((our_pos, new_target), color="Blue")

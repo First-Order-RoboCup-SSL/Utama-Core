@@ -18,7 +18,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
@@ -30,7 +30,15 @@ from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
     is_goal_blocked,
 )
 
+# How far off its aim a robot may be and still pass, shoot or clear. Raised to 0.07 on the
+# 2026-10-28 field day because the real robots stalled short of their aim on a slow final turn;
+# they then kicked at the tolerance's edge, every time on the side they turned from (passing
+# rallies: +3.5-4.7 deg of the 6-17 deg by which passes missed). Back at 0.05 since `move()`
+# turns them at least `RobotParams.MIN_TURN`.
 ORIENTATION_TOLERANCE_RAD = 0.05
+# How far off the robot's heading a kick may leave: `heading_on_target`'s room for error at each
+# distance. The orientation tolerance, the error `oriented_towards` already accepts in a pass.
+SHOT_AIM_ERROR_RAD = ORIENTATION_TOLERANCE_RAD
 
 # `clamp_outside_own_defense_area`/`clamp_outside_enemy_defense_area` (and
 # their `*_hold_point` siblings) previously defaulted to `2*ROBOT_RADIUS+0.05
@@ -256,6 +264,72 @@ def oriented_towards(
     robot = game.friendly_robots[robot_id]
     diff = (target_orientation - robot.orientation + math.pi) % (2 * math.pi) - math.pi
     return abs(diff) <= tolerance
+
+
+def kick_bend(game: Game, motion_controller, robot_id: int) -> float:
+    """How far (rad, anticlockwise) `robot_id`'s kick will leave its heading: towards the side
+    the ball sits on the dribbler, `motion_controller.kick_bend` per metre off-centre. A pass or
+    shot aims that much the other way. 98 real kicks (2026-10-27/28): yellow 1 bent 4.7 deg and
+    blue 0 2.1 deg per cm, the error dropping from ~8 deg to ~3 deg once counted. Plus the robot's
+    `motion_controller.kick_bias` whatever the ball's offset. 0 in the sims."""
+    per_m = motion_controller.kick_bend.get(robot_id, 0.0)
+    bias = motion_controller.kick_bias.get(robot_id, 0.0)
+    if not per_m:
+        return bias
+    robot = game.friendly_robots[robot_id]
+    ball = game.ball.p.to_2d()
+    left = -(ball.x - robot.p.x) * math.sin(robot.orientation) + (ball.y - robot.p.y) * math.cos(robot.orientation)
+    # Off the dribbler's measured width the ball is not on it; don't aim for a wild guess.
+    left = max(-_ACQUIRE_LATERAL_MAX, min(_ACQUIRE_LATERAL_MAX, left))
+    return per_m * left + bias
+
+
+def heading_on_target(game: Game, robot_id: int, bend: float = 0.0) -> bool:
+    """Would a kick now score: the line along `robot_id`'s heading crosses the enemy goal line
+    between the posts and passes every other robot, each with room for the ball and for
+    `SHOT_AIM_ERROR_RAD` at its distance.
+
+    The shot gate. Kicking within a fixed tolerance of the best-shot heading (2026-10-27 field
+    runs) both waited for an aim the open goal didn't need and kicked at the keeper when the
+    robot's error lay towards it; this checks the line the ball will actually take, `bend`
+    (`kick_bend`) off the heading."""
+    robot = game.friendly_robots[robot_id]
+    return _shot_line_clear(game, robot_id, robot.orientation + bend, SHOT_AIM_ERROR_RAD)
+
+
+def shot_heading_reachable(game: Game, robot_id: int, heading: float) -> bool:
+    """Can turning to `heading` pass `heading_on_target`: its line is clear with twice the aim
+    error, so a robot anywhere within `SHOT_AIM_ERROR_RAD` of it still gets a clear line.
+
+    A gap `find_best_shot` returns can be narrower than that (it takes the widest, however
+    narrow): turning to it, the gate never opened and the robot held the ball, turning on the
+    spot forever. Such a gap counts as no shot, and the robot moves for a better one."""
+    return _shot_line_clear(game, robot_id, heading, 2.0 * SHOT_AIM_ERROR_RAD)
+
+
+def _shot_line_clear(game: Game, robot_id: int, heading: float, aim_error: float) -> bool:
+    """The line from `robot_id` along `heading` crosses the enemy goal line between the posts
+    and passes every other robot, each with room for the ball and for `aim_error` at its distance."""
+    robot = game.friendly_robots[robot_id]
+    goal_line = game.field.enemy_goal_line
+    goal_x = float(goal_line[0][0])
+    post_y1, post_y2 = sorted((float(goal_line[0][1]), float(goal_line[1][1])))
+    ux, uy = math.cos(heading), math.sin(heading)
+    if (goal_x - robot.p.x) * ux <= 0:
+        return False  # facing away from the goal line
+    reach = (goal_x - robot.p.x) / ux  # along the heading to the goal line
+    slope = math.tan(aim_error)
+    cross_y = robot.p.y + reach * uy
+    room = BALL_RADIUS + reach * slope
+    if not post_y1 + room <= cross_y <= post_y2 - room:
+        return False
+    others = [*game.enemy_robots.values(), *(r for rid, r in game.friendly_robots.items() if rid != robot_id)]
+    for other in others:
+        dx, dy = other.p.x - robot.p.x, other.p.y - robot.p.y
+        along = dx * ux + dy * uy
+        if 0.0 < along < reach and abs(dx * uy - dy * ux) < ROBOT_RADIUS + BALL_RADIUS + along * slope:
+            return False
+    return True
 
 
 def clamp_to_field(position: Vector2D, game: Game, margin: float = 0.3) -> Vector2D:
@@ -484,7 +558,10 @@ def ball_in_own_defense_area(game: Game) -> bool:
 
 
 def in_enemy_defense_area(game: Game, point: Vector2D) -> bool:
-    """True if `point` is inside the enemy's defense area. Mirror of `in_own_defense_area`."""
+    """True if `point` is inside the enemy's defense area. Mirror of `in_own_defense_area`.
+    Never, without `defense_area_rules`: the box is only ever somewhere we may not go."""
+    if not game.field.defense_area_rules:
+        return False
     defense_area = game.field.enemy_defense_area
     front_x = float(defense_area[1][0])
     goal_x = game.field.enemy_goal_line[0][0]
@@ -526,9 +603,10 @@ def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 
     inside it. Keep-out is enforced on x with one robot-diameter margin;
     the y-coordinate is preserved unchanged (the area only spans
     `half_defense_area_width`, so a clamped x alone is already outside).
+    Unchanged without `defense_area_rules`.
     """
     defense_area = game.field.my_defense_area
-    if _beside_defense_area(game, point, margin):
+    if not game.field.defense_area_rules or _beside_defense_area(game, point, margin):
         return point
     front_x = float(defense_area[1][0])
     sign = 1.0 if game.my_team_is_right else -1.0
@@ -538,6 +616,14 @@ def clamp_outside_own_defense_area(game: Game, point: Vector2D, margin: float = 
     if sign < 0 and point.x < exit_x:
         return Vector2D(exit_x, point.y)
     return point
+
+
+def _clamp_to_box_width(y: float, half_width: float, margin: float) -> float:
+    """`y` clamped `margin` inside a defense area's width, or to the width itself when the area is
+    narrower than that: `half_width - margin` turns negative there and the clamp flipped, sending a
+    robot waiting for a ball in the box to the far side of it (2026-10-27 field run, 1 m wide box)."""
+    limit = half_width - margin if half_width > margin else half_width
+    return max(-limit, min(limit, y))
 
 
 def own_defense_area_exit_point(game: Game, at_y: float, margin: float = _DEFENSE_AREA_CLAMP_MARGIN) -> Vector2D:
@@ -553,7 +639,7 @@ def own_defense_area_exit_point(game: Game, at_y: float, margin: float = _DEFENS
     half_width = abs(float(defense_area[0][1]))
     sign = 1.0 if game.my_team_is_right else -1.0
     exit_x = front_x - sign * margin
-    y = max(-(half_width - margin), min(half_width - margin, at_y))
+    y = _clamp_to_box_width(at_y, half_width, margin)
     return Vector2D(exit_x, y)
 
 
@@ -569,10 +655,10 @@ def clamp_outside_enemy_defense_area(
     clamp it the same way `clamp_outside_own_defense_area` clamps defensive
     targets. Mirror image of that function: the enemy goal is on the
     opposite side from ours, so the clamp direction is `-sign` instead of
-    `sign`.
+    `sign`. Unchanged without `defense_area_rules`.
     """
     defense_area = game.field.enemy_defense_area
-    if _beside_defense_area(game, point, margin):
+    if not game.field.defense_area_rules or _beside_defense_area(game, point, margin):
         return point
     front_x = float(defense_area[1][0])
     sign = -1.0 if game.my_team_is_right else 1.0
@@ -597,7 +683,7 @@ def enemy_defense_area_hold_point(game: Game, at_y: float, margin: float = _DEFE
     half_width = abs(float(defense_area[0][1]))
     sign = -1.0 if game.my_team_is_right else 1.0
     exit_x = front_x - sign * margin
-    y = max(-(half_width - margin), min(half_width - margin, at_y))
+    y = _clamp_to_box_width(at_y, half_width, margin)
     return Vector2D(exit_x, y)
 
 

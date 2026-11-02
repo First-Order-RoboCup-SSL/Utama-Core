@@ -15,7 +15,7 @@ per camera, our stack in WSL on the robot laptop (`docs/real_robot_setup.md`).
 
 - **The cameras disagree.** The same robot was reported 13–20 cm apart by the two cameras
   early on; after the distortion was retuned in ssl-vision, 5 cm, then 85 mm later in the day
-  (`replays/field/20261022_211142_real_score_goal.log`, constant 83–85 mm in every frame).
+  (`replays/field/20261022_211142_score_goal.log`, constant 83–85 mm in every frame).
   Something moved between those checks, and nothing tells us when.
 - **Against known spots** (`vision_check.py --guided ball`,
   `replays/field/20261022_212332_vision_truth_ball.json`): camera 0 saw 7 of 9 points, 33 mm
@@ -49,7 +49,7 @@ Built during the test day; it hides the cameras' disagreement but cannot remove 
   the robot from another camera plus the gap between them just before: the 2.4% of frames of
   the log above that put the ball inside the robot are gone.
 - `PositionRefiner` takes a ball inside the field or a goal over one outside them, then the one
-  nearest the last ball. Replayed, `20261022_213347_real_score_goal.log`'s ball jumps of over 0.3 m in one frame went
+  nearest the last ball. Replayed, `20261022_213347_score_goal.log`'s ball jumps of over 0.3 m in one frame went
   from 5,439 to 4.
 - `tools/vision_check.py` prints where each camera puts each robot and ball and the gap
   between them, and with `--guided` checks each camera against 9 known spots and saves the

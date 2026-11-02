@@ -54,17 +54,24 @@ class GameGater:
             A tuple containing the refined game frame for the player's team and the opponent's team (if is_pvp is True).
         """
 
+        def vision_summary(game_frame: GameFrame) -> str:
+            """One line: what vision sees against what the run expects, with the mapped IDs."""
+
+            def side(name, robots, exp, mapping):
+                want = f" of {sorted(mapping)}" if mapping else ""
+                return f"{name} {len(robots)}/{exp} {sorted(robots)}{want}"
+
+            ball = "ball seen" if game_frame.ball is not None else ("no ball" if exp_ball else "ball not needed")
+            return "Waiting for vision: " + ", ".join(
+                (
+                    side("ours", game_frame.friendly_robots, exp_friendly, my_vision_to_cmd_mapping),
+                    side("theirs", game_frame.enemy_robots, exp_enemy, opp_vision_to_cmd_mapping),
+                    ball,
+                )
+            )
+
         def print_current_vision(game_frame: GameFrame):
-            print("Waiting for valid game frame...")
-            friendly_ids = sorted(game_frame.friendly_robots.keys())
-            enemy_ids = sorted(game_frame.enemy_robots.keys())
-            print(f"Friendly robots: {len(game_frame.friendly_robots)}/{exp_friendly}  observed IDs: {friendly_ids}")
-            if my_vision_to_cmd_mapping is not None:
-                print(f"  expected IDs (from mapping): {sorted(my_vision_to_cmd_mapping.keys())}")
-            print(f"Enemy robots: {len(game_frame.enemy_robots)}/{exp_enemy}  observed IDs: {enemy_ids}")
-            if opp_vision_to_cmd_mapping is not None:
-                print(f"  expected IDs (from mapping): {sorted(opp_vision_to_cmd_mapping.keys())}")
-            print(f"Ball present: {game_frame.ball is not None} (exp: {exp_ball})\n")
+            print(vision_summary(game_frame))
 
         def _add_frame(my_game_frame: GameFrame, opp_game_frame: GameFrame) -> Tuple[GameFrame, Optional[GameFrame]]:
             if rsim_env:
@@ -95,14 +102,18 @@ class GameGater:
 
         my_game_frame, opp_game_frame = _add_frame(my_game_frame, opp_game_frame)
 
+        last_printed = None
         while (
             len(my_game_frame.friendly_robots) < exp_friendly
             or len(my_game_frame.enemy_robots) < exp_enemy
             or (my_game_frame.ball is None and exp_ball)
         ):
-            if time.time() - start_time > wait_before_warn:
-                start_time = time.time()
-                print_current_vision(my_game_frame)
+            # After `wait_before_warn`, a line whenever what vision sees changes, not a block every
+            # few seconds: a field-day start printed screens of the same five lines.
+            summary = vision_summary(my_game_frame)
+            if time.time() - start_time > wait_before_warn and summary != last_printed:
+                last_printed = summary
+                print(summary)
                 # nothing will change in rsim if we don't step it.
                 # if no valid frame, likely misconfigured.
             if rsim_env:

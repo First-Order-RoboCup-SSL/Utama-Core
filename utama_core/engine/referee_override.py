@@ -149,6 +149,15 @@ class RefereeOverride:
         self._direct_free_ours = DirectFreeOursStep()
         self._direct_free_theirs = DirectFreeTheirsStep()
         self._overrides = dict(overrides) if overrides else {}
+        self._jobs: dict[RobotId, str] = {}
+
+    @property
+    def jobs(self) -> dict[RobotId, str]:
+        """Each robot's job in the restart the last `tick` positioned it for, in words for the
+        dashboard ("ball placement · placer", "stop · keeping clear"). The Live tab showed the
+        tactic a robot was in before the restart, so a placer read as going to the ball
+        (2026-10-28 field test)."""
+        return dict(self._jobs)
 
     @property
     def overrides(self) -> dict[RefereeCommand, RefereeActionOverride]:
@@ -164,14 +173,18 @@ class RefereeOverride:
         """Compute every friendly robot's command for this restart, or {} if not an override command."""
         override_fn = self._overrides.get(command)
         if override_fn is not None:
-            return dict(override_fn(game, motion_controller))
+            commands = dict(override_fn(game, motion_controller))
+            self._jobs = {rid: f"{command.name.lower()} · strategy's own" for rid in commands}
+            return commands
 
         step = self._step_for(command, game.my_team_is_yellow)
         if step is None:
+            self._jobs = {}
             return {}
         shim = _BlackboardShim(game=game, motion_controller=motion_controller)
         step.blackboard = shim
         step.update()
+        self._jobs = {rid: _job(step, rid) for rid in shim.cmd_map}
         return dict(shim.cmd_map)
 
     def _step_for(self, command: RefereeCommand, my_team_is_yellow: bool):
@@ -199,3 +212,27 @@ class RefereeOverride:
             return self._direct_free_theirs if my_team_is_yellow else self._direct_free_ours
 
         return None
+
+
+# What each Step has the robots do, for the dashboard: (everyone's job, the one robot's job).
+_STEP_JOBS = {
+    StopStep: "stop · keeping clear",
+    BallPlacementOursStep: "ball placement · keeping off its path",
+    BallPlacementTheirsStep: "their ball placement · keeping clear",
+    PrepareKickoffOursStep: "our kickoff · positions",
+    PrepareKickoffTheirsStep: "their kickoff · positions",
+    PreparePenaltyOursStep: "our penalty · positions",
+    PreparePenaltyTheirsStep: "their penalty · positions",
+    DirectFreeOursStep: "our free kick · positions",
+    DirectFreeTheirsStep: "their free kick · keeping clear",
+}
+
+
+def _job(step, robot_id: RobotId) -> str:
+    """`robot_id`'s job under `step`: the placer and the free-kick taker by name, the rest by
+    what the restart has everyone do."""
+    if isinstance(step, BallPlacementOursStep) and robot_id == step._placer_id:
+        return "ball placement · placer"
+    if isinstance(step, DirectFreeOursStep) and robot_id == step._kicker_sticky.current:
+        return "our free kick · kicker"
+    return _STEP_JOBS[type(step)]

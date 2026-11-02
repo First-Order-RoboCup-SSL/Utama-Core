@@ -4,6 +4,7 @@ from utama_core.entities.data.command import RobotResponse
 from utama_core.run.strategy_runner import (
     _build_robot_feedback_snapshot,
     _record_robot_feedback_responses,
+    _ReplyRates,
     _RobotPortFeedbackState,
 )
 
@@ -133,3 +134,25 @@ def test_unmapped_raw_responder_still_appears():
             "age_seconds": 0.0,
         }
     ]
+
+
+def test_reply_rate_is_the_share_of_ticks_answered_over_the_window():
+    rates = _ReplyRates(window_s=1.0)
+    for i in range(10):  # robot 1 answers every tick, robot 2 every other
+        rates.tick(
+            i * 0.1, [RobotResponse(id=1, has_ball=False)] + ([RobotResponse(id=2, has_ball=False)] if i % 2 else [])
+        )
+    assert rates.rates() == {1: 1.0, 2: 0.5}
+    for i in range(10, 21):  # robot 2 goes silent: its old answers leave the window
+        rates.tick(i * 0.1, [RobotResponse(id=1, has_ball=False)])
+    assert rates.rates() == {1: 1.0}
+
+    snapshot = _build_robot_feedback_snapshot(
+        {},
+        now=2.0,
+        my_team_is_yellow=True,
+        yellow_cmd_to_vision_mapping={1: 0, 2: 1},
+        blue_cmd_to_vision_mapping={},
+        reply_rates=rates.rates(),
+    )
+    assert [row["reply_rate"] for row in snapshot] == [1.0, 0.0]

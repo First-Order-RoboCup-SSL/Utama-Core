@@ -1,3 +1,5 @@
+import dataclasses
+
 from utama_core.entities.game.current_game_frame import CurrentGameFrame
 from utama_core.entities.game.field import Field
 from utama_core.entities.game.game_frame import GameFrame
@@ -10,6 +12,11 @@ class Game:
         self._current_game_standard_frame = current
         self.current = CurrentGameFrame(current)
         self._field = field
+
+    def with_friendly_robots(self, robots: dict) -> "Game":
+        """This game with our robots replaced by `robots`, sharing its history (which it leaves alone)."""
+        frame = dataclasses.replace(self._current_game_standard_frame, friendly_robots=robots)
+        return Game(self.__past, frame, self._field)
 
     def add_game_frame(self, game_frame: GameFrame):
         self.__past.add_game_frame(self._current_game_standard_frame)
