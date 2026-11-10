@@ -286,7 +286,10 @@ def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
 
     rid, robot = min(game.friendly_robots.items(), key=lambda item: dist(item[1]))
     enemy_nearest = min((dist(e) for e in game.enemy_robots.values()), default=math.inf)
-    return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
+    # An enemy in reach too is a contest, not a kicker waiting. Comparing the two distances there
+    # (0.112 m against 0.113 m) changed the answer every tick and with it who held the attack
+    # slot, each change wiping that tactic's memory (press_and_pass_vs_tiki_taka_plus, 2026-11-09).
+    return rid if dist(robot) <= _KICK_REACH_M < enemy_nearest else None
 
 
 def holds_ball(game: Game, robot_id: RobotId) -> bool:

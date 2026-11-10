@@ -11,12 +11,17 @@ Called by `PressAndContainTactic` on every marker robot (`robot_ids[1:]`, one en
 `press_and_contain.py`.
 """
 
+import math
+
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
 from utama_core.skills.src.utils.move_utils import face_ball, move
 
 MARK_STANDOFF = 0.6  # metres — mark from this distance on the goal side of the opponent, not on top of them
+_ON_BALL_M = 0.13  # robot centre to ball with both touching
+_MIN_READ_PASS_M = 1.2  # nearer than the standoff and a bit, there is no room to step between them
+_PASS_READ_RAD = 0.2
 
 
 def mark_target(game: Game, opponent_id: int) -> Vector2D:
@@ -26,7 +31,30 @@ def mark_target(game: Game, opponent_id: int) -> Vector2D:
     # Toward our own goal. The sign was reversed until 2026-10-05: markers stood on the
     # far side, leaving the opponent a clear run at goal.
     direction = -1.0 if goal_x < opponent.p.x else 1.0
+    passer = _passer_facing(game, opponent_id)
+    if passer is not None:
+        # The ball is about to come to this opponent: stand in its way rather than behind it.
+        towards_passer = (passer.p - opponent.p).norm()
+        return opponent.p + towards_passer * MARK_STANDOFF
     return Vector2D(opponent.p.x + direction * MARK_STANDOFF, opponent.p.y)
+
+
+def _passer_facing(game: Game, opponent_id: int):
+    """The enemy on the ball if it is facing `opponent_id` from far enough to pass to it."""
+    ball = game.ball
+    if ball is None:
+        return None
+    here = ball.p.to_2d()
+    opponent = game.enemy_robots[opponent_id]
+    for enemy_id, enemy in game.enemy_robots.items():
+        if enemy_id == opponent_id or enemy.p.distance_to(here) > _ON_BALL_M:
+            continue
+        if enemy.p.distance_to(opponent.p) < _MIN_READ_PASS_M:
+            continue
+        off = (enemy.p.angle_to(opponent.p) - enemy.orientation + math.pi) % (2.0 * math.pi) - math.pi
+        if abs(off) <= _PASS_READ_RAD:
+            return enemy
+    return None
 
 
 def man_mark(game: Game, motion_controller: MotionController, robot_id: int, target_id: int):

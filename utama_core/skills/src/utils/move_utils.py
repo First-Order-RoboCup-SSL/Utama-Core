@@ -13,7 +13,44 @@ from utama_core.motion_planning.src.common.motion_controller import MotionContro
 # Off its target orientation by more than this, a robot turns at least `MotionController.min_turn`.
 _MIN_TURN_FROM_RAD = 0.01
 
+# Crashing is a foul above 1.5 m/s of closing speed. In 12 matches on 2026-11-09 all 33 charges
+# were head-on, both robots closing at 1.2-1.5 m/s from 1.5-2 m apart and neither braking: the
+# path planner steers around robots but does not slow for them. Each robot sheds its own share,
+# so two robots using this meet legally, and one facing an enemy that does not slow is the slower.
+_LEGAL_CLOSING_MPS = 1.3
+_MIN_CONTACT_APPROACH_MPS = 0.5
+_ENEMY_BRAKING_MPS2 = 3.0  # of rsim's 4 m/s²: leaves room for the command delay
+_ENEMY_BRAKING_RANGE_M = 1.2
+
 ### TODO: IT IS CONTENTIOUS IF WE EVEN NEED THIS MOVE FUNCTION ANYMORE. POTENTIALLY JUST SEND DIRECTLY TO MOTION CONTROLLER ###
+
+
+def _limit_closing_speed(robot, enemies, velocity: Vector2D) -> Vector2D:
+    """`velocity` with its component towards each nearby enemy capped to what can still brake."""
+    vx, vy = velocity.x, velocity.y
+    for enemy in enemies:
+        dx, dy = enemy.p.x - robot.p.x, enemy.p.y - robot.p.y
+        distance = math.hypot(dx, dy)
+        if not 1e-6 < distance < _ENEMY_BRAKING_RANGE_M:
+            continue
+        ux, uy = dx / distance, dy / distance
+        approach = vx * ux + vy * uy
+        enemy_approach = max(0.0, -(enemy.v.x * ux + enemy.v.y * uy))
+        at_contact = max(_MIN_CONTACT_APPROACH_MPS, _LEGAL_CLOSING_MPS - enemy_approach)
+        limit = at_contact + math.sqrt(_ENEMY_BRAKING_MPS2 * max(0.0, distance - 2.0 * ROBOT_RADIUS))
+        if approach > limit:
+            vx -= (approach - limit) * ux
+            vy -= (approach - limit) * uy
+    return Vector2D(vx, vy) if (vx, vy) != (velocity.x, velocity.y) else velocity
+
+
+def _sprint_velocity(position: Vector2D, target: Vector2D, max_speed: float, max_acceleration: float) -> Vector2D:
+    """Towards `target`, as fast as a robot braking at `max_acceleration` can still stop on it."""
+    offset = target - position
+    distance = offset.mag()
+    if distance == 0.0:
+        return Vector2D(0.0, 0.0)
+    return offset * (min(max_speed, math.sqrt(2.0 * max_acceleration * distance)) / distance)
 
 
 def move(
@@ -23,8 +60,11 @@ def move(
     target_coords: Vector2D,
     target_oren: float,
     dribbling: bool = False,
+    sprint: bool = False,
 ) -> RobotCommand:
-    """Calculate the robot command to move towards a target point with a specified orientation."""
+    """Calculate the robot command to move towards a target point with a specified orientation.
+    `sprint`: straight at the target, as fast as it can still stop there, instead of along the planner's
+    path, which covers a short hop at about 0.45 m/s. Only for a short, clear step that cannot wait."""
 
     # From where our robots will be when this command takes effect (`PoseAhead`), and in the
     # robot's frame as it will be turned by then.
@@ -38,8 +78,14 @@ def move(
         target_oren=target_oren,
     )
 
+    if sprint:
+        global_velocity = _sprint_velocity(
+            robot.p, target_coords, motion_controller.max_speed, motion_controller.max_acceleration
+        )
+    capped_velocity = _limit_closing_speed(robot, ahead.enemy_robots.values(), global_velocity)
+    adjusted = sprint or capped_velocity is not global_velocity
+    global_velocity = capped_velocity
     forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
-    adjusted = False
 
     # A turn slower than the robot can make leaves it short of its target orientation for good.
     min_turn = motion_controller.min_turn

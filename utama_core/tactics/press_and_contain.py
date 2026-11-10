@@ -180,6 +180,7 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
             )
         marker_ids = tuple(rid for rid in robot_ids if rid != presser_id)
         mem.presser_id = presser_id
+        ctx.ball_claims.add(presser_id)
 
         if ctx.match_log is not None:
             ctx.match_log.trace_if_changed(

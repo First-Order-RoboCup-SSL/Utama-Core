@@ -360,6 +360,16 @@ def intercept_point(
 
 
 _PASS_ROLLING_MPS = 0.5
+_BALL_CONTACT_M = 0.13  # robot centre to ball with both touching
+_BALL_ROLL_DECEL_MPS2 = 0.3  # tools/evaluation/reference/world.json, ball_roll_decel
+# Off a ball's path by this much a robot can still meet it: the width of its dribbler and a sidestep.
+_RECEIVE_REACH_M = 0.1
+_RECEIVE_SIDESTEP_MPS = 1.0
+_RECEIVE_REACH_MAX_M = 1.0
+_INTERCEPT_MIN_M = 0.3
+_INTERCEPT_STEP_S = 0.05
+_CHASE_SPEED_MPS = 1.5
+_CHASE_START_S = 0.1
 
 
 def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
@@ -377,6 +387,91 @@ def ball_line_receive_point(game: Game, receiver_id: int) -> Optional[Vector2D]:
     if along <= 0.0:
         return None
     return clamp_to_field(ball_pos + velocity * (along / speed), game)
+
+
+def _ball_untouched(game: Game) -> bool:
+    ball = game.ball.p.to_2d()
+    robots = [*game.friendly_robots.values(), *game.enemy_robots.values()]
+    return all(robot.p.distance_to(ball) > _BALL_CONTACT_M for robot in robots)
+
+
+def receiver_of_rolling_ball(game: Game, robot_ids) -> Optional[int]:
+    """The first of `robot_ids` a ball rolling free will come to and that can get onto its path in
+    time. Whoever kicked it, a pass nobody announced or an enemy's: the ball is coming either way.
+    None for a shot at the enemy goal, which a teammate must not stop, or when an enemy is first
+    to it: going for those, the enemy got there first 42% of the time (2026-11-09)."""
+    if not robot_ids:
+        return None
+    ball = game.ball
+    velocity = Vector2D(ball.v.x, ball.v.y)
+    speed = velocity.mag()
+    if speed < _PASS_ROLLING_MPS or not _ball_untouched(game):
+        return None
+    start = ball.p.to_2d()
+    if _reaches_goal(game.field.enemy_goal_line, start, math.atan2(velocity.y, velocity.x), 0.0):
+        return None
+    best, best_along = None, None
+    for robot_id in robot_ids:
+        along = _distance_along_ball_path(game.friendly_robots[robot_id].p, start, velocity)
+        if along is not None and (best is None or along < best_along):
+            best, best_along = robot_id, along
+    if best is None:
+        return None
+    for enemy in game.enemy_robots.values():
+        along = _distance_along_ball_path(enemy.p, start, velocity)
+        if along is not None and along < best_along:
+            return None
+    return best
+
+
+def _distance_along_ball_path(position: Vector2D, start: Vector2D, velocity: Vector2D) -> Optional[float]:
+    """How far down the path of a ball rolling from `start` a robot at `position` can meet it.
+    None if it is behind the ball, past where the ball stops, or cannot get onto the path in time."""
+    speed = velocity.mag()
+    direction = velocity * (1.0 / speed)
+    offset = position - start
+    along = offset.dot(direction)
+    if along <= 0.0 or along > speed**2 / (2.0 * _BALL_ROLL_DECEL_MPS2):
+        return None
+    lateral = abs(offset.x * direction.y - offset.y * direction.x)
+    if lateral > min(_RECEIVE_REACH_MAX_M, _RECEIVE_REACH_M + _RECEIVE_SIDESTEP_MPS * along / speed):
+        return None
+    return along
+
+
+def still_receiving(game: Game, robot_id: int) -> bool:
+    """The free ball a robot set out to meet is still on its way to it. Looser than choosing the
+    receiver (`receiver_of_rolling_ball`), whose reach check came and went with vision noise and
+    left a robot receiving for 0.16 s on average (2026-11-09)."""
+    if ball_line_receive_point(game, robot_id) is None or not _ball_untouched(game):
+        return False
+    ball = game.ball
+    velocity = Vector2D(ball.v.x, ball.v.y)
+    offset = game.friendly_robots[robot_id].p - ball.p.to_2d()
+    return abs(offset.x * velocity.y - offset.y * velocity.x) / velocity.mag() <= _RECEIVE_REACH_MAX_M
+
+
+def ball_intercept_point(game: Game, robot_id: int) -> Optional[Vector2D]:
+    """Where `robot_id` can first meet a ball rolling free, or where it comes to rest if never
+    before. None for a slow ball, one a robot is touching, or a robot already beside it."""
+    ball = game.ball
+    velocity = Vector2D(ball.v.x, ball.v.y)
+    speed = velocity.mag()
+    start = ball.p.to_2d()
+    position = game.friendly_robots[robot_id].p
+    if speed < _PASS_ROLLING_MPS or position.distance_to(start) < _INTERCEPT_MIN_M or not _ball_untouched(game):
+        return None
+    direction = velocity * (1.0 / speed)
+    stops_after = speed / _BALL_ROLL_DECEL_MPS2
+    t = 0.0
+    while t < stops_after:
+        spot = start + direction * (speed * t - 0.5 * _BALL_ROLL_DECEL_MPS2 * t**2)
+        if position.distance_to(spot) / _CHASE_SPEED_MPS + _CHASE_START_S <= t:
+            break
+        t += _INTERCEPT_STEP_S
+    else:
+        spot = start + direction * (speed**2 / (2.0 * _BALL_ROLL_DECEL_MPS2))
+    return clamp_outside_enemy_defense_area(game, clamp_outside_own_defense_area(game, clamp_to_field(spot, game)))
 
 
 def enemy_positions(game: Game) -> list[Vector2D]:
@@ -706,7 +801,143 @@ def find_best_shot(
     return _find_best_shot(point, enemy_robots, goal_x, goal_y1, goal_y2, prev_best_shot_y, switch_margin)
 
 
+# A kick that has to go now: the lane only has to clear the ball's width past a robot's body, and
+# a robot touching the ball beside this one does not block a kick that leaves away from it.
+RELEASE_LANE_CLEARANCE = ROBOT_RADIUS + BALL_RADIUS + 0.05
+_OWN_GOAL_RELEASE_MARGIN_M = 0.3
+_MIN_OPEN_TEAMMATE_M = 0.7
+# Further than this a full-power kick reached the teammate less than 45% of the time and left the
+# pitch more than 40%, against 52% and 30% from 1.5 m to 3.5 m (36 matches, 2026-11-09).
+MAX_OPEN_TEAMMATE_M = 3.5
+# A passer tells its receiver once it is this near its aim: a turn away from the kick. Told any
+# earlier, the ball came to only 14% of the receivers that stopped for it (2026-11-09).
+ANNOUNCE_PASS_RAD = 0.5
+
+
+def _reaches_goal(line, point: Vector2D, heading: float, margin: float) -> bool:
+    goal_x = float(line[0][0])
+    half_width = max(abs(float(line[0][1])), abs(float(line[1][1])))
+    to_line = goal_x - point.x
+    if math.cos(heading) * to_line <= 0.0:
+        return False
+    return abs(point.y + math.tan(heading) * to_line) <= half_width + margin
+
+
+def reaches_own_goal(game: Game, point: Vector2D, heading: float) -> bool:
+    """A kick from `point` along `heading` would reach our goal mouth."""
+    return _reaches_goal(game.field.my_goal_line, point, heading, _OWN_GOAL_RELEASE_MARGIN_M)
+
+
+def open_teammate(
+    game: Game, robot_id: int, clearance: float = ROBOT_RADIUS + 0.15, origin: Optional[Vector2D] = None
+) -> Optional[int]:
+    """Id of the most advanced teammate in range of a kick down a clear lane, outside our own box.
+    From `origin` for a robot not at the ball yet, otherwise from where the robot stands."""
+    position = game.friendly_robots[robot_id].p if origin is None else origin
+    enemies = enemy_positions(game)
+    goal_x = enemy_goal_line(game)[0]
+    best, best_to_goal = None, None
+    for teammate_id, teammate in game.friendly_robots.items():
+        if (
+            teammate_id == robot_id
+            or not _MIN_OPEN_TEAMMATE_M <= position.distance_to(teammate.p) <= MAX_OPEN_TEAMMATE_M
+        ):
+            continue
+        if in_own_defense_area(game, teammate.p) or segment_blocked(position, teammate.p, enemies, clearance):
+            continue
+        to_goal = abs(goal_x - teammate.p.x)
+        if best is None or to_goal < best_to_goal:
+            best, best_to_goal = teammate_id, to_goal
+    return best
+
+
+_RESTART_SUPPORT_M = 2.0
+_RESTART_SUPPORT_OFFSETS_RAD = (0.0, 0.5, -0.5, 1.0, -1.0)
+_RESTART_SUPPORT_FIELD_MARGIN_M = 0.3
+
+
+def restart_support(game: Game, kicker_id: int, ball: Vector2D) -> Optional[tuple[int, Vector2D]]:
+    """(teammate, spot) for a restart with nobody to pass to: the nearest teammate outside our box and
+    a spot `_RESTART_SUPPORT_M` from the ball towards the enemy goal with a clear lane from it, kept
+    inside the pitch. None when no teammate can come or no such spot exists."""
+    others = {
+        rid: robot
+        for rid, robot in game.friendly_robots.items()
+        if rid != kicker_id and not in_own_defense_area(game, robot.p)
+    }
+    if not others:
+        return None
+    enemies = enemy_positions(game)
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    to_goal = ball.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
+    for offset in _RESTART_SUPPORT_OFFSETS_RAD:
+        spot = ball + Vector2D(math.cos(to_goal + offset), math.sin(to_goal + offset)) * _RESTART_SUPPORT_M
+        in_field = (
+            abs(spot.x) <= game.field.half_length - _RESTART_SUPPORT_FIELD_MARGIN_M
+            and abs(spot.y) <= game.field.half_width - _RESTART_SUPPORT_FIELD_MARGIN_M
+        )
+        if not in_field or spot.distance_to(clamp_outside_enemy_defense_area(game, spot)) > 0.0:
+            continue
+        if spot.distance_to(clamp_outside_own_defense_area(game, spot)) > 0.0:
+            continue
+        if not segment_blocked(ball, spot, enemies, RELEASE_LANE_CLEARANCE):
+            return min(others, key=lambda rid: others[rid].p.distance_to(spot)), spot
+    return None
+
+
+def _distance_to_field_edge(game: Game, point: Vector2D, heading: float) -> float:
+    dx, dy = math.cos(heading), math.sin(heading)
+    limits = []
+    if abs(dx) > 1e-9:
+        limits.append((math.copysign(game.field.half_length, dx) - point.x) / dx)
+    if abs(dy) > 1e-9:
+        limits.append((math.copysign(game.field.half_width, dy) - point.y) / dy)
+    return max(0.0, min(limits))
+
+
+def release_heading(game: Game, robot_id: int) -> float:
+    """Where to kick a ball that cannot be held any longer: at an open teammate, otherwise at the
+    enemy goal, turned off it just enough to clear an enemy in the way. Kicked down whichever lane
+    looked clear instead, 56% left the pitch and on-target kicks halved (round-robin of 2026-11-09)."""
+    robot = game.friendly_robots[robot_id]
+    teammate = open_teammate(game, robot_id, RELEASE_LANE_CLEARANCE)
+    if teammate is not None:
+        return robot.p.angle_to(game.friendly_robots[teammate].p)
+    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+    return _nearest_clear_heading(
+        game, robot_id, robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)), _RELEASE_OFFSETS_RAD
+    )
+
+
+_CLEARANCE_OFFSETS_RAD = (0.0, 0.26, -0.26, 0.52, -0.52)
+# Wide enough to clear an enemy touching the ball dead ahead (a body 0.21 m from the kicker's).
+_RELEASE_OFFSETS_RAD = (0.0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4)
+_CLEARANCE_LANE_M = 2.0
+
+
+def upfield_heading(game: Game, robot_id: int) -> float:
+    """Straight upfield, or the nearest angle off it with a clear lane that stays in play."""
+    return _nearest_clear_heading(game, robot_id, math.pi if game.my_team_is_right else 0.0, _CLEARANCE_OFFSETS_RAD)
+
+
+def _nearest_clear_heading(game: Game, robot_id: int, base: float, offsets_rad: tuple[float, ...]) -> float:
+    """`base`, or the angle off it nearest to it with a clear lane that stays in play."""
+    robot = game.friendly_robots[robot_id]
+    enemies = enemy_positions(game)
+    # Of two equal angles, the one towards the middle of the field.
+    ordered = sorted(offsets_rad, key=lambda o: (abs(o), abs(robot.p.y + _CLEARANCE_LANE_M * math.sin(base + o))))
+    for offset in ordered:
+        heading = base + offset
+        if offset != 0.0 and _distance_to_field_edge(game, robot.p, heading) < _CLEARANCE_LANE_M:
+            continue
+        lane_end = robot.p + Vector2D(math.cos(heading), math.sin(heading)) * _CLEARANCE_LANE_M
+        if not segment_blocked(robot.p, lane_end, enemies, RELEASE_LANE_CLEARANCE):
+            return heading
+    return base
+
+
 _NO_SHOT_STRAFE_STEP = 0.6  # metres of lateral reposition per tick while hunting for a lane
+_DEEP_NEAR_LINE_M = 1.5
 
 
 def no_shot_reposition_target(
@@ -764,6 +995,10 @@ def no_shot_reposition_target(
         return max(
             -field_half_width + margin, min(field_half_width - margin, carrier_pos.y + sign * _NO_SHOT_STRAFE_STEP)
         )
+
+    if abs(goal_x - carrier_pos.x) < _DEEP_NEAR_LINE_M and not goal_y1 <= carrier_pos.y <= goal_y2:
+        # Deep and wide of the goal, the way out is towards the middle: the other way is the corner.
+        away_sign = 1.0 if carrier_pos.y < 0.0 else -1.0
 
     target_y = _clamped_target_y(away_sign)
     if abs(target_y - carrier_pos.y) < _NO_SHOT_STRAFE_STEP / 2:

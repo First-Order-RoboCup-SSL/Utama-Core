@@ -41,6 +41,7 @@ from utama_core.tactics.give_and_go import (
     _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,
     _MAX_HOP_TICKS,
+    _MAX_PASS_WAIT_TICKS,
     GiveAndGoMem,
     GiveAndGoTactic,
     _relocate_target,
@@ -185,7 +186,7 @@ def test_carrier_does_not_hold_again_after_the_first_touch_hold_times_out():
     tactic = GiveAndGoTactic()
     mem = tactic.initial_mem()
 
-    for _ in range(_MAX_HOP_TICKS - 1):
+    for _ in range(_MAX_PASS_WAIT_TICKS - 1):
         _, mem = tactic.tick(game, ctx, (1, 2), mem)
     held = ctx.motion_controller.targets[1]
     assert held.distance_to(Vector2D(0.0, 0.0)) < 1e-6  # holding in place during the hold
@@ -196,6 +197,25 @@ def test_carrier_does_not_hold_again_after_the_first_touch_hold_times_out():
     assert mem.ticks_held < _MAX_FIRST_TOUCH_TICKS  # first_touch_stuck is not what moves it
     assert mem.receiver_id is None and mem.hop_count == 0
     assert ctx.motion_controller.targets[1].distance_to(Vector2D(0.0, 0.0)) > 0.5
+
+
+def test_a_carrier_stops_waiting_for_its_receiver_after_the_limit(monkeypatch):
+    """Carriers stood with the ball for 9 s after free kicks, two 4 s waits for a receiver in
+    a row (high_press_vs_split_shape t=500.6, tournament_20261109_225810)."""
+    calls = []
+
+    def _fake_pass_exec(game, ctx, passer, receiver, kick_now=False):
+        calls.append(kick_now)
+        return {}, False, False
+
+    monkeypatch.setattr("utama_core.tactics.give_and_go._pass_exec", _fake_pass_exec)
+    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.0, 1.0), enemy_pos=Vector2D(3.0, -2.5))
+    ctx = TickContext(motion_controller=_PerRobotMotionController(), match_log=None)
+    tactic = GiveAndGoTactic()
+    mem = tactic.initial_mem()
+    for _ in range(_MAX_PASS_WAIT_TICKS):
+        _, mem = tactic.tick(game, ctx, (1, 2), mem)
+    assert calls[-2:] == [False, True]
 
 
 def _make_flicker_game() -> Game:
@@ -472,13 +492,14 @@ def test_relocate_others_clamps_deep_targets_outside_the_enemy_defense_area():
 
 
 @pytest.mark.parametrize(("carried", "expect_kick"), [(0.79, False), (0.80, True)])
-def test_no_lane_strafe_shoots_once_the_carry_reaches_0_8m(carried, expect_kick):
+def test_no_lane_strafe_shoots_once_the_carry_reaches_0_8m(carried, expect_kick, monkeypatch):
     """With every shot lane walled off, the carrier strafes sideways looking
     for one (`no_shot_reposition_target`). That strafe had no end of its own
     and carried the ball past `ExcessiveDribblingRule`'s 1.0m — 51 fouls in
     the 2026-09-23 round-robin. At `CARRY_LIMIT_M` (0.8m) from where the
-    dribble began, it must shoot at the goal centre instead (already facing
-    it here, so `kick()` this tick)."""
+    dribble began, it must kick along `release_heading` instead (already
+    facing it here, so `kick()` this tick)."""
+    monkeypatch.setattr("utama_core.tactics.give_and_go.release_heading", lambda *a: math.pi)
     carrier_pos = Vector2D(-3.0, 0.0)
     friendly = {
         1: Robot(

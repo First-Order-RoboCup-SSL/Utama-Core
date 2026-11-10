@@ -49,7 +49,6 @@ from typing import Optional
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
@@ -57,6 +56,7 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     oriented_towards,
     own_defense_area_exit_point,
+    upfield_heading,
 )
 from utama_core.skills.src.defend_parameter import defend_parameter
 from utama_core.skills.src.go_to_ball import go_to_ball
@@ -64,10 +64,6 @@ from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
 
 _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
-# How far upfield (away from our own goal) the clearance aims, along the
-# ball's current y — simpler than `ClearBallTactic`'s multi-lane scoring,
-# appropriate for this tactic's "minimal baseline" role (see class docstring).
-_CLEAR_DISTANCE = 4.5
 
 
 @dataclass
@@ -190,12 +186,7 @@ class DefenseTactic(BaseTactic[DefenseMem]):
         docstring). `robot_id` is only ever called here once it already has
         the ball (`carrier_id`'s definition in `tick()`), so there is no
         chase branch."""
-        ball_pos = game.ball.p.to_2d()
-        attack_dir = -1.0 if game.my_team_is_right else 1.0
-        half_length = game.field.half_length
-        target_x = max(-half_length + 0.5, min(half_length - 0.5, ball_pos.x + attack_dir * _CLEAR_DISTANCE))
-        target = Vector2D(target_x, ball_pos.y)
-        target_oren = game.friendly_robots[robot_id].p.angle_to(target)
+        target_oren = upfield_heading(game, robot_id)
         if oriented_towards(game, robot_id, target_oren) and has_ball(game, robot_id):
             return kick()
         return turn_on_spot(

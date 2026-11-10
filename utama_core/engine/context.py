@@ -12,7 +12,7 @@ per-tick auxiliary inputs a `Tactic.tick()` call needs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 from utama_core.motion_planning.src.common.motion_controller import MotionController
@@ -31,6 +31,10 @@ class TickContext:
     # match logging is disabled (the common case — tournament/CI runs) so
     # tracing a tick is a single `is not None` check, not a real cost.
     match_log: Optional["MatchLog"] = None
+    # This tick's: robots driving at the ball (`go_to_ball`, a presser) and robots a teammate is
+    # about to pass to. `BallRoles` reads both once every tactic has ticked; `Strategy` clears them.
+    ball_claims: set[int] = field(default_factory=set)
+    expected_receivers: set[int] = field(default_factory=set)
 
     def trace(self, game: "Game", key: str, value: Any) -> None:
         """`match_log.trace_if_changed` at this tick's time; nothing without a match log. A key

@@ -37,6 +37,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from utama_core.engine.ball_release import BallRelease
+from utama_core.engine.ball_roles import BallRoles
 from utama_core.engine.context import TickContext
 from utama_core.engine.match_log import MatchLog
 from utama_core.engine.referee_override import (
@@ -177,6 +179,8 @@ class Strategy:
         self._their_restart: Optional[tuple[RefereeCommand, float, float]] = None
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
+        self._ball_release = BallRelease()
+        self._ball_roles = BallRoles()
         # Robots the referee, not a tactic, drives this tick, with their job (see `referee_control`).
         self._referee_control: dict[RobotId, str] = {}
 
@@ -349,7 +353,15 @@ class Strategy:
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
+        self._ctx.ball_claims.clear()
+        self._ctx.expected_receivers.clear()
         commands = self._tick(game)
+        if self._referee_control:  # a restart or HALT drives the robots: nothing to release
+            self._ball_release.reset()
+            self._ball_roles.reset()
+        else:
+            commands = self._ball_release.apply(game, self._ctx, commands)
+            commands = self._ball_roles.apply(game, self._ctx, commands, self._outfield_robot_ids)
         if self.match_log is not None:
             self.match_log.clear_untraced(self._tick_count, getattr(game, "ts", 0.0))
         return commands

@@ -43,6 +43,7 @@ def _std_field(my_team_is_right: bool):
         my_goal_line=goal_line,
         half_goal_width=0.5,
         my_defense_area=_defense_area(goal_x, depth=0.5, width=1.0),
+        enemy_goal_line=np.array([[-goal_x, 0.5], [-goal_x, -0.5]]),
     )
 
 
@@ -546,6 +547,7 @@ def test_goalkeep_clears_retrieved_ball_without_dribbling_it_out(monkeypatch):
     exact carry). Facing its own goal (pi) here, so it must turn on the spot
     toward upfield (+x for a left-side team)."""
     game = SimpleNamespace(
+        enemy_robots={},
         my_team_is_yellow=True,
         my_team_is_right=False,
         field=_std_field(False),
@@ -573,6 +575,7 @@ def test_goalkeep_kicks_held_ball_once_oriented_upfield(monkeypatch):
     the box too."""
     exit_x = -2.93
     game = SimpleNamespace(
+        enemy_robots={},
         my_team_is_yellow=True,
         my_team_is_right=False,
         field=_std_field(False),
@@ -649,6 +652,7 @@ def test_clearance_kicks_within_its_tolerance_of_upfield(monkeypatch, off_rad, k
     """The real keeper settled ~0.07 rad off upfield and never reached the 0.05 rad shot
     tolerance, so it never cleared (2026-10-27 field runs)."""
     game = SimpleNamespace(
+        enemy_robots={},
         my_team_is_yellow=True,
         my_team_is_right=False,
         field=_std_field(False),
@@ -661,3 +665,40 @@ def test_clearance_kicks_within_its_tolerance_of_upfield(monkeypatch, off_rad, k
     assert ku.kick_upfield(game, motion_controller=object(), robot_id=0) == (
         "sentinel-kick" if kicks else "sentinel-turn"
     )
+
+
+def _held_ball_game(teammate, enemy=None, orientation=0.0):
+    """A left-side keeper holding the ball, one outfield robot upfield."""
+    return SimpleNamespace(
+        enemy_robots={} if enemy is None else {0: SimpleNamespace(p=Vector2D(*enemy))},
+        my_team_is_yellow=True,
+        my_team_is_right=False,
+        field=_std_field(False),
+        friendly_robots={
+            0: SimpleNamespace(p=Vector2D(-4.2, 0.0), orientation=orientation, has_ball=True),
+            1: SimpleNamespace(p=Vector2D(*teammate), orientation=0.0, has_ball=False),
+        },
+        ball=SimpleNamespace(p=Vector3D(-4.11, 0.0, 0.0), v=Vector3D(0.0, 0.0, 0.0)),
+    )
+
+
+def test_keeper_passes_to_a_teammate_standing_free(monkeypatch):
+    monkeypatch.setattr(gk, "kick", lambda: "pass")
+    monkeypatch.setattr(gk, "kick_upfield", lambda *a: "clear")
+    ctx = SimpleNamespace(expected_receivers=set())
+    assert gk.goalkeep(_held_ball_game((-1.0, 0.0)), None, 0, ctx) == "pass"
+    assert ctx.expected_receivers == {1}
+
+
+def test_keeper_turns_to_the_teammate_before_passing(monkeypatch):
+    monkeypatch.setattr(gk, "turn_on_spot", lambda **kw: kw["target_oren"])
+    target = gk.goalkeep(_held_ball_game((-2.0, 2.0), orientation=-0.5), None, 0)
+    assert target == pytest.approx(math.atan2(2.0, 2.2))
+
+
+def test_keeper_clears_upfield_when_the_teammate_is_marked(monkeypatch):
+    monkeypatch.setattr(gk, "kick_upfield", lambda *a: "clear")
+    # 0.39 m off the lane is inside the keeper's safety margin
+    assert gk.goalkeep(_held_ball_game((-1.0, 0.0), enemy=(-2.0, 0.39)), None, 0) == "clear"
+    monkeypatch.setattr(gk, "kick", lambda: "pass")
+    assert gk.goalkeep(_held_ball_game((-1.0, 0.0), enemy=(-2.0, 0.41)), None, 0) == "pass"

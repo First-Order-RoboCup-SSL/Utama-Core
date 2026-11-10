@@ -21,14 +21,20 @@ match pinned for the last 28 s of a 60 s game this way (see
 `docs/strategies.md`'s "Known open bugs").
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import ball_in_own_defense_area, has_ball
+from utama_core.shared.pass_and_score_geometry import (
+    ANNOUNCE_PASS_RAD,
+    ball_in_own_defense_area,
+    has_ball,
+    open_teammate,
+    oriented_towards,
+)
 from utama_core.skills.src.go_to_point import go_to_point
 from utama_core.skills.src.kick_upfield import kick_upfield
 from utama_core.skills.src.utils.defense_utils import (
@@ -36,9 +42,16 @@ from utama_core.skills.src.utils.defense_utils import (
     intersection_with_x_line,
     single_defender_stop_y,
 )
+from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
+
+if TYPE_CHECKING:
+    from utama_core.engine.context import TickContext
 
 # TODO: instead of checking number of friendly, should check roles
 
+# A pass out from our own goal has to be safe: an enemy this near its line can step onto it.
+_KEEPER_PASS_CLEARANCE = 0.4
+_KEEPER_PASS_TOLERANCE_RAD = 0.12
 _RETRIEVE_BALL_SPEED = 0.3  # m/s — below this, a ball in our box is "at rest," not a live shot to block
 
 # `predict_ball_pos_at_x` returns None the instant the ball's x reaches (or
@@ -109,10 +122,26 @@ def _ball_needs_clearing(game: Game, robot_id: int) -> bool:
     return has_ball(game, robot_id, visual=True)
 
 
+def _distribute(game: Game, motion_controller: MotionController, robot_id: int, ctx: Optional["TickContext"]):
+    """Kick the held ball to a teammate standing free, and only without one upfield."""
+    teammate = open_teammate(game, robot_id, _KEEPER_PASS_CLEARANCE)
+    if teammate is None:
+        return kick_upfield(game, motion_controller, robot_id)
+    target_oren = game.friendly_robots[robot_id].p.angle_to(game.friendly_robots[teammate].p)
+    if ctx is not None and oriented_towards(game, robot_id, target_oren, ANNOUNCE_PASS_RAD):
+        ctx.expected_receivers.add(teammate)
+    if oriented_towards(game, robot_id, target_oren, _KEEPER_PASS_TOLERANCE_RAD):
+        return kick()
+    return turn_on_spot(
+        game=game, motion_controller=motion_controller, robot_id=robot_id, target_oren=target_oren, dribbling=True
+    )
+
+
 def goalkeep(
     game: Game,
     motion_controller: MotionController,
     robot_id: int,
+    ctx: Optional["TickContext"] = None,
 ):
     """Move `robot_id` (the goalkeeper) to cover the predicted shot on the goal line.
 
@@ -148,7 +177,7 @@ def goalkeep(
             # creep in the box until `KeeperHeldBallRule` fired (5-6 per round-robin).
             # Face the ball and take it onto the dribbler first, as retrieval does.
             return go_to_point(game, motion_controller, robot_id, game.ball.p.to_2d(), dribbling=True)
-        return kick_upfield(game, motion_controller, robot_id)
+        return _distribute(game, motion_controller, robot_id, ctx)
 
     edge_offset = BALL_RADIUS + ROBOT_RADIUS
     goal_x = game.field.my_goal_line[0][0]

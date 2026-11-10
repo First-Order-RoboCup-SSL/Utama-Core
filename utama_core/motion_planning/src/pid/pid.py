@@ -115,6 +115,11 @@ class PID(AbstractPID[float]):
         return output
 
 
+_APPROACH_MIN_M = 0.1  # closer than this kp settles the robot, which a higher speed would overshoot
+_APPROACH_MAX_M = 1.0  # the planner's carrot is this far ahead until then, so kp is at cruising speed
+_STRAIGHT_RUN_M = 0.02
+
+
 class TwoDPID(AbstractPID[Vector2D]):
     """A 2D PID controller that controls the X and Y dimensions and scales the resulting velocity vector to a maximum
     speed if needed."""
@@ -126,6 +131,7 @@ class TwoDPID(AbstractPID[Vector2D]):
         super().__init__(config)
         self.max_velocity = config.max_velocity
         self.max_acceleration = config.max_acceleration
+        self.approach_brake_fraction = config.approach_brake_fraction
         # Set by a caller (`FastPathPlanningController`) right before
         # `calculate()` when `target` is a lookahead "carrot" rather than the
         # robot's actual destination — see `set_final_target`'s docstring for
@@ -263,6 +269,15 @@ class TwoDPID(AbstractPID[Vector2D]):
         max_brake_vel = (
             math.sqrt(2 * self.max_acceleration * brake_distance) if self.max_acceleration > 0 else self.max_velocity
         )
+        if self.approach_brake_fraction and final_target is not None and error > 0.0:
+            # Kp * error is 0.45 m/s with 0.25 m to go, so the last half metre of every move took over 1 s.
+            # Only inside the last metre: cruising speed is left alone, a higher kp crashed crowded robots.
+            # And only straight at the destination: a nearer waypoint is a corner, which the planner
+            # takes by slowing down, and at speed a robot cut across the ball's keep-out circle.
+            if _APPROACH_MIN_M < brake_distance < _APPROACH_MAX_M and error >= brake_distance - _STRAIGHT_RUN_M:
+                floor = min(self.Kp * _APPROACH_MAX_M, self.approach_brake_fraction * max_brake_vel)
+                if output < floor:
+                    x_vel, y_vel = floor * (dx / error), floor * (dy / error)
         return self._apply_speed_limits(x_vel, y_vel, min(self.max_velocity, max_brake_vel))
 
     def _apply_speed_limits(self, x_vel: float, y_vel: float, max_vel: float) -> Vector2D:

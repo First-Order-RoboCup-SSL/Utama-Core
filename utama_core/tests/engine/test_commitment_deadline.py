@@ -15,6 +15,7 @@ test here) and does not touch the pinned goalkeeper slot at all.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Optional
 
 from utama_core.engine.context import TickContext
@@ -54,6 +55,8 @@ class _FakeGame:
         self.referee = _FakeReferee(referee_command) if referee_command is not None else None
         self.ts = ts
         self.ball = _FakeBall(_FakeVector(ball_x, ball_y))
+        self.friendly_robots = {0: SimpleNamespace(has_ball=False, p=_FakeVector(9.0, 9.0))}  # the pinned keeper
+        self.enemy_robots = {}
 
 
 @dataclass

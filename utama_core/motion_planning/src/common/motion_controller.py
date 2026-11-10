@@ -19,6 +19,8 @@ class MotionController(ABC):
         self.pose_ahead = PoseAhead(control_latency_s(mode))
         # `move()` holds a robot with the ball to these (`RobotParams.CARRY_SPEED`/`CARRY_TURN`).
         params = _PARAMS_BY_MODE[Mode(mode)]
+        self.max_speed: float = params.MAX_VEL
+        self.max_acceleration: float = params.MAX_ACCELERATION
         self.carry_speed: float | None = params.CARRY_SPEED
         self.carry_turn: float | None = params.CARRY_TURN
         self.min_turn: float | None = params.MIN_TURN

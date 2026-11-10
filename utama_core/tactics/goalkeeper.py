@@ -80,7 +80,7 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
         if mem.pid_controller is None:
             mem.pid_controller = PIDController(ctx.motion_controller.mode, ctx.motion_controller.rsim_env)
 
-        command = goalkeep(game, mem.pid_controller, self.robot_id)
+        command = goalkeep(game, mem.pid_controller, self.robot_id, ctx)
         if command is None:
             command = empty_command(False)
         return {self.robot_id: command}, mem

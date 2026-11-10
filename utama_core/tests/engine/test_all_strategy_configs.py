@@ -88,13 +88,13 @@ def make_runner():
         r.close()
 
 
-@pytest.mark.parametrize("build_factory", _CONFIGS)
-def test_partitions_every_outfield_robot_and_never_the_keeper_for_30_ticks(build_factory, make_runner):
+@pytest.mark.parametrize("name", _CONFIGS)
+def test_partitions_every_outfield_robot_and_never_the_keeper_for_30_ticks(name, make_runner):
     """30 ticks, not 5-10: enough for PressAndContainTactic's applicable()
     to plausibly flip in configs that use it, exercising the exact hazard
     `_press_and_pass_split_picker`/`_three_way_picker` exist to avoid (a
     Partitioner proposing robots for a currently-inapplicable tactic)."""
-    runner = make_runner(build_factory)
+    runner = make_runner(name)
     strategy = runner.my.strategy
     assert isinstance(strategy._kernel_strategy, Strategy)
     assert strategy._goalkeeper_id == 0
