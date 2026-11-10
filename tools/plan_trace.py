@@ -34,6 +34,7 @@ from utama_core.analysis.findings import write_jsonl  # noqa: E402
 from utama_core.analysis.plan_snapshot import game_from_scenario  # noqa: E402
 from utama_core.analysis.plan_trace import plan_findings, plan_trace  # noqa: E402
 from utama_core.replay.scenario import scenario_from_replay  # noqa: E402
+from utama_core.strategy.catalog import plain_name
 
 
 def replay_game_at(replay: Path, side: str):
@@ -91,7 +92,7 @@ def main() -> None:
         REPO_ROOT / "replays" / "plan_trace" / f"{args.replay.stem}_{args.t0:g}-{args.t1:g}_{args.side}{args.robot}.png"
     )
     config = first.config_a_name if args.side == "friendly" else first.config_b_name
-    short = (config or "?").removeprefix("build_").removesuffix("_kernel_strategy")
+    short = plain_name((config or "?"))
     title = f"planned {args.side} {short}, robot {args.robot}, t = {args.t0:g} to {args.t1:g} s"
 
     trace = plan_trace(

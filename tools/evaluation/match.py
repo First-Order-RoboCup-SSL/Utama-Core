@@ -3,7 +3,7 @@ evaluation drivers (`round_robin.py`, `evaluate.py`).
 
 Why this exists: `round_robin.py`'s `run_match` and the since-retired
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
-two strategies from kernel_strategy factory names, construct a referee with
+two strategies from their names, construct a referee with
 the right kickoff-team/initial-command, wire up match_log/stats/replay paths,
 build and step a `StrategyRunner`, read back the score) that had drifted into
 two independent copies differing only in a few real parameters (duration,
@@ -36,30 +36,29 @@ from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import 
 )
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
+from utama_core.strategy import catalog
+from utama_core.strategy.catalog import plain_name
 
 N_OUTFIELD = 5  # + 1 goalkeeper per side
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
-# build_default_kernel_strategy is excluded from the auto-discovered catalog:
+# default is excluded from the auto-discovered catalog:
 # despite the name, it isn't a competitive team — it's the kernel's minimal
 # single-tactic smoke-test scaffold (see its docstring), used across the test
 # suite with as few as zero outfield robots, and plays a real match with 3 of 5
 # outfield robots never issued a command. Every other strategy is playable here;
 # which ones a round-robin plays by default is round_robin.RETIRED's business.
-_CONFIG_NAMES = [
-    name
-    for name in dir(kernel_strategy)
-    if name.startswith("build_")
-    and name.endswith("_kernel_strategy")
-    and callable(getattr(kernel_strategy, name))
-    and name != "build_default_kernel_strategy"
-]
+_CONFIG_NAMES = [name for name in catalog.names() if name != "default"]
 
 
 def _short_name(config_name: str) -> str:
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
+
+
+def _load_strategy(config_name: str) -> AbstractStrategy:
+    """A strategy by name."""
+    return AbstractStrategy(build=catalog.builder(config_name, OUTFIELD_ROBOT_IDS))
 
 
 def _stats_to_dict(stats) -> dict:
@@ -179,11 +178,8 @@ def run_match(
     """
     enable_sim_reuse()
 
-    build_a = getattr(kernel_strategy, config_a_name)
-    build_b = getattr(kernel_strategy, config_b_name)
-
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
+    strategy_a = _load_strategy(config_a_name)
+    strategy_b = _load_strategy(config_b_name)
 
     # "simulation" profile's kickoff_team defaults to "yellow"; override it to
     # "blue" when B kicks off. Neither CustomReferee.from_profile_name nor

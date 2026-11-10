@@ -3,8 +3,8 @@ from tools.signal_report import build, markdown
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:
     return {
-        "config_a": f"build_{a}_kernel_strategy",
-        "config_b": f"build_{b}_kernel_strategy",
+        "config_a": a,
+        "config_b": b,
         "score_a": score_a,
         "score_b": score_b,
         "stats": {"shots": {"friendly": 2, "enemy": 1}, "pass_progress_m": [1.5], "enemy_pass_progress_m": [0.2]},
@@ -44,9 +44,9 @@ def test_build_writes_every_figure(tmp_path):
         "shot_quality.png",
         "signals.png",
     ]
-    assert table["build_x_kernel_strategy"]["chances"]["regain_to_shot"] == 1.0
+    assert table["x"]["chances"]["regain_to_shot"] == 1.0
     # Shots faced are the other side's shots: x (config_a, friendly) faced the enemy's 1, y faced 2.
-    assert table["build_x_kernel_strategy"]["shots_faced"] == 1
-    assert table["build_y_kernel_strategy"]["shots_faced"] == 2
+    assert table["x"]["shots_faced"] == 1
+    assert table["y"]["shots_faced"] == 2
     rows = markdown(table).splitlines()
     assert rows[2].startswith("| `x` | 3.00 | 1.0 | 0.0 | 2.0 | 1.0 | 50% | 0% |")

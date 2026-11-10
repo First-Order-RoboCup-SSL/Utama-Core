@@ -45,7 +45,7 @@ Usage:
         --t 260 --duration 15 --control-scheme trajsample \\
         --trace-out /tmp/repro_trace.jsonl
 
-`--strategy` / `--opponent` take the short name of a `build_*_kernel_strategy` factory in
+`--strategy` / `--opponent` take the name of a strategy in
 `utama_core/strategy/` (e.g. `clear_press_plus`, `counter_flow`), the same names as the
 replay's `summary.json` config names. The trace shows the tactics those strategies use, not
 the strategy names (e.g. `decoy_and_overload.*` keys come from a strategy's DecoyOverloadTactic).
@@ -100,7 +100,7 @@ from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
+from utama_core.strategy import catalog
 
 _STILL_STALLED_WINDOW_S = 10.0
 _STILL_STALLED_THRESHOLD_M = 0.05  # 5 cm
@@ -114,11 +114,8 @@ def _resolve_config_name(explicit: Optional[str], from_scenario: Optional[str], 
             f"given and the replay's directory has no summary.json (or no matching entry) to derive it from. "
             f"Pass --strategy/--opponent explicitly."
         )
-    if not name.startswith("build_"):
-        name = f"build_{name}"
-    if not name.endswith("_kernel_strategy"):
-        name = f"{name}_kernel_strategy"
-    if not hasattr(kernel_strategy, name):
+    name = catalog.plain_name(name)
+    if name not in catalog.names():
         raise SystemExit(
             f"Unknown strategy config {name!r} (from {'CLI override' if explicit else 'replay metadata'})."
         )
@@ -251,7 +248,7 @@ def main() -> None:
         "--strategy",
         default=None,
         help="override the friendly (config_a) strategy: the short name (e.g. clear_press_plus) or the factory "
-        "name (e.g. build_clear_press_plus_kernel_strategy); default: the replay's summary.json",
+        "name (e.g. clear_press_plus); default: the replay's summary.json",
     )
     parser.add_argument(
         "--opponent",
@@ -286,10 +283,8 @@ def main() -> None:
     strategy_a_name = _resolve_config_name(args.strategy, scenario.config_a_name, "friendly")
     strategy_b_name = _resolve_config_name(args.opponent, scenario.config_b_name, "enemy")
 
-    build_a = getattr(kernel_strategy, strategy_a_name)
-    build_b = getattr(kernel_strategy, strategy_b_name)
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
+    strategy_a = AbstractStrategy(build=catalog.builder(strategy_a_name, OUTFIELD_ROBOT_IDS))
+    strategy_b = AbstractStrategy(build=catalog.builder(strategy_b_name, OUTFIELD_ROBOT_IDS))
 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1

@@ -10,7 +10,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -34,7 +34,7 @@ ORIENTATION_TOLERANCE = 0.1  # radians
 
 def _idle_strategy() -> AbstractStrategy:
     """Minimal kernel strategy that does nothing — used when we only care about game state."""
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
+    return AbstractStrategy(build=builder("default", ()))
 
 
 class _TeleportAccuracyTestManager(AbstractTestManager):

@@ -28,7 +28,7 @@ def _strategy(ticks: list) -> AbstractStrategy:
         kernel.tick = lambda game: ticks.append(game.referee.referee_command) or tick(game)
         return kernel
 
-    return AbstractStrategy(build_kernel_strategy=build)
+    return AbstractStrategy(build=build)
 
 
 @pytest.fixture

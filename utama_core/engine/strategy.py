@@ -195,8 +195,8 @@ class Strategy:
 
         # Optional structured intention/trace log — assigned post-construction
         # by `StrategyRunner` (see its `match_log_path` param), not threaded
-        # through every `build_*_kernel_strategy` factory's constructor
-        # signature, since none of them currently take anything beyond
+        # through every strategy's `build` signature, since none of them
+        # currently take anything beyond
         # `motion_controller`. `None` disables it entirely. The setter below
         # also pushes it into `self._ctx.match_log`, the one instance shared
         # by every tactic/skill invoked this tick, so assigning it here is
@@ -214,7 +214,7 @@ class Strategy:
 
         Assigned post-construction the same way `match_log` is — `AbstractStrategy.__init__`
         runs before `load_motion_controller` builds the kernel `Strategy` via each
-        `build_kernel_strategy(motion_controller)` factory, none of which know about
+        `build(motion_controller)` factory, none of which know about
         `referee_overrides`, so `AbstractStrategy.load_motion_controller` sets this right
         after construction instead of threading a new constructor kwarg through every
         existing factory.
@@ -235,7 +235,7 @@ class Strategy:
 
         Assigned post-construction the same way `match_log`/`referee_overrides`
         are — `AbstractStrategy` knows `goalkeeper_id` independently of
-        whichever `build_kernel_strategy` factory built this `Strategy`, so
+        whichever `build` factory built this `Strategy`, so
         this is the one place a caller needs to touch, not a constructor
         param threaded through every factory.
 

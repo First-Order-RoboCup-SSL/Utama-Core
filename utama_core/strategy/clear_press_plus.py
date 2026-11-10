@@ -1,4 +1,4 @@
-"""The `clear_press_plus` kernel strategy: `build_clear_press_plus_kernel_strategy` and the pickers only it uses."""
+"""The `clear_press_plus` kernel strategy: `clear_press_plus` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _clear_press_plus_picker(
     return {}
 
 
-def build_clear_press_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """`clear_danger` plus `tiki_taka_plus`'s final-third overload handoff.
 
     Five concurrent slots -- `GiveAndGoTactic` ("attack"),
@@ -108,24 +108,21 @@ def build_clear_press_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     duet once the ball reaches the final third, the same swap
     `tiki_taka_plus` validated on `tiki_taka`'s base.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "overload": DecoyOverloadTactic(),
-                "clear": ClearBallTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_clear_press_plus_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "overload": DecoyOverloadTactic(),
+            "clear": ClearBallTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_clear_press_plus_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

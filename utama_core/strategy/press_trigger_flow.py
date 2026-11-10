@@ -1,4 +1,4 @@
-"""The `press_trigger_flow` kernel strategy: `build_press_trigger_flow_kernel_strategy` and the pickers only it uses."""
+"""The `press_trigger_flow` kernel strategy: `press_trigger_flow` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _press_trigger_flow_picker(
     return {}
 
 
-def build_press_trigger_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """`counter_flow` with a zone-triggered all-in press: the usual 3-press/
     2-block split everywhere, except an all-in press (every free robot) when
     the ball is lost in our own third specifically. See the
@@ -99,22 +99,19 @@ def build_press_trigger_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]
     own-third press commitment differs, so any observed difference from
     plain `counter_flow` is attributable to the zone-triggered press alone.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_press_trigger_flow_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_press_trigger_flow_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

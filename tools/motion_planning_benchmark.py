@@ -666,7 +666,7 @@ def _go_to_targets_strategy(
             ctx=TickContext(motion_controller=motion_controller),
         )
 
-    return AbstractStrategy(build_kernel_strategy=build, exp_ball=False)
+    return AbstractStrategy(build=build, exp_ball=False)
 
 
 class _ControllerTimer:

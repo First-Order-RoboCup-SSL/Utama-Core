@@ -30,7 +30,7 @@ Headless rsim, no external process required. For each distinct pair of the
 `build_*_kernel_strategy` factories in `utama_core.strategy.kernel_strategy`,
 runs one `StrategyRunner` match (6v6: 1 goalkeeper + 5 outfield robots per
 side — enough for every factory's minimum, including the `min_attack=2`
-configs and `build_three_slot_kernel_strategy`'s three concurrent slots),
+configs and `three_slot`'s three concurrent slots),
 steps it until `CustomReferee` calls full time, and records the final
 score from its scoreboard.
 
@@ -115,21 +115,22 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import eval_ledger, match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+from utama_core.strategy.catalog import plain_name
 
 # Left out of a round-robin unless named: the bottom ten of the 2026-10-05 full round-robin
 # (docs/strategies.md). Their code stays, since kept strategies and tests build on some of them.
 # Named here, outside the match cache key, so retiring one reruns nothing.
 RETIRED = {
-    "build_tiki_taka_kernel_strategy",
-    "build_counter_press_kernel_strategy",
-    "build_high_line_zone_kernel_strategy",
-    "build_three_slot_kernel_strategy",
-    "build_switch_of_play_kernel_strategy",
-    "build_low_block_kernel_strategy",
-    "build_zone_fluid_kernel_strategy",
-    "build_score_aware_zone_flow_kernel_strategy",
-    "build_overload_flow_kernel_strategy",
-    "build_shadow_switch_kernel_strategy",
+    "tiki_taka",
+    "counter_press",
+    "high_line_zone",
+    "three_slot",
+    "switch_of_play",
+    "low_block",
+    "zone_fluid",
+    "score_aware_zone_flow",
+    "overload_flow",
+    "shadow_switch",
 }
 
 # A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped

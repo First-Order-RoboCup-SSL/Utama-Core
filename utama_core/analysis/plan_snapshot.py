@@ -38,6 +38,7 @@ from utama_core.motion_planning.src.fastpathplanning.planner import (
     _keeps_off_ball,
 )
 from utama_core.replay.scenario import Scenario, scenario_from_replay
+from utama_core.strategy.catalog import plain_name
 
 # Same ink and palette as tools/signal_report.py (FOR = friendly, AGAINST = enemy).
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
@@ -179,7 +180,7 @@ def _stadium(a: np.ndarray, b: np.ndarray, r: float, n: int = 24) -> np.ndarray:
 def _short(config_name: Optional[str]) -> str:
     if not config_name:
         return "?"
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
 
 
 def style_axes(ax):

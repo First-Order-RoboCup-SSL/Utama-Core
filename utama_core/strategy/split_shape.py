@@ -1,4 +1,4 @@
-"""The `split_shape` kernel strategy: `build_split_shape_kernel_strategy` and the pickers only it uses."""
+"""The `split_shape` kernel strategy: `split_shape` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def _possession_split_picker(
     return partition
 
 
-def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """5-robot (or fewer) split-shape `Strategy` factory.
 
     Wires `LeadAndSupportTactic` ("attack") and `ShadowAndMarkTactic`
@@ -69,18 +69,15 @@ def build_split_shape_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     `_possession_split_picker`. This is the concrete forcing case the design
     doc's §7 deferral was waiting on — see §11 for the full rationale.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
-            partitioner=_possession_split_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={"attack": LeadAndSupportTactic(), "defense": ShadowAndMarkTactic()},
+        partitioner=_possession_split_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

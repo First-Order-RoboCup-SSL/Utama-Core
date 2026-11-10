@@ -5,8 +5,8 @@ Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
-`engine/` is the scheduler/protocol infra; `strategy/` holds the `build_*_kernel_strategy`
-factories (one module per strategy, `kernel_strategy.py` re-exporting them), where day-to-day
+`engine/` is the scheduler/protocol infra; `strategy/` holds the strategies (one module
+each, named after the strategy, with one `build`), where day-to-day
 strategy edits land. (`engine/` was
 renamed from `kernel/` so it can't be confused with "kernel strategy", the model's own term.)
 
@@ -174,7 +174,7 @@ A strategy is a combination of existing tactics plus a partitioner that decides 
 each gets. Most new strategies need no new tactic. When one does, add it as a new module in
 `tactics/` (on a strategy branch, never by changing an existing tactic: see below).
 
-How a strategy composes tactics, using `build_split_shape_kernel_strategy`: two tactic slots and
+How a strategy composes tactics, using `split_shape`: two tactic slots and
 one hand-written partitioner that switches on which side has the ball.
 
 ```mermaid
@@ -210,11 +210,10 @@ flowchart TD
     split --> validate
 ```
 
-**Writing one.** Add `strategy/<name>.py` with `build_<name>_kernel_strategy(outfield_robot_ids)`,
-returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses; then import
-the factory in `strategy/kernel_strategy.py`. Every `build_*_kernel_strategy` that module
-re-exports is discovered by name (`match`), so it joins round-robins and `evaluate.py` as
-`<name>` (a test fails if a factory is defined but not re-exported). Reuse the shared partitioner
+**Writing one.** Add `strategy/<name>.py` with `build(outfield_robot_ids, motion_controller)`,
+returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses. The file is
+all it takes: `strategy/catalog.py` finds it, so it joins round-robins and `evaluate.py` as
+`<name>`. Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
 - `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
   near-tie or unreadable state, where a sticky picker keeps its previous split.
@@ -269,7 +268,7 @@ The flowchart contrasts it with the round-robin, which answers a different quest
 ```mermaid
 flowchart TD
     subgraph rr["round_robin.py: is the whole catalog healthy?"]
-        r1["Every build_*_kernel_strategy config plays<br/>every other once (one full match per pair)"]
+        r1["Every strategy plays<br/>every other once (one full match per pair)"]
         r2["Stall and error check<br/>--strict fails on a stall"]
         r3["Standings in summary.json<br/>not a verdict on any one strategy"]
         r1 --> r2 --> r3
@@ -348,15 +347,14 @@ reaches `main` by pull request:
    `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
    (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
    skill or an engine primitive, is a separate change on an ordinary branch.
-3. Leave the opponents as they are on `main`: either add new strategy modules (plus their import
-   lines in `kernel_strategy.py`) or change exactly one existing strategy, never both, and never
-   `pickers.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
+3. Leave the opponents as they are on `main`: either add new strategy modules or change exactly one existing strategy, never both, and never
+   `pickers.py`, `catalog.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
    a new module and change the copy; making the improvement everyone's is a human change. Your
    strategy's and tactics' code may not reach outside its module: no import-time effects,
    no module-level state (keep state inside `build`), no imports of another strategy,
    no changing attributes of what it imports. CI checks all of this statically, from `main`'s
    copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
-   directly, not through `kernel_strategy.py`.
+   directly.
 4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger

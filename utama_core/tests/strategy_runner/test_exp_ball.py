@@ -15,7 +15,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -32,11 +32,11 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 
 
 def _idle_with_ball_strategy() -> AbstractStrategy:
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
+    return AbstractStrategy(build=builder("default", ()), exp_ball=True)
 
 
 def _idle_no_ball_strategy() -> AbstractStrategy:
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=False)
+    return AbstractStrategy(build=builder("default", ()), exp_ball=False)
 
 
 # ---------------------------------------------------------------------------

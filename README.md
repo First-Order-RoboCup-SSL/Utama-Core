@@ -44,7 +44,7 @@ Coding agents: read [AGENTS.md](AGENTS.md) first (`CLAUDE.md` is a symlink to it
 
 Everything lives under `utama_core/`:
 
-- `strategy/`: the strategies (one module per `build_*_kernel_strategy` factory, re-exported by `kernel_strategy.py`)
+- `strategy/`: the strategies (one module each, named after the strategy)
 - `tactics/`, `skills/`, `shared/`: reusable tactics, per-robot skills, and geometry they share
 - `engine/`: the tactic-kernel infrastructure (`Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee overrides)
 - `custom_referee/`: the in-process referee (rules, state machine, restart positioning, profiles)

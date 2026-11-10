@@ -17,6 +17,7 @@ from typing import List, Optional
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.dashboard.server import DashboardServer
+from utama_core.strategy.catalog import plain_name
 
 
 def attach(server: DashboardServer) -> None:
@@ -47,7 +48,7 @@ def _load_runs() -> List[dict]:
 
 
 def _short(config: str) -> str:
-    return config.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config)
 
 
 def _replay_path(run_dir: Path, result: dict) -> Optional[str]:

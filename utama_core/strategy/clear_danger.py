@@ -1,4 +1,4 @@
-"""The `clear_danger` kernel strategy: `build_clear_danger_kernel_strategy` and the pickers only it uses."""
+"""The `clear_danger` kernel strategy: `clear_danger` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _clear_danger_picker(
     return {}
 
 
-def build_clear_danger_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Safety-valve team: counter_flow's postures plus a danger-clearance valve.
 
     Four concurrent slots — `GiveAndGoTactic` ("attack"),
@@ -110,23 +110,20 @@ def build_clear_danger_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     kick sites aim at the enemy goal), so pinned-deep teams can only
     shadow/mark/block and wait.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "clear": ClearBallTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_clear_danger_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "clear": ClearBallTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_clear_danger_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

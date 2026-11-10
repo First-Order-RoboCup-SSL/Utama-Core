@@ -18,7 +18,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import RobotState, Scenario, apply_scenario
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -29,7 +29,7 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 
 
 def _idle_strategy() -> AbstractStrategy:
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
+    return AbstractStrategy(build=builder("default", ()))
 
 
 class _ApplyScenarioTestManager(AbstractTestManager):

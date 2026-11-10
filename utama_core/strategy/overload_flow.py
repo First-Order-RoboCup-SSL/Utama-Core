@@ -1,4 +1,4 @@
-"""The `overload_flow` kernel strategy: `build_overload_flow_kernel_strategy` and the pickers only it uses."""
+"""The `overload_flow` kernel strategy: `overload_flow` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def _allocate(
     return {}
 
 
-def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """`zone_fluid` with a possession-*duration*-aware give-and-go attacker
     count: 3 attackers as usual, growing to 4 only once the possession edge
     has held for a sustained window (`_POSSESSION_STREAK_TICKS`), instead of
@@ -132,21 +132,18 @@ def build_overload_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     attacker-count decision differs, so any observed difference from plain
     `zone_fluid` is attributable to the streak requirement alone.
 
-    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    Returns a `build(motion_controller)` callable suitable
     for `AbstractStrategy`'s constructor argument of the same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "givego": GiveAndGoTactic(),
-                "overload": DecoyOverloadTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_overload_flow_picker(),
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "givego": GiveAndGoTactic(),
+            "overload": DecoyOverloadTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_overload_flow_picker(),
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

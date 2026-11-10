@@ -1,4 +1,4 @@
-"""The `press_and_pass` kernel strategy: `build_press_and_pass_kernel_strategy` and the pickers only it uses."""
+"""The `press_and_pass` kernel strategy: `press_and_pass` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -54,28 +54,25 @@ def _press_and_pass_split_picker(
     return partition
 
 
-def build_press_and_pass_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """5-robot (or fewer) `Strategy` factory exercising the newer tactics.
 
     Wires `GiveAndGoTactic` ("attack") and `PressAndContainTactic`
     ("defense") as two concurrently active slots, split by
     `_press_and_pass_split_picker`. Sibling to
-    `build_split_shape_kernel_strategy`, same shape, different tactic pair —
+    `split_shape`, same shape, different tactic pair —
     lets the give-and-go/press-and-contain tactics be driven end to end via
     `StrategyRunner` instead of only unit-level `tick()` calls.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
-            partitioner=_press_and_pass_split_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
+        partitioner=_press_and_pass_split_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

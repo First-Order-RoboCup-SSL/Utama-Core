@@ -133,6 +133,7 @@ from utama_core.config.physical_constants import ROBOT_RADIUS  # noqa: E402
 from utama_core.replay.columnar_reader import load_columnar_replay  # noqa: E402
 from utama_core.replay.entities import ReplayMetadata  # noqa: E402
 from utama_core.replay.replay_player import _load_replay  # noqa: E402
+from utama_core.strategy.catalog import plain_name
 
 # --- Sampling ---------------------------------------------------------------
 _SAMPLE_HZ = 10.0
@@ -579,7 +580,7 @@ def compute_frame_metrics(replay_path: Path, referee_events: list[dict]) -> dict
 
 def _match_tag(config_a: str, config_b: str) -> str:
     def short(name: str) -> str:
-        return name.removeprefix("build_").removesuffix("_kernel_strategy")
+        return plain_name(name)
 
     return f"{short(config_a)}_vs_{short(config_b)}"
 

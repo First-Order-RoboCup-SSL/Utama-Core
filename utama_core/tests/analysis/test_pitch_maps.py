@@ -139,7 +139,7 @@ def test_position_grid_shares_sum_to_one_and_means_are_per_robot():
 
 
 def _views():
-    names = ["build_a_kernel_strategy", "build_b_kernel_strategy"]
+    names = ["a", "b"]
     shots = [{"x": 2.0, "y": 0.5, "scored": True, "own": True}, {"x": -1.0, "y": 0.0, "scored": False, "own": False}]
     fouls = [{"x": 1.0, "y": -1.0, "rule": "crashing"}, {"x": -2.0, "y": 1.0, "rule": "double_touch"}]
     views = []
@@ -178,13 +178,13 @@ def test_rule_colours_take_fixed_slots_in_rank_order():
 def test_zone_findings_are_six_descriptive_shares_per_strategy_in_the_pitch_zone_names():
     # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/pitch_zones.md).
     view = pm.MatchView(
-        strategy="build_a_kernel_strategy",
+        strategy="a",
         pos_x=np.array([-2.0, 0.0, 2.0, 2.5]),
         pos_y=np.zeros(4),
         pos_in=np.array([True, True, True, False]),  # three in possession, one out
         pos_robot=np.array([1, 2, 3, 1]),
     )
-    findings = pm.zone_findings([view], ["build_a_kernel_strategy"], {"in possession": "a.png"})
+    findings = pm.zone_findings([view], ["a"], {"in possession": "a.png"})
 
     assert len(findings) == 6
     assert all(f.kind == "zone_share" and f.threshold is None and f.replay is None for f in findings)

@@ -57,8 +57,8 @@ class AbstractStrategy:
     """Kernel-tactic strategy base class, driven by `StrategyRunner`.
 
     Args:
-        build_kernel_strategy: called once, from `load_motion_controller`, as
-            `build_kernel_strategy(motion_controller) -> Strategy`.
+        build: called once, from `load_motion_controller`, as
+            `build(motion_controller) -> Strategy`.
             Deferred to a factory (rather than passed pre-built) only because
             `AbstractStrategy.__init__` itself runs before `StrategyRunner` has
             injected anything — `Strategy.__init__` never reads `game`, only
@@ -82,10 +82,10 @@ class AbstractStrategy:
             the kernel `Strategy` in `load_motion_controller` (see
             `Strategy.referee_overrides`'s setter docstring for why this is a
             post-construction assignment rather than a constructor kwarg on
-            `build_kernel_strategy` itself).
+            `build` itself).
         control_scheme: optional name of the preferred motion control scheme to
             use (e.g. 'trajsample', 'fpp', 'dwa', 'pid'). If omitted, defaults to
-            class attribute `control_scheme` or `build_kernel_strategy.control_scheme`,
+            class attribute `control_scheme` or `build.control_scheme`,
             falling back to StrategyRunner's default ("fpp").
     """
 
@@ -93,21 +93,21 @@ class AbstractStrategy:
 
     def __init__(
         self,
-        build_kernel_strategy,
+        build,
         goalkeeper_id: int = 0,
         exp_ball: bool = True,
         referee_overrides: Optional[dict[RefereeCommand, RefereeActionOverride]] = None,
         control_scheme: Optional[str] = None,
     ):
         self.exp_ball = exp_ball
-        self._build_kernel_strategy = build_kernel_strategy
+        self._build = build
         self._kernel_strategy: Optional[KernelSchedulerStrategy] = None
         self._goalkeeper_id = goalkeeper_id
         self._referee_overrides = referee_overrides
         self.control_scheme = (
             control_scheme
             if control_scheme is not None
-            else getattr(self, "control_scheme", None) or getattr(build_kernel_strategy, "control_scheme", None)
+            else getattr(self, "control_scheme", None) or getattr(build, "control_scheme", None)
         )
 
         ### These attributes are set by the StrategyRunner before the strategy is run. ###
@@ -178,7 +178,7 @@ class AbstractStrategy:
         kernel `Strategy` (see class docstring for why this, not `load_game`,
         is the right timing)."""
         self.motion_controller = motion_controller
-        self._kernel_strategy = self._build_kernel_strategy(motion_controller)
+        self._kernel_strategy = self._build(motion_controller)
         if self._referee_overrides:
             self._kernel_strategy.referee_overrides = self._referee_overrides
         self._kernel_strategy.set_goalkeeper(self._goalkeeper_id)

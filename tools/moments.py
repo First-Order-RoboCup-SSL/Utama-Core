@@ -55,7 +55,7 @@ Play it under several seeds as one table, compare with the code at a git ref (a 
 `AGAINST_DIR`, to remove with `git worktree remove --force`), look at its events (referee changes, fouls,
 keep-out entries, kicks, closest approaches), or try a scratch strategy file's factory:
     pixi run python tools/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
-    pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:build_my_kernel_strategy
+    pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:my
 """
 
 from __future__ import annotations
@@ -95,9 +95,10 @@ from utama_core.replay.scenario import (  # noqa: E402
     _referee_command_at,
     scenario_from_replay,
 )
+from utama_core.strategy.catalog import plain_name
 
 MOMENTS_DIR = REPO_ROOT / "utama_core" / "tests" / "moments"
-DEFAULT_OPPONENT = "build_split_shape_kernel_strategy"
+DEFAULT_OPPONENT = "split_shape"
 DEFAULT_SECONDS = 3.0
 
 # Rulebook distances (`custom_referee/rules/keep_out_rule.py`, `robot_stop_speed_rule.py`).
@@ -140,13 +141,11 @@ class Moment:
 
 
 def short_name(name: str) -> str:
-    return name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(name)
 
 
 def _full_name(name: str) -> str:
-    if name == "all" or name.startswith("build_") or _is_file_spec(name):
-        return name
-    return f"build_{name}_kernel_strategy"
+    return name if name == "all" or _is_file_spec(name) else plain_name(name)
 
 
 def _is_file_spec(name: str) -> bool:
@@ -223,7 +222,7 @@ def save(m: Moment, path: Optional[Path] = None) -> Path:
 
 
 def catalog() -> list[str]:
-    """The round-robin's strategies: every factory `kernel_strategy.py` re-exports, minus the
+    """The round-robin's strategies: every strategy in the catalog, minus the
     retired ones."""
     from tools.evaluation.round_robin import _CONFIG_NAMES, RETIRED
 
@@ -233,9 +232,9 @@ def catalog() -> list[str]:
 def _referee_behaviour(name: str) -> tuple:
     """What decides a strategy's robots during a restart: its referee overrides and its
     goalkeeper tactic. Strategies equal here move identically while the override holds."""
-    from utama_core.strategy import kernel_strategy
+    from utama_core.strategy.catalog import builder
 
-    strategy = getattr(kernel_strategy, name)(OUTFIELD_ROBOT_IDS)(None)
+    strategy = builder(name, OUTFIELD_ROBOT_IDS)(None)
     overrides = tuple(
         sorted((c.name, getattr(f, "__qualname__", repr(f))) for c, f in strategy.referee_overrides.items())
     )
@@ -576,15 +575,15 @@ def events(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
 
 
 def factory_for(name: str) -> Callable:
-    """The strategy factory a name means: a catalog `build_*_kernel_strategy`, or `PATH.py:FACTORY`,
-    a factory in a scratch file imported as it is (so a tactic can be tried without a repo change)."""
-    from utama_core.strategy import kernel_strategy
+    """`f(outfield_robot_ids)` -> `AbstractStrategy`'s first argument, for a catalog strategy or for
+    `PATH.py:FUNCTION`, a `build(outfield_robot_ids, motion_controller)` in a scratch file imported as
+    it is (so a tactic can be tried without a repo change)."""
+    from utama_core.strategy import catalog
 
     if not _is_file_spec(name):
-        try:
-            return getattr(kernel_strategy, name)
-        except AttributeError:
-            raise MomentError(f"unknown strategy {short_name(name)!r}") from None
+        if plain_name(name) not in catalog.names():
+            raise MomentError(f"unknown strategy {short_name(name)!r}")
+        return partial(catalog.builder, name)
     path, _, func = name.rpartition(":")
     if not Path(path).is_file():
         raise MomentError(f"{name}: no such file {path}")
@@ -594,7 +593,7 @@ def factory_for(name: str) -> Callable:
     factory = getattr(module, func, None)
     if not callable(factory):
         raise MomentError(f"{name}: {path} has no factory {func!r}")
-    return factory
+    return lambda outfield_robot_ids: partial(factory, outfield_robot_ids)
 
 
 def label(name: str) -> str:
@@ -614,7 +613,7 @@ def play(m: Moment, strategy: str) -> list[Tick]:
     from utama_core.run import StrategyRunner
 
     def side(name: str) -> AbstractStrategy:
-        return AbstractStrategy(build_kernel_strategy=factory_for(name)(OUTFIELD_ROBOT_IDS))
+        return AbstractStrategy(build=factory_for(name)(OUTFIELD_ROBOT_IDS))
 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1

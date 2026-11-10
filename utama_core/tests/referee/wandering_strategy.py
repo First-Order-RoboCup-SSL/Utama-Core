@@ -114,7 +114,7 @@ def wandering_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build)
+    return AbstractStrategy(build=_build)
 
 
 __all__ = ["WanderingTactic", "wandering_strategy"]

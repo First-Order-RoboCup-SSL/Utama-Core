@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from utama_core.entities.data.object import TeamType
-from utama_core.strategy.kernel_strategy import (
+from utama_core.strategy.pickers import (
     friendly_closer_to_ball,
     reset_closer_to_ball_state,
 )

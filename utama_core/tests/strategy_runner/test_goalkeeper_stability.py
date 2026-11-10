@@ -27,14 +27,14 @@ from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
+from utama_core.strategy.catalog import builder
 
 N_OUTFIELD = 5
 OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 
 # Same pairing that surfaced the bug live.
-_BUILD_A = kernel_strategy.build_counter_flow_kernel_strategy
-_BUILD_B = kernel_strategy.build_tiki_taka_kernel_strategy
+_NAME_A = "counter_flow"
+_NAME_B = "tiki_taka"
 
 
 def test_goalkeeper_converges_on_static_target_without_oscillating(headless):
@@ -42,8 +42,8 @@ def test_goalkeeper_converges_on_static_target_without_oscillating(headless):
     keeper's target is provably fixed) — the keeper must settle to a steady
     y-position, not oscillate around it.
     """
-    strategy_a = AbstractStrategy(build_kernel_strategy=_BUILD_A(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=_BUILD_B(OUTFIELD_ROBOT_IDS))
+    strategy_a = AbstractStrategy(build=builder(_NAME_A, OUTFIELD_ROBOT_IDS))
+    strategy_b = AbstractStrategy(build=builder(_NAME_B, OUTFIELD_ROBOT_IDS))
 
     profile = load_profile("simulation")
     profile = dataclasses.replace(

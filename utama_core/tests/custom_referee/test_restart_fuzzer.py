@@ -33,7 +33,7 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 GEO = RefereeGeometry.from_field_dims(STANDARD_FIELD_DIMS)
 

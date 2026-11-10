@@ -10,7 +10,7 @@ from tools import triage
 from utama_core.analysis import matches as match_files
 from utama_core.analysis.findings import Finding
 
-A, B, C = "build_alpha_kernel_strategy", "build_beta_kernel_strategy", "build_gamma_kernel_strategy"
+A, B, C = "alpha", "beta", "gamma"
 
 
 def _finding(kind, value, *, robots=(1,), t0=0.0, t1=10.0, message=None):

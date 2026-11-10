@@ -11,7 +11,7 @@ import pytest
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.engine.abstract_strategy import AbstractStrategy, SpaceRequirements
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 
 def make_dummy_game(field_bounds):
@@ -22,7 +22,7 @@ def make_dummy_game(field_bounds):
 
 
 def _strategy(min_bb) -> AbstractStrategy:
-    strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
+    strategy = AbstractStrategy(build=builder("default", ()))
     strategy.get_min_bounding_req = lambda: min_bb
     return strategy
 

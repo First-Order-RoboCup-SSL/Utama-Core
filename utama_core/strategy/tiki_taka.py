@@ -1,4 +1,4 @@
-"""The `tiki_taka` kernel strategy: `build_tiki_taka_kernel_strategy` and the pickers only it uses."""
+"""The `tiki_taka` kernel strategy: `tiki_taka` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def _tiki_taka_picker(
     return {}
 
 
-def build_tiki_taka_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Real possession-play team: give-and-go build-up, press on loss,
     shadow-and-mark cover behind every attack.
 
@@ -85,22 +85,19 @@ def build_tiki_taka_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     setup-then-shoot, which the match-stuck investigation showed cannot
     complete under contest.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "press": PressAndContainTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_tiki_taka_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "press": PressAndContainTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_tiki_taka_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

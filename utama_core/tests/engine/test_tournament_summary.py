@@ -4,8 +4,8 @@ from utama_core.analysis.strategy_table import strategy_table
 
 def _result(a: str, b: str, score_a: int, score_b: int) -> dict:
     return {
-        "config_a": f"build_{a}_kernel_strategy",
-        "config_b": f"build_{b}_kernel_strategy",
+        "config_a": a,
+        "config_b": b,
         "score_a": score_a,
         "score_b": score_b,
         "stats": {
@@ -29,7 +29,7 @@ def test_strategy_table_reads_each_side_from_its_own_perspective():
         results, real_losses_by_match={"x_vs_y": {"tackled": 3, "foul": 1}, "y_vs_x": {"pass_intercepted": 6}}
     )
 
-    x = table["build_x_kernel_strategy"]
+    x = table["x"]
     assert (x["matches"], x["wins"], x["draws"], x["losses"]) == (2, 1, 1, 0)
     assert (x["goals_for"], x["goals_against"]) == (2, 1)
     assert x["shots"] == 3 + 1  # friendly in x_vs_y, enemy in y_vs_x
@@ -39,7 +39,7 @@ def test_strategy_table_reads_each_side_from_its_own_perspective():
     assert (x["matches_as_a"], x["real_losses_as_a"]) == (1, 4)
     assert x["real_loss_kinds_as_a"] == {"tackled": 3, "foul": 1}
 
-    y = table["build_y_kernel_strategy"]
+    y = table["y"]
     assert (y["wins"], y["draws"], y["losses"]) == (0, 1, 1)
     assert (y["matches_as_a"], y["real_losses_as_a"]) == (1, 6)
 
@@ -60,12 +60,12 @@ def test_strategy_table_reads_chances_and_pass_progress_for_both_sides():
 
     table = strategy_table([a, b], chances_by_match={"x_vs_y": record})
 
-    x, y = table["build_x_kernel_strategy"]["chances"], table["build_y_kernel_strategy"]["chances"]
+    x, y = table["x"]["chances"], table["y"]["chances"]
     assert (x["matches"], x["shots"], x["conversion"], x["save_rate"]) == (1, 2, 0.5, 1.0)
     assert (y["matches"], y["shots"], y["save_rate"], y["danger_s_per_match"]) == (1, 1, 0.5, 8.0)
-    assert table["build_x_kernel_strategy"]["pass_progress_m"] == 1.0
-    assert table["build_x_kernel_strategy"]["forward_pass_share"] == 0.5
-    assert table["build_y_kernel_strategy"]["pass_progress_m"] == -1.0
+    assert table["x"]["pass_progress_m"] == 1.0
+    assert table["x"]["forward_pass_share"] == 0.5
+    assert table["y"]["pass_progress_m"] == -1.0
 
 
 def test_strategy_table_counts_stalled_matches_for_both_sides():
@@ -78,15 +78,15 @@ def test_strategy_table_counts_stalled_matches_for_both_sides():
 
     table = strategy_table([stalled, backstop, _result("y", "z", 2, 0)])
 
-    assert table["build_x_kernel_strategy"]["stalled"] == 2
-    assert table["build_x_kernel_strategy"]["wins"] == 1
-    assert table["build_y_kernel_strategy"]["stalled"] == 1
-    assert table["build_z_kernel_strategy"]["stalled"] == 1
+    assert table["x"]["stalled"] == 2
+    assert table["x"]["wins"] == 1
+    assert table["y"]["stalled"] == 1
+    assert table["z"]["stalled"] == 1
 
 
 def test_strategy_table_without_replays_leaves_real_losses_empty():
     table = strategy_table([_result("x", "y", 1, 1)])
-    assert table["build_x_kernel_strategy"]["matches_as_a"] == 0
+    assert table["x"]["matches_as_a"] == 0
 
 
 def test_foul_table_attributes_each_side_to_its_own_strategy():
@@ -97,8 +97,8 @@ def test_foul_table_attributes_each_side_to_its_own_strategy():
 
     results = [
         {
-            "config_a": "build_alpha_kernel_strategy",
-            "config_b": "build_beta_kernel_strategy",
+            "config_a": "alpha",
+            "config_b": "beta",
             "stats": {
                 "fouls": [
                     foul("excessive_dribbling", "friendly", "lure"),
@@ -108,7 +108,7 @@ def test_foul_table_attributes_each_side_to_its_own_strategy():
                 ]
             },
         },
-        {"config_a": "build_beta_kernel_strategy", "config_b": "build_alpha_kernel_strategy", "stats": None},
+        {"config_a": "beta", "config_b": "alpha", "stats": None},
     ]
 
     table = foul_table(results)
@@ -151,6 +151,6 @@ def test_ratings_table_ranks_by_goal_margin_with_an_sd():
     from tools.evaluation.round_robin import _ratings
 
     table = _ratings([_result("x", "y", 3, 0), _result("y", "z", 2, 0), _result("x", "z", 4, 1)])
-    x, z = table["build_x_kernel_strategy"], table["build_z_kernel_strategy"]
-    assert x["strength"] > table["build_y_kernel_strategy"]["strength"] > z["strength"]
+    x, z = table["x"], table["z"]
+    assert x["strength"] > table["y"]["strength"] > z["strength"]
     assert x["sd"] > 0

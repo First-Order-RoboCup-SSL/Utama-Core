@@ -61,6 +61,7 @@ from utama_core.analysis.chances import LIVE, REGAIN_MIN_HOLD_S, THIRD_DEPTH_M
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.referee.referee_command import RefereeCommand as C
 from utama_core.replay.columnar_reader import load_columnar_replay
+from utama_core.strategy.catalog import plain_name
 
 WINDOW_S = 10.0
 FOLD_S = 1.5
@@ -268,7 +269,7 @@ def run_labels(run_dir: Path) -> dict[str, tuple[str, str]]:
 
 def _short(config: str) -> str:
     """A config's name in replay file names (`match._short_name`)."""
-    return config.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config)
 
 
 def situation_type(situation: Optional[dict], side: str) -> str:

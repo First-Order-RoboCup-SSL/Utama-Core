@@ -8,7 +8,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game.field import FieldBounds
 from utama_core.global_utils.mapping_utils import map_left_right_to_colors
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
@@ -21,7 +21,7 @@ POSITION_TOLERANCE = 0.15
 
 def _idle_strategy() -> AbstractStrategy:
     """Minimal kernel strategy used only to drive runner lifecycle."""
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()), exp_ball=True)
+    return AbstractStrategy(build=builder("default", ()), exp_ball=True)
 
 
 class _CaptureFirstFrameManager(AbstractTestManager):

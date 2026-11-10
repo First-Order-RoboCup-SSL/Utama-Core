@@ -1,8 +1,8 @@
 """debug_match.py — one-off ad hoc match runner for tactic debugging.
 
 Run:
-    pixi run python tools/debug_match.py --strategy build_counter_flow_kernel_strategy \\
-        --opponent build_high_press_kernel_strategy --duration 90 --headless
+    pixi run python tools/debug_match.py --strategy counter_flow \\
+        --opponent high_press --duration 90 --headless
 
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
 bug (`trace_relay_stall.py`, `trace_finish_detail.py`, `check_keeper.py`,
@@ -53,7 +53,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
+from utama_core.strategy import catalog
 
 
 class _TargetRecorder:
@@ -146,10 +146,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    build_a = getattr(kernel_strategy, args.strategy)
-    build_b = getattr(kernel_strategy, args.opponent)
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
+    strategy_a = AbstractStrategy(build=catalog.builder(args.strategy, OUTFIELD_ROBOT_IDS))
+    strategy_b = AbstractStrategy(build=catalog.builder(args.opponent, OUTFIELD_ROBOT_IDS))
 
     referee = CustomReferee.from_profile_name(
         "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1

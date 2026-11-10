@@ -1,4 +1,4 @@
-"""The `shadow_switch` kernel strategy: `build_shadow_switch_kernel_strategy` and the pickers only it uses."""
+"""The `shadow_switch` kernel strategy: `shadow_switch` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _shadow_switch_picker(
     return {}
 
 
-def build_shadow_switch_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Switch-of-play attack with man-marking cover -- a tactic pairing never
     tried elsewhere in the catalog (`high_line_zone` paired the switch with
     a zone screen; `tiki_taka`/`tiki_taka_plus` paired shadow-and-mark with
@@ -99,21 +99,18 @@ def build_shadow_switch_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     on a 3/2 split with sticky possession-edge hysteresis, matching the
     settling time the switch relay needs.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "switch": SwitchOfPlayTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_shadow_switch_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "switch": SwitchOfPlayTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_shadow_switch_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

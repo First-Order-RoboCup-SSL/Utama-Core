@@ -51,7 +51,7 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 from .test_referee_override import (  # noqa: F401 (re-used fixture helper)
     _set_referee_command,
@@ -194,7 +194,7 @@ def override_runner():
         return {1: _SENTINEL_COMMAND}
 
     strategy = AbstractStrategy(
-        build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)),
+        build=builder("split_shape", (1, 2, 3, 4, 5)),
         referee_overrides={RefereeCommand.PREPARE_KICKOFF_YELLOW: kickoff_override},
     )
     runner = StrategyRunner(

@@ -7,17 +7,15 @@ an A/B against itself) counted each other's possession.
 from unittest.mock import MagicMock
 
 from utama_core.strategy import overload_flow
-from utama_core.strategy.overload_flow import (
-    _POSSESSION_STREAK_TICKS,
-    build_overload_flow_kernel_strategy,
-)
+from utama_core.strategy.catalog import builder
+from utama_core.strategy.overload_flow import _POSSESSION_STREAK_TICKS
 
 _ROBOTS = frozenset({1, 2, 3, 4, 5})
 _TACTICS = frozenset({"givego", "overload", "defense"})
 
 
 def _picker():
-    return build_overload_flow_kernel_strategy((1, 2, 3, 4, 5))(MagicMock())._partitioner
+    return builder("overload_flow", (1, 2, 3, 4, 5))(MagicMock())._partitioner
 
 
 def test_each_strategy_counts_its_own_possession_streak(monkeypatch):

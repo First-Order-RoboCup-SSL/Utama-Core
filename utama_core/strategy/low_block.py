@@ -1,4 +1,4 @@
-"""The `low_block` kernel strategy: `build_low_block_kernel_strategy` and the pickers only it uses."""
+"""The `low_block` kernel strategy: `low_block` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.pass_and_shoot import PassAndShootTactic
 
 
-def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """5-robot (or fewer) `Strategy` factory: a conservative, defense-heavy
-    counterpart to `build_high_press_kernel_strategy` — most of the pool
+    counterpart to `high_press` — most of the pool
     stays back regardless of possession (floored at `min_attack=2`, since
     `PassAndShootTactic` hard-requires at least 2 robots). Wires
     `PassAndShootTactic` ("attack") and `DefenseTactic` ("defense"), the
@@ -20,18 +20,15 @@ def build_low_block_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     they were designed to be (§1/§2's original pairing) rather than the
     newer, more elaborate Tactics used elsewhere in this file.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={"attack": PassAndShootTactic(), "defense": DefenseTactic()},
-            partitioner=fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={"attack": PassAndShootTactic(), "defense": DefenseTactic()},
+        partitioner=fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2),
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

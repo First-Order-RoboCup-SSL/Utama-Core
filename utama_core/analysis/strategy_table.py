@@ -10,11 +10,12 @@ from __future__ import annotations
 from typing import Optional
 
 from utama_core.analysis import chances
+from utama_core.strategy.catalog import plain_name
 
 
 def _short_name(config_name: str) -> str:
     """A config's name in replay file names (mirrors `tools/evaluation/match._short_name`)."""
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
 
 
 def strategy_table(

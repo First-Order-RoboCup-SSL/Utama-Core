@@ -84,24 +84,19 @@ def test_events_of_nothing_is_nothing():
     assert moments.events([]) == []
 
 
-def test_factory_for_resolves_a_catalog_name_to_its_factory():
-    from utama_core.strategy import kernel_strategy
+def test_factory_for_resolves_a_catalog_name_to_its_builder():
+    from utama_core.strategy.split_shape import build
 
-    factory = moments.factory_for("build_split_shape_kernel_strategy")
-    assert factory is kernel_strategy.build_split_shape_kernel_strategy
+    assert moments.factory_for("split_shape")((1, 2)).func is build
 
 
-def test_factory_for_imports_a_factory_from_a_scratch_file(tmp_path):
+def test_factory_for_imports_a_build_from_a_scratch_file(tmp_path):
     scratch = tmp_path / "mine.py"
-    scratch.write_text(
-        "from utama_core.strategy import kernel_strategy\n\n"
-        "def build_mine_kernel_strategy(ids):\n"
-        "    return kernel_strategy.build_split_shape_kernel_strategy(ids)\n"
-    )
-    name = f"{scratch}:build_mine_kernel_strategy"
-    assert callable(moments.factory_for(name)(moments.OUTFIELD_ROBOT_IDS))
+    scratch.write_text("def mine(ids, motion_controller):\n    return ids, motion_controller\n")
+    name = f"{scratch}:mine"
+    assert moments.factory_for(name)(moments.OUTFIELD_ROBOT_IDS)("mc") == (moments.OUTFIELD_ROBOT_IDS, "mc")
     assert moments._full_name(name) == name
-    assert moments.label(name) == "mine:build_mine_kernel_strategy"
+    assert moments.label(name) == "mine:mine"
 
 
 def test_factory_for_names_a_missing_file_a_missing_factory_and_an_unknown_strategy(tmp_path):
@@ -112,4 +107,4 @@ def test_factory_for_names_a_missing_file_a_missing_factory_and_an_unknown_strat
     with pytest.raises(moments.MomentError, match="has no factory 'build_x'"):
         moments.factory_for(f"{scratch}:build_x")
     with pytest.raises(moments.MomentError, match="unknown strategy 'nope'"):
-        moments.factory_for("build_nope_kernel_strategy")
+        moments.factory_for("nope")

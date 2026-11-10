@@ -58,7 +58,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 from utama_core.team_controller.src.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
@@ -100,7 +100,7 @@ def _make_runner(referee: CustomReferee) -> StrategyRunner:
     `AbstractStrategy`'s goalkeeper pinning is irrelevant to this test.
     """
     return StrategyRunner(
-        strategy=AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((0, 1))),
+        strategy=AbstractStrategy(build=builder("default", (0, 1))),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",

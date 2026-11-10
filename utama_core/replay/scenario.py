@@ -96,6 +96,7 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Game, GameFrame, GameHistory, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import _load_replay, load_frames_in_range
+from utama_core.strategy.catalog import plain_name
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ class Scenario:
     enemy_robots: tuple[RobotState, ...]
     referee_command: Optional[RefereeCommand]
     source_replay: Path
-    config_a_name: Optional[str] = None  # e.g. "build_high_line_zone_kernel_strategy" (friendly)
+    config_a_name: Optional[str] = None  # e.g. "high_line_zone" (friendly)
     config_b_name: Optional[str] = None  # enemy
     frame_ts: float = field(default=0.0)  # the actual frame's `ts`, may differ slightly from requested sim_time
 
@@ -154,7 +155,7 @@ class Scenario:
 def _short_name(config_name: str) -> str:
     """Mirror `tournament._short_name` without importing the CLI script as a
     module (it's a root-level script, not a package)."""
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
 
 
 def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:

@@ -6,7 +6,7 @@
     "t": 333.5
   },
   "strategy": "all",
-  "opponent": "build_press_trigger_flow_kernel_strategy",
+  "opponent": "press_trigger_flow",
   "seconds": 3.0,
   "checks": [
     "keeps_clear",

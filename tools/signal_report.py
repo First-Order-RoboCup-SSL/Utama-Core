@@ -41,6 +41,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from utama_core.analysis import turnover_breakdown  # noqa: E402
 from utama_core.analysis.strategy_table import strategy_table  # noqa: E402
+from utama_core.strategy.catalog import plain_name
 
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 FOR, AGAINST = "#2a78d6", "#eb6834"  # categorical slots 1 and 2
@@ -66,7 +67,7 @@ plt.rcParams.update(
 
 
 def short(name: str) -> str:
-    return name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(name)
 
 
 def points(row: dict) -> float:
@@ -310,7 +311,7 @@ def _fouls_per_match(summary: dict, table: dict) -> dict[str, dict[str, float]]:
     out: dict[str, dict[str, float]] = {n: {} for n in table}
     for rule, info in summary["fouls"].items():
         for key, count in info["by_tactic"].items():
-            strategy = f"build_{key.split('/')[0]}_kernel_strategy"
+            strategy = key.split("/")[0]
             if strategy in table:
                 out[strategy][rule] = out[strategy].get(rule, 0.0) + count / table[strategy]["matches"]
     return out

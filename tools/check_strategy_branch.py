@@ -13,8 +13,8 @@ copy of this file on the base branch, so the branch under test can't loosen it. 
 2. **Opponents.** Every other strategy must run the base branch's code, so the round-robin plays
    the same opponents as on `main`. A branch either adds new strategy modules or changes exactly
    one existing one, never both; it never changes or deletes `pickers.py` (shared by most
-   strategies) or deletes a strategy; in `kernel_strategy.py` it only adds imports from the
-   modules it adds; and in `tactics/` it only adds new modules, since the existing tactics are
+   strategies) or `catalog.py` (which finds them) or deletes a strategy; and in `tactics/` it only
+   adds new modules, since the existing tactics are
    what the opponents run (to improve one, copy it into a new module).
 3. **Reach.** A new or changed strategy or tactic module can't affect anything outside itself: no import-time
    effects or hazards (`utama_core/replay/fingerprint.py`'s `_import_time_effects` and `_hazards`:
@@ -47,7 +47,7 @@ ALLOWED = (
 
 STRATEGY_DIR = "utama_core/strategy/"
 TACTICS_DIR = "utama_core/tactics/"
-REGISTRY = STRATEGY_DIR + "kernel_strategy.py"
+CATALOG = STRATEGY_DIR + "catalog.py"
 PICKERS = STRATEGY_DIR + "pickers.py"
 PACKAGE_INIT = STRATEGY_DIR + "__init__.py"
 _FINGERPRINT = Path("utama_core/replay/fingerprint.py")
@@ -83,7 +83,7 @@ def _module_name(path: str) -> str:
 
 def opponent_problems(changes: dict[str, str]) -> list[str]:
     """Check 2's file rules, from `changed_files`."""
-    strategy = {p: s for p, s in changes.items() if p.startswith(STRATEGY_DIR) and p.endswith(".py") and p != REGISTRY}
+    strategy = {p: s for p, s in changes.items() if p.startswith(STRATEGY_DIR) and p.endswith(".py")}
     problems = [f"{p}: deletes a strategy module" for p, s in strategy.items() if s == "D"]
     problems += [
         f"{p}: changes an existing tactic, which the opponents run; copy it into a new module instead"
@@ -92,6 +92,8 @@ def opponent_problems(changes: dict[str, str]) -> list[str]:
     ]
     if PICKERS in strategy:
         problems.append(f"{PICKERS}: shared by most strategies, so changing it changes the opponents")
+    if CATALOG in strategy:
+        problems.append(f"{CATALOG}: every strategy is found through it, so changing it changes the opponents")
     if PACKAGE_INIT in strategy:
         problems.append(f"{PACKAGE_INIT}: every strategy runs it, so changing it changes the opponents")
     problems += [
@@ -99,43 +101,13 @@ def opponent_problems(changes: dict[str, str]) -> list[str]:
     ]
     added = sorted(p for p, s in strategy.items() if s == "A")
     # anything but an addition or a deletion changes an existing strategy, a type change included
-    modified = sorted(p for p, s in strategy.items() if s not in ("A", "D") and p not in (PICKERS, PACKAGE_INIT))
+    modified = sorted(
+        p for p, s in strategy.items() if s not in ("A", "D") and p not in (PICKERS, CATALOG, PACKAGE_INIT)
+    )
     if added and modified:
         problems.append(f"adds {', '.join(added)} and also changes {', '.join(modified)}: do one or the other")
     elif len(modified) > 1:
         problems.append(f"changes {len(modified)} existing strategies ({', '.join(modified)}): change one")
-    return problems
-
-
-def registry_problems(old_source: str, new_source: str, added_modules: set[str]) -> list[str]:
-    """Check 2's `kernel_strategy.py` rule: the old statements unchanged and in order, plus only
-    `from <added module> import ...` statements, which may not rebind a name the registry
-    already has (that would replace an opponent's factory) or rename what they import."""
-    old_tree = ast.parse(old_source)
-    old = [ast.dump(s) for s in old_tree.body]
-    bound = {n.id for n in ast.walk(old_tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
-    bound |= {
-        a.asname or a.name for n in ast.walk(old_tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names
-    }
-    new = ast.parse(new_source).body
-    problems, i = [], 0
-    for stmt in new:
-        if i < len(old) and ast.dump(stmt) == old[i]:
-            i += 1
-        elif not (isinstance(stmt, ast.ImportFrom) and stmt.module in added_modules):
-            problems.append(
-                f"{REGISTRY} line {stmt.lineno}: only imports from the modules this branch adds may be added"
-            )
-        else:
-            for a in stmt.names:
-                if a.asname or a.name in bound:
-                    problems.append(
-                        f"{REGISTRY} line {stmt.lineno}: imports {a.name}"
-                        + (f" as {a.asname}" if a.asname else "")
-                        + ", which would rebind or rename a name the registry has"
-                    )
-    if i < len(old):
-        problems.append(f"{REGISTRY}: changes or removes an existing statement")
     return problems
 
 
@@ -322,13 +294,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     problems = opponent_problems(changes)
-    added = {_module_name(p) for p, s in changes.items() if s == "A" and p.startswith(STRATEGY_DIR)}
-    if REGISTRY in changes:
-        problems += registry_problems(_git("show", f"{args.base}:{REGISTRY}"), Path(REGISTRY).read_text(), added)
     fingerprint = _load_fingerprint()
     for path, status in sorted(changes.items()):
         code = path.startswith((STRATEGY_DIR, TACTICS_DIR)) and path.endswith(".py")
-        if status != "D" and code and path != REGISTRY:
+        if status != "D" and code:
             problems += reach_problems(path, Path(path).read_text(), fingerprint)
     if problems:
         print("This strategy branch could change its opponents or the evaluation:")

@@ -30,7 +30,7 @@ _EVERY_PAIR_SCORES_5 = _Always5()
 def rig(tmp_path, monkeypatch):
     rig = type("Rig", (), {})()
     rig.played = []
-    rig.version = {f"build_{c}_kernel_strategy": 0 for c in _CONFIGS}
+    rig.version = {c: 0 for c in _CONFIGS}
     rig.score = {}  # pair -> score_a, to make a replay disagree with its stored record
     rig.cache = MatchCache(tmp_path / "cache")
     rig.on_play = None
@@ -84,13 +84,13 @@ def test_a_second_run_reuses_every_stored_match_and_reports_the_same_results(rig
 
 def test_after_one_config_changes_only_its_matches_play(rig):
     rig.run("--spot-check", "0")
-    rig.version["build_low_block_kernel_strategy"] += 1
+    rig.version["low_block"] += 1
 
     rig.run("--spot-check", "0")
 
     assert sorted(rig.played) == [
-        ("build_high_press_kernel_strategy", "build_low_block_kernel_strategy"),
-        ("build_low_block_kernel_strategy", "build_tiki_taka_kernel_strategy"),
+        ("high_press", "low_block"),
+        ("low_block", "tiki_taka"),
     ]
 
 
@@ -120,16 +120,14 @@ def test_a_match_is_stored_only_if_its_key_is_unchanged_when_it_finishes(rig):
     # match (high_press vs low_block, sorted pairs played in order) leaves that match's key as it
     # was: it is stored. Both tiki_taka matches finish under a changed key: neither is.
     def edit():
-        rig.version["build_tiki_taka_kernel_strategy"] = 9
+        rig.version["tiki_taka"] = 9
 
     rig.on_play = edit
 
     rig.run("--spot-check", "0")
 
     stored = [json.loads(p.read_text())["result"] for p in rig.cache.root.rglob("*.json")]
-    assert [(r["config_a"], r["config_b"]) for r in stored] == [
-        ("build_high_press_kernel_strategy", "build_low_block_kernel_strategy")
-    ]
+    assert [(r["config_a"], r["config_b"]) for r in stored] == [("high_press", "low_block")]
 
 
 def test_reuse_with_no_save_is_refused(monkeypatch):

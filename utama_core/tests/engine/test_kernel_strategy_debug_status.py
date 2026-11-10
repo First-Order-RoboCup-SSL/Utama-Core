@@ -11,14 +11,14 @@ import pytest
 from utama_core.engine.abstract_strategy import AbstractStrategy, robot_steps
 from utama_core.engine.tactic import TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 
 @pytest.fixture
 def split_shape_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -84,7 +84,7 @@ def test_debug_status_leaves_out_a_goalkeeper_whose_robot_is_not_on_the_field():
     phantom "goalkeeper" row for a robot ID that is not there."""
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((0, 1)), goalkeeper_id=15)
+    strategy = AbstractStrategy(build=builder("split_shape", (0, 1)), goalkeeper_id=15)
     runner = StrategyRunner(
         strategy=strategy, my_team_is_yellow=True, my_team_is_right=True, mode="rsim", exp_friendly=2, exp_enemy=0
     )
@@ -105,7 +105,7 @@ def _refereed_runner(command, notifier=None):
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=3)
     if notifier is not None:
         referee.attach_dashboard_notifier(notifier)
-    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
     return StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,

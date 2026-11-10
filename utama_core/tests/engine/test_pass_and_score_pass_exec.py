@@ -4,7 +4,7 @@ Found live: `GiveAndGoTactic` (via the shared `_pass_exec`) kept aiming a
 hop at a receiver for 4+ seconds after two enemies settled onto the direct
 carrier-receiver line, producing a highly interceptable pass every tick
 with no way for the caller to notice and abandon early — see
-`build_tiki_taka_kernel_strategy` vs `build_counter_press_kernel_strategy`,
+`tiki_taka` vs `counter_press`,
 t≈23s, `give_and_go.pass_target` locked on receiver 3 while enemies 1/5
 sat ~0.15m off the direct line (well inside `segment_blocked`'s own
 default clearance).

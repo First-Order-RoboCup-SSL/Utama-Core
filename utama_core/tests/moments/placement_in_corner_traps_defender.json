@@ -6,7 +6,7 @@
     "t": 163.0
   },
   "strategy": "all",
-  "opponent": "build_give_and_go_solo_kernel_strategy",
+  "opponent": "give_and_go_solo",
   "seconds": 3.0,
   "checks": [
     "keeps_clear",

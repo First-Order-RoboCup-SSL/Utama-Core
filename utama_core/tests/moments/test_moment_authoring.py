@@ -91,9 +91,9 @@ def test_a_real_rule_name_and_star_are_valid_checks():
 
 def test_unknown_strategy_and_opponent_are_named():
     with pytest.raises(moments.MomentError, match=r"unknown strategy 'nope'"):
-        moments.validate(dataclasses.replace(_template(), strategy="build_nope_kernel_strategy"))
+        moments.validate(dataclasses.replace(_template(), strategy="nope"))
     with pytest.raises(moments.MomentError, match=r"unknown opponent 'nope'"):
-        moments.validate(dataclasses.replace(_template(), opponent="build_nope_kernel_strategy"))
+        moments.validate(dataclasses.replace(_template(), opponent="nope"))
 
 
 def test_seconds_must_be_positive():
@@ -153,8 +153,8 @@ def test_our_fouls_names_the_command_active_and_the_restart_side(tmp_path):
 
     results = [
         {
-            "config_a": "build_a_kernel_strategy",
-            "config_b": "build_b_kernel_strategy",
+            "config_a": "a",
+            "config_b": "b",
             "stats": {"fouls": [foul(1.0), foul(5.0), foul(12.0), foul(20.0), foul(6.0, side="enemy")]},
         }
     ]
@@ -181,9 +181,7 @@ def test_our_fouls_names_the_match_replay_relative_to_the_repo(tmp_path):
     import json
 
     row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
-    results = [
-        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
-    ]
+    results = [{"config_a": "a", "config_b": "b", "stats": {"fouls": [row]}}]
     (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
     (fouls,) = moments.our_fouls(tmp_path)
     assert fouls["replay"] is None  # no a_vs_b replay in the run dir
@@ -206,9 +204,7 @@ def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
     import json
 
     row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
-    results = [
-        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
-    ]
+    results = [{"config_a": "a", "config_b": "b", "stats": {"fouls": [row]}}]
     (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
     (fouls,) = moments.our_fouls(tmp_path)
     assert fouls["command"] is None and fouls["restart"] is None
@@ -217,8 +213,8 @@ def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
 
 def _foul_row(config_a, rule, restart=None, tactic="X"):
     return {
-        "config_a": f"build_{config_a}_kernel_strategy",
-        "config_b": "build_b_kernel_strategy",
+        "config_a": config_a,
+        "config_b": "b",
         "rule": rule,
         "tactic": tactic,
         "restart": restart,

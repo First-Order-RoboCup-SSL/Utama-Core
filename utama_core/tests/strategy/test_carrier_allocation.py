@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from utama_core.entities.data.object import TeamType
-from utama_core.strategy.kernel_strategy import _clear_press_plus_picker
+from utama_core.strategy.clear_press_plus import _clear_press_plus_picker
 
 
 def _final_third_game(carrier_id):
@@ -49,7 +49,7 @@ def test_a_free_kick_kicker_standing_at_the_ball_goes_first():
     # kick the kicker stood 0.11 m from the ball without dribbler contact, went to
     # "block"/"switch", and the overload decoy had to cross the field to it --
     # no kick for 10 s. Within kick reach of a still ball counts as holding it.
-    from utama_core.strategy.kernel_strategy import carrier_first
+    from utama_core.strategy.pickers import carrier_first
 
     assert carrier_first(_free_kick_game(kicker_dist=0.12), frozenset(range(1, 6)))[0] == 5
 
@@ -59,7 +59,7 @@ def test_a_kicker_that_nudged_its_own_free_kick_ball_still_goes_first():
     # the ball at 0.21 m/s, it lost the carrier spot to the lowest ids, walked off,
     # and the unkicked ball (moved 4.5 cm, never in play) sat for 10 s. A ball under
     # the 0.3 m/s dead-ball speed is still one the kicker can simply take.
-    from utama_core.strategy.kernel_strategy import carrier_first
+    from utama_core.strategy.pickers import carrier_first
 
     assert carrier_first(_free_kick_game(kicker_dist=0.11, ball_speed=0.21), frozenset(range(1, 6)))[0] == 5
     assert carrier_first(_free_kick_game(kicker_dist=0.11, ball_speed=0.29), frozenset(range(1, 6)))[0] == 5
@@ -67,7 +67,7 @@ def test_a_kicker_that_nudged_its_own_free_kick_ball_still_goes_first():
 
 
 def test_a_robot_short_of_kick_reach_or_beaten_to_the_ball_is_not_first():
-    from utama_core.strategy.kernel_strategy import carrier_first
+    from utama_core.strategy.pickers import carrier_first
 
     assert carrier_first(_free_kick_game(kicker_dist=0.30), frozenset(range(1, 6)))[0] == 1
     assert carrier_first(_free_kick_game(kicker_dist=0.12, enemy_dist=0.11), frozenset(range(1, 6)))[0] == 1

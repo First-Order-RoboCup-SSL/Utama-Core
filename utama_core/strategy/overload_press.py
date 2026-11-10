@@ -1,4 +1,4 @@
-"""The `overload_press` kernel strategy: `build_overload_press_kernel_strategy` and the pickers only it uses."""
+"""The `overload_press` kernel strategy: `overload_press` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def _overload_press_picker(
     return {}
 
 
-def build_overload_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Numbers-overload team built to beat tiki_taka's shot-line-only shadow
     defense, with a direct pre-press counter for the transition window.
 
@@ -108,23 +108,20 @@ def build_overload_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     the ball; on loss, the whole team goes direct via the counter rather than
     building a press, to hit before tiki_taka's own 3-press organizes.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "overload": DecoyOverloadTactic(),
-                "switch": SwitchOfPlayTactic(),
-                "counter": LeadAndSupportTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_overload_press_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "overload": DecoyOverloadTactic(),
+            "switch": SwitchOfPlayTactic(),
+            "counter": LeadAndSupportTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_overload_press_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

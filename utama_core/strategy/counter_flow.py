@@ -1,4 +1,4 @@
-"""The `counter_flow` kernel strategy: `build_counter_flow_kernel_strategy` and the pickers only it uses."""
+"""The `counter_flow` kernel strategy: `counter_flow` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def _counter_flow_picker(
     return {}
 
 
-def build_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Direct answer to tiki_taka: our own give-and-go attack, our own press
     on the ball, a space-denying screen everywhere else.
 
@@ -117,22 +117,19 @@ def build_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     of trying to dodge it, and uses tiki_taka's own proven-undefeated attack
     engine rather than a fresh pattern.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_counter_flow_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_counter_flow_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

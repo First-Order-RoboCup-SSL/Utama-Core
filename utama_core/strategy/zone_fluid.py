@@ -1,4 +1,4 @@
-"""The `zone_fluid` kernel strategy: `build_zone_fluid_kernel_strategy` and the pickers only it uses."""
+"""The `zone_fluid` kernel strategy: `zone_fluid` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _zone_flow_picker(
     return {}
 
 
-def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Zone-adaptive team: the attacking pattern itself changes with ball
     position, the first strategy in the catalog with two concurrent ATTACK-
     tagged slots that the picker chooses between — exactly the use the closed
@@ -83,22 +83,19 @@ def build_zone_fluid_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     duet replaces the trio, luring the last line out of position instead of
     passing into it.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "givego": GiveAndGoTactic(),
-                "overload": DecoyOverloadTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_zone_flow_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "givego": GiveAndGoTactic(),
+            "overload": DecoyOverloadTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_zone_flow_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

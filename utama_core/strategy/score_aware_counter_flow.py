@@ -1,4 +1,4 @@
-"""The `score_aware_counter_flow` kernel strategy: `build_score_aware_counter_flow_kernel_strategy` and the pickers only it uses."""
+"""The `score_aware_counter_flow` kernel strategy: `score_aware_counter_flow` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _score_aware_counter_flow_picker(
     return {}
 
 
-def build_score_aware_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """`counter_flow` (the catalog's only undefeated strategy) with the same
     scoreline-aware attack-commitment shift `score_aware_zone_flow` validated
     on a weaker base. Same three tactics/slots as `counter_flow`
@@ -105,21 +105,18 @@ def build_score_aware_counter_flow_kernel_strategy(outfield_robot_ids: tuple[int
     same sticky possession-edge hysteresis -- only the picker's late-game
     attack-count decision differs. See `_score_aware_counter_flow_picker`.
 
-    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    Returns a `build(motion_controller)` callable suitable
     for `AbstractStrategy`'s constructor argument of the same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_score_aware_counter_flow_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_score_aware_counter_flow_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

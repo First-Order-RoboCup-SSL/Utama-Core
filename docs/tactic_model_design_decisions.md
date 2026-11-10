@@ -87,7 +87,7 @@ and removed as duplicated machinery. Consequences, each learned from a bug:
 
 **§10. `AbstractStrategy` is kernel-native** (BT/py_trees removed: `087ee4b`, `960662c`,
 `48affd6`). `StrategyRunner` drives it unchanged; it builds the `Strategy` in
-`load_motion_controller()` because `build_kernel_strategy(motion_controller)` needs the
+`load_motion_controller()` because `build(motion_controller)` needs the
 controller but not `game`.
 
 **§13. Referee restarts are handled before any Tactic ticks** (`engine/referee_override.py`).

@@ -1,4 +1,4 @@
-"""The `score_aware_zone_flow` kernel strategy: `build_score_aware_zone_flow_kernel_strategy` and the pickers only it uses."""
+"""The `score_aware_zone_flow` kernel strategy: `score_aware_zone_flow` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -96,8 +96,8 @@ def _score_aware_zone_flow_picker(
     return {}
 
 
-def build_score_aware_zone_flow_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
-    """Zone-flow team (see `build_zone_fluid_kernel_strategy`) with one added
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
+    """Zone-flow team (see `zone_fluid`) with one added
     decision input nothing else in the catalog uses: the scoreline. Late in a
     half, the give-and-go attack/defense split shrinks when we're ahead
     (protect the lead) and grows when we're behind (chase the game), instead
@@ -107,21 +107,18 @@ def build_score_aware_zone_flow_kernel_strategy(outfield_robot_ids: tuple[int, .
     results is attributable to the new score-aware allocation, not a
     different tactic set.
 
-    Returns a `build_kernel_strategy(motion_controller)` callable suitable
+    Returns a `build(motion_controller)` callable suitable
     for `AbstractStrategy`'s constructor argument of the same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "givego": GiveAndGoTactic(),
-                "overload": DecoyOverloadTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_score_aware_zone_flow_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "givego": GiveAndGoTactic(),
+            "overload": DecoyOverloadTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_score_aware_zone_flow_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

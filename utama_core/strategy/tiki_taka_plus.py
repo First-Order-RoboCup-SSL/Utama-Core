@@ -1,4 +1,4 @@
-"""The `tiki_taka_plus` kernel strategy: `build_tiki_taka_plus_kernel_strategy` and the pickers only it uses."""
+"""The `tiki_taka_plus` kernel strategy: `tiki_taka_plus` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 # add the one wrinkle it doesn't have -- a distinct final-third finishing
 # move. `_zone_flow_picker` already validated handing the attacking slot
 # from `GiveAndGoTactic` to `DecoyOverloadTactic`'s two-role duet once the
-# ball crosses into the final third (see `build_zone_fluid_kernel_strategy`);
+# ball crosses into the final third (see `zone_fluid`);
 # this grafts that same handoff onto tiki_taka's stronger 3/2 base shape
 # instead of `zone_fluid`'s weaker one.
 #
@@ -117,7 +117,7 @@ def _tiki_taka_plus_picker(
     return {}
 
 
-def build_tiki_taka_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """`tiki_taka` with a final-third finishing wrinkle: same give-and-go
     build-up and press-on-loss engine, but the attacking slot hands off to
     `DecoyOverloadTactic`'s two-role duet once the ball reaches the final
@@ -141,23 +141,20 @@ def build_tiki_taka_plus_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     added" section for the full writeup, including the caveat that one
     40-match run isn't yet enough to rule out variance at this sample size.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": GiveAndGoTactic(),
-                "overload": DecoyOverloadTactic(),
-                "press": PressAndContainTactic(),
-                "defense": ShadowAndMarkTactic(),
-            },
-            partitioner=_tiki_taka_plus_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": GiveAndGoTactic(),
+            "overload": DecoyOverloadTactic(),
+            "press": PressAndContainTactic(),
+            "defense": ShadowAndMarkTactic(),
+        },
+        partitioner=_tiki_taka_plus_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

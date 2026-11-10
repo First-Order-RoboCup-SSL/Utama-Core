@@ -75,13 +75,12 @@ One term per thing; reuse these instead of coining new ones.
   `MatchLog`, `AbstractStrategy`, referee-override plumbing. Strategy-dev work touches this
   rarely, mostly to add a new primitive, not a new strategy. Named `engine/`, not `kernel/`,
   specifically to avoid colliding with "kernel strategy" — the model's own established
-  vocabulary (every factory is `build_*_kernel_strategy`, e.g. `build_tiki_taka_kernel_strategy`)
-  — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
+  vocabulary — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
 - `utama_core/strategy/` — the actual strategies people write, run, and compare
-  (`build_*_kernel_strategy` factories — `tiki_taka`, `counter_flow`, etc.), one module per
-  strategy (`strategy/<name>.py`, with the pickers only it uses) plus `pickers.py` for helpers
-  shared by several; `kernel_strategy.py` re-exports every factory, so a new strategy must be
-  imported there to be discovered. This is where day-to-day strategy-dev edits land.
+  (`tiki_taka`, `counter_flow`, etc.), one module per strategy (`strategy/<name>.py`, with one
+  `build(outfield_robot_ids, motion_controller)` and the pickers only it uses) plus `pickers.py`
+  for helpers shared by several. The module's name is the strategy's name and `catalog.py` finds
+  them, so a new strategy is a new file. This is where day-to-day strategy-dev edits land.
 - `utama_core/tactics/` — reusable `Tactic` implementations (`GiveAndGoTactic`,
   `PressAndContainTactic`, ...) that strategies compose.
 - `utama_core/skills/` — lower-level per-robot primitives (`go_to_ball`, `block_attacker`,
@@ -167,7 +166,7 @@ need most:
   Read it when designing or debugging a strategy, and before adding a metric; they are
   diagnostics, not objectives.
 - `docs/strategies.md` — strategy catalog: status, description, and real round-robin
-  results per `build_*_kernel_strategy` factory.
+  results per strategy.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.

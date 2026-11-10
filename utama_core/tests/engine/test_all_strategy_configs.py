@@ -1,5 +1,5 @@
-"""Comprehensive, table-driven tests over every `build_*_kernel_strategy` factory
-re-exported by `utama_core/strategy/kernel_strategy.py`.
+"""Comprehensive, table-driven tests over every strategy
+in `utama_core/strategy/`.
 
 Replaces the earlier one-file-per-config pattern (`test_split_shape_kernel_strategy.py`,
 `test_press_and_pass_kernel_strategy.py`, `test_high_press_kernel_strategy.py`,
@@ -11,7 +11,7 @@ around a near-identical `StrategyRunner`/rsim fixture. A single parametrized
 suite over `_CONFIGS` gives the same coverage without the duplication.
 
 Does not replace `test_kernel_strategy.py` (tests the `AbstractStrategy`
-adapter/blackboard wiring itself, via `build_default_kernel_strategy` as one
+adapter/blackboard wiring itself, via `default` as one
 convenient example config — not "does this config's partition behave
 correctly") or `test_kernel_strategy_debug_status.py` (tests `debug_status()`
 mechanics specifically). Picker-level unit tests that don't need rsim at all
@@ -29,38 +29,22 @@ import pytest
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
-from utama_core.strategy import kernel_strategy
-from utama_core.strategy.kernel_strategy import (
-    _clear_danger_picker,
-    _clear_press_plus_picker,
-    _counter_flow_picker,
-    _counter_press_picker,
-    _three_way_picker,
-    _tiki_taka_picker,
-    _zone_flow_picker,
-    build_clear_danger_kernel_strategy,
-    build_counter_press_kernel_strategy,
-    build_decoy_and_overload_kernel_strategy,
-    build_give_and_go_solo_kernel_strategy,
-    build_high_press_kernel_strategy,
-    build_low_block_kernel_strategy,
-    build_press_and_pass_kernel_strategy,
-    build_split_shape_kernel_strategy,
-    build_three_slot_kernel_strategy,
-    build_tiki_taka_kernel_strategy,
-    build_zone_fluid_kernel_strategy,
-    fixed_ratio_picker,
-)
+from utama_core.strategy import catalog
+from utama_core.strategy.catalog import builder
+from utama_core.strategy.clear_danger import _clear_danger_picker
+from utama_core.strategy.clear_press_plus import _clear_press_plus_picker
+from utama_core.strategy.counter_flow import _counter_flow_picker
+from utama_core.strategy.counter_press import _counter_press_picker
+from utama_core.strategy.pickers import fixed_ratio_picker
+from utama_core.strategy.three_slot import _three_way_picker
+from utama_core.strategy.tiki_taka import _tiki_taka_picker
+from utama_core.strategy.zone_fluid import _zone_flow_picker
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
-# Every factory `kernel_strategy` re-exports, as round-robins discover them, so a new strategy is
-# covered without editing this file (a strategy branch can't: see tools/check_strategy_branch.py).
-_CONFIGS = [
-    pytest.param(getattr(kernel_strategy, name), id=name.removeprefix("build_").removesuffix("_kernel_strategy"))
-    for name in sorted(dir(kernel_strategy))
-    if name.startswith("build_") and name.endswith("_kernel_strategy") and name != "build_default_kernel_strategy"
-]
+# Every strategy, as round-robins discover them, so a new one is covered without editing this
+# file (a strategy branch can't: see tools/check_strategy_branch.py).
+_CONFIGS = [pytest.param(name, id=name) for name in catalog.names() if name != "default"]
 
 
 @pytest.fixture
@@ -69,8 +53,8 @@ def make_runner():
 
     made = []
 
-    def _make(build_kernel_strategy_factory):
-        strategy = AbstractStrategy(build_kernel_strategy=build_kernel_strategy_factory(_OUTFIELD_IDS))
+    def _make(name):
+        strategy = AbstractStrategy(build=catalog.builder(name, _OUTFIELD_IDS))
         r = StrategyRunner(
             strategy=strategy,
             my_team_is_yellow=True,
@@ -127,7 +111,7 @@ def test_fixed_ratio_picker_high_press_split():
 def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
     """attack_fraction=0.2 on 5 robots rounds to 1, but PassAndShootTactic
     hard-requires >=2 (it unconditionally reads robot_ids[1]) — min_attack=2
-    floors the split rather than letting `build_low_block_kernel_strategy`
+    floors the split rather than letting `low_block`
     crash the tactic it wires (the exact regression this test guards)."""
     picker = fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2)
     partition = picker(
@@ -201,7 +185,7 @@ def test_three_way_picker_falls_back_to_attack_when_press_and_mark_inapplicable(
 
 
 def test_give_and_go_solo_always_assigns_everyone_to_attack(make_runner):
-    runner = make_runner(build_give_and_go_solo_kernel_strategy)
+    runner = make_runner("give_and_go_solo")
     runner.step_once()
     partition = runner.my.strategy._kernel_strategy.active_partition
     assert partition == {"attack": frozenset(_OUTFIELD_IDS)}

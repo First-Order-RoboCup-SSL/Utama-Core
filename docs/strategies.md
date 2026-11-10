@@ -1,7 +1,7 @@
 # Strategy catalog
 
-Every `build_*_kernel_strategy` factory in `utama_core/strategy/` (one module each, re-exported by `kernel_strategy.py`), whether a
-round-robin plays it, and the latest results. Short config names drop `build_`/`_kernel_strategy`.
+Every strategy in `utama_core/strategy/` (one module each, named after the strategy), whether a
+round-robin plays it, and the latest results.
 
 Run:
 

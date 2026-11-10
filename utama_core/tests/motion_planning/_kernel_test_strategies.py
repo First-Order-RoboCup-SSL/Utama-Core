@@ -77,7 +77,7 @@ def go_to_point_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 def single_robot_go_to_point_strategy(
@@ -143,7 +143,7 @@ def go_to_trajectory_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 @dataclass
@@ -224,7 +224,7 @@ def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 __all__ = [

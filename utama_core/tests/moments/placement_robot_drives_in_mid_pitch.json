@@ -6,7 +6,7 @@
     "t": 122.5
   },
   "strategy": "all",
-  "opponent": "build_score_aware_counter_flow_kernel_strategy",
+  "opponent": "score_aware_counter_flow",
   "seconds": 3.0,
   "checks": [
     "keeps_clear"

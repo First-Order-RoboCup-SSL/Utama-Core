@@ -1,4 +1,4 @@
-"""The `high_line_zone` kernel strategy: `build_high_line_zone_kernel_strategy` and the pickers only it uses."""
+"""The `high_line_zone` kernel strategy: `high_line_zone` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _high_line_zone_picker(
     return {}
 
 
-def build_high_line_zone_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """Zone-defense team built to deny tiki_taka's give-and-go trio the 1v1s
     it's designed around, switching the ball past its thin 2-robot cover.
 
@@ -110,22 +110,19 @@ def build_high_line_zone_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     defense is always just 2 robots — an imbalance is easy to create); the
     final third hands off to the overload duet to finish.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "switch": SwitchOfPlayTactic(),
-                "overload": DecoyOverloadTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_high_line_zone_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "switch": SwitchOfPlayTactic(),
+            "overload": DecoyOverloadTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_high_line_zone_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

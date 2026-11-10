@@ -19,7 +19,6 @@ from tools.check_strategy_branch import (
     opponent_problems,
     outside_allowlist,
     reach_problems,
-    registry_problems,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -30,7 +29,6 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
         outside_allowlist(
             [
                 "utama_core/strategy/new_idea.py",
-                "utama_core/strategy/kernel_strategy.py",
                 "utama_core/tests/strategy/test_new_idea.py",
                 "docs/strategies.md",
             ]
@@ -71,11 +69,6 @@ def _git(repo, *args):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=repo, check=True)
 
 
-REGISTRY_SRC = (
-    '"""Factories."""\n'
-    "from utama_core.strategy.a import build_a_kernel_strategy\n"
-    "from utama_core.strategy.b import build_b_kernel_strategy\n"
-)
 STRATEGY_SRC = (
     "from utama_core.strategy.pickers import helper\n\n\ndef build_{n}_kernel_strategy(ids):\n    return helper(ids)\n"
 )
@@ -86,7 +79,7 @@ def repo(tmp_path, monkeypatch):
     _git(tmp_path, "init", "-q", "-b", "main")
     s = tmp_path / "utama_core/strategy"
     s.mkdir(parents=True)
-    (s / "kernel_strategy.py").write_text(REGISTRY_SRC)
+    (s / "catalog.py").write_text("def names():\n    return []\n")
     (s / "pickers.py").write_text("def helper(ids):\n    return ids\n")
     for n in "ab":
         (s / f"{n}.py").write_text(STRATEGY_SRC.format(n=n))
@@ -115,22 +108,19 @@ def test_tuning_one_strategy_passes(repo):
     assert main(["--base", "main"]) == 0
 
 
-def test_adding_a_strategy_and_its_import_passes(repo):
-    registry = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy\n"
+def test_adding_a_strategy_passes(repo):
     _commit(
         repo,
-        {"utama_core/strategy/c.py": STRATEGY_SRC.format(n="c"), "utama_core/strategy/kernel_strategy.py": registry},
+        {"utama_core/strategy/c.py": STRATEGY_SRC.format(n="c")},
     )
     assert main(["--base", "main"]) == 0
 
 
 def test_adding_a_strategy_and_weakening_another_fails(repo):
-    registry = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy\n"
     _commit(
         repo,
         {
             "utama_core/strategy/c.py": STRATEGY_SRC.format(n="c"),
-            "utama_core/strategy/kernel_strategy.py": registry,
             "utama_core/strategy/b.py": STRATEGY_SRC.format(n="b").replace("helper(ids)", "[]"),
         },
     )
@@ -139,14 +129,12 @@ def test_adding_a_strategy_and_weakening_another_fails(repo):
 
 def test_adding_a_tactic_and_a_strategy_that_uses_it_passes(repo):
     tactic = "from utama_core.tactics.press import PressTactic\n\n\nclass FastPress(PressTactic):\n    reach = 2\n"
-    registry = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy\n"
-    strategy = "from utama_core.tactics.fast_press import FastPress\n\n\ndef build_c_kernel_strategy(ids):\n    return FastPress()\n"
+    strategy = "from utama_core.tactics.fast_press import FastPress\n\n\ndef c(ids):\n    return FastPress()\n"
     _commit(
         repo,
         {
             "utama_core/tactics/fast_press.py": tactic,
             "utama_core/strategy/c.py": strategy,
-            "utama_core/strategy/kernel_strategy.py": registry,
         },
     )
     assert main(["--base", "main"]) == 0
@@ -214,28 +202,9 @@ def test_tests_and_the_catalog_do_not_count_as_strategies():
     assert opponent_problems(changes) == []
 
 
-def test_registry_may_only_gain_imports_from_added_modules():
-    added = {"utama_core.strategy.c"}
-    new_import = "from utama_core.strategy.c import build_c_kernel_strategy\n"
-    # isort may put the new import anywhere.
-    first = REGISTRY_SRC.replace('"""Factories."""\n', '"""Factories."""\n' + new_import)
-    assert registry_problems(REGISTRY_SRC, first, added) == []
-    assert registry_problems(REGISTRY_SRC, REGISTRY_SRC + new_import, set())
-    repointed = REGISTRY_SRC.replace("strategy.b import", "strategy.c import")
-    assert registry_problems(REGISTRY_SRC, repointed, added)
-    assert registry_problems(REGISTRY_SRC, REGISTRY_SRC + "build_b_kernel_strategy = None\n", added)
-
-
-def test_an_added_module_may_not_rebind_or_rename_a_registry_name():
-    added = {"utama_core.strategy.c"}
-    # placed after b's import, this would replace the opponent b's factory with c's code
-    shadow = REGISTRY_SRC + "from utama_core.strategy.c import build_b_kernel_strategy\n"
-    assert registry_problems(REGISTRY_SRC, shadow, added)
-    renamed = REGISTRY_SRC + "from utama_core.strategy.c import build_c_kernel_strategy as build_a_kernel_strategy\n"
-    assert registry_problems(REGISTRY_SRC, renamed, added)
-
-
-# --- reach ------------------------------------------------------------------------------------
+def test_changing_the_catalog_fails(repo):
+    _commit(repo, {"utama_core/strategy/catalog.py": "def names():\n    return ['a']\n"})
+    assert main(["--base", "main"]) == 1
 
 
 @pytest.fixture(scope="module")
@@ -255,7 +224,7 @@ def test_a_plain_strategy_reaches_nothing(fingerprint):
         "from utama_core.tactics import press\n\n\ndef build(ids):\n    press.TABLE['k'] = 0\n",
         "from utama_core.tactics import press\n\n\ndef build(ids):\n    setattr(press, 'reach', 0)\n",
         # Reaching another strategy, the opponent.
-        "from utama_core.strategy.tiki_taka import build_tiki_taka_kernel_strategy\n",
+        "from utama_core.strategy.tiki_taka import tiki_taka\n",
         "import utama_core.strategy.tiki_taka\n",
         # Import-time effects and hazards.
         "import sys\n\nsys.path.append('x')\n",
@@ -298,9 +267,7 @@ def test_setting_attributes_on_its_own_objects_is_fine(fingerprint):
     assert reach_problems("s.py", local, fingerprint) == []
 
 
-@pytest.mark.parametrize(
-    "body", ["from .tiki_taka import build_tiki_taka_kernel_strategy\n", "from . import tiki_taka\n"]
-)
+@pytest.mark.parametrize("body", ["from .tiki_taka import tiki_taka\n", "from . import tiki_taka\n"])
 def test_a_relative_import_of_another_strategy_is_reported(fingerprint, body):
     assert reach_problems("utama_core/strategy/c.py", body, fingerprint)
     assert reach_problems("utama_core/strategy/c.py", "from .pickers import helper\n", fingerprint) == []
@@ -312,7 +279,7 @@ def test_every_existing_strategy_passes_the_reach_check(fingerprint):
     failing = {
         p.name
         for p in (REPO_ROOT / "utama_core/strategy").glob("*.py")
-        if p.name not in ("__init__.py", "kernel_strategy.py", "pickers.py")
+        if p.name not in ("__init__.py", "catalog.py", "pickers.py")
         and reach_problems(p.name, p.read_text(), fingerprint)
     }
     assert failing == set()

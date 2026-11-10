@@ -35,14 +35,14 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 
 @pytest.fixture
 def split_shape_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,

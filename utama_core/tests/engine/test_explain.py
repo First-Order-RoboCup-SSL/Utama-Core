@@ -20,8 +20,8 @@ from utama_core.replay.columnar_writer import (
 )
 
 CAND, CHAMP, OPP1, OPP2 = (
-    "build_cand_kernel_strategy",
-    "build_champ_kernel_strategy",
+    "cand",
+    "champ",
     "build_opp1_kernel_strategy",
     "build_opp2_kernel_strategy",
 )
@@ -133,12 +133,12 @@ def test_paired_difference_uses_same_opponent_seed_and_colour(run_dir, tmp_path)
 
 def test_explain_refuses_when_a_side_has_no_replay(run_dir, tmp_path):
     with pytest.raises(FileNotFoundError):
-        explain.explain(run_dir, "build_nobody_kernel_strategy", CHAMP, tmp_path / "out", workers=1)
+        explain.explain(run_dir, "nobody", CHAMP, tmp_path / "out", workers=1)
 
 
 def test_evaluate_explain_is_off_by_default():
-    assert evaluate.build_parser().parse_args(["build_x_kernel_strategy"]).explain is False
-    assert evaluate.build_parser().parse_args(["build_x_kernel_strategy", "--explain"]).explain is True
+    assert evaluate.build_parser().parse_args(["x"]).explain is False
+    assert evaluate.build_parser().parse_args(["x", "--explain"]).explain is True
 
 
 def test_an_explain_failure_never_escapes(monkeypatch, tmp_path):

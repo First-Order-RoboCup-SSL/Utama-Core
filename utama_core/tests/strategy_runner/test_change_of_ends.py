@@ -18,7 +18,7 @@ from utama_core.entities.referee.stage import Stage
 from utama_core.global_utils.math_utils import in_field_bounds
 from utama_core.run import StrategyRunner
 from utama_core.run.strategy_runner import _turned
-from utama_core.strategy import kernel_strategy
+from utama_core.strategy.catalog import builder
 
 N_OUTFIELD = 2
 HALF_S = 3.0
@@ -27,12 +27,11 @@ GOAL_AREA_X = 3.5  # the goal line is at |x| = 4.5; the defense area is 1 m deep
 
 
 def test_the_teams_play_the_second_half_from_the_other_end(headless):
-    build = kernel_strategy.build_tiki_taka_kernel_strategy
     profile = load_profile("simulation")
     profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, half_duration_seconds=HALF_S))
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build_kernel_strategy=build(tuple(range(1, N_OUTFIELD + 1)))),
-        opp_strategy=AbstractStrategy(build_kernel_strategy=build(tuple(range(1, N_OUTFIELD + 1)))),
+        strategy=AbstractStrategy(build=builder("tiki_taka", tuple(range(1, N_OUTFIELD + 1)))),
+        opp_strategy=AbstractStrategy(build=builder("tiki_taka", tuple(range(1, N_OUTFIELD + 1)))),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",

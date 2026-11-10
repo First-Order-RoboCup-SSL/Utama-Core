@@ -1,4 +1,4 @@
-"""The `counter_press` kernel strategy: `build_counter_press_kernel_strategy` and the pickers only it uses."""
+"""The `counter_press` kernel strategy: `counter_press` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _counter_press_picker(
     return {}
 
 
-def build_counter_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """High-intensity transition team: smother the ball where it was lost,
     then switch the play to the weak side at full commitment.
 
@@ -76,22 +76,19 @@ def build_counter_press_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     three-role switch (carrier/pivot/runner) needs at least 3 robots, hence
     the 4+1 split.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "attack": SwitchOfPlayTactic(),
-                "press": PressAndContainTactic(),
-                "block": BlockShapeTactic(),
-            },
-            partitioner=_counter_press_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "attack": SwitchOfPlayTactic(),
+            "press": PressAndContainTactic(),
+            "block": BlockShapeTactic(),
+        },
+        partitioner=_counter_press_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

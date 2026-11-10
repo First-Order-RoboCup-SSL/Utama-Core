@@ -1,4 +1,4 @@
-"""The `three_slot` kernel strategy: `build_three_slot_kernel_strategy` and the pickers only it uses."""
+"""The `three_slot` kernel strategy: `three_slot` and the pickers only it uses."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _three_way_picker(
     return partition
 
 
-def build_three_slot_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
+def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """5-robot (or fewer) `Strategy` factory running three concurrent Tactic
     slots at once: `PressAndContainTactic` ("press"), `ShadowAndMarkTactic`
     ("mark"), and `GiveAndGoTactic` ("attack"). Distinct in kind from every
@@ -77,22 +77,19 @@ def build_three_slot_kernel_strategy(outfield_robot_ids: tuple[int, ...]):
     kernel has always structurally supported (`_validate_partition` iterates
     `partition.items()` generically) but nothing had tested until now.
 
-    Returns a `build_kernel_strategy(motion_controller)`
+    Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
     same name.
     """
 
-    def _build(motion_controller: MotionController) -> KernelSchedulerStrategy:
-        ctx = TickContext(motion_controller=motion_controller)
-        return KernelSchedulerStrategy(
-            tactics={
-                "press": PressAndContainTactic(),
-                "mark": ShadowAndMarkTactic(),
-                "attack": GiveAndGoTactic(),
-            },
-            partitioner=_three_way_picker,
-            outfield_robot_ids=outfield_robot_ids,
-            ctx=ctx,
-        )
-
-    return _build
+    ctx = TickContext(motion_controller=motion_controller)
+    return KernelSchedulerStrategy(
+        tactics={
+            "press": PressAndContainTactic(),
+            "mark": ShadowAndMarkTactic(),
+            "attack": GiveAndGoTactic(),
+        },
+        partitioner=_three_way_picker,
+        outfield_robot_ids=outfield_robot_ids,
+        ctx=ctx,
+    )

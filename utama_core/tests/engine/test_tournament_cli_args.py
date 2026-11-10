@@ -45,8 +45,8 @@ def test_fuzz_restarts_and_interval_parsed_and_passed_to_run_match(tmp_path, mon
             "--fuzz-interval",
             "5",
             "10",
-            "build_low_block_kernel_strategy",
-            "build_tiki_taka_kernel_strategy",
+            "low_block",
+            "tiki_taka",
         ],
     )
 
@@ -80,8 +80,8 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
         [
             "tournament.py",
             "--sequential",
-            "build_low_block_kernel_strategy",
-            "build_tiki_taka_kernel_strategy",
+            "low_block",
+            "tiki_taka",
         ],
     )
 
@@ -117,7 +117,7 @@ def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkey
 
     tournament.main()
 
-    assert calls == [("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy")]
+    assert calls == [("tiki_taka", "low_block")]
 
 
 def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
@@ -140,20 +140,20 @@ def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_s
         calls.append((config_a_name, config_b_name))
         return _stub_result(config_a_name, config_b_name)
 
-    names = ["build_a_kernel_strategy", "build_b_kernel_strategy", "build_c_kernel_strategy"]
+    names = ["a", "b", "c"]
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(tournament, "_CONFIG_NAMES", names)
-    monkeypatch.setattr(tournament, "RETIRED", {"build_c_kernel_strategy"})
+    monkeypatch.setattr(tournament, "RETIRED", {"c"})
 
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save"])
     tournament.main()
-    assert calls == [("build_a_kernel_strategy", "build_b_kernel_strategy")]
+    assert calls == [("a", "b")]
 
     calls.clear()
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save", "a", "c"])
     tournament.main()
-    assert calls == [("build_a_kernel_strategy", "build_c_kernel_strategy")]
+    assert calls == [("a", "c")]
 
 
 def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypatch):
@@ -174,8 +174,8 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
             "--sequential",
             "--sim-noise",
             '{"seed": 3, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.2}',
-            "build_low_block_kernel_strategy",
-            "build_tiki_taka_kernel_strategy",
+            "low_block",
+            "tiki_taka",
         ],
     )
 
@@ -216,8 +216,8 @@ def test_match_seconds_keys_the_match_cache_and_is_recorded_in_the_summary(tmp_p
             "--reuse",
             "--match-seconds",
             "300",
-            "build_low_block_kernel_strategy",
-            "build_tiki_taka_kernel_strategy",
+            "low_block",
+            "tiki_taka",
         ],
     )
 
