@@ -24,7 +24,6 @@ from typing import Optional
 
 from utama_core.bundle import wire
 from utama_core.bundle.archive import SUFFIX, read_manifest, unpack
-from utama_core.config.enums import Mode
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.match_log import IntentionEvent, TraceEvent
 from utama_core.engine.tactic import TacticTag
@@ -169,7 +168,9 @@ class _RemoteKernel:
 class BundledStrategy(AbstractStrategy):
     """A `.strategy` file, as `StrategyRunner` drives any strategy."""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, outfield_robot_ids: Optional[tuple[int, ...]] = None):
+        """`outfield_robot_ids`: the robots this run has, if not the ones the file was built for
+        (a field day rarely has five)."""
         super().__init__(build=None)
         self.path = Path(path)
         root = unpack(self.path)
@@ -177,7 +178,7 @@ class BundledStrategy(AbstractStrategy):
         if self.manifest["format"] != FORMAT_VERSION:
             raise ValueError(f"{path}: format {self.manifest['format']}, this code reads {FORMAT_VERSION}")
         self._process = subprocess.Popen(
-            [sys.executable, "-m", "utama_core.bundle.host"],
+            [sys.executable, "-m", "utama_core.bundle.host", *map(str, outfield_robot_ids or ())],
             cwd=root,
             env={**os.environ, "PYTHONPATH": str(root)},
             stdin=subprocess.PIPE,
@@ -198,8 +199,6 @@ class BundledStrategy(AbstractStrategy):
         return reply
 
     def load_motion_controller(self, motion_controller) -> None:
-        if motion_controller.mode == Mode.REAL:
-            raise ValueError("A .strategy file plays in simulation only for now")
         self.motion_controller = motion_controller
         self._send(
             {
@@ -208,6 +207,8 @@ class BundledStrategy(AbstractStrategy):
                 "mode": motion_controller.mode.value,
                 "latency_s": motion_controller.pose_ahead.latency_s,
                 "robot_carry": {str(rid): list(carry) for rid, carry in motion_controller.robot_carry.items()},
+                "kick_bend": {str(rid): bend for rid, bend in motion_controller.kick_bend.items()},
+                "kick_bias": {str(rid): bias for rid, bias in motion_controller.kick_bias.items()},
             }
         )
 
@@ -236,10 +237,12 @@ class BundledStrategy(AbstractStrategy):
         self._send({"type": "tick"})
         reply = self._reply()
         self._kernel_strategy.record(reply["events"])
+        commands = {int(robot_id): RobotCommand(*values) for robot_id, values in reply["commands"].items()}
+        if self._kicker_charge is not None:  # needs the robot controller, which stays on this side
+            commands = self._kicker_charge.apply(self.game, commands)
         for robot_id in self.game.friendly_robots:
-            values = reply["commands"].get(str(robot_id))
-            if values is not None:
-                self.robot_controller.add_robot_commands(RobotCommand(*values), robot_id)
+            if robot_id in commands:
+                self.robot_controller.add_robot_commands(commands[robot_id], robot_id)
         self.robot_controller.send_robot_commands()
 
     def debug_status(self) -> dict[int, list[str]]:

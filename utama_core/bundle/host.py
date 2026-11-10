@@ -135,13 +135,15 @@ def _controller(setup: dict):
     controller = scheme(Mode(setup["mode"]), None)
     controller.pose_ahead.latency_s = setup["latency_s"]
     controller.robot_carry = {int(rid): tuple(carry) for rid, carry in setup["robot_carry"].items()}
+    controller.kick_bend = {int(rid): bend for rid, bend in setup["kick_bend"].items()}
+    controller.kick_bias = {int(rid): bias for rid, bias in setup["kick_bias"].items()}
     return controller
 
 
 def _builder(manifest: dict):
     """`AbstractStrategy`'s first argument. The file's own code decides how: files of commits from
     before `strategy/catalog.py` have `kernel_strategy.build_<name>_kernel_strategy` instead."""
-    ids = tuple(manifest["outfield_ids"])
+    ids = tuple(map(int, sys.argv[1:])) or tuple(manifest["outfield_ids"])  # the run's robots, if it named them
     name = manifest["strategy"]
     try:
         from utama_core.strategy.catalog import builder

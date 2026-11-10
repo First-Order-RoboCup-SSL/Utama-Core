@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -219,6 +220,55 @@ def test_a_bundled_strategy_sends_exactly_the_commands_of_the_same_strategy_in_p
     bundled = strategy_file.BundledStrategy(strategy_file.build(STRATEGY, tmp_path / "a.strategy"))
     in_process = AbstractStrategy(catalog.builder(STRATEGY, (1, 2, 3, 4, 5)))
     assert _run(bundled) == _run(in_process)
+
+
+def _setup_of(strategy, mode=Mode.REAL) -> dict:
+    sent = []
+    strategy._send = sent.append
+    controller = get_control_scheme("fpp")(mode, None)
+    controller.kick_bend, controller.kick_bias = {1: 0.5}, {2: -0.25}
+    controller.robot_carry = {3: (0.3, 0.6)}
+    controller.pose_ahead.latency_s = 0.079
+    strategy.load_motion_controller(controller)
+    return sent[0]
+
+
+def test_real_robots_kick_calibration_reaches_the_files_controller(tmp_path, monkeypatch):
+    monkeypatch.setattr(archive, "_CACHE", tmp_path / "cache")
+    strategy = strategy_file.BundledStrategy(strategy_file.build(STRATEGY, tmp_path / "a.strategy"))
+    send = strategy._send
+    setup = _setup_of(strategy)
+    strategy._send = send  # for close()
+    controller = host._controller(wire_round_trip(setup))
+    assert controller.mode == Mode.REAL
+    assert (controller.kick_bend, controller.kick_bias) == ({1: 0.5}, {2: -0.25})
+    assert controller.robot_carry == {3: (0.3, 0.6)}
+    assert controller.pose_ahead.latency_s == 0.079
+
+
+def wire_round_trip(message: dict) -> dict:
+    return json.loads(json.dumps(message))
+
+
+class _KeepsCharged(_Commands):
+    keeps_kickers_charged = True
+
+
+def test_a_real_robots_kicker_charge_is_applied_to_a_files_commands(tmp_path, monkeypatch):
+    """The charge step needs the real controller, so it stays with the runner: same commands as in process."""
+    monkeypatch.setattr(archive, "_CACHE", tmp_path / "cache")
+    monkeypatch.setattr(sys.modules[__name__], "_Commands", _KeepsCharged)
+    bundled = strategy_file.BundledStrategy(strategy_file.build(STRATEGY, tmp_path / "a.strategy"))
+    in_process = AbstractStrategy(catalog.builder(STRATEGY, (1, 2, 3, 4, 5)))
+    assert _run(bundled) == _run(in_process)
+    assert bundled._kicker_charge is not None
+
+
+def test_a_file_can_play_with_the_robots_a_run_has(tmp_path, monkeypatch):
+    monkeypatch.setattr(archive, "_CACHE", tmp_path / "cache")
+    path = strategy_file.build(STRATEGY, tmp_path / "a.strategy")
+    bundled = strategy_file.BundledStrategy(path, (1, 2))
+    assert _run(bundled) == _run(AbstractStrategy(catalog.builder(STRATEGY, (1, 2))))
 
 
 def _observed(strategy, path) -> dict:
