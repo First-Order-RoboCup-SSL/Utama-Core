@@ -9,7 +9,11 @@ Run:
     --held-out        play the held-out opponents instead (the check before promoting)
     --baseline NAME   compare against this strategy instead of the champion: a new version
                       against the one it changes. The baseline takes the champion's role, the
-                      champion joins the opponents, and a baseline from the pool leaves them
+                      champion joins the opponents, and a baseline among the opponents leaves them
+    --frozen REF      judge today's code against the past: the champion and every opponent are
+                      played from `.strategy` files of git commit REF (built once, kept in
+                      replays/eval/frozen/), the candidates from the working tree. The check for a
+                      change to shared code, which otherwise moves both sides of every match
     --max-rounds N    rounds before a candidate is called undecided (default 6)
     --max-workers N   matches at once (default 8)
     --explain         also write on-pitch pictures of each candidate against the champion to
@@ -79,6 +83,7 @@ from tools.evaluation.sim_settings import (  # noqa: E402
     reference_noise,
 )
 from utama_core.analysis import ratings  # noqa: E402
+from utama_core.bundle.strategy_file import frozen  # noqa: E402
 from utama_core.config.settings import REPLAY_BASE_PATH  # noqa: E402
 from utama_core.replay import eval_ledger  # noqa: E402
 from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
@@ -87,6 +92,7 @@ from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
+FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the ledger
 
 
 def round_fixtures(candidates: list[str], champion: str, opponents: list[str], k: int) -> list[tuple[str, str, int]]:
@@ -140,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--opponents", type=Path, default=DEFAULT_OPPONENTS)
     parser.add_argument("--held-out", action="store_true")
     parser.add_argument("--baseline")
+    parser.add_argument("--frozen", metavar="REF", help="champion and opponents from this git commit (see above)")
     parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
     parser.add_argument("--max-workers", type=int, default=min(8, max(1, (os.cpu_count() or 1) - 1)))
     parser.add_argument("--explain", action="store_true", help="also write on-pitch pictures per candidate (see above)")
@@ -149,13 +156,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
 
-    pool = json.loads(args.pool.read_text())
-    champion = _resolve_config_names([args.baseline or pool["champion"]])[0]
-    opponents = _resolve_config_names(pool["held_out"] if args.held_out else pool["opponents"])
-    pool_champion = _resolve_config_names([pool["champion"]])[0]
-    if champion != pool_champion:
-        opponents.append(pool_champion)  # against a baseline, the champion is one more opponent
-    opponents = [o for o in opponents if o != champion]  # a baseline from the pool leaves its seat
+    reference = load_opponents(args.opponents)
+    champion = _resolve_config_names([args.baseline or reference["champion"]])[0]
+    opponents = _resolve_config_names(reference["held_out"] if args.held_out else reference["opponents"])
+    reference_champion = _resolve_config_names([reference["champion"]])[0]
+    if champion != reference_champion:
+        opponents.append(reference_champion)  # against a baseline, the champion is one more opponent
+    opponents = [o for o in opponents if o != champion]  # a baseline among the opponents leaves its seat
+    if args.frozen:
+        champion, *opponents = [frozen(n, args.frozen, FROZEN_DIR).as_posix() for n in [champion, *opponents]]
     candidates = [c for c in _resolve_config_names(args.candidates) if c != champion]
     noise = SimNoise.from_dict(reference_noise()).to_dict()
     noise.pop("seed", None)
@@ -163,10 +172,15 @@ def main() -> None:
     graph = CodeGraph()
     env = eval_ledger.environment(graph, duration_seconds=MAX_MATCH_SECONDS, sim_noise=noise)
     fps = {n: graph.strategy_fingerprint(n)[:16] for n in {*candidates, champion, *opponents}}
+    for c in list(candidates):
+        twin = next((r for r in [champion, *opponents] if fps[r] == fps[c]), None)
+        if twin is not None:
+            print(f"{_short_name(c)} is skipped: it is the same code as {_short_name(twin)}")
+            candidates.remove(c)
 
     def fixture_id(f: tuple[str, str, int]) -> str:
         a, b, seed = f
-        return eval_ledger.fixture_id(env, a, fps[a], b, fps[b], seed)
+        return eval_ledger.fixture_id(env, fps[a], fps[b], seed)
 
     run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
     run_dir = Path(REPLAY_BASE_PATH) / run_id  # replay files must sit directly under replays/
@@ -184,7 +198,7 @@ def main() -> None:
         for k in range(1, args.max_rounds + 1):
             if not open_:
                 break
-            ledger = eval_ledger.load(env)
+            ledger = eval_ledger.load(env, fps=fps)
             todo = [f for f in round_fixtures(open_, champion, opponents, k) if fixture_id(f) not in ledger]
             reused += len(round_fixtures(open_, champion, opponents, k)) - len(todo)
             futures = {executor.submit(play, *f, noise, run_dir, args.explain): f for f in todo}
@@ -201,7 +215,7 @@ def main() -> None:
                     )
 
             fit = _fit(env, fps, {*open_, champion, *opponents})
-            ledger = _up_to_round(eval_ledger.load(env), k)
+            ledger = _up_to_round(eval_ledger.load(env, fps=fps), k)
             for c in list(open_):
                 margin, sd = ratings.paired_difference(*paired(ledger, fps, c, champion, opponents), fit.noise_sd)
                 p = ratings.p_positive(margin, sd)
@@ -217,7 +231,7 @@ def main() -> None:
     shutil.rmtree(run_dir, ignore_errors=True)  # this run's own scratch dir; results are in the ledger
 
     final = _fit(env, fps, {*candidates, champion, *opponents})
-    ledger = eval_ledger.load(env)
+    ledger = eval_ledger.load(env, fps=fps)
     print(f"Verdicts ({played} matches played, {reused} reused from the ledger):")
     for c in candidates:
         r = report[c]
@@ -230,8 +244,10 @@ def main() -> None:
         for o, row in r["per_opponent"].items():
             name = o if o == "head-to-head" else _short_name(o)
             print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
-        if r["verdict"] == "better" and not args.held_out:
-            print(f"    -> next: evaluate.py {_short_name(c)} --held-out, then set it as the pool's champion")
+        if r["verdict"] == "better" and not args.held_out and not args.frozen:
+            print(
+                f"    -> next: evaluate.py {_short_name(c)} --held-out, then set it as champion in reference/opponents.json"
+            )
     print("\nStrengths (goals per match, ± SD):")
     for n in sorted(final.names, key=lambda n: -final.strength(n)[0]):
         m, sd = final.strength(n)
@@ -246,6 +262,7 @@ def main() -> None:
                 "run": _run_metadata(),
                 "opponents": str(args.opponents),
                 "held_out": args.held_out,
+                "frozen": args.frozen,
                 "environment": env,
                 "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
                 "candidates": report,
@@ -276,7 +293,7 @@ def _fit(env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
     """Ratings over every ledger match in `env` between `players` at their current code."""
     matches = [
         (e["a"], e["b"], e["score_a"] - e["score_b"])
-        for e in eval_ledger.load(env).values()
+        for e in eval_ledger.load(env, fps=fps).values()
         if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
     ]
     return ratings.fit(matches, names=sorted(players))

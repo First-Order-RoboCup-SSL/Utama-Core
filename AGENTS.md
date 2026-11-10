@@ -61,6 +61,16 @@ One term per thing; reuse these instead of coining new ones.
   `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
+- **Strategy file / frozen baseline** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a
+  zip of one strategy and the whole `utama_core` package at one commit; it plays in its own process, game frames in and
+  robot commands out, simulation only. `evaluate.py CANDIDATE --frozen REF` plays the champion and the opponents from
+  such files of commit REF (the frozen baseline, kept in `replays/eval/frozen/`), so a change to shared code moves only
+  the candidate. The referee and the simulator stay today's for both sides. A file is a player like any strategy name wherever one is named (`evaluate.py`, `round_robin.py`, `opponents.json`), with the same replays, stats and logs. Its fingerprint is computed like the code's, so a file and the code it was built from are one player in the ledger.
+- **World / robot capability** — simulator settings fall into two kinds: the world (ball
+  friction, vision noise and dropouts, latency) comes from measurements; robot capability (kick,
+  dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
+  in the control layer. The test: would better robots change it? `tools/evaluation/reference/
+  world.json`, `robots.json`; field sessions in `tools/field_sessions.json`.
 - **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×

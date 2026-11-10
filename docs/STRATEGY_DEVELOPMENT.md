@@ -322,6 +322,13 @@ flowchart TD
   be clearly worse against opponents never used for selection. Then edit the champion in
   `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
   against the rest is a matchup, not a better strategy.
+- **A change to shared code** (skills, tactics, motion, engine) moves every strategy, so a normal run compares
+  worse with worse as easily as better with better. `evaluate.py <name> --frozen v2.5.0` plays the champion and
+  the opponents from `.strategy` files of that commit (`replays/eval/frozen/`, built once) and the candidate from
+  the working tree. A bundled match equals the same match run normally, frame for frame. The referee and the
+  simulator are today's for both sides, so a frozen side meets rule changes it was not written for. A file and
+  the same code are one player in the ledger, and matches between two files are replayed only when the referee,
+  the simulator or the match runner change: a skills or tactics edit reruns only the candidate's matches.
 - **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
   their fouls by rule, and a `summary.json` of the numbers behind them, written to

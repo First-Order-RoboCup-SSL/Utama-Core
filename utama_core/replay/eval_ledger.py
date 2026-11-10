@@ -8,9 +8,10 @@ counts in every later evaluation until the code that played it changes.
 - **Environment** (`environment`): the shared code and machine (`fingerprint.base_fingerprint`
   of the match runner), the match length, the planner and the sim noise without its seed.
   Matches from different environments are never mixed: a planner or sim change replays all.
-- **Player**: a strategy name and its `fingerprint.strategy_fingerprint`. Editing a strategy
-  makes it a new player; its old matches stay in the file but no longer count.
-- **Fixture** (`fixture_id`): environment, both players, sides and seed. An rsim match is a
+- **Player**: the `fingerprint.strategy_fingerprint` of its code, with the name it had when it
+  played as a label. Editing a strategy makes it a new player; its old matches stay in the file
+  but no longer count.
+- **Fixture** (`fixture_id`): environment, both fingerprints, sides and seed. An rsim match is a
   pure function of it, so a fixture already in the ledger is never played again.
 """
 
@@ -48,9 +49,10 @@ def environment(
     )[:16]
 
 
-def fixture_id(env: str, a: str, a_fp: str, b: str, b_fp: str, seed: Optional[int]) -> str:
-    """config_a is always yellow and starts on the right, kicking off (`match.run_match`'s defaults)."""
-    return _digest([env, a, a_fp, b, b_fp, json.dumps(seed)])[:16]
+def fixture_id(env: str, a_fp: str, b_fp: str, seed: Optional[int]) -> str:
+    """config_a is always yellow and starts on the right, kicking off (`match.run_match`'s defaults).
+    Fingerprints, not names: a `.strategy` file and the same code in the repo are one player."""
+    return _digest([env, a_fp, b_fp, json.dumps(seed)])[:16]
 
 
 def entry(env: str, graph: CodeGraph, result: dict, seed: Optional[int], source: str) -> dict:
@@ -59,7 +61,7 @@ def entry(env: str, graph: CodeGraph, result: dict, seed: Optional[int], source:
     a_fp, b_fp = graph.strategy_fingerprint(a)[:16], graph.strategy_fingerprint(b)[:16]
     shots = (result.get("stats") or {}).get("shots") or {}
     return {
-        "fixture": fixture_id(env, a, a_fp, b, b_fp, seed),
+        "fixture": fixture_id(env, a_fp, b_fp, seed),
         "env": env,
         "a": a,
         "a_fp": a_fp,
@@ -84,9 +86,11 @@ def append(entries: Iterable[dict], path: Path = LEDGER_PATH) -> None:
             f.flush()
 
 
-def load(env: str, path: Path = LEDGER_PATH) -> dict[str, dict]:
+def load(env: str, path: Path = LEDGER_PATH, fps: Optional[dict[str, str]] = None) -> dict[str, dict]:
     """The ledger's entries for `env`, by fixture id (the last one wins if a fixture was played
-    twice)."""
+    twice). With `fps` (name -> fingerprint), a player it knows goes by that name, whatever the
+    name was when the match was played."""
+    names = {fp: name for name, fp in (fps or {}).items()}
     out: dict[str, dict] = {}
     if not path.exists():
         return out
@@ -96,5 +100,6 @@ def load(env: str, path: Path = LEDGER_PATH) -> dict[str, dict]:
         except json.JSONDecodeError:
             continue  # a torn last line from a crash
         if e.get("env") == env:
+            e["a"], e["b"] = names.get(e["a_fp"], e["a"]), names.get(e["b_fp"], e["b"])
             out[e["fixture"]] = e
     return out

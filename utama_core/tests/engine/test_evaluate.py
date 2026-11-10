@@ -1,3 +1,5 @@
+import pytest
+
 from tools.evaluation import evaluate
 from utama_core.replay import eval_ledger
 
@@ -38,8 +40,17 @@ def test_ledger_round_trip_keeps_the_last_entry_per_fixture_and_skips_torn_lines
 
 def test_fixture_id_depends_on_seed_and_code():
     f = eval_ledger.fixture_id
-    assert f("e", "x", "1", "y", "2", 1) != f("e", "x", "1", "y", "2", 2)
-    assert f("e", "x", "1", "y", "2", 1) != f("e", "x", "9", "y", "2", 1)
+    assert f("e", "1", "2", 1) != f("e", "1", "2", 2)
+    assert f("e", "1", "2", 1) != f("e", "9", "2", 1)
+
+
+def test_a_ledger_player_goes_by_this_runs_name_for_the_same_code(tmp_path):
+    """A frozen file and the same code in the repo are one player, whichever played the match."""
+    path = tmp_path / "ledger.jsonl"
+    row = {"env": "e", "fixture": "f", "a": "split_shape", "a_fp": "1", "b": "other", "b_fp": "2"}
+    eval_ledger.append([row], path)
+    loaded = eval_ledger.load("e", path, fps={"frozen/split_shape@abc.strategy": "1"})
+    assert (loaded["f"]["a"], loaded["f"]["b"]) == ("frozen/split_shape@abc.strategy", "other")
 
 
 def test_per_opponent_compares_only_matches_with_the_same_seed_and_colour():
@@ -80,21 +91,43 @@ def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
     assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
 
 
-def test_pools_are_valid_and_load_cleanly():
-    import json
-    from pathlib import Path
+def test_the_reference_opponents_load():
+    from tools.evaluation.sim_settings import load_opponents
 
+    reference = load_opponents()
+    assert reference["champion"] and reference["opponents"] and reference["held_out"]
+
+
+def test_the_reference_world_and_robots_make_one_valid_sim_noise():
+    from tools.evaluation.sim_settings import reference_noise
     from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 
-    pools_dir = Path(__file__).resolve().parents[3] / "tools" / "evaluation" / "pools"
-    pool_files = list(pools_dir.glob("pool_v*.json"))
-    assert len(pool_files) >= 1  # pool_v1.json
+    noise = SimNoise.from_dict(reference_noise(seed=3))
+    assert noise.seed == 3
+    assert noise.latency_estimate_s == pytest.approx(0.07)
 
-    for path in pool_files:
-        data = json.loads(path.read_text())
-        assert "version" in data and "champion" in data and "opponents" in data
-        assert "held_out" in data and "sim_noise" in data
-        assert len(data["opponents"]) > 0
-        assert len(data["held_out"]) > 0
-        noise = SimNoise.from_dict(data["sim_noise"])
-        assert noise.vanishing >= 0
+
+def test_every_reference_setting_names_its_source():
+    import json
+
+    from tools.evaluation.sim_settings import REFERENCE_DIR
+
+    for name in ("world", "robots"):
+        data = json.loads((REFERENCE_DIR / f"{name}.json").read_text())
+        assert set(data["sources"]) == set(data["values"]), name
+
+
+def test_the_reference_sim_does_not_draw_robot_motor_limits():
+    """Acceleration is the command cap; a per-match draw would be a robot capability as noise."""
+    from tools.evaluation.sim_settings import reference_noise
+    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+
+    assert not SimNoise.from_dict(reference_noise()).motion_limits
+
+
+def test_sim_noise_spec_forms():
+    from tools.evaluation.sim_settings import sim_noise_from_spec
+
+    assert sim_noise_from_spec("reference").seed == 0
+    assert sim_noise_from_spec("reference:7").seed == 7
+    assert sim_noise_from_spec('{"seed": 2, "kick_speed_sd": 0.3}').kick_speed_sd == 0.3

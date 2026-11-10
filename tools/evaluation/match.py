@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
@@ -53,11 +54,15 @@ _CONFIG_NAMES = [name for name in catalog.names() if name != "default"]
 
 
 def _short_name(config_name: str) -> str:
+    if config_name.endswith(SUFFIX):
+        return Path(config_name).stem
     return plain_name(config_name)
 
 
 def _load_strategy(config_name: str) -> AbstractStrategy:
-    """A strategy by name."""
+    """A strategy by name, or a `.strategy` file by path."""
+    if config_name.endswith(SUFFIX):
+        return BundledStrategy(config_name)
     return AbstractStrategy(build=catalog.builder(config_name, OUTFIELD_ROBOT_IDS))
 
 
@@ -252,6 +257,9 @@ def run_match(
         stats = runner.match_stats.finalize() if runner.match_stats is not None else None
     finally:
         runner.close()
+        for strategy in (strategy_a, strategy_b):
+            if isinstance(strategy, BundledStrategy):
+                strategy.close()
 
     return MatchResult(
         config_a=config_a_name,

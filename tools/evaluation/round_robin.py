@@ -111,6 +111,7 @@ from tools.evaluation.match import run_match as _lib_run_match
 from tools.evaluation.sim_settings import sim_noise_from_spec
 from utama_core.analysis import ratings, restart_outcomes, turnover_breakdown
 from utama_core.analysis.strategy_table import strategy_table
+from utama_core.bundle.strategy_file import SUFFIX
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import eval_ledger, match_cache
 from utama_core.replay.fingerprint import CodeGraph, match_key
@@ -762,20 +763,14 @@ def _store_played(
 
 
 def _resolve_config_names(requested_names: list[str]) -> list[str]:
-    """Factory names for `requested_names`, each given with or without the
-    `build_`/`_kernel_strategy` wrapping, in catalog order."""
-    requested = set(requested_names)
-    config_names = [
-        name
-        for name in _CONFIG_NAMES
-        if name in requested or name.removeprefix("build_").removesuffix("_kernel_strategy") in requested
-    ]
-    unmatched = requested - {
-        n for name in config_names for n in (name, name.removeprefix("build_").removesuffix("_kernel_strategy"))
-    }
+    """The strategies named, in catalog order, then any `.strategy` files as given."""
+    files = [name for name in requested_names if name.endswith(SUFFIX)]
+    requested = {plain_name(name) for name in requested_names if name not in files}
+    config_names = [name for name in _CONFIG_NAMES if name in requested]
+    unmatched = requested - set(config_names)
     if unmatched:
         raise SystemExit(f"Unknown config name(s): {sorted(unmatched)}. Available: {sorted(_CONFIG_NAMES)}")
-    return config_names
+    return config_names + files
 
 
 def _run_metadata() -> dict:
