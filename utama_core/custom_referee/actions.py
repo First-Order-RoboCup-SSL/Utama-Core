@@ -10,6 +10,7 @@ game.my_team_is_right so no construction-time team colour is needed.
 """
 
 import math
+from typing import Optional
 
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import (
@@ -25,12 +26,30 @@ from utama_core.config.referee_constants import (
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import (
     detour_around_circle,
     distance_point_to_segment,
 )
+from utama_core.shared.pass_and_score_geometry import (
+    enemy_goal_line,
+    has_ball,
+    kick_bend,
+    open_teammate,
+    oriented_towards,
+    restart_support,
+)
 from utama_core.shared.tolerance import Sticky
-from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
+from utama_core.skills.src.man_mark import mark_target
+from utama_core.skills.src.utils.move_utils import (
+    empty_command,
+    kick,
+    move,
+    turn_on_spot,
+)
+
+_WALL_FROM_BALL_M = BALL_KEEP_OUT_DISTANCE + 0.15
+_STOP_FORMATION_SPEED_MPS = 1.2  # under RobotStopSpeedRule's limit
 
 
 def _all_stop(blackboard) -> None:
@@ -453,13 +472,19 @@ class StopStep:
     """Moves encroaching robots out of the keep-out radius and stops the rest."""
 
     def update(self) -> None:
+        game = self.blackboard.game
+        next_is_theirs = _next_is_their_free_kick(game)
         _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             clear_opp_defense_area=True,
             clear_own_defense_area=True,
             max_own_defenders=1,
+            intended_targets=their_free_kick_targets(game) if next_is_theirs else None,
         )
+        if next_is_theirs:
+            for robot_id, command in self.blackboard.cmd_map.items():
+                self.blackboard.cmd_map[robot_id] = _capped_speed(command, _STOP_FORMATION_SPEED_MPS)
 
 
 # ---------------------------------------------------------------------------
@@ -978,11 +1003,16 @@ class PreparePenaltyTheirsStep:
 
 
 class DirectFreeOursStep:
-    """Positions our robots for our direct free kick.
+    """Takes our direct free kick.
 
-    The robot closest to the ball becomes the kicker and approaches from the
-    field-inward side so it cannot push the ball out of bounds.
-    All other robots stop in place.
+    The robot closest to the ball becomes the kicker, gets behind it and kicks it
+    to an open teammate. With none in range the nearest teammate comes to a spot
+    towards the enemy goal first; only if there is no such spot does it shoot. All
+    other robots stop in place, the teammate being kicked to facing the ball.
+
+    It used to stand behind the ball and leave the kick to the tactics once the
+    referee started play, which a real game controller does not do, and the taker
+    walked off or stood there for up to 10 s (round-robin of 2026-11-09).
     """
 
     # How close the robot center should get behind the ball before turning/kicking.
@@ -990,6 +1020,11 @@ class DirectFreeOursStep:
     _APPROACH_READY_DISTANCE = 0.04
     _KICK_READY_DISTANCE = 0.16
     _FACE_READY_ANGLE = 0.18
+    # A receiver facing the ball within 10 degrees catches 95% of passes, 10-20 degrees 7%.
+    _RECEIVER_READY_ANGLE = 0.17
+    _RECEIVER_AT_SPOT_M = 0.1
+    _KEEP_OUT_EDGE_M = 0.05
+    _NEW_RESTART_M = 0.05  # the ball this far from where the target was chosen is another free kick
 
     # Robot-body clearance only, not the full OPPONENT_DEFENSE_AREA_KEEP_
     # DISTANCE (0.25m) `StopStep`/`_clear_to_legal_positions` use for general
@@ -1026,21 +1061,38 @@ class DirectFreeOursStep:
 
     def __init__(self):
         self._kicker_sticky = Sticky[int](margin=self._KICKER_REASSIGN_MARGIN_M)
+        self._target: Optional[tuple[int, Vector2D, Optional[int], Optional[Vector2D], float]] = None
 
     @staticmethod
     def _angle_error(current: float, target: float) -> float:
         return math.atan2(math.sin(target - current), math.cos(target - current))
 
-    def _nearest_enemy_to_ball(self, game, ball_pos: Vector2D):
-        if not game.enemy_robots:
-            return None, None
-        enemy_id = min(game.enemy_robots, key=lambda rid: game.enemy_robots[rid].p.distance_to(ball_pos))
-        return enemy_id, game.enemy_robots[enemy_id]
-
-    def _kick_target_enemy(self, game, ball_pos: Vector2D):
-        if 1 in game.enemy_robots:
-            return 1, game.enemy_robots[1]
-        return self._nearest_enemy_to_ball(game, ball_pos)
+    def _kick_target(self, game, kicker_id: int, ball_pos: Vector2D) -> tuple[Optional[int], Optional[Vector2D], float]:
+        """(teammate or None, the spot it must come to or None, heading from the ball). Chosen once a
+        free kick: a target flipping as lanes open and shut would send the kicker round the ball again.
+        Only the teammate is fixed: the heading follows it, once it is at any spot it was called to."""
+        target = self._target
+        if target is None or target[0] != kicker_id or target[1].distance_to(ball_pos) > self._NEW_RESTART_M:
+            teammate = open_teammate(game, kicker_id, origin=ball_pos)
+            spot = None
+            if teammate is not None:
+                point = game.friendly_robots[teammate].p
+            else:
+                support = restart_support(game, kicker_id, ball_pos)
+                if support is not None:
+                    teammate, spot = support
+                    point = spot
+                else:
+                    goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
+                    point = Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0)
+            target = self._target = (kicker_id, ball_pos, teammate, spot, ball_pos.angle_to(point))
+        teammate, spot, heading = target[2:]
+        if teammate in game.friendly_robots:
+            position = game.friendly_robots[teammate].p
+            if spot is None or position.distance_to(spot) <= self._RECEIVER_AT_SPOT_M:
+                # Who is fixed, where it stands is not: it has moved since, by 0.17 m at 2 m in a kick that missed.
+                heading = ball_pos.angle_to(position)
+        return teammate, spot, heading
 
     def update(self) -> None:
         game = self.blackboard.game
@@ -1053,18 +1105,32 @@ class DirectFreeOursStep:
 
         distances = {rid: game.friendly_robots[rid].p.distance_to(ball.p) for rid in game.friendly_robots}
         kicker_id = self._kicker_sticky.update(list(distances), score_fn=lambda rid: -distances[rid])
+        receiver_command = None
 
         for robot_id in game.friendly_robots:
             if robot_id == kicker_id:
                 robot = game.friendly_robots[robot_id]
                 ball_pos = Vector2D(ball.p.x, ball.p.y)
                 distance_to_ball = robot.p.distance_to(ball_pos)
-                _, enemy = self._kick_target_enemy(game, ball_pos)
-
-                if enemy is None:
-                    target_oren = robot.p.angle_to(ball_pos)
-                else:
-                    target_oren = ball_pos.angle_to(enemy.p)
+                receiver_id, receiver_spot, kick_heading = self._kick_target(game, kicker_id, ball_pos)
+                target_oren = kick_heading - kick_bend(game, motion_controller, robot_id)
+                receiver_ready = True
+                if receiver_id in game.friendly_robots:
+                    receiver = game.friendly_robots[receiver_id]
+                    to_ball = receiver.p.angle_to(ball_pos)
+                    if receiver_spot is not None and receiver.p.distance_to(receiver_spot) > self._RECEIVER_AT_SPOT_M:
+                        receiver_ready = False
+                        receiver_command = (
+                            receiver_id,
+                            move(game, motion_controller, receiver_id, receiver_spot, receiver_spot.angle_to(ball_pos)),
+                        )
+                    else:
+                        receiver_ready = oriented_towards(game, receiver_id, to_ball, self._RECEIVER_READY_ANGLE)
+                        if not receiver_ready:
+                            receiver_command = (
+                                receiver_id,
+                                turn_on_spot(game, motion_controller, receiver_id, to_ball),
+                            )
 
                 kick_dir = Vector2D(math.cos(target_oren), math.sin(target_oren))
                 approach = Vector2D(
@@ -1098,22 +1164,102 @@ class DirectFreeOursStep:
                     )
                 elif distance_to_ball > self._KICK_READY_DISTANCE:
                     self.blackboard.cmd_map[robot_id] = move(game, motion_controller, robot_id, approach, target_oren)
-                else:
+                elif not receiver_ready:
                     self.blackboard.cmd_map[robot_id] = empty_command(False)
+                elif has_ball(game, robot_id):
+                    self.blackboard.cmd_map[robot_id] = kick()
+                else:
+                    self.blackboard.cmd_map[robot_id] = move(
+                        game, motion_controller, robot_id, ball_pos, target_oren, dribbling=True
+                    )
 
+        exempt = {kicker_id}
+        # A robot cleared in the stoppage stands a millimetre inside the circle, and clearing it again
+        # pointed it away from the ball: the receiver never turned and 69 free kicks timed out (2026-11-10).
+        if (
+            receiver_command is not None
+            and BALL_KEEP_OUT_DISTANCE - self._KEEP_OUT_EDGE_M
+            <= distances[receiver_command[0]]
+            < BALL_KEEP_OUT_DISTANCE
+        ):
+            exempt.add(receiver_command[0])
         _clear_to_legal_positions(
             self.blackboard,
             ball_keep_dist=BALL_KEEP_OUT_DISTANCE,
             clear_opp_defense_area=True,
             clear_own_defense_area=True,
             max_own_defenders=1,
-            exempt_robot_ids={kicker_id},
+            exempt_robot_ids=exempt,
         )
+        # That stops every robot already standing legally; this one still has to get ready.
+        if receiver_command is not None and (
+            receiver_command[0] in exempt or self.blackboard.cmd_map[receiver_command[0]] == empty_command(False)
+        ):
+            self.blackboard.cmd_map[receiver_command[0]] = receiver_command[1]
 
 
 # ---------------------------------------------------------------------------
 # DIRECT_FREE — theirs
 # ---------------------------------------------------------------------------
+
+
+def _next_is_their_free_kick(game) -> bool:
+    command = getattr(game.referee, "next_command", None)
+    if game.my_team_is_yellow:
+        return command in (RefereeCommand.DIRECT_FREE_BLUE, RefereeCommand.INDIRECT_FREE_BLUE)
+    return command in (RefereeCommand.DIRECT_FREE_YELLOW, RefereeCommand.INDIRECT_FREE_YELLOW)
+
+
+def their_free_kick_targets(game) -> dict[int, Vector2D]:
+    """Where to stand for an opponent's free kick: the nearest robot in the wall on the ball's line
+    to our goal, and each other one goal-side of a receiver, those nearest our goal first. Standing
+    wherever the stop left them, a side conceded 1.35 goals a match from free kicks (`docs/signals.md`).
+    The keeper keeps its own job."""
+    ball = game.ball
+    if ball is None:
+        return {}
+    ref = game.referee
+    keeper_id = (ref.yellow_team if game.my_team_is_yellow else ref.blue_team).goalkeeper
+    ball_pos = Vector2D(ball.p.x, ball.p.y)
+    free = {
+        rid: robot.p
+        for rid, robot in game.friendly_robots.items()
+        if rid != keeper_id and not _must_clear_first(game, robot.p, ball_pos)
+    }
+    if not free:
+        return {}
+    goal = Vector2D(float(game.field.my_goal_line[0][0]), 0.0)
+    wall = _outside_own_defense_area(game, ball_pos + (goal - ball_pos).norm() * _WALL_FROM_BALL_M)
+    targets: dict[int, Vector2D] = {}
+    wall_robot = min(free, key=lambda rid: free[rid].distance_to(wall))
+    targets[wall_robot] = wall
+    del free[wall_robot]
+
+    enemies = sorted(game.enemy_robots, key=lambda eid: game.enemy_robots[eid].p.distance_to(ball_pos))[1:]
+    enemies.sort(key=lambda eid: game.enemy_robots[eid].p.distance_to(goal))
+    for enemy_id in enemies:
+        if not free:
+            break
+        mark = _outside_own_defense_area(game, mark_target(game, enemy_id))
+        marker = min(free, key=lambda rid: free[rid].distance_to(mark))
+        targets[marker] = mark
+        del free[marker]
+    return targets
+
+
+def _must_clear_first(game, position: Vector2D, ball_pos: Vector2D) -> bool:
+    """Inside the keep-out circle or a defense area: on its way out before it takes up a spot."""
+    return (
+        position.distance_to(ball_pos) < BALL_KEEP_OUT_DISTANCE
+        or _is_in_own_defense_area(game, position.x, position.y)
+        or _project_outside_opp_defense_area(game, position, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE) != position
+    )
+
+
+def _outside_own_defense_area(game, point: Vector2D) -> Vector2D:
+    return (
+        Vector2D(_own_defense_area_exit_x(game), point.y) if _is_in_own_defense_area(game, point.x, point.y) else point
+    )
 
 
 class DirectFreeTheirsStep:
@@ -1126,4 +1272,5 @@ class DirectFreeTheirsStep:
             clear_opp_defense_area=True,
             clear_own_defense_area=True,
             max_own_defenders=1,
+            intended_targets=their_free_kick_targets(self.blackboard.game),
         )

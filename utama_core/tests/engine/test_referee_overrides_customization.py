@@ -144,6 +144,7 @@ def test_override_for_non_override_command_is_never_called():
     )
 
     game = Mock()
+    game.friendly_robots = game.enemy_robots = {}
     game.my_team_is_yellow = True
     referee = Mock()
     referee.referee_command = RefereeCommand.NORMAL_START

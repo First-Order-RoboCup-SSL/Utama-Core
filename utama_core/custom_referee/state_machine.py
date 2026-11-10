@@ -188,7 +188,6 @@ class GameStateMachine:
         # Timestamps for sustained-readiness countdown before play-starting advances.
         # Set to math.inf when condition is not yet met; fire when elapsed >= _AUTO_ADVANCE_DELAY.
         self._advance2_ready_since: float = math.inf  # PREPARE_* → NORMAL_START
-        self._advance3_ready_since: float = math.inf  # DIRECT_FREE_* → NORMAL_START
         self._advance4_ready_since: float = math.inf  # BALL_PLACEMENT_* → next_command
         # First Defender Too Close foul of the current free kick; restarts its clock.
         self._defender_too_close_at: float = -math.inf
@@ -303,7 +302,6 @@ class GameStateMachine:
                 self._advance4_ready_since = math.inf
             elif self.command in self._DIRECT_FREE_COMMANDS:
                 self.next_command = RefereeCommand.NORMAL_START
-                self._advance3_ready_since = math.inf
             elif self.command in self._PREPARE_KICKOFF_COMMANDS or self.command in self._PREPARE_PENALTY_COMMANDS:
                 self.next_command = RefereeCommand.NORMAL_START
                 self._prepare_entered_time = current_time
@@ -389,13 +387,10 @@ class GameStateMachine:
                 self._advance2_ready_since = math.inf
 
         # ----------------------------------------------------------------
-        # Auto-advance 3: DIRECT_FREE_* → NORMAL_START
-        # Fires when the kicker is within _KICKER_READY_DIST of the ball
-        # AND all defending robots are ≥ _BALL_CLEAR_DIST away, sustained
-        # for _AUTO_ADVANCE_DELAY seconds.
+        # Auto-advance 3: DIRECT_FREE_* → NORMAL_START once the kick is taken,
+        # FORCE_START if it is not within the time limit.
         # ----------------------------------------------------------------
         elif self._auto_advance.direct_free_to_normal and self.command in self._DIRECT_FREE_COMMANDS:
-            ready = game_frame is not None and self._free_kick_ready(self.command, game_frame)
             kick_clock_start = max(self.command_timestamp, self._defender_too_close_at)
             if self._free_kick_taken(game_frame):
                 # The kicker has kicked: the ball is in play, as after the kick of a ready free kick
@@ -409,17 +404,7 @@ class GameStateMachine:
                 self.command_timestamp = current_time
                 self.next_command = None
                 self.status_message = None
-                self._advance3_ready_since = math.inf
                 self._last_transition_time = current_time
-            elif ready:
-                if self._advance3_ready_since == math.inf:
-                    self._advance3_ready_since = current_time
-                    logger.debug("Advance 3 countdown started (%s)", self.command.name)
-                elif (current_time - self._advance3_ready_since) >= _AUTO_ADVANCE_DELAY:
-                    logger.info("Free kick ready — auto-advancing %s → NORMAL_START", self.command.name)
-                    self._start_normal_play(current_time, game_frame)
-            else:
-                self._advance3_ready_since = math.inf
 
         # ----------------------------------------------------------------
         # Auto-advance 4: BALL_PLACEMENT_* → next_command
@@ -617,34 +602,6 @@ class GameStateMachine:
         closest = min(math.hypot(robot.p.x - penalty_mark_x, robot.p.y) for robot in attackers.values())
         return closest <= _KICKER_READY_DIST
 
-    def _free_kick_ready(self, command: RefereeCommand, game_frame: "GameFrame") -> bool:
-        """Return True when a free kick is ready to start:
-        - The kicker (closest attacker to ball) is within _KICKER_READY_DIST of the ball.
-        - All defending robots are ≥ _BALL_CLEAR_DIST from the ball.
-        """
-        ball = game_frame.ball
-        if ball is None:
-            return False
-        bx, by = ball.p.x, ball.p.y
-
-        kicking_is_yellow = command == RefereeCommand.DIRECT_FREE_YELLOW
-        attackers = (
-            game_frame.friendly_robots if kicking_is_yellow == game_frame.my_team_is_yellow else game_frame.enemy_robots
-        )
-        defenders = (
-            game_frame.enemy_robots if kicking_is_yellow == game_frame.my_team_is_yellow else game_frame.friendly_robots
-        )
-
-        # Check defending robots are all clear.
-        if any(math.hypot(r.p.x - bx, r.p.y - by) < _BALL_CLEAR_DIST for r in defenders.values()):
-            return False
-
-        # Check at least one attacker is close to the ball (kicker in position).
-        if not attackers:
-            return False
-        closest = min(math.hypot(r.p.x - bx, r.p.y - by) for r in attackers.values())
-        return closest <= _KICKER_READY_DIST
-
     def _ball_has_moved(self, game_frame: "GameFrame") -> bool:
         """Return True if the ball has moved ≥ 0.05 m since NORMAL_START."""
         if self._ball_pos_at_normal_start is None or game_frame.ball is None:
@@ -666,8 +623,8 @@ class GameStateMachine:
         return (game_frame.ball.p.x, game_frame.ball.p.y)
 
     def _start_normal_play(self, current_time: float, game_frame: "GameFrame") -> None:
-        """DIRECT_FREE_* → NORMAL_START (the kicker was ready, or the ball has been kicked): the ball
-        is in play, and NORMAL_START's own timeout measures from here."""
+        """DIRECT_FREE_* → NORMAL_START (the ball has been kicked): the ball is in play, and
+        NORMAL_START's own timeout measures from here."""
         self.command = RefereeCommand.NORMAL_START
         self.command_counter += 1
         self.command_timestamp = current_time
@@ -675,7 +632,6 @@ class GameStateMachine:
         self.status_message = None
         self._normal_start_time = current_time
         self._ball_pos_at_normal_start = self._ball_xy(game_frame)
-        self._advance3_ready_since = math.inf
         self._last_transition_time = current_time
 
     def _ball_placement_done(self, game_frame: "GameFrame") -> bool:
@@ -698,7 +654,6 @@ class GameStateMachine:
         self.command_timestamp = current_time
         if completed_command in self._DIRECT_FREE_COMMANDS:
             self.next_command = RefereeCommand.NORMAL_START
-            self._advance3_ready_since = math.inf
         elif completed_command in self._PREPARE_KICKOFF_COMMANDS or completed_command in self._PREPARE_PENALTY_COMMANDS:
             self.next_command = RefereeCommand.NORMAL_START
             self._prepare_entered_time = current_time
@@ -818,7 +773,6 @@ class GameStateMachine:
         self._post_ball_placement_command = None
         self.status_message = None
         self._advance2_ready_since = math.inf
-        self._advance3_ready_since = math.inf
         self._advance4_ready_since = math.inf
 
         if command in (RefereeCommand.STOP, RefereeCommand.HALT):
@@ -852,7 +806,6 @@ class GameStateMachine:
         self._post_ball_placement_command = None
         self.status_message = None
         self._advance2_ready_since = math.inf
-        self._advance3_ready_since = math.inf
         self._advance4_ready_since = math.inf
         if ball_placement_target is not None:
             self.ball_placement_target = ball_placement_target
@@ -874,7 +827,6 @@ class GameStateMachine:
         self._stop_entered_time = timestamp
         self.status_message = None
         self._advance2_ready_since = math.inf
-        self._advance3_ready_since = math.inf
         self._advance4_ready_since = math.inf
         logger.info("Resuming from HALT (queued: %s)", self.next_command.name if self.next_command else "None")
         return self.next_command in self._NEEDS_STOP_FIRST or self.next_command == RefereeCommand.FORCE_START

@@ -11,6 +11,11 @@ from utama_core.custom_referee.rules.last_touch import infer_last_touch_team
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 
+# Frames in a row over the limit before it counts. 67-91% of the calls in the round-robins of
+# 2026-11-09 were one frame, up to 39 m/s, with the robot's kick at a median 5.3 m/s: vision noise
+# in the ball's velocity, not a kick.
+_FRAMES_OVER_LIMIT = 2
+
 _ACTIVE_PLAY_COMMANDS = {
     RefereeCommand.NORMAL_START,
     RefereeCommand.FORCE_START,
@@ -24,14 +29,14 @@ class BallSpeedRule(BaseRule):
     Only the ball's ground speed (x/y) counts — a bounce's z-velocity is not
     part of the kick-speed rule and would otherwise cause false positives.
 
-    Edge-detected: fires once when the ball crosses above the limit, not
-    every frame it remains fast, mirroring how a real kick is a single
-    event rather than a sustained state.
+    Fires once when the ball has been over the limit for `_FRAMES_OVER_LIMIT`
+    frames in a row, not every frame it remains fast, mirroring how a real
+    kick is a single event rather than a sustained state.
     """
 
     def __init__(self, max_speed_mps: float = 6.5) -> None:
         self._max_speed = max_speed_mps
-        self._was_over_limit = False
+        self._frames_over_limit = 0
         # True = friendly last touched, False = enemy, None = unknown.
         # Maintained colour-blind by `infer_last_touch_team` (see last_touch.py).
         self._last_touch_was_friendly: Optional[bool] = None
@@ -46,7 +51,7 @@ class BallSpeedRule(BaseRule):
         designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
         if current_command not in _ACTIVE_PLAY_COMMANDS:
-            self._was_over_limit = False
+            self._frames_over_limit = 0
             self._prev_ball_v = None  # the ball may be moved or placed while play is stopped
             return None
 
@@ -60,11 +65,9 @@ class BallSpeedRule(BaseRule):
         self._prev_ball_v = (ball.v.x, ball.v.y)
 
         speed = math.hypot(ball.v.x, ball.v.y)
-        is_over_limit = speed > self._max_speed
-        rising_edge = is_over_limit and not self._was_over_limit
-        self._was_over_limit = is_over_limit
+        self._frames_over_limit = self._frames_over_limit + 1 if speed > self._max_speed else 0
 
-        if not rising_edge or self._last_touch_was_friendly is None:
+        if self._frames_over_limit != _FRAMES_OVER_LIMIT or self._last_touch_was_friendly is None:
             return None
 
         # SSL rulebook §8.4.2 "Ball Speed" is a non-stopping foul: the kicking
@@ -82,5 +85,5 @@ class BallSpeedRule(BaseRule):
         )
 
     def reset(self) -> None:
-        self._was_over_limit = False
+        self._frames_over_limit = 0
         self._last_touch_was_friendly = None

@@ -44,6 +44,7 @@ from utama_core.config.referee_constants import (
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
+from utama_core.engine import ball_release
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
@@ -461,11 +462,12 @@ class _NoProgressClearsManager(AbstractTestManager):
         return TestingStatus.IN_PROGRESS
 
 
-def test_no_progress_restart_separates_robots_before_force_start(headless):
+def test_no_progress_restart_separates_robots_before_force_start(headless, monkeypatch):
     """The runner's sim shortcut forced FORCE_START on the STOP's first tick, with the
     ball teleported to where it already lay. Two robots locked on the ball never
     separated, so no_progress fired every 10 s for 230 s of tiki_taka_plus_vs_zone_fluid
     (tournament_20261005_115048). A queued FORCE_START waits for StopStep's clearing."""
+    monkeypatch.setattr(ball_release, "HELD_STILL_S", float("inf"))  # the robot must keep holding the ball
     referee = CustomReferee.from_profile_name("simulation")
     runner = StrategyRunner(
         strategy=_go_to_ball_strategy(robot_id=0),

@@ -82,6 +82,9 @@ class DoubleTouchRule(BaseRule):
         self._kicker: Optional[RobotKey] = None
         self._kicking_team_is_yellow: Optional[bool] = None
         self._had_ball_last_frame: set[RobotKey] = set()
+        # The kicking team's robot on the ball while the restart was still being prepared. A free
+        # kick is struck under DIRECT_FREE_*: it is the kicker, not the first robot to receive it.
+        self._restart_toucher: Optional[RobotKey] = None
 
     def check(
         self,
@@ -90,15 +93,20 @@ class DoubleTouchRule(BaseRule):
         current_command: RefereeCommand,
         designated_position: Optional[tuple[float, float]] = None,
     ) -> Optional[RuleViolation]:
+        if current_command in _RESTART_COMMANDS:
+            self._restart_toucher = self._toucher_of_kicking_team(game_frame, current_command) or self._restart_toucher
         if current_command == RefereeCommand.NORMAL_START and self._prev_command in _RESTART_COMMANDS:
             self._armed = True
-            self._kicker = None
+            self._kicker = self._restart_toucher
             self._kicking_team_is_yellow = self._prev_command in _YELLOW_RESTARTS
-            self._had_ball_last_frame = set()
+            # Still in contact at the changeover is the same touch, not a second one.
+            self._had_ball_last_frame = {self._kicker} if self._kicker is not None else set()
         elif current_command != RefereeCommand.NORMAL_START:
             self._armed = False
             self._kicker = None
 
+        if current_command not in _RESTART_COMMANDS:
+            self._restart_toucher = None
         self._prev_command = current_command
 
         if not self._armed:
@@ -144,6 +152,12 @@ class DoubleTouchRule(BaseRule):
 
         return violation
 
+    @staticmethod
+    def _toucher_of_kicking_team(game_frame: GameFrame, command: RefereeCommand) -> Optional[RobotKey]:
+        is_friendly = game_frame.my_team_is_yellow == (command in _YELLOW_RESTARTS)
+        robots = game_frame.friendly_robots if is_friendly else game_frame.enemy_robots
+        return next(((is_friendly, robot.id) for robot in robots.values() if robot.has_ball), None)
+
     def _other_robot_touching(self, game_frame: GameFrame) -> bool:
         ball = game_frame.ball
         if ball is None:
@@ -169,6 +183,7 @@ class DoubleTouchRule(BaseRule):
     def reset_for_new_episode(self) -> None:
         self.reset()
         self._prev_command = None
+        self._restart_toucher = None
 
     def _violation_for(self, kicker: RobotKey, game_frame: GameFrame, geometry: RefereeGeometry) -> RuleViolation:
         kicker_is_friendly, kicker_id = kicker

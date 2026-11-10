@@ -30,9 +30,8 @@ class KeepOutRule(BaseRule):
     keep-out radius of the ball during the other team's kick-off or free kick.
 
     Non-stopping: the rulebook's sanction is a foul-counter increment and a reset of
-    the kicking team's timer, not a stop. The timer reset needs nothing here: the
-    state machine only counts down a free kick or kick-off once every defender is
-    clear (`_free_kick_ready`), so an encroaching defender already holds it back.
+    the kicking team's timer, not a stop: the state machine restarts the free kick's
+    clock from the foul.
     Stopping play and re-awarding the free kick, as this rule used to, voided the
     restart -- in sim straight into a FORCE_START scramble.
 

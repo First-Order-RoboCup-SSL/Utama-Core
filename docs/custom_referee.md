@@ -61,7 +61,7 @@ Built in `_build_active_rules` (`custom_referee.py`), in this priority order; de
 |---|---|---|
 | 1 | `STOP` → queued restart | all robots ≥0.5m from ball (15s clear timeout) |
 | 2 | `PREPARE_KICKOFF_*`/`PREPARE_PENALTY_*` → `NORMAL_START` | prepare timer + kicker in position (kick-off: and every robot in its own half, waited for at most 10 s past the prepare timer, `_KICKOFF_POSITIONING_CAP_S`), held 2s |
-| 3 | `DIRECT_FREE_*` → `NORMAL_START` | the free kick is taken: the ball has moved ≥0.05m from where it was when the command began (at once, from any kick during the preparation); or kicker ≤0.3m from ball, defenders ≥0.5m, held 2s |
+| 3 | `DIRECT_FREE_*` → `NORMAL_START` | the free kick is taken: the ball has moved ≥0.05m from where it was when the command began (at once). Not taken within 10 s: `FORCE_START` |
 | 4 | `BALL_PLACEMENT_*` → next command | ball ≤0.15m from target, held 2s (10s placement timeout) |
 | 5 | `NORMAL_START` → `FORCE_START` | `kickoff_timeout_seconds` elapsed and ball unmoved |
 | 6 | end of a half → second half, then `POST_GAME` | the half's playing time (`half_duration_seconds`) used up |

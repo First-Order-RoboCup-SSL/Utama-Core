@@ -400,15 +400,13 @@ def test_our_direct_free_moves_kicker_to_the_ball(split_shape_runner):
 
     _set_referee_command(split_shape_runner, RefereeCommand.DIRECT_FREE_YELLOW)
 
+    dist_to_ball = math.inf
     for _ in range(200):
         split_shape_runner.step_once()
+        ball = game.ball.p
+        for robot in game.friendly_robots.values():
+            dist_to_ball = min(dist_to_ball, math.hypot(robot.p.x - ball.x, robot.p.y - ball.y))
 
-    ball = game.ball.p
-    kicker = min(
-        game.friendly_robots.values(),
-        key=lambda robot: math.hypot(robot.p.x - ball.x, robot.p.y - ball.y),
-    )
-    dist_to_ball = math.hypot(kicker.p.x - ball.x, kicker.p.y - ball.y)
     assert (
         dist_to_ball < 0.3
     ), f"no robot approached the ball for our direct free kick: closest dist={dist_to_ball:.3f}m"

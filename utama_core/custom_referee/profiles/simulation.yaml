@@ -64,7 +64,7 @@ game:
     stop_to_next_command: true      # STOP → queued restart when all robots clear
     prepare_kickoff_to_normal: true # PREPARE_KICKOFF_* → NORMAL_START when kicker in circle
     prepare_penalty_to_normal: true # PREPARE_PENALTY_* → NORMAL_START when kicker reaches the mark
-    direct_free_to_normal: true     # DIRECT_FREE_* → NORMAL_START when kicker ready
+    direct_free_to_normal: true     # DIRECT_FREE_* → NORMAL_START when the kick is taken
     ball_placement_to_next: true    # BALL_PLACEMENT_* → next_command when ball at target
     normal_start_to_force: true     # NORMAL_START → FORCE_START on kickoff timeout
     end_of_half: true               # half's playing time up → second half, then POST_GAME

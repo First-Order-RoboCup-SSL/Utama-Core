@@ -239,6 +239,7 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
         assert violation.rule_name == "ball_speed"
@@ -260,10 +261,9 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
-        first = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        second = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
-        assert first is not None
-        assert second is None  # still fast, but not a new kick
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is not None
+        assert rule.check(frame, GEO, RefereeCommand.NORMAL_START) is None  # still fast, but not a new kick
 
     def test_fires_again_after_dropping_below_and_back_above_limit(self):
         rule = BallSpeedRule(max_speed_mps=6.5)
@@ -271,9 +271,20 @@ class TestBallSpeedRule:
         fast = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
         slow = _frame(ball=_ball(0.0, 0.0, vx=1.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
 
+        rule.check(fast, GEO, RefereeCommand.NORMAL_START)
         assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
         assert rule.check(slow, GEO, RefereeCommand.NORMAL_START) is None
+        rule.check(fast, GEO, RefereeCommand.NORMAL_START)
         assert rule.check(fast, GEO, RefereeCommand.NORMAL_START) is not None
+
+    def test_one_frame_over_the_limit_is_noise_not_a_kick(self):
+        rule = BallSpeedRule(max_speed_mps=6.5)
+        friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        spike = _frame(ball=_ball(0.0, 0.0, vx=39.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        normal = _frame(ball=_ball(0.0, 0.0, vx=5.3, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        for _ in range(3):
+            assert rule.check(spike, GEO, RefereeCommand.NORMAL_START) is None
+            assert rule.check(normal, GEO, RefereeCommand.NORMAL_START) is None
 
     def test_non_stopping_foul_charged_to_the_kicking_team(self):
         """SSL rulebook §8.4.2 lists Ball Speed as a non-stopping foul: friendly
@@ -282,6 +293,7 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         friendly = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, my_team_is_yellow=True)
+        rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
         assert violation.is_stopping is False
@@ -304,6 +316,7 @@ class TestBallSpeedRule:
         rule = BallSpeedRule(max_speed_mps=6.5)
         enemy = {0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)}
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), enemy_robots=enemy, my_team_is_yellow=True)
+        rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
         assert violation.offending_teams == (False,)
@@ -315,6 +328,7 @@ class TestBallSpeedRule:
         friendly = {0: _robot(0, 0.08, 0.0, is_friendly=True, has_ball=True)}
         enemy = {0: _robot(0, 0.03, 0.0, is_friendly=False, has_ball=True)}  # 0.03 m — closer
         frame = _frame(ball=_ball(0.0, 0.0, vx=7.0, vy=0.0), friendly_robots=friendly, enemy_robots=enemy)
+        rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         violation = rule.check(frame, GEO, RefereeCommand.NORMAL_START)
         assert violation is not None
         assert violation.offending_teams == (False,)  # enemy (blue) kicked
@@ -336,6 +350,44 @@ def _arm_double_touch(rule: DoubleTouchRule, restart_command: RefereeCommand) ->
 
 
 class TestDoubleTouchRule:
+    @staticmethod
+    def _kick_during_the_free_kick(rule):
+        kicking = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=True)}
+        rule.check(
+            _frame(ball=_ball(0.0, 0.0), friendly_robots=kicking, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.DIRECT_FREE_YELLOW,
+        )
+        rule.reset()
+        gone = {0: _robot(0, 0.0, 0.0, is_friendly=True, has_ball=False)}
+        rule.check(
+            _frame(ball=_ball(0.5, 0.0, vx=5.0), friendly_robots=gone, my_team_is_yellow=True),
+            GEO,
+            RefereeCommand.NORMAL_START,
+        )
+
+    def test_the_taker_of_a_kick_struck_before_play_started_cannot_touch_it_again(self):
+        rule = DoubleTouchRule()
+        self._kick_during_the_free_kick(rule)
+        back = {0: _robot(0, 0.5, 0.0, is_friendly=True, has_ball=True)}
+        violation = rule.check(
+            _frame(ball=_ball(0.5, 0.0), friendly_robots=back, my_team_is_yellow=True), GEO, RefereeCommand.NORMAL_START
+        )
+        assert violation is not None and violation.offending_robots == ((True, 0),)
+
+    def test_the_receiver_of_a_kick_struck_before_play_started_is_not_the_kicker(self):
+        rule = DoubleTouchRule()
+        self._kick_during_the_free_kick(rule)
+        taker_away = _robot(0, -2.0, 0.0, is_friendly=True, has_ball=False)
+        for has_ball in (True, False, True):
+            robots = {0: taker_away, 1: _robot(1, 2.0, 0.0, is_friendly=True, has_ball=has_ball)}
+            violation = rule.check(
+                _frame(ball=_ball(2.0, 0.0), friendly_robots=robots, my_team_is_yellow=True),
+                GEO,
+                RefereeCommand.NORMAL_START,
+            )
+            assert violation is None
+
     def test_same_robot_touching_twice_after_a_restart_fouls(self):
         rule = DoubleTouchRule()
         _arm_double_touch(rule, RefereeCommand.DIRECT_FREE_YELLOW)
@@ -1020,7 +1072,6 @@ class TestGameStateMachine:
 
         sm.reset()
         assert sm._advance2_ready_since == math.inf
-        assert sm._advance3_ready_since == math.inf
         assert sm._advance4_ready_since == math.inf
         assert sm._last_transition_time == -math.inf
 
@@ -1270,23 +1321,20 @@ class TestCustomReferee:
         data = referee.step(clear_frame, current_time=2.0)
         assert data.referee_command == RefereeCommand.DIRECT_FREE_BLUE
 
-        # Blue kicker ready, defenders clear -> auto-advances to NORMAL_START.
-        ready_frame = _frame(
-            ball=_ball(0.0, 0.0),
-            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False)},
-            ts=5.0,
-        )
-        referee.step(ready_frame, current_time=5.0)
-        data = referee.step(ready_frame, current_time=8.0)
-        assert data.referee_command == RefereeCommand.NORMAL_START
-
-        # Blue kicker touches the ball (the restart kick itself).
+        # Blue kicker strikes the ball: it has moved, so the free kick is taken.
         kicker_touch = _frame(
             ball=_ball(0.0, 0.0),
             enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=True)},
-            ts=8.1,
+            ts=5.0,
         )
-        referee.step(kicker_touch, current_time=8.1)
+        referee.step(kicker_touch, current_time=5.0)
+        struck = _frame(
+            ball=_ball(0.1, 0.0),
+            enemy_robots={0: _robot(0, 0.0, 0.0, is_friendly=False, has_ball=False)},
+            ts=5.1,
+        )
+        data = referee.step(struck, current_time=5.1)
+        assert data.referee_command == RefereeCommand.NORMAL_START
 
         # Kicker releases, then touches again — no one else touched it. Foul.
         released = _frame(
