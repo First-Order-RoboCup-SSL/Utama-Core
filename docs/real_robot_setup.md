@@ -236,10 +236,8 @@ which every example reads (`load_profile`). Nothing to copy by hand:
 - `carry_speed`, `carry_turn`: the carry ladder's slowest direction, the fastest speed it kept
   the ball every time; `move()` holds this robot to them (`RobotParams.CARRY_*` otherwise).
 
-rsim kicks a robot given its profile as it measured (`real_kick.py`): at its kick speed, off its
-heading by its bias and bend, scattered by its spread, and passes and shots aim against bend and
-bias there too. So an example rehearsed in rsim (`--mode rsim`) kicks like the robot on the field.
-Matches without profiles (the strategy evaluation) keep the sim's own kick.
+rsim keeps its own kick, and kick bend and bias are applied on real robots only, so a rehearsal in
+rsim (`--mode rsim`) does not kick like the robot on the field.
 
 **Kicker charge in play.** On real robots a robot that has not kicked for 25 s fires an empty
 kick, when the ball is neither on it (ball sensor) nor within 30 cm (vision), and never in a HALT

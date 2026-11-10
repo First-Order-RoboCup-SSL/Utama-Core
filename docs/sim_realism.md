@@ -94,7 +94,7 @@ friction). **Within** means kick-to-kick noise for the same robot.
 | Kick speed: between and within | How much time the keeper has; pass weight | Yes: peak ball speed after each kick, per team | Fixed |
 | Kick direction error | Wide rate (6% vs 22%) | Partly: shot miss distance, pass error relative to the receiver | None: exact |
 | Robot top speed, acceleration, braking, turn rate | Who reaches the ball first | Yes: from the tracker, per robot | One limit for all robots (2 m/s for evaluation) |
-| Vision noise and dropped frames (ball especially, also when blocked) | Every decision; keeper tracking | Yes from raw vision packets in the logs; the converter currently reads the filtered tracker | Yes: `SimNoise` (`--sim-noise`, the pool's `sim_noise`) in `run_match`, the round-robin and `evaluate.py`; `rsim_noise` and `rsim_vanishing` in `StrategyRunner` are its older form |
+| Vision noise and dropped frames (ball especially, also when blocked) | Every decision; keeper tracking | Yes from raw vision packets in the logs; the converter currently reads the filtered tracker | Yes: `SimNoise` (`--sim-noise`, the reference's `world.json`) in `run_match`, the round-robin and `evaluate.py`; `rsim_noise` and `rsim_vanishing` in `StrategyRunner` are its older form |
 | Dribbler: hold strength, ball loss when turning or touched, release speed | Possession, passing | Weak: only possession-loss rates as a proxy | Fixed, with the fork's dribbler fixes (`vendor/rSim/FORK_NOTES.md`) |
 | Ball bounce off robots and walls | Rebounds, deflections | Partly: speed before and after contact | Fixed |
 | Robots fielded per team | Defenders in the way of each shot (real 4.5 on average, sim always 6) | Yes: robots on the field in live play, per match | Always 6 |
@@ -340,13 +340,13 @@ direction SD 3° (per robot 1.5°), ball slide 2.5–4.0 then roll 0.27–0.33 m
 
 All of these are built (2026-10-17): `SimNoise` draws each knob per match from its range, seeded
 and recorded in the replay, and reaches `run_match`, the round-robin option, `evaluate.py` and
-`pool_v1` (the v3 ranges, played as `v3_seed2` in the 2026-10-17 round-robin). A knob at zero
+the reference `tools/evaluation/reference/world.json` (the v3 ranges, played as `v3_seed2` in the 2026-10-17 round-robin, have since changed). A knob at zero
 reproduces the old behaviour, so results played without `--sim-noise` are unchanged.
 
 Each knob is off by default, so current results are unchanged, and each comes with a test that
 pins its effect:
 
-- **Latency:** a delay buffer between the strategy's command and rsim (Python). This is the cheapest and probably biggest.
+- **Latency:** a delay buffer between the strategy's command and rsim (Python). This is the cheapest and probably biggest. Current range: 50 to 90 ms in `tools/evaluation/reference/world.json`.
 - **Vision noise and dropped frames:** done. `SimNoise` (`--sim-noise`, the pool's `sim_noise`) goes through `run_match`, the round-robin and `evaluate.py`.
 - **Kick speed noise:** perturb the commanded kick speed (Python).
 - **Kick direction noise:** perturb the direction inside the C++ kicker (fork change, recorded in `FORK_NOTES.md`).
@@ -459,14 +459,16 @@ detections, because the two cameras disagreed by several cm. Vision noise comes 
 
 #### Our robots' kicks in rsim rehearsals (2026-10-29)
 
+Removed 2026-11-09: simulation models the measured world and assumes robots work; see `tools/evaluation/reference/`.
+
 A robot's calibrated profile now drives its kick in rsim when a run gives the profile (the
 examples do): ball speed `kick_speed` (yellow 0 2.19 m/s, blue 0 1.31, the medians of
 2026-10-28's kicks), direction bias + bend × ball offset + normal scatter of `kick_spread_deg`
 (`utama_core/rsoccer_simulator/src/Utils/real_kick.py`). rsim's ball leaves 0.26 m/s slower than
 the kick speed commanded, at 1 to 5 m/s, so the command adds that back. The strategy evaluation
 passes no profiles, so its matches are unchanged: whether evaluation should use our kick is the
-Phase 4 / roadmap 2a decision, not this one. Latency is left out: real robots predict their
-79 ms delay, and rsim would need both to stay faithful.
+Phase 4 / roadmap 2a decision, not this one. Latency is not in this kick profile: rsim's latency is `SimNoise`'s (`reference/world.json`), and real robots predict their
+79 ms delay, so rsim would need both to stay faithful.
 
 ## P1: Value model on real data
 
@@ -516,7 +518,7 @@ Writing `ball_seen` into converted logs would let a later pass tell hidden from 
 
 Built instead of a cheaper outcome (V, shots, xG, stat combinations: all rejected, see
 `docs/signals.md`, "Ranking"): `tools/evaluation/evaluate.py` judges a candidate against the
-champion of a fixed, versioned pool (`tools/evaluation/pools/pool_v1.json`) in rounds of seeded
+champion of a fixed set of reference opponents (`tools/evaluation/reference/opponents.json`) in rounds of seeded
 noisy matches, with ratings from goal margins (`analysis/ratings.py`) and a ledger of every
 match (`replays/eval/ledger.jsonl`); see `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy".
 This covers Phase 4's "several seeds per pairing, paired seeds for A/B".

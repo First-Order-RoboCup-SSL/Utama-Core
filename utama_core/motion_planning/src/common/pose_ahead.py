@@ -30,8 +30,9 @@ class PoseAhead:
     this (4 cm with no delay); the motion benchmark's collisions went from 7 to 3.
 
     Only our robots move ahead, and only for planning their motion (`move()`): the game itself,
-    its history and every other decision keep what vision saw. With no latency (the simulators)
-    `game()` returns the game unchanged.
+    its history and every other decision keep what vision saw. rsim with simulated delay uses this
+    too, at the middle of its range (`SimNoise.latency_estimate_s`). With no latency `game()`
+    returns the game unchanged.
     """
 
     def __init__(self, latency_s: float):

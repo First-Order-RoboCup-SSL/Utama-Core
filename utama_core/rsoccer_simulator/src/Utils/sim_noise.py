@@ -104,6 +104,12 @@ class SimNoise:
         assert self.substeps >= 1
 
     @property
+    def latency_estimate_s(self) -> float:
+        """The one delay the control layer assumes (`PoseAhead`): the middle of `latency_s`. Each
+        robot's real draw differs from it, as a real robot's delay differs from its setting."""
+        return sum(self.latency_s) / 2
+
+    @property
     def native_physics(self) -> bool:
         """Whether any setting needs the fork's C++ physics (`set_physics_params`)."""
         return (
