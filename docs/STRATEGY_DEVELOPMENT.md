@@ -119,7 +119,7 @@ flowchart TD
     ko_t["PREPARE_KICKOFF (theirs)<br/>PrepareKickoffTheirsStep: non-keepers to own half,<br/>outside the centre circle"]
     pe_o["PREPARE_PENALTY (ours)<br/>PreparePenaltyOursStep: kicker to the penalty mark,<br/>others on a line behind it"]
     pe_t["PREPARE_PENALTY (theirs)<br/>PreparePenaltyTheirsStep: keeper to our goal line centre,<br/>others behind the penalty mark"]
-    fk_o["DIRECT_FREE or INDIRECT_FREE (ours)<br/>DirectFreeOursStep: nearest robot becomes kicker,<br/>others stop"]
+    fk_o["DIRECT_FREE or INDIRECT_FREE (ours)<br/>DirectFreeOursStep: nearest robot takes the kick,<br/>others stop"]
     fk_t["DIRECT_FREE or INDIRECT_FREE (theirs)<br/>DirectFreeTheirsStep: clear robots out of keep-out"]
     bp_o["BALL_PLACEMENT (ours)<br/>BallPlacementOursStep: closest robot carries ball to the spot,<br/>others clear"]
     bp_t["BALL_PLACEMENT (theirs)<br/>BallPlacementTheirsStep: clear away from ball and target"]
@@ -139,6 +139,16 @@ flowchart TD
     sel --> bp_t
     sel --> resume
 ```
+
+## After the tactics: team-level ball handling
+
+Two passes run in live play on the commands every tactic returned, so they apply to all strategies.
+`engine/ball_release.py` kicks a ball that cannot be held longer (carry limit, or pinned by an enemy).
+`engine/ball_roles.py` then settles who deals with the ball: the first robot a free ball rolls to
+meets it, a robot about to be passed to stops and faces the ball (`ctx.expected_receivers`), and of
+the robots driving at the ball (`ctx.ball_claims`, set by `go_to_ball` and pressers) one carries on
+and the rest cover it. A tactic's command for a robot can be replaced here: their trace is `ball[id]`
+or `release[id]`.
 
 ## Writing a Tactic
 
@@ -223,7 +233,7 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
    Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
    before anything else.
 3. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
-   is it better than the pool's champion, worse, or not clearly either? Several candidates go in
+   is it better than the champion in `tools/evaluation/reference/opponents.json`, worse, or not clearly either? Several candidates go in
    one call. A strict round-robin (`round_robin.py --strict --reuse`) is the check for stalls
    and the occasional health check of the whole catalog, no longer the way to judge one change.
 
@@ -234,15 +244,15 @@ changes and run one round-robin over the batch.
 **`--reuse`** takes a match's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
 to one strategy only its matches play, one per other config (21 of 231 with 22 configs). What counts as
-"runs" is `utama_core/replay/fingerprint.py`'s: the factory's own module, every module that
-imports (`strategy/pickers.py` and the tactics among them, whole files), and the shared code and
-environment (planner, referee, runner, simulator build, packages, CPU). Editing `pickers.py`
+"runs" is `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that
+imports (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole
+files), and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing `pickers.py`
 reruns every config that imports it, which is most of them; changing shared code reruns
 everything, correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
 difference evicts the records, says the fingerprint missed a dependency, and fails the run.
 Use `--reuse` on every run.
 
-**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference pool. A round-robin's W-D-L is a diagnostic.
+**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference opponents. A round-robin's W-D-L is a diagnostic.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
 it is a target. Don't tune a threshold until results move: a change needs a reason in game
 terms. Two round-robins of near-identical code agree
@@ -252,7 +262,7 @@ because the code is near-identical.
 ### Evaluating a strategy
 
 `tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...]` answers one question per candidate: is
-it stronger than the champion of a fixed reference pool, in goals, under the realistic sim noise?
+it stronger than the champion of a fixed set of reference opponents, in goals, under the realistic sim noise?
 
 The flowchart contrasts it with the round-robin, which answers a different question.
 
@@ -266,7 +276,7 @@ flowchart TD
     end
 
     subgraph ev["evaluate.py: is this candidate stronger than the champion?"]
-        e1["Pool pool_v1.json: champion, six opponents,<br/>three held-out opponents, sim noise"]
+        e1["Reference opponents.json: champion, six opponents,<br/>three held-out opponents; world and robots, sim noise"]
         e2["Round k, noise seed k<br/>candidate and champion each play every opponent"]
         e7["Every match appended to the ledger<br/>replays/eval/ledger.jsonl"]
         e3{"P(candidate stronger), paired<br/>with the champion's results"}
@@ -282,10 +292,11 @@ flowchart TD
     end
 ```
 
-- **The pool** (`tools/evaluation/pools/pool_v1.json`): a champion, six opponents chosen for
-  spread of styles, three held-out opponents and the sim noise. It changes only on purpose, as
-  a new version, so a result means the same thing next month; it does not follow the latest
-  standings.
+- **The reference opponents** (`tools/evaluation/reference/opponents.json`): a champion, six
+  opponents chosen for spread of styles and three held-out opponents. The simulated world and
+  robots are `world.json` and `robots.json` in the same folder (`sim_settings.py` loads them).
+  It changes only on purpose, so a result means the same thing next month; it does not follow
+  the latest standings.
 - **Rounds.** In round k every candidate plays each opponent and the champion once, and the
   champion plays each opponent, all with noise seed k and the side under test in the same colour
   (the noise is drawn per colour and robot, so one seed can favour a colour by half a goal). A
@@ -307,10 +318,10 @@ flowchart TD
   evaluate.py and round-robins, keyed by the code that played it. A match is never played twice;
   the champion's matches are played once per seed and reused by every candidate, and editing a
   strategy starts its record afresh. Replays are not kept, except during a `--explain` run (rerun one with `round_robin.py --pair
-  A B --sim-noise` and the pool's noise with that seed).
+  A B --sim-noise reference:<seed>`).
 - **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
-  be clearly worse against opponents never used for selection. Then edit the pool's champion by
-  hand. Check its per-opponent table: a candidate far better against one opponent and worse
+  be clearly worse against opponents never used for selection. Then edit the champion in
+  `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
   against the rest is a matchup, not a better strategy.
 - **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
@@ -342,7 +353,7 @@ reaches `main` by pull request:
    `pickers.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
    a new module and change the copy; making the improvement everyone's is a human change. Your
    strategy's and tactics' code may not reach outside its module: no import-time effects,
-   no module-level state (keep state in the factory's closure), no imports of another strategy,
+   no module-level state (keep state inside `build`), no imports of another strategy,
    no changing attributes of what it imports. CI checks all of this statically, from `main`'s
    copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
    directly, not through `kernel_strategy.py`.
@@ -413,14 +424,14 @@ whoever runs it.
 - **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
   command latency per robot, kick speed and direction noise (a per-robot offset plus
   kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot
-  speed, acceleration and braking limits applied to the commands the sim acts on (hardware caps,
+  speed and braking limits applied to the commands the sim acts on (hardware caps, the 4 m/s^2 command cap, no per-match acceleration draw,
   below any planner), the physics substep count, and vision noise and dropped detections, all
   off by default. Ball friction, kick direction and substeps need a robosim binary built from
   `vendor/rSim` (`vendor/rSim/FORK_NOTES.md`); with the stock binary they raise. Draws depend on the seed, team
   colour and robot id only, so every pairing in a run gets the same physics and A/B comparisons
   stay paired; the same seed replays a match exactly. Settings and draws go into each replay
   (`columnar_reader.load_sim_noise`) and `summary.json`, and into the match key only when set.
-  Ranges come from `docs/sim_realism.md` Phase 1; until then the knobs have no calibrated values.
+  Ranges and their sources are in `tools/evaluation/reference/world.json` (the Phase 1 numbers are in `docs/sim_realism.md`).
 - **`tools/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
   why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
 - **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
@@ -492,7 +503,7 @@ The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `
    placement geometry under the referee override). `tools/moments.py capture REPLAY --t S --name
    ... --check ... --note "..." [--out PATH]` saves the state; `play JSON --seeds 0-4` must fail on
    at least 4 of 5 before the fix (`--against REF` plays the code at REF beside it; `--events`
-   lists referee changes, fouls, keep-out entries and kicks; `--strategy scratch.py:factory`
+   lists referee changes, fouls, keep-out entries and kicks; `--strategy scratch.py:function`
    tries a strategy from a scratch file). Its note names the fix; if the fix is not in the same
    change, set `"known_failure": "<cause>"` (a strict xfail).
 

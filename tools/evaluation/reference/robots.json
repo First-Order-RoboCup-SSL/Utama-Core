@@ -1,0 +1,15 @@
+{
+  "note": "What the simulated robots can do: assumed good, at league level, not noise-free. Never our current robots' measurements: their shortfalls are the control layer's job. Top speed and the 4 m/s^2 acceleration cap are RSIM_PARAMS. A change here starts a new evaluation environment and replays the ledger.",
+  "values": {
+    "kick_speed_offset_sd": 0.2,
+    "kick_speed_sd": 0.45,
+    "kick_angle_offset_sd_deg": 1.5,
+    "kick_angle_sd_deg": 3.0
+  },
+  "sources": {
+    "kick_speed_offset_sd": "League logs, docs/sim_realism.md: team median kick speeds 4.1 to 6.3 m/s.",
+    "kick_speed_sd": "League logs, docs/sim_realism.md: within-team SD about 0.45 m/s.",
+    "kick_angle_offset_sd_deg": "Chosen with kick_angle_sd_deg to match real pass completion, docs/sim_realism.md: 0.80 at 1 degree, 0.39 at 6, real 0.50.",
+    "kick_angle_sd_deg": "As kick_angle_offset_sd_deg."
+  }
+}

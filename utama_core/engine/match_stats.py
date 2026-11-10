@@ -430,6 +430,7 @@ _POSSESSION_RADIUS_M = 2 * ROBOT_RADIUS + 0.05
 # tools/metric_correlation.py's `_PASS_RELEASE_MPS`, which itself matches
 # this file's own `_SHOT_LOCK_RELEASE_MPS`).
 _PASS_RELEASE_MPS = 1.0
+_MIN_PASS_M = 0.5  # 90% of overload_press's "148 passes" per match were shorter (2026-11-09)
 # Hysteresis band around the attacking-third boundary (half_length +
 # _SHOT_ATTACKING_THIRD_M) so oscillation on that line doesn't double-count
 # entries. Matches tools/metric_correlation.py's `_ENTRY_HYSTERESIS_M`.
@@ -915,12 +916,18 @@ class MatchStatsAccumulator:
                 # holder's -- this is the passer->receiver vector a
                 # completed pass measures distance/progress over.
                 previous_position = self._poss_robot_position
+                # Two teammates side by side trading "nearest robot" is not a pass.
+                is_pass = (
+                    previous_position is None or previous_position.distance_to(nearest_robot_position) >= _MIN_PASS_M
+                )
                 if self._poss_side == nearest_side == "friendly":
-                    self._completed_passes += 1
-                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "friendly")
+                    if is_pass:
+                        self._completed_passes += 1
+                        self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "friendly")
                 elif self._poss_side == nearest_side == "enemy":
-                    self._enemy_completed_passes += 1
-                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "enemy")
+                    if is_pass:
+                        self._enemy_completed_passes += 1
+                        self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "enemy")
                 elif self._poss_side == "friendly" and nearest_side != "friendly":
                     self._turnovers += 1
                 elif self._poss_side == "enemy" and nearest_side != "enemy":

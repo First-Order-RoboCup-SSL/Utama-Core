@@ -8,7 +8,7 @@ Run:
 - `pixi run python tools/evaluation/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
   named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
 - `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
-  of the reference pool (`tools/evaluation/pools/pool_v1.json`). The way to judge a strategy.
+  of the reference opponents (`tools/evaluation/reference/opponents.json`). The way to judge a strategy.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
@@ -36,7 +36,7 @@ strategies named plays these.
 **Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
 unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
 kept strategies and tests build on some of them. A retired strategy comes back by being judged
-with `evaluate.py` against the pool.
+with `evaluate.py` against the reference opponents.
 
 | Strategy | Description |
 |---|---|
@@ -53,7 +53,7 @@ with `evaluate.py` against the pool.
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
 
-Strategies are judged with `evaluate.py` against the reference pool `pool_v1`
+Strategies are judged with `evaluate.py` against the reference opponents (`tools/evaluation/reference/`)
 (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). The round-robin results below are a
 snapshot of the catalog, not the verdict on any one strategy.
 
@@ -98,7 +98,7 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
 
 ## Updating this file
 
-- New factory → add a row with a one-line description to the round-robin table.
+- New strategy → add a row with a one-line description to the round-robin table.
 - New tournament → replace the matching results table (one table per tournament type) and
   record the run directory; don't append narrative. Findings belong in commit messages.
 - Strategy abandoned after losing → add it to `RETIRED` and move its row to the retired table.

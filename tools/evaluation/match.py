@@ -46,7 +46,7 @@ TICKS_PER_SECOND = 60  # matches rsim's default step rate
 # despite the name, it isn't a competitive team — it's the kernel's minimal
 # single-tactic smoke-test scaffold (see its docstring), used across the test
 # suite with as few as zero outfield robots, and plays a real match with 3 of 5
-# outfield robots never issued a command. Every other factory is playable here;
+# outfield robots never issued a command. Every other strategy is playable here;
 # which ones a round-robin plays by default is round_robin.RETIRED's business.
 _CONFIG_NAMES = [
     name
@@ -132,7 +132,7 @@ def run_match(
     fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     sim_noise: Optional[SimNoise] = None,
 ) -> MatchResult:
-    """Play one match between two kernel-strategy factories, until the referee calls full
+    """Play one match between two strategies, until the referee calls full
     time (two halves of the profile's `half_duration_seconds` of playing time, the clock
     stopped whenever no team may play the ball) or `duration_seconds` of sim time pass,
     whichever is first. The cap only ends a match that can't finish: two 300 s halves took

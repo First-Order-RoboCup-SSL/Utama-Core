@@ -51,12 +51,14 @@ One term per thing; reuse these instead of coining new ones.
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a
-  candidate stronger than the champion of a fixed, versioned reference pool
-  (`tools/evaluation/pools/pool_vN.json`)? Rounds of matches against the pool's opponents under
-  seeded sim noise, decided on paired results (candidate and champion against the same opponent
-  under the same noise) and stopping once the answer is clear; ratings (strength ± SD in goals
-  per match, `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
+- **Evaluation / ratings / reference opponents / ledger** — `tools/evaluation/evaluate.py`: is a
+  candidate stronger than the champion of a fixed set of reference opponents
+  (`tools/evaluation/reference/opponents.json`: the champion, six opponents, three held-out
+  opponents)? Rounds of matches against those opponents in the simulated world and robots
+  (`tools/evaluation/reference/world.json`, `robots.json`) under seeded sim noise, decided on
+  paired results (candidate and champion against the same opponent under the same noise) and
+  stopping once the answer is clear; ratings (strength ± SD in goals per match,
+  `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
 - **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the

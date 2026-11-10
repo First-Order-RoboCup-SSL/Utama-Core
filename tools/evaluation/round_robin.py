@@ -19,7 +19,8 @@ Configs are short names (`tiki_taka`); none means every config not in RETIRED. F
     --both-sides            play each pair twice, sides swapped
     --control-scheme NAME   planner (fpp, trajsample, ...)
     --fuzz-restarts SEED    inject random legal restarts; --fuzz-interval LO HI sets the gap
-    --sim-noise JSON        seeded sim noise for every match: a SimNoise as inline JSON or a file
+    --sim-noise SPEC        seeded sim noise for every match: reference[:seed] (reference/world.json
+                            and robots.json), or a SimNoise as inline JSON or a file
     --match-seconds S       match length in sim seconds (default 1200)
     --max-workers N, --sequential, --no-save, -v/--verbose, -h/--help
 
@@ -107,6 +108,7 @@ from tools.evaluation.match import (  # noqa: F401 -- re-exported for callers im
     _stats_to_dict,
 )
 from tools.evaluation.match import run_match as _lib_run_match
+from tools.evaluation.sim_settings import sim_noise_from_spec
 from utama_core.analysis import ratings, restart_outcomes, turnover_breakdown
 from utama_core.analysis.strategy_table import strategy_table
 from utama_core.config.settings import REPLAY_BASE_PATH
@@ -312,16 +314,16 @@ def main() -> None:
         fuzz_interval_s = (float(args[idx + 1]), float(args[idx + 2]))
         args = args[:idx] + args[idx + 3 :]
 
-    # `--sim-noise JSON` plays every match with the same seeded latency, kick speed and direction
-    # noise, ball friction, per-robot motion limits and vision noise: a `SimNoise` as inline JSON or
-    # a path to a JSON file, e.g. '{"seed": 1, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.3}'
+    # `--sim-noise SPEC` plays every match with the same seeded latency, kick speed and direction
+    # noise, ball friction, per-robot motion limits and vision noise: `reference` or `reference:<seed>`
+    # (`reference/world.json` and `robots.json`), or a `SimNoise` as inline JSON or a path to a JSON
+    # file, e.g. '{"seed": 1, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.3}'
     # (field list in `SimNoise`'s docstring). Every pairing gets the same
     # draws (they depend on colour and robot id, not strategy), so standings stay paired.
     sim_noise: Optional[SimNoise] = None
     if "--sim-noise" in args:
         idx = args.index("--sim-noise")
-        spec = args[idx + 1]
-        sim_noise = SimNoise.from_dict(json.loads(Path(spec).read_text() if Path(spec).is_file() else spec))
+        sim_noise = sim_noise_from_spec(args[idx + 1])
         args = args[:idx] + args[idx + 2 :]
     sim_noise_dict = sim_noise.to_dict() if sim_noise is not None else None
 

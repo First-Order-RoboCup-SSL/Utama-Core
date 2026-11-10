@@ -33,7 +33,7 @@ a robot came near the ball. Without them a moment passes when the opponent
 does something else, the ball goes elsewhere, or our robot never gets there.
 
 Hand-made moments: `new` writes a template (both teams in a fixed formation, ours on the right,
-the pool's noise with seed 1, source null) to edit by hand; `save` and `load` refuse an
+the reference noise with seed 1, source null) to edit by hand; `save` and `load` refuse an
 invalid one, naming each problem (ids, field lines, check and strategy names).
 
 List our side's fouls in a round-robin run, as starting points, each with the referee command
@@ -75,6 +75,7 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
+from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -323,7 +324,7 @@ def template(
     seconds: float = DEFAULT_SECONDS,
 ) -> Moment:
     """A hand-made moment: both teams in a fixed formation (ours yellow on the right, facing left),
-    the given ball and referee command, the reference pool's noise with seed 1, source null."""
+    the given ball and referee command, the reference noise with seed 1, source null."""
     from utama_core.replay.scenario import RobotState
 
     ours = [(4.0, 0.0), (2.2, 1.2), (2.2, -1.2), (1.0, 2.0), (1.0, -2.0), (0.6, 0.0)]
@@ -333,7 +334,8 @@ def template(
             RobotState(id=i, x=x, y=y, orientation=facing, vx=0.0, vy=0.0) for i, (x, y) in enumerate(positions)
         )
 
-    pool = json.loads((REPO_ROOT / "tools" / "evaluation" / "pools" / "pool_v1.json").read_text())
+    from tools.evaluation.sim_settings import reference_noise
+
     scenario = Scenario(
         sim_time=0.0,
         ball_x=ball[0],
@@ -352,7 +354,7 @@ def template(
         checks=list(checks),
         strategy=_full_name(strategy),
         seconds=seconds,
-        sim_noise={**pool["sim_noise"], "seed": 1},
+        sim_noise=reference_noise(seed=1),
     )
 
 

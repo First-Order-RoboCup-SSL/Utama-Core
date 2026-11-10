@@ -3,9 +3,10 @@
 Run:
     pixi run python tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...] [flags]
 
-    --pool PATH       the reference pool (default tools/evaluation/pools/pool_v1.json): the
-                      champion, the opponents, the held-out opponents and the sim noise
-    --held-out        play the pool's held-out opponents instead (the check before promoting)
+    --opponents PATH  the champion, opponents and held-out opponents (default
+                      tools/evaluation/reference/opponents.json). The sim is always the reference
+                      world and robots (reference/world.json, reference/robots.json)
+    --held-out        play the held-out opponents instead (the check before promoting)
     --baseline NAME   compare against this strategy instead of the champion: a new version
                       against the one it changes. The baseline takes the champion's role, the
                       champion joins the opponents, and a baseline from the pool leaves them
@@ -44,12 +45,11 @@ Strengths printed at the end come from the ratings over all matches (`analysis/r
 
 A fixture already in the ledger is never played again, so the champion's matches are played
 once per seed and reused by every candidate. Replays are not kept: a match is a pure function
-of its fixture, so `round_robin.py --pair A B --sim-noise` with the pool's noise and the seed
-plays it again.
+of its fixture, so `round_robin.py --pair A B --sim-noise reference:<seed>` plays it again.
 
 Promoting is a decision, not a side effect: a candidate called better should pass `--held-out`
 (it must not lose clearly to opponents never used for selection) before you set it as the
-pool's champion by hand.
+champion by hand in `reference/opponents.json`.
 """
 
 from __future__ import annotations
@@ -73,13 +73,17 @@ from tools.evaluation.round_robin import (  # noqa: E402
     _resolve_config_names,
     _run_metadata,
 )
+from tools.evaluation.sim_settings import (  # noqa: E402
+    DEFAULT_OPPONENTS,
+    load_opponents,
+    reference_noise,
+)
 from utama_core.analysis import ratings  # noqa: E402
 from utama_core.config.settings import REPLAY_BASE_PATH  # noqa: E402
 from utama_core.replay import eval_ledger  # noqa: E402
 from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E402
 
-DEFAULT_POOL = Path(__file__).with_name("pools") / "pool_v1.json"
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
@@ -133,7 +137,7 @@ def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool = Fal
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("candidates", nargs="+")
-    parser.add_argument("--pool", type=Path, default=DEFAULT_POOL)
+    parser.add_argument("--opponents", type=Path, default=DEFAULT_OPPONENTS)
     parser.add_argument("--held-out", action="store_true")
     parser.add_argument("--baseline")
     parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
@@ -153,7 +157,7 @@ def main() -> None:
         opponents.append(pool_champion)  # against a baseline, the champion is one more opponent
     opponents = [o for o in opponents if o != champion]  # a baseline from the pool leaves its seat
     candidates = [c for c in _resolve_config_names(args.candidates) if c != champion]
-    noise = SimNoise.from_dict(pool["sim_noise"]).to_dict()
+    noise = SimNoise.from_dict(reference_noise()).to_dict()
     noise.pop("seed", None)
 
     graph = CodeGraph()
@@ -168,7 +172,7 @@ def main() -> None:
     run_dir = Path(REPLAY_BASE_PATH) / run_id  # replay files must sit directly under replays/
     run_dir.mkdir(parents=True, exist_ok=True)
     print(
-        f"Pool v{pool['version']}{' (held out)' if args.held_out else ''}: "
+        f"{'Held-out opponents' if args.held_out else 'Opponents'}: "
         f"{'baseline' if args.baseline else 'champion'} {_short_name(champion)}; "
         f"opponents {', '.join(_short_name(o) for o in opponents)}; environment {env}\n"
     )
@@ -240,7 +244,7 @@ def main() -> None:
             {
                 "run_id": run_id,
                 "run": _run_metadata(),
-                "pool": str(args.pool),
+                "opponents": str(args.opponents),
                 "held_out": args.held_out,
                 "environment": env,
                 "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
