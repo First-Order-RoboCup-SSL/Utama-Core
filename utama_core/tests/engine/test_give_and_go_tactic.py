@@ -36,7 +36,10 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import find_best_shot
+from utama_core.shared.pass_and_score_geometry import (
+    MIN_OPEN_TEAMMATE_M,
+    find_best_shot,
+)
 from utama_core.tactics.give_and_go import (
     _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,
@@ -44,6 +47,7 @@ from utama_core.tactics.give_and_go import (
     _MAX_PASS_WAIT_TICKS,
     GiveAndGoMem,
     GiveAndGoTactic,
+    _nearest_safe_receiver,
     _relocate_target,
 )
 
@@ -209,7 +213,7 @@ def test_a_carrier_stops_waiting_for_its_receiver_after_the_limit(monkeypatch):
         return {}, False, False
 
     monkeypatch.setattr("utama_core.tactics.give_and_go._pass_exec", _fake_pass_exec)
-    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.0, 1.0), enemy_pos=Vector2D(3.0, -2.5))
+    game = _make_game(carrier_pos=Vector2D(0.0, 0.0), teammate_pos=Vector2D(1.5, 1.5), enemy_pos=Vector2D(3.0, -2.5))
     ctx = TickContext(motion_controller=_PerRobotMotionController(), match_log=None)
     tactic = GiveAndGoTactic()
     mem = tactic.initial_mem()
@@ -277,11 +281,11 @@ def test_first_touch_stuck_gives_up_after_max_first_touch_ticks():
     assert mem.hop_count == 0
 
 
-def _make_open_lane_game(carrier_orientation: float) -> Game:
+def _make_open_lane_game(carrier_orientation: float, teammate_pos: Vector2D = Vector2D(0.3, 0.3)) -> Game:
     """No enemies at all (shot lane always open — `find_best_shot` never
     returns None) and a teammate close enough to be a real ally but inside
-    `_MIN_SAFE_PASS_DISTANCE`, so `_nearest_safe_receiver` never selects it
-    (`dist < _MIN_SAFE_PASS_DISTANCE: continue`) -- `mem.receiver_id` stays
+    `MIN_OPEN_TEAMMATE_M`, so `_nearest_safe_receiver` never selects it
+    (`dist < MIN_OPEN_TEAMMATE_M: continue`) -- `mem.receiver_id` stays
     None forever without needing a blocked lane, isolating the
     `first_touch_stuck`/`force_shot` interaction from any pass mechanics.
     `carrier_orientation` lets a test aim the carrier at the enemy goal
@@ -289,7 +293,6 @@ def _make_open_lane_game(carrier_orientation: float) -> Game:
     takes the immediate-`kick()` branch rather than `turn_on_spot`.
     """
     carrier_pos = Vector2D(0.0, 0.0)
-    teammate_pos = Vector2D(0.3, 0.3)  # well under _MIN_SAFE_PASS_DISTANCE (0.7m)
     friendly = {
         1: Robot(
             id=1,
@@ -695,3 +698,11 @@ def test_lone_carrier_switches_aim_when_the_keeper_clearly_opens_the_other_side(
     # The keeper steps 0.3 m toward the aimed-at corner: the other side is now far wider.
     first, after_step = _aimed_side([0.01, -0.3 if aims_low else 0.3])
     assert first != after_step
+
+
+@pytest.mark.parametrize("gap, chosen", [(MIN_OPEN_TEAMMATE_M - 0.05, False), (MIN_OPEN_TEAMMATE_M + 0.05, True)])
+def test_first_touch_pass_skips_a_teammate_too_near_to_adjust(gap, chosen):
+    """A first-touch pass goes to a teammate at least `MIN_OPEN_TEAMMATE_M` away: nearer, a
+    full-power kick arrives before the receiver can adjust (28% received under 1.5 m)."""
+    game = _make_open_lane_game(0.0, teammate_pos=Vector2D(gap, 0.0))
+    assert (_nearest_safe_receiver(game, 1, (2,)) == 2) is chosen

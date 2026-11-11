@@ -14,6 +14,15 @@ from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
 
+def _defending_attack_count(robots: int) -> int:
+    """Robots kept in "attack" while the enemy is nearer the ball: one goes to the ball and, from four
+    robots up, one more holds open space upfield. A ball won with nobody ahead of it led to a shot 3%
+    of the time, with four ahead 23% (2026-11-10 round-robin); in 684 paired 12 s drills from enemy
+    possession the second attacker scored +2.6 +/- 0.9 points more often, conceded no more (+0.3 +/- 0.7)
+    but gave away more free kicks (+7.3 +/- 2.5 points). Three robots keep all three back."""
+    return robots // 2 if robots >= 4 else robots // 2 - 1
+
+
 def _possession_split_picker(
     game: Game,
     free_robots: frozenset[RobotId],
@@ -50,7 +59,7 @@ def _possession_split_picker(
     if "defense" not in available_tactic_ids:
         return {"attack": frozenset(ordered)}
 
-    attack_count = (len(ordered) + 1) // 2 + 1 if friendly_has_ball_edge else len(ordered) // 2 - 1
+    attack_count = (len(ordered) + 1) // 2 + 1 if friendly_has_ball_edge else _defending_attack_count(len(ordered))
     attack_count = max(0, min(len(ordered), attack_count))
 
     partition = {}

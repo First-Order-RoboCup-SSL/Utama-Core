@@ -50,6 +50,9 @@ from utama_core.skills.src.utils.move_utils import (
 
 _WALL_FROM_BALL_M = BALL_KEEP_OUT_DISTANCE + 0.15
 _STOP_FORMATION_SPEED_MPS = 1.2  # under RobotStopSpeedRule's limit
+# A free kick's receiver stands waiting for a still ball: under 1 m it was received 53% of the time,
+# as often as from 1.5 m to 2.5 m (2026-11-10), so restarts keep short passes that open play skips.
+RESTART_MIN_TEAMMATE_M = 0.7
 
 
 def _all_stop(blackboard) -> None:
@@ -1073,7 +1076,7 @@ class DirectFreeOursStep:
         Only the teammate is fixed: the heading follows it, once it is at any spot it was called to."""
         target = self._target
         if target is None or target[0] != kicker_id or target[1].distance_to(ball_pos) > self._NEW_RESTART_M:
-            teammate = open_teammate(game, kicker_id, origin=ball_pos)
+            teammate = open_teammate(game, kicker_id, origin=ball_pos, min_distance=RESTART_MIN_TEAMMATE_M)
             spot = None
             if teammate is not None:
                 point = game.friendly_robots[teammate].p

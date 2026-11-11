@@ -47,6 +47,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import (
+    MIN_OPEN_TEAMMATE_M,
     ball_in_own_defense_area,
     ball_line_receive_point,
     carry_exhausted,
@@ -157,7 +158,6 @@ def _best_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) 
     return best_id
 
 
-_MIN_SAFE_PASS_DISTANCE = 0.7  # metres — matches score_pass_setup's own min_pass_distance
 _SHOT_SWITCH_MARGIN = 0.15  # metres a new shot gap must beat the aimed-at one by; same as _pass_and_score's
 
 
@@ -181,7 +181,7 @@ def _nearest_safe_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int
     for candidate_id in candidate_ids:
         candidate_pos = game.friendly_robots[candidate_id].p
         dist = carrier_pos.distance_to(candidate_pos)
-        if dist < _MIN_SAFE_PASS_DISTANCE:
+        if dist < MIN_OPEN_TEAMMATE_M:
             continue
         if segment_blocked(carrier_pos, candidate_pos, enemies):
             continue

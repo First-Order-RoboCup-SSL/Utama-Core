@@ -805,7 +805,10 @@ def find_best_shot(
 # a robot touching the ball beside this one does not block a kick that leaves away from it.
 RELEASE_LANE_CLEARANCE = ROBOT_RADIUS + BALL_RADIUS + 0.05
 _OWN_GOAL_RELEASE_MARGIN_M = 0.3
-_MIN_OPEN_TEAMMATE_M = 0.7
+# Nearer than this a full-power kick reaches the teammate before it can adjust: 28% of passes under
+# 1.5 m were received against about 50% from 1.5 m to 3.5 m (3131 passes, 2026-11-10). Skipping them
+# in paired drills: +1.7 +/- 0.6 points of goal difference and the ball 0.26 m further upfield.
+MIN_OPEN_TEAMMATE_M = 1.5
 # Further than this a full-power kick reached the teammate less than 45% of the time and left the
 # pitch more than 40%, against 52% and 30% from 1.5 m to 3.5 m (36 matches, 2026-11-09).
 MAX_OPEN_TEAMMATE_M = 3.5
@@ -829,7 +832,11 @@ def reaches_own_goal(game: Game, point: Vector2D, heading: float) -> bool:
 
 
 def open_teammate(
-    game: Game, robot_id: int, clearance: float = ROBOT_RADIUS + 0.15, origin: Optional[Vector2D] = None
+    game: Game,
+    robot_id: int,
+    clearance: float = ROBOT_RADIUS + 0.15,
+    origin: Optional[Vector2D] = None,
+    min_distance: float = MIN_OPEN_TEAMMATE_M,
 ) -> Optional[int]:
     """Id of the most advanced teammate in range of a kick down a clear lane, outside our own box.
     From `origin` for a robot not at the ball yet, otherwise from where the robot stands."""
@@ -838,10 +845,7 @@ def open_teammate(
     goal_x = enemy_goal_line(game)[0]
     best, best_to_goal = None, None
     for teammate_id, teammate in game.friendly_robots.items():
-        if (
-            teammate_id == robot_id
-            or not _MIN_OPEN_TEAMMATE_M <= position.distance_to(teammate.p) <= MAX_OPEN_TEAMMATE_M
-        ):
+        if teammate_id == robot_id or not min_distance <= position.distance_to(teammate.p) <= MAX_OPEN_TEAMMATE_M:
             continue
         if in_own_defense_area(game, teammate.p) or segment_blocked(position, teammate.p, enemies, clearance):
             continue
