@@ -96,3 +96,20 @@ def test_starts_come_from_the_latest_run_with_several_replays_of_the_strategy(tm
 def test_replays_where_it_was_our_side_come_first(tmp_path):
     d = _run(tmp_path, "tournament_1", [("y", "s"), ("s", "x"), ("a", "b")])
     assert [p.name for p in screen.replays_with(d, "s")] == ["s_vs_x.npz", "y_vs_s.npz"]
+
+
+def test_command_at_is_the_last_referee_command_at_or_before_t(tmp_path):
+    import json
+
+    rows = [
+        {"event": "referee", "sim_time": 4.0, "command": "STOP"},
+        {"event": "intention", "sim_time": 5.0},
+        {"event": "referee", "sim_time": 0.0, "command": "NORMAL_START"},
+    ]
+    sidecar = tmp_path / "a_vs_b.intentions.jsonl"
+    sidecar.write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
+    timeline = screen.referee_timeline(sidecar)
+    assert timeline == [(0.0, "NORMAL_START"), (4.0, "STOP")]
+    assert screen.command_at(timeline, -1.0) is None
+    assert screen.command_at(timeline, 3.99) == "NORMAL_START"
+    assert screen.command_at(timeline, 4.0) == "STOP"  # at the change, the new command, as the scenario reads it

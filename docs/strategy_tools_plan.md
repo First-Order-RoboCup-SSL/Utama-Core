@@ -65,7 +65,8 @@ play?" It is for deciding whether a change is worth the cost of an evaluation.
 - **Call:** `SKIP: did not fire` if under 10% of starts fired; `SKIP: fewer goals in the starts` if,
   over the fired starts, the goal difference (change minus base) is lower by more than 2 standard
   errors; otherwise `WORTH EVALUATING`.
-- **Cost:** about 30 minutes on 8 workers, against several hours for a 6-round `evaluate.py` run.
+- **Cost:** about 4 minutes on 12 workers (120 starts of 20 s; measured 2026-11-11), against 10–15 minutes
+  per `evaluate.py` round and up to 6 rounds.
 - Every run appends to `replays/eval/screen_log.jsonl` (commit, fingerprints of both sides, every
   pair, the call), so its calls can be checked against verdicts later.
 
@@ -84,6 +85,17 @@ is judged going forward:
   again; if it fails twice, the screen is dropped and `evaluate.py` stays the only gate.
 - If the record grows too slowly, deliberate small mistakes in the champion (each confirmed worse by
   `evaluate.py` first), their reversals and changes that cannot alter play can be added as known answers.
+
+**Track record.** One row per real change; the screen's runs are in `replays/eval/screen_log.jsonl`.
+
+| Date | Change | Screen | `evaluate.py` |
+|---|---|---|---|
+| 2026-11-11 | `split_shape` at `5b623b0e` (no open-play pass under 1.5 m, one attacker kept upfield) against `e16649d5` | fired 60 of 60; goal difference +0.00 ± 0.05; WORTH EVALUATING | not run yet |
+
+What the first run shows, recorded and not acted on (the rule is not tuned during the trial): any change
+to a strategy's code fires in every start, within 0.1 s, because the sim diverges from the smallest
+difference, so "did not fire" can only catch changes the starts never reach. The goal rule has little to
+work with: 10 goals in 120 starts of 20 s.
 
 **Why not the retired scenario bench.** The scenario bench (retired 2026-10-17) also started
 matches from fixed states. It ranked *different* strategies. Its estimate was biased per

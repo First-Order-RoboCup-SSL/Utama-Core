@@ -37,6 +37,7 @@ import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import argparse
+import bisect
 import json
 import math
 import random
@@ -187,19 +188,49 @@ def replay_seconds(path: Path) -> float:
     return float(ts[-1] - ts[0]) if len(ts) else 0.0
 
 
+def referee_timeline(sidecar: Path) -> list[tuple[float, str]]:
+    """The `event: referee` rows of a match's `.intentions.jsonl` as (sim_time, command), in time order."""
+    rows = []
+    for line in sidecar.read_text().splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("event") == "referee" and row.get("sim_time") is not None and row.get("command"):
+            rows.append((float(row["sim_time"]), row["command"]))
+    return sorted(rows, key=lambda r: r[0])
+
+
+def command_at(timeline: list[tuple[float, str]], t: float) -> Optional[str]:
+    """The last command at or before `t` (as `scenario._referee_command_at` reads it), None before the first."""
+    i = bisect.bisect_right([ts for ts, _ in timeline], t)
+    return timeline[i - 1][1] if i else None
+
+
+def _is_live(path: Path, t: float, timelines: dict) -> bool:
+    """Live play at `t`: from the sidecar, read once per replay (reloading the replay for every draw took
+    over a minute per screen); from the replay's own frame when there is no sidecar."""
+    sidecar = path.with_name(f"{path.stem}.intentions.jsonl")
+    if sidecar.exists():
+        if path not in timelines:
+            timelines[path] = referee_timeline(sidecar)
+        return command_at(timelines[path], t) in {c.name for c in LIVE}
+    try:
+        return scenario_from_replay(path, t).referee_command in LIVE
+    except (ValueError, IndexError):
+        return False
+
+
 def choose_starts(paths: list[Path], n: int, seed: int) -> list[Start]:
     """`n` moments of live play, the replays taken in turn, each with its own noise seed."""
     rng = random.Random(seed)
     lengths = {path: replay_seconds(path) for path in paths}
+    timelines: dict = {}
     starts: list[Start] = []
     for i in range(n):
         path = paths[i % len(paths)]
         for t in draw_times(rng, lengths[path], MAX_DRAWS):
-            try:
-                scenario = scenario_from_replay(path, t)
-            except (ValueError, IndexError):
-                continue
-            if scenario.referee_command in LIVE:
+            if _is_live(path, t, timelines):
                 starts.append(Start(path.as_posix(), round(t, 3), zlib.crc32(f"{seed}:{i}".encode())))
                 break
     return starts
@@ -284,7 +315,9 @@ def main() -> None:
     parser.add_argument("--starts", type=int, default=STARTS)
     parser.add_argument("--seconds", type=float, default=SECONDS)
     parser.add_argument("--seed", type=int, default=0, help="which starts and noise (default 0)")
-    parser.add_argument("--max-workers", type=int, default=8, help="parallel starts (default 8)")
+    parser.add_argument(
+        "--max-workers", type=int, default=12, help="parallel starts (default 12; each runs about 3 processes)"
+    )
     parser.add_argument("--no-record", action="store_true", help=f"don't append to {LOG_PATH}")
     args = parser.parse_args()
 
