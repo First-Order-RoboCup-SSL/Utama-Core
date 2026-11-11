@@ -42,7 +42,7 @@ def _build_dribbler_kernel_strategy(motion_controller: MotionController) -> Kern
 
 def main() -> None:
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build_kernel_strategy=_build_dribbler_kernel_strategy),
+        strategy=AbstractStrategy(build=_build_dribbler_kernel_strategy),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",

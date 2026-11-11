@@ -269,7 +269,7 @@ def _one_robot_strategy(robot_id: int, tactic_cls) -> AbstractStrategy:
         )
 
     return AbstractStrategy(
-        build_kernel_strategy=_build,
+        build=_build,
         goalkeeper_id=robot_id if tactic_cls is None else _NO_ROBOT,
     )
 

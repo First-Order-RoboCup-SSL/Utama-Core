@@ -49,3 +49,19 @@ def test_the_field_example_holds_while_its_tactic_does_not_apply():
     assert example._play_or_hold(None, robots, None, frozenset({"hold"})) == {"hold": robots}
     assert example._play_or_hold(None, robots, None, frozenset({"play", "hold"})) == {"play": robots}
     assert example._play_or_hold(None, frozenset(), None, frozenset({"play", "hold"})) == {}
+
+
+@pytest.mark.parametrize("path", sorted(EXAMPLES.glob("*.py")), ids=lambda p: p.name)
+def test_every_example_imports(path, tmp_path):
+    """Every example's imports resolve. Until 2026-11-11 two demos still imported the removed
+    `utama_core.strategy.kernel_strategy` (gone when strategies became `strategy/<name>.py`) and one
+    the long-deleted `WanderingStrategy`, and nothing ran them."""
+    code = (
+        "import importlib.util, sys; "
+        f"sys.path.insert(0, {str(EXAMPLES)!r}); "
+        f"spec = importlib.util.spec_from_file_location('example_under_test', {str(path)!r}); "
+        "module = sys.modules['example_under_test'] = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module)"
+    )
+    done = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr[-2000:]

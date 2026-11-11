@@ -1,5 +1,5 @@
 """round_robin.py (formerly smoke_tournament.py, before that tournament.py) — Round-robin every
-`build_*_kernel_strategy` config against every other, one full match per pair
+strategy (`utama_core/strategy/catalog.py`) against every other, one full match per pair
 (two halves, see `MAX_MATCH_SECONDS` below). This is the whole-catalog health and stall check;
 a single strategy is judged with `evaluate.py`.
 
@@ -32,7 +32,7 @@ Configs are short names (`tiki_taka`); none means every config not in RETIRED. F
 What this does
 --------------
 Headless rsim, no external process required. For each distinct pair of the
-`build_*_kernel_strategy` factories in `utama_core.strategy.kernel_strategy`,
+strategies `utama_core/strategy/catalog.py` finds (one `strategy/<name>.py` each),
 runs one `StrategyRunner` match (6v6: 1 goalkeeper + 5 outfield robots per
 side — enough for every factory's minimum, including the `min_attack=2`
 configs and `three_slot`'s three concurrent slots),
@@ -191,8 +191,8 @@ def vs_champion_pairs(config_names: list[str], champion: str, first_opponent: st
 
 
 def main() -> None:
-    # Optional CLI args: config names (with or without the `build_`/
-    # `_kernel_strategy` wrapping) to run instead of the full auto-discovered
+    # Optional CLI args: config names (plain, or the old `build_<name>_kernel_strategy`
+    # form, which `catalog.plain_name` still accepts) to run instead of the full auto-discovered
     # catalog — useful for a quick check of one or two configs without
     # waiting on every pair, e.g. `python tools/evaluation/round_robin.py default
     # low_block`. `--sequential` forces the old one-process-at-a-time loop

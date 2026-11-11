@@ -11,7 +11,7 @@ What it does:
   - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
-  - build_tiki_taka_plus_kernel_strategy() builds the give-and-go +
+  - builder("tiki_taka_plus", ...) builds the give-and-go +
     final-third decoy-overload kernel strategy (see
     docs/strategies.md) so you can watch real tactic assignments in the
     dashboard's Live tab instead of an aimless wandering tactic, and watch
@@ -39,7 +39,7 @@ from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.run import StrategyRunner
-from utama_core.strategy.kernel_strategy import build_tiki_taka_plus_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -69,7 +69,7 @@ def main() -> None:
 
     outfield_robot_ids = tuple(range(1, N_ROBOTS))
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build_kernel_strategy=build_tiki_taka_plus_kernel_strategy(outfield_robot_ids)),
+        strategy=AbstractStrategy(build=builder("tiki_taka_plus", outfield_robot_ids)),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
@@ -78,7 +78,7 @@ def main() -> None:
         exp_enemy=N_ROBOTS,
         referee=referee,  # StrategyRunner drives referee.step() each tick
         show_live_status=True,
-        opp_strategy=AbstractStrategy(build_kernel_strategy=build_tiki_taka_plus_kernel_strategy(outfield_robot_ids)),
+        opp_strategy=AbstractStrategy(build=builder("tiki_taka_plus", outfield_robot_ids)),
     )
 
     runner.run()
