@@ -35,6 +35,7 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 ## Open work
 
 - [roadmap.md](roadmap.md): larger open workstreams, and one-line pointers to finished ones.
+- [strategy_tools_plan.md](strategy_tools_plan.md): design note, "one question, one tool": which strategy tool answers which question, what is planned and in what order, and the open names.
 - [sim_realism.md](sim_realism.md): how far rsim is from real matches, the realism scorecard, and the plan to close the gap with measured, randomized physics.
 - [in_house_vision.md](in_house_vision.md): our own vision stack for lab days (per-session tag calibration, tags on robots), the experiments that decide it, and the 2026-10-22 test day's vision findings.
 - [field_log_replay.md](field_log_replay.md): design for finding a moment in a field log and rerunning the decision code on its recorded inputs, and the physical setup's own errors (tag yaw and offset, kicker offset, cameras) as per-robot profiles.

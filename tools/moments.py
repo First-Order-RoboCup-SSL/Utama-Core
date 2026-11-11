@@ -65,7 +65,6 @@ import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before any import: hides pygame's banner
 import argparse
 import dataclasses
-import importlib.util
 import json
 import math
 import os
@@ -75,7 +74,6 @@ import subprocess
 import sys
 import tempfile
 from collections import Counter
-from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -83,6 +81,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools import sim_setup  # noqa: E402
 from tools.evaluation.match import (  # noqa: E402
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
@@ -95,7 +94,7 @@ from utama_core.replay.scenario import (  # noqa: E402
     _referee_command_at,
     scenario_from_replay,
 )
-from utama_core.strategy.catalog import plain_name
+from utama_core.strategy.catalog import plain_name  # noqa: E402
 
 MOMENTS_DIR = REPO_ROOT / "utama_core" / "tests" / "moments"
 DEFAULT_OPPONENT = "split_shape"
@@ -150,7 +149,7 @@ def _full_name(name: str) -> str:
 
 def _is_file_spec(name: str) -> bool:
     """`PATH.py:FACTORY`: a factory in a scratch file, not a catalog name."""
-    return name.rpartition(":")[0].endswith(".py")
+    return sim_setup.is_file_spec(name)
 
 
 def to_dict(m: Moment) -> dict:
@@ -575,25 +574,11 @@ def events(ticks: list[Tick], we_are_yellow: bool = True) -> list[str]:
 
 
 def factory_for(name: str) -> Callable:
-    """`f(outfield_robot_ids)` -> `AbstractStrategy`'s first argument, for a catalog strategy or for
-    `PATH.py:FUNCTION`, a `build(outfield_robot_ids, motion_controller)` in a scratch file imported as
-    it is (so a tactic can be tried without a repo change)."""
-    from utama_core.strategy import catalog
-
-    if not _is_file_spec(name):
-        if plain_name(name) not in catalog.names():
-            raise MomentError(f"unknown strategy {short_name(name)!r}")
-        return partial(catalog.builder, name)
-    path, _, func = name.rpartition(":")
-    if not Path(path).is_file():
-        raise MomentError(f"{name}: no such file {path}")
-    spec = importlib.util.spec_from_file_location(f"scratch_{Path(path).stem}", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    factory = getattr(module, func, None)
-    if not callable(factory):
-        raise MomentError(f"{name}: {path} has no factory {func!r}")
-    return lambda outfield_robot_ids: partial(factory, outfield_robot_ids)
+    """`sim_setup.factory_for`, its errors as `MomentError`."""
+    try:
+        return sim_setup.factory_for(name)
+    except sim_setup.UnknownStrategy as e:
+        raise MomentError(str(e)) from None
 
 
 def label(name: str) -> str:
@@ -606,30 +591,20 @@ def label(name: str) -> str:
 
 def play(m: Moment, strategy: str) -> list[Tick]:
     """Play `m` with `strategy` on our side (yellow) for `m.seconds`."""
-    from utama_core.custom_referee import CustomReferee
-    from utama_core.engine.abstract_strategy import AbstractStrategy
     from utama_core.replay.scenario import apply_scenario
     from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
-    from utama_core.run import StrategyRunner
 
-    def side(name: str) -> AbstractStrategy:
-        return AbstractStrategy(build=factory_for(name)(OUTFIELD_ROBOT_IDS))
+    def side(name: str):
+        try:
+            return sim_setup.load_side(name)
+        except sim_setup.UnknownStrategy as e:
+            raise MomentError(str(e)) from None
 
-    referee = CustomReferee.from_profile_name(
-        "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
-    )
-    runner = StrategyRunner(
-        strategy=side(strategy),
-        opp_strategy=side(m.opponent),
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
+    runner, referee = sim_setup.sim_runner(
+        side(strategy),
+        side(m.opponent),
         sim_noise=SimNoise.from_dict(m.sim_noise) if m.sim_noise else None,
+        initial_command=None,
     )
     ticks = []
     try:

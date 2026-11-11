@@ -3,6 +3,23 @@
 Every script in the repository, by what it is for. Run them from the repository root with
 `pixi run python <path>`; each script's docstring has its full usage and flags.
 
+## Which tool?
+
+Pick the tool by the question you have. Only tools that exist are named in this table. Items marked
+*planned* are designed but not built: see [strategy_tools_plan.md](strategy_tools_plan.md), which also
+says why the tools are split this way.
+
+| Question | Tool |
+|---|---|
+| Does it break? | `pixi run test` (it includes the regression moments). Stalls: every match records them; `evaluate.py` and the round-robin report them |
+| Is it better? | `tools/evaluation/evaluate.py CANDIDATE`, paired against the champion. The only verdict. Add `--held-out` before promoting |
+| Does everything still run after a shared-code change? | `tools/evaluation/round_robin.py --vs-champion`: one match per strategy against the champion (12). The full round-robin (66) only occasionally. A round-robin is not an evaluation |
+| What went wrong in these matches (thrashing, stalls, restart geometry)? | `tools/triage.py RUN_DIR --strategy NAME`, then the picture tools. It finds bugs, not why a strategy loses |
+| Is this change worth evaluating? | *Planned:* a screen (short paired starts of one strategy against itself). Until it exists, `evaluate.py` |
+| Keep a fixed bug fixed? | A unit test at the cause. `tools/moments.py capture` writes a regression moment, which runs in `pixi run test` |
+| Look closely at one thing? | `tools/repro_from_replay.py`, `tools/replay_trace.py`, the picture tools, `tools/debug_match.py` |
+| Is the simulator realistic? | [Simulator realism](#simulator-realism). Not strategy development |
+
 ## pixi tasks
 
 `pixi run <task>` (defined in `pixi.toml`):
@@ -32,8 +49,9 @@ Every script in the repository, by what it is for. Run them from the repository 
 
 | Script | Purpose |
 |---|---|
-| `tools/evaluation/round_robin.py` | The whole-catalog health and stall check: every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`, and adds its matches to the evaluation ledger. `--pair A B` plays one match; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. `--sim-noise JSON` (inline or a file, or `reference` / `reference:<seed>` for the reference world and robots) plays every match with the same seeded latency, kick speed and direction noise, ball friction, motion limits and vision noise (`SimNoise`, `docs/STRATEGY_DEVELOPMENT.md`). A single strategy is judged with `evaluate.py`, not by its place here |
-| `tools/evaluation/evaluate.py` | One or more candidates against the champion of a fixed set of reference opponents (`tools/evaluation/reference/opponents.json`; `--opponents PATH` takes another file), in rounds under seeded sim noise, until its paired results against the champion say better (P >= 0.99), worse (P <= 0.2) or undecided after 6 rounds; `--held-out` plays the reference's held-out opponents before promoting. Results go to the evaluation ledger `replays/eval/ledger.jsonl` (round-robins add theirs too), reports to `replays/eval/reports/`; no replays kept. The way to judge a strategy (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). `--explain` (off by default) also writes pictures and a `summary.json` of each candidate against the champion to `replays/eval/explain/` (`tools/evaluation/explain.py`); they explain the verdict, never change it |
+| `tools/evaluation/round_robin.py` | The whole-catalog health and stall check: every config not in `RETIRED` (12 of the 22 today) against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`, and adds its matches to the evaluation ledger. `--pair A B` plays one match; `--vs-champion` plays each strategy once against the champion (plus the champion against the first reference opponent), defaulting to `--sim-noise reference:2` so those matches are `evaluate.py`'s round-2 fixtures, the day-to-day health check; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. `--sim-noise JSON` (inline or a file, or `reference` / `reference:<seed>` for the reference world and robots) plays every match with the same seeded latency, kick speed and direction noise, ball friction, motion limits and vision noise (`SimNoise`, `docs/STRATEGY_DEVELOPMENT.md`). A single strategy is judged with `evaluate.py`, not by its place here |
+| `tools/evaluation/evaluate.py` | One or more candidates against the champion of a fixed set of reference opponents (`tools/evaluation/reference/opponents.json`; `--opponents PATH` takes another file), in rounds under seeded sim noise, until its paired results against the champion say better (P >= 0.99), worse (P <= 0.2) or undecided after 6 rounds; `--held-out` plays the reference's held-out opponents before promoting. Results go to the evaluation ledger `replays/eval/ledger.jsonl` (round-robins add theirs too), reports to `replays/eval/reports/`; no replays kept. Stalls are reported after each verdict with how many matches were checked (the watchdog sees config_a only; ledger lines from before stalls were recorded count as unchecked); they never change a verdict. The way to judge a strategy (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). `--explain` (off by default) also writes pictures and a `summary.json` of each candidate against the champion to `replays/eval/explain/` (`tools/evaluation/explain.py`); they explain the verdict, never change it |
+| `tools/sim_setup.py` | Not a script: the one way the debugging tools (`repro_from_replay.py`, `moments.py`, `debug_match.py`, `main.py`) load a strategy (a catalog name, a `.strategy` file, or `PATH.py:FUNCTION` from a scratch file) and set up an rsim match. `match.py` still builds its own, to keep cached matches valid |
 | `tools/build_strategy.py` | `build_strategy.py NAME OUT.strategy [--ref COMMIT]`: pack one strategy and the code it runs on into a file that plays in its own process (`utama_core/bundle/`). `evaluate.py --frozen` builds its own |
 | `tools/evaluation/explain.py` | `explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`: positions (with and without the ball), shots for and against, and fouls by rule, for two strategies from the matches in a run dir (a round-robin's or an `evaluate.py` run's), plus `summary.json` with the numbers behind them; goals stay the verdict. Used by `evaluate.py --explain` |
 | `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
@@ -49,7 +67,6 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 | `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
 | `tools/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for [signal_report.md](signal_report.md#on-the-pitch). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold) |
 | `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
-| `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges for the sim-realism plan ([sim_realism.md](sim_realism.md)): ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
 
 ### Validation studies
@@ -65,7 +82,6 @@ These check how far cheap metrics agree with round-robin results. They do not ju
 | Script | Purpose |
 |---|---|
 | `tools/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted (`--keep-raw` keeps it; downloads cut short are resumed; each conversion's memory is capped by `--max-memory-gb`). Also writes sidecars for measuring physics: the tracker's kicks and visibility, and with `--raw-vision` every raw camera detection; `--backfill-extras` adds them to matches already converted. What a converted match holds and its limits: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md#real-matches) |
-| `tools/realism_scorecard.py` | Our sim against real Division B matches, component by component: attempts per live minute (open play and set pieces), attempt distance, real xG per attempt, finishing, goal rate and keeper saves per xG band, shot outcomes (keeper, defender, wide, post, crossed with no goal), aim outside the posts and miss distance, ball slow-down, kick speed, keeper depth, keeper and nearest-defender reaction time (`utama_core/analysis/realism/reaction.py`), pass line offset and completion (`passes.py`). Each row: the real value and 95% interval, the sim value, and whether it is inside. `--real` rebuilds the committed reference (`utama_core/analysis/realism/real_2025_2026.json`: the real xG model and rows) from converted logs; `--sim RUN_DIR` scores a round-robin against it. Attempts exclude passes and kicks from beyond 6 m. See [sim_realism.md](sim_realism.md) |
 
 ## Debugging a match
 
@@ -96,6 +112,21 @@ Fields: `tool`, `kind`, `replay` (path or null), `side` (`friendly`, `enemy` or 
 Library helpers for the same job (`render_window`, `render_clip`, `MatchLog.trace()`) are
 described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 
+## Simulator realism
+
+Is the simulator close to the real league, and are its physics settings measured? These tools judge
+the simulator, not a strategy: none of them is part of strategy development. The plan and the
+results are in [sim_realism.md](sim_realism.md). Their inputs are the official logs converted by
+`tools/convert_ssl_log.py` (its kick and visibility sidecars, see [Real matches](#real-matches)) and
+the field logs in `replays/field/`.
+
+| Script | Purpose |
+|---|---|
+| `tools/realism_scorecard.py` | Our sim against real Division B matches, component by component: attempts per live minute (open play and set pieces), attempt distance, real xG per attempt, finishing, goal rate and keeper saves per xG band, shot outcomes (keeper, defender, wide, post, crossed with no goal), aim outside the posts and miss distance, ball slow-down, kick speed, keeper depth, keeper and nearest-defender reaction time (`utama_core/analysis/realism/reaction.py`), pass line offset and completion (`passes.py`). Each row: the real value and 95% interval, the sim value, and whether it is inside. `--real` rebuilds the committed reference (`utama_core/analysis/realism/real_2025_2026.json`: the real xG model and rows) from converted logs; `--sim RUN_DIR` scores a round-robin against it. Attempts exclude passes and kicks from beyond 6 m. See [sim_realism.md](sim_realism.md) |
+| `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges for the sim-realism plan ([sim_realism.md](sim_realism.md)): ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
+| `tools/field_physics.py` | Measures the world settings from field logs, only from sessions `tools/field_sessions.json` allows, and prints how well runs, days and radios agree. |
+| `tools/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/convert_ssl_log.py` |
+
 ## Architecture
 
 | Script | Purpose |
@@ -112,7 +143,7 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 
 | Script | Purpose |
 |---|---|
-| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `split_shape` vs `high_press` |
+| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `split_shape` vs `high_press`. |
 | `examples/demo_custom_referee.py` | Every `CustomReferee` rule in a scripted scenario, in a pygame window; no simulator needed |
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
@@ -127,8 +158,6 @@ described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
 | `examples/passing_rally.py` | `pass_receive.py`'s pair passing their way along the field in two lanes, turning round `TURN_M` from each end line, for ever (no shots) |
 | `tools/vision_check.py` | Does ssl-vision's multicast reach this machine: sender, packets per second per camera, detections and the field size, in 5 s with no radio or runner. The first check of a test day ([real_robot_setup.md](real_robot_setup.md)). `--guided ball` (or `"blue 2"`): each camera's error on 9 known spots, saved as a baseline |
 | `tools/ssl-vision-lab-field.patch` | Not a script: adds a **Lab Field** preset (our 3 m x 2.25 m field, two cameras) to an ssl-vision checkout; `git apply` it there and rebuild |
-| `tools/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/convert_ssl_log.py` |
-| `tools/field_physics.py` | Measures the world settings from field logs, only from sessions `tools/field_sessions.json` allows, and prints how well runs, days and radios agree. |
 | `utama_core/analysis/close_calls.py` | Where two robots came within 0.25 m of each other in field logs (`replays/field/*.log`): how near, how fast they were closing, and the referee command in force; only the robots the run drove, `--tag` per robot. `python -m utama_core.analysis.close_calls replays/field/*real*.log` |
 | `examples/planner_ab.py` | Two robots swap ends head on and cross, again and again, in blocks alternating the planner (fpp, trajsample): contacts, close calls, nearest approach and time per planner; every block a game log. The field A/B of the motion planners |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |

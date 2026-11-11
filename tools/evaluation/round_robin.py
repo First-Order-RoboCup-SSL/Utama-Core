@@ -11,6 +11,11 @@ Run:
 
 Configs are short names (`tiki_taka`); none means every config not in RETIRED. Flags:
     --pair A B              one match, A as config_a
+    --vs-champion           the day-to-day health check: one match per active strategy against the
+                            champion (reference/opponents.json), plus champion vs the first opponent;
+                            --sim-noise defaults to reference:2: evaluate.py's round 2 puts the side
+                            under test second, so (strategy, champion) are its champion-row fixtures
+                            and land in the ledger. Not with --pair
     --reuse                 take unchanged matches from replays/match_cache/; check the
                             "N reused ... M to play" line it prints before waiting on M
     --spot-check F          with --reuse, replay this fraction of reused matches to verify
@@ -108,7 +113,7 @@ from tools.evaluation.match import (  # noqa: F401 -- re-exported for callers im
     _stats_to_dict,
 )
 from tools.evaluation.match import run_match as _lib_run_match
-from tools.evaluation.sim_settings import sim_noise_from_spec
+from tools.evaluation.sim_settings import load_opponents, sim_noise_from_spec
 from utama_core.analysis import ratings, restart_outcomes, turnover_breakdown
 from utama_core.analysis.strategy_table import strategy_table
 from utama_core.bundle.strategy_file import SUFFIX
@@ -171,6 +176,18 @@ def run_match(
         fuzz_interval_s=fuzz_interval_s,
         sim_noise=sim_noise,
     )
+
+
+def vs_champion_pairs(config_names: list[str], champion: str, first_opponent: str) -> list[tuple[str, str]]:
+    """`--vs-champion` fixtures: each other config as config_a against the champion as config_b,
+    then the champion as config_a against `first_opponent`. evaluate.py puts the side under test
+    second in even rounds, so with the default seed 2 each (strategy, champion) is its champion-row
+    fixture for a reference opponent; (champion, first_opponent) at seed 2 is not one of them."""
+    if champion not in config_names:
+        raise ValueError(f"--vs-champion needs the champion {champion!r} among the configs")
+    if first_opponent not in config_names or first_opponent == champion:
+        raise ValueError(f"--vs-champion needs the first opponent {first_opponent!r} among the configs")
+    return [(name, champion) for name in sorted(config_names) if name != champion] + [(champion, first_opponent)]
 
 
 def main() -> None:
@@ -244,6 +261,12 @@ def main() -> None:
     args = [a for a in args if a not in ("--verbose", "-v")]
     both_sides = "--both-sides" in args
     args = [a for a in args if a != "--both-sides"]
+    # `--vs-champion`: the day-to-day health check (see the module docstring), one match per
+    # active strategy against the champion instead of every pair.
+    vs_champion = "--vs-champion" in args
+    args = [a for a in args if a != "--vs-champion"]
+    if vs_champion and "--pair" in args:
+        raise SystemExit("--vs-champion and --pair don't combine: --pair plays one named fixture")
     max_workers_override: int | None = None
     if "--max-workers" in args:
         idx = args.index("--max-workers")
@@ -327,6 +350,11 @@ def main() -> None:
         idx = args.index("--sim-noise")
         sim_noise = sim_noise_from_spec(args[idx + 1])
         args = args[:idx] + args[idx + 2 :]
+    elif vs_champion:
+        # evaluate.py's round-2 champion fixtures (see vs_champion_pairs), so these matches are in the ledger (`_append_to_ledger`
+        # keeps only seeded, unfuzzed matches for the ratings) and count toward the champion's rating.
+        sim_noise = sim_noise_from_spec("reference:2")
+        print("--vs-champion: --sim-noise not given, using reference:2 (evaluate.py's round-2 champion fixtures)")
     sim_noise_dict = sim_noise.to_dict() if sim_noise is not None else None
 
     match_seconds = MAX_MATCH_SECONDS
@@ -357,7 +385,18 @@ def main() -> None:
         else:
             config_names = [name for name in _CONFIG_NAMES if name not in RETIRED]
 
-        base_pairs = list(itertools.combinations(sorted(config_names), 2))
+        if vs_champion:
+            reference = load_opponents()
+            champion, first_opponent = (
+                _resolve_config_names([reference["champion"]])[0],
+                _resolve_config_names([reference["opponents"][0]])[0],
+            )
+            try:
+                base_pairs = vs_champion_pairs(config_names, champion, first_opponent)
+            except ValueError as e:
+                raise SystemExit(str(e))
+        else:
+            base_pairs = list(itertools.combinations(sorted(config_names), 2))
         # --both-sides plays (a, b) and (b, a) as distinct fixtures — see the
         # module docstring for why this is a real second data point (side-
         # dependent geometry) rather than a duplicate, unlike naively re-running

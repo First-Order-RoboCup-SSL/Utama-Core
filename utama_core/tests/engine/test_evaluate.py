@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from tools.evaluation import evaluate
@@ -131,3 +133,107 @@ def test_sim_noise_spec_forms():
     assert sim_noise_from_spec("reference").seed == 0
     assert sim_noise_from_spec("reference:7").seed == 7
     assert sim_noise_from_spec('{"seed": 2, "kick_speed_sd": 0.3}').kick_speed_sd == 0.3
+
+
+class _Graph:
+    """Stands in for CodeGraph: entry() only asks for a strategy's fingerprint."""
+
+    def strategy_fingerprint(self, name):
+        return "fp-" + name
+
+
+_FROZEN_EVENT = {
+    "kind": "COMMITTED_FROZEN",
+    "sim_time": 12.5,
+    "tick": 1250,
+    "referee_command": "NORMAL_START",
+    "duration_s": 9.0,
+    "tactic_ids": ["t1"],
+    "robot_ids": [1, 2],
+    "diagnosis": "ball held by enemy 3",
+}
+
+
+def _result(a, b, stats):
+    return {"config_a": a, "config_b": b, "score_a": 1, "score_b": 0, "stats": stats}
+
+
+def test_entry_stores_the_stall_events_compactly():
+    row = eval_ledger.entry("e", _Graph(), _result("c", "o", {"shots": {}, "stall_events": [_FROZEN_EVENT]}), 1, "run")
+    assert row["stalls"] == [{"kind": "COMMITTED_FROZEN", "sim_time": 12.5, "diagnosis": "ball held by enemy 3"}]
+
+
+def test_entry_stores_an_empty_list_when_the_stats_show_no_stall():
+    row = eval_ledger.entry("e", _Graph(), _result("c", "o", {"stall_events": []}), 1, "run")
+    assert row["stalls"] == []
+
+
+def test_entry_stores_none_when_stall_events_are_unknown():
+    """No stats at all, or stats without the stall field: unknown, not 'no stalls'."""
+    assert eval_ledger.entry("e", _Graph(), _result("c", "o", None), 1, "run")["stalls"] is None
+    assert eval_ledger.entry("e", _Graph(), _result("c", "o", {"shots": {}}), 1, "run")["stalls"] is None
+
+
+def test_stall_summary_drops_the_detail_a_ledger_line_does_not_need():
+    rows = eval_ledger.stall_summary([{**_FROZEN_EVENT, "diagnosis": ""}])
+    assert rows == [{"kind": "COMMITTED_FROZEN", "sim_time": 12.5}]
+    assert json.loads(json.dumps(rows)) == rows
+
+
+def test_an_old_ledger_line_without_stalls_reads_as_unknown(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    path.write_text(json.dumps({"env": "e", "fixture": "f", "a": "c", "a_fp": "1", "b": "o", "b_fp": "2"}) + "\n")
+    assert eval_ledger.load("e", path)["f"]["stalls"] is None
+
+
+FPS = {"c": "fc", "o": "fo", "ch": "fch"}
+
+
+def _ledger_row(a, b, stalls, fixture, seed=1, a_fp=None):
+    return {
+        "fixture": fixture,
+        "a": a,
+        "b": b,
+        "a_fp": a_fp or FPS[a],
+        "b_fp": FPS[b],
+        "seed": seed,
+        "stalls": stalls,
+    }
+
+
+def test_stall_coverage_counts_only_matches_where_the_candidate_was_config_a():
+    ledger = {
+        "1": _ledger_row("c", "o", [], "1"),  # checked, no stalls
+        "2": _ledger_row("o", "c", None, "2"),  # candidate as config_b: unchecked
+        "3": _ledger_row("c", "o", None, "3", seed=2),  # reused old line: unknown, unchecked
+        "4": _ledger_row("o", "c", [{"kind": "RESTART_STALL", "sim_time": 5.0}], "4", seed=2),
+    }
+    cov = evaluate.stall_coverage(ledger, FPS, "c")
+    assert (cov["checked"], cov["total"]) == (1, 4)
+    assert cov["stalls"] == []
+
+
+def test_stall_coverage_lists_each_stall_with_its_match_seed_kind_and_time():
+    ledger = {
+        "1": _ledger_row("c", "o", [{"kind": "RESTART_STALL", "sim_time": 5.0, "diagnosis": "ball in goal"}], "1")
+    }
+    cov = evaluate.stall_coverage(ledger, FPS, "c")
+    assert cov["checked"] == 1 and cov["total"] == 1
+    assert cov["stalls"] == [
+        {"a": "c", "b": "o", "seed": 1, "kind": "RESTART_STALL", "sim_time": 5.0, "diagnosis": "ball in goal"}
+    ]
+
+
+def test_stall_coverage_ignores_matches_at_other_code_and_other_players():
+    ledger = {
+        "1": _ledger_row("c", "o", [], "1", a_fp="old"),  # the candidate's code has changed since
+        "2": _ledger_row("ch", "o", [], "2", a_fp="fch"),  # the champion's match, not the candidate's
+    }
+    assert evaluate.stall_coverage(ledger, FPS, "c") == {"checked": 0, "total": 0, "stalls": []}
+
+
+def test_stall_lines_say_none_only_when_checked_and_unknown_when_not():
+    assert evaluate.stall_lines({"checked": 3, "total": 7, "stalls": []}, "candidate") == [
+        "stalls checked in 3 of 7 candidate matches (watchdog covers config_a only): none"
+    ]
+    assert evaluate.stall_lines({"checked": 0, "total": 7, "stalls": []}, "candidate")[0].endswith(": unknown")

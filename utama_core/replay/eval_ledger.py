@@ -2,7 +2,7 @@
 
 `tools/evaluation/evaluate.py` and `round_robin.py` append one JSON line per match they play:
 the environment it ran in, both sides with the fingerprint of their code, the noise seed, the
-score and the shots. A rating fit reads back the matches of one environment, so each result
+score, the shots and the stall events. A rating fit reads back the matches of one environment, so each result
 counts in every later evaluation until the code that played it changes.
 
 - **Environment** (`environment`): the shared code and machine (`fingerprint.base_fingerprint`
@@ -55,11 +55,28 @@ def fixture_id(env: str, a_fp: str, b_fp: str, seed: Optional[int]) -> str:
     return _digest([env, a_fp, b_fp, json.dumps(seed)])[:16]
 
 
+def stall_summary(events: Optional[Iterable[dict]]) -> Optional[list[dict]]:
+    """A match's stall events as ledger rows (kind, sim time, and the diagnosis if there is one),
+    or None when the match's stats were not collected: unknown, which is not "no stalls".
+    The watchdog only watches config_a, so these are config_a's stalls."""
+    if events is None:
+        return None
+    rows = []
+    for e in events:
+        row = {"kind": e["kind"], "sim_time": e["sim_time"]}
+        if e.get("diagnosis"):
+            row["diagnosis"] = e["diagnosis"]
+        rows.append(row)
+    return rows
+
+
 def entry(env: str, graph: CodeGraph, result: dict, seed: Optional[int], source: str) -> dict:
-    """A ledger line for `result` (a `match.MatchResult` as a dict, with its stats)."""
+    """A ledger line for `result` (a `match.MatchResult` as a dict, with its stats). `stalls` is
+    config_a's stall events, or None when the match's stats do not say."""
     a, b = result["config_a"], result["config_b"]
     a_fp, b_fp = graph.strategy_fingerprint(a)[:16], graph.strategy_fingerprint(b)[:16]
-    shots = (result.get("stats") or {}).get("shots") or {}
+    stats = result.get("stats") or {}
+    shots = stats.get("shots") or {}
     return {
         "fixture": fixture_id(env, a_fp, b_fp, seed),
         "env": env,
@@ -72,6 +89,7 @@ def entry(env: str, graph: CodeGraph, result: dict, seed: Optional[int], source:
         "score_b": result["score_b"],
         "shots_a": shots.get("friendly"),
         "shots_b": shots.get("enemy"),
+        "stalls": stall_summary(stats.get("stall_events") if stats else None),
         "source": source,
     }
 
@@ -100,6 +118,7 @@ def load(env: str, path: Path = LEDGER_PATH, fps: Optional[dict[str, str]] = Non
         except json.JSONDecodeError:
             continue  # a torn last line from a crash
         if e.get("env") == env:
+            e.setdefault("stalls", None)  # lines written before stalls were recorded: unknown
             e["a"], e["b"] = names.get(e["a_fp"], e["a"]), names.get(e["b_fp"], e["b"])
             out[e["fixture"]] = e
     return out

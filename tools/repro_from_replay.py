@@ -92,14 +92,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.evaluation.match import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
-from utama_core.custom_referee import CustomReferee
-from utama_core.engine.abstract_strategy import AbstractStrategy
+from tools.sim_setup import load_side, sim_runner
+from utama_core.bundle.strategy_file import SUFFIX
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
-from utama_core.run import StrategyRunner
 from utama_core.strategy import catalog
 
 _STILL_STALLED_WINDOW_S = 10.0
@@ -114,6 +113,8 @@ def _resolve_config_name(explicit: Optional[str], from_scenario: Optional[str], 
             f"given and the replay's directory has no summary.json (or no matching entry) to derive it from. "
             f"Pass --strategy/--opponent explicitly."
         )
+    if name.endswith(SUFFIX):
+        return name
     name = catalog.plain_name(name)
     if name not in catalog.names():
         raise SystemExit(
@@ -283,28 +284,12 @@ def main() -> None:
     strategy_a_name = _resolve_config_name(args.strategy, scenario.config_a_name, "friendly")
     strategy_b_name = _resolve_config_name(args.opponent, scenario.config_b_name, "enemy")
 
-    strategy_a = AbstractStrategy(build=catalog.builder(strategy_a_name, OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build=catalog.builder(strategy_b_name, OUTFIELD_ROBOT_IDS))
-
-    referee = CustomReferee.from_profile_name(
-        "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
-    )
-
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    runner, referee = sim_runner(
+        load_side(strategy_a_name),
+        load_side(strategy_b_name),
+        sim_noise=sim_noise,
         control_scheme=args.control_scheme,
         match_log_path=args.trace_out,
-        sim_noise=sim_noise,
     )
 
     print(noise_line)

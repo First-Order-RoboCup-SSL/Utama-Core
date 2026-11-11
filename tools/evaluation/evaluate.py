@@ -47,6 +47,11 @@ one goal better found 61% of the time, half a goal better 20%. A small change to
 (correlation ~0.9): one goal better found every time in ~3 rounds, half a goal better 55%.
 Strengths printed at the end come from the ratings over all matches (`analysis/ratings.py`).
 
+Stalls (the stall watchdog's `StallEvent`s, see `engine/match_stats.py`) are reported for
+post-analysis only: each candidate's and the champion's stalls, and how many of their matches
+were checked (the watchdog covers config_a only; ledger lines from before stalls were recorded
+count as unchecked). They never change a verdict or stop a run.
+
 A fixture already in the ledger is never played again, so the champion's matches are played
 once per seed and reused by every candidate. Replays are not kept: a match is a pure function
 of its fixture, so `round_robin.py --pair A B --sim-noise reference:<seed>` plays it again.
@@ -136,8 +141,49 @@ def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool = Fal
         "config_b": result.config_b,
         "score_a": result.score_a,
         "score_b": result.score_b,
-        "stats": {"shots": (result.stats or {}).get("shots")},
+        "stats": {
+            "shots": (result.stats or {}).get("shots"),
+            # config_a's stall watchdog; None when the match's stats were not collected
+            "stall_events": eval_ledger.stall_summary(
+                (result.stats or {}).get("stall_events") if result.stats is not None else None
+            ),
+        },
     }
+
+
+def stall_coverage(ledger: dict, fps: dict, side: str) -> dict:
+    """Stalls `side` was checked for over the ledger's matches at current code: the watchdog only
+    watches config_a, so a match counts as checked when `side` was config_a and its ledger line
+    has a stall record (None, an older line, is unknown). `total` counts every match of `side`."""
+    checked, total, stalls = 0, 0, []
+    for e in ledger.values():
+        if side not in (e["a"], e["b"]):
+            continue
+        if e["a_fp"] != fps.get(e["a"]) or e["b_fp"] != fps.get(e["b"]):
+            continue
+        total += 1
+        if e["a"] != side or e.get("stalls") is None:
+            continue
+        checked += 1
+        stalls += [{"a": e["a"], "b": e["b"], "seed": e["seed"], **s} for s in e["stalls"]]
+    return {"checked": checked, "total": total, "stalls": stalls}
+
+
+def stall_lines(cov: dict, name: str) -> list[str]:
+    """The printed stall report for one side's `stall_coverage`."""
+    head = f"stalls checked in {cov['checked']} of {cov['total']} {name} matches (watchdog covers config_a only): "
+    if not cov["checked"]:
+        return [head + "unknown"]
+    if not cov["stalls"]:
+        return [head + "none"]
+    lines = [head + str(len(cov["stalls"]))]
+    for s in cov["stalls"]:
+        diagnosis = f" -- {s['diagnosis']}" if s.get("diagnosis") else ""
+        lines.append(
+            f"    {_short_name(s['a'])} vs {_short_name(s['b'])} seed {s['seed']}: "
+            f"{s['kind']} at t={s['sim_time']:.1f}s{diagnosis}"
+        )
+    return lines
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -240,14 +286,23 @@ def main() -> None:
             f"margin {r['margin']:+.2f} ± {r['margin_sd']:.2f} goals/match  after {r['rounds']} round(s)"
         )
         r["per_opponent"] = _per_opponent(_up_to_round(ledger, r["rounds"]), fps, c, champion, opponents)
+        r["stalls"] = stall_coverage(_up_to_round(ledger, r["rounds"]), fps, c)
         print(f"    {'opponent':<26} {'candidate GD':>12} {'champion GD':>12} {'matches':>8} (same seed and colour)")
         for o, row in r["per_opponent"].items():
             name = o if o == "head-to-head" else _short_name(o)
             print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
+        for line in stall_lines(r["stalls"], "candidate"):
+            print(f"    {line}")
         if r["verdict"] == "better" and not args.held_out and not args.frozen:
             print(
                 f"    -> next: evaluate.py {_short_name(c)} --held-out, then set it as champion in reference/opponents.json"
             )
+    champion_stalls = None
+    if candidates:
+        rounds = max(report[c]["rounds"] for c in candidates)
+        champion_stalls = stall_coverage(_up_to_round(ledger, rounds), fps, champion)
+        for line in stall_lines(champion_stalls, "champion"):
+            print(line)
     print("\nStrengths (goals per match, ± SD):")
     for n in sorted(final.names, key=lambda n: -final.strength(n)[0]):
         m, sd = final.strength(n)
@@ -266,6 +321,7 @@ def main() -> None:
                 "environment": env,
                 "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
                 "candidates": report,
+                "champion_stalls": champion_stalls,
                 "strengths": {n: final.strength(n) for n in final.names},
                 "noise_sd": final.noise_sd,
             },

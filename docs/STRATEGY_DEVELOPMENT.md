@@ -242,7 +242,9 @@ changes and run one round-robin over the batch.
 
 **`--reuse`** takes a match's result from
 `replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
-to one strategy only its matches play, one per other config (21 of 231 with 22 configs). What counts as
+to one strategy only its matches play, one per other config. A default round-robin plays the 12 configs
+not in `RETIRED` (`tools/evaluation/round_robin.py`; the catalog has 22), so a change to one of them replays
+11 of its 66 matches. Naming all 22 configs gives 21 of 231. What counts as
 "runs" is `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that
 imports (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole
 files), and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing `pickers.py`
@@ -318,6 +320,16 @@ flowchart TD
   the champion's matches are played once per seed and reused by every candidate, and editing a
   strategy starts its record afresh. Replays are not kept, except during a `--explain` run (rerun one with `round_robin.py --pair
   A B --sim-noise reference:<seed>`).
+- **Stalls** are reported after each candidate's and the champion's verdict, for post-analysis only:
+  they never change a verdict or stop a run. "stalls checked in N of M ... (watchdog covers config_a
+  only)" counts the matches where the watchdog could see that side (`run/strategy_runner.py` records
+  stats for config_a only). A match where the side was config_b, or a ledger line from before stalls
+  were recorded, counts as unchecked; "unknown" means none was checked. The JSON report has them under
+  `candidates[...].stalls` and `champion_stalls`.
+- **Health check.** After a shared-code change, `round_robin.py --vs-champion` plays each strategy once
+  against the champion (12 matches, not the 66 of a full round-robin), defaulting to `--sim-noise
+  reference:2` so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2. Read
+  its STALLS section; a strategy's verdict still comes from `evaluate.py`.
 - **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
   be clearly worse against opponents never used for selection. Then edit the champion in
   `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
@@ -458,7 +470,7 @@ The same steps as a flowchart; the moment branch is the optional step 5.
 
 ```mermaid
 flowchart TD
-    find["1. Find it<br/>moments.py fouls RUN_DIR --by strategy,rule<br/>(without --by: each foul, with its time and tactic)"]
+    find["1. Find it<br/>triage.py RUN_DIR --strategy NAME<br/>(index.md, then findings.jsonl)"]
     look["2. Look at it<br/>replay_trace.py REPLAY T0 T1 --events<br/>repro_from_replay.py REPLAY --t S --summary IDS"]
     q{"Restart or placement geometry?<br/>a field state alone decides it"}
     moment["Capture a moment<br/>moments.py capture REPLAY --t S<br/>play --seeds 0-4 must fail on 4 of 5"]
@@ -474,8 +486,11 @@ flowchart TD
 
 The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `pitch_maps.py`) write their flags as JSON with `--findings`: filter on that, open the picture to understand a flag, and never conclude from a picture alone.
 
-1. **Find it.** `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`
-   counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
+1. **Find it.** `tools/triage.py` is the one starting point for "what went wrong in a run" (see the
+   start of this section). It flags thrashing and stalls, and restart geometry with `--restarts`.
+   Fouls are not in triage yet. To list our side's fouls by rule, use
+   `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`, after triage
+   and not instead of it. It counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
    (`--skip-own-restart` drops fouls during our own restarts; `--json` writes either form as JSON).

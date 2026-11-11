@@ -42,18 +42,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.evaluation.match import (
-    _CONFIG_NAMES,
-    N_OUTFIELD,
-    OUTFIELD_ROBOT_IDS,
-    TICKS_PER_SECOND,
-)
-from utama_core.custom_referee import CustomReferee
-from utama_core.engine.abstract_strategy import AbstractStrategy
+from tools.evaluation.match import TICKS_PER_SECOND
+from tools.sim_setup import UnknownStrategy, load_side, sim_runner
 from utama_core.engine.match_log import load_jsonl
-from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.strategy import catalog
 
 
 class _TargetRecorder:
@@ -114,8 +106,8 @@ def _tick_row(runner: StrategyRunner, tick: int, targets: dict[str, tuple[float,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--strategy", required=True, choices=sorted(_CONFIG_NAMES))
-    parser.add_argument("--opponent", required=True, choices=sorted(_CONFIG_NAMES))
+    parser.add_argument("--strategy", required=True, help="a strategy name, a .strategy file or PATH.py:FUNCTION")
+    parser.add_argument("--opponent", required=True, help="the same kinds as --strategy")
     parser.add_argument("--duration", type=float, default=90.0, help="sim seconds (default 90)")
     parser.add_argument("--stop-on-goal", action="store_true", help="end the match as soon as either side scores")
     parser.add_argument(
@@ -146,25 +138,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    strategy_a = AbstractStrategy(build=catalog.builder(args.strategy, OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build=catalog.builder(args.opponent, OUTFIELD_ROBOT_IDS))
+    try:
+        strategy_a, strategy_b = load_side(args.strategy), load_side(args.opponent)
+    except UnknownStrategy as e:
+        parser.error(str(e))
 
-    referee = CustomReferee.from_profile_name(
-        "simulation", n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1
-    )
-
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    runner, _ = sim_runner(
+        strategy_a,
+        strategy_b,
         match_log_path=args.match_log,
         stats_path=args.stats_path,
         control_scheme=args.control_scheme,
