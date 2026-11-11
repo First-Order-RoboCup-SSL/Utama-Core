@@ -36,13 +36,18 @@ One term per thing; reuse these instead of coining new ones.
   verdict on a strategy; see Evaluation.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
-- **Moment / regression moment** — a field state (from a replay or by hand) that reproduced a
+- **Moment / regression moment** — a field state (captured from a replay) that reproduced a
   bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/moments.py`).
   A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
   the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
   the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
+- **Screen** — `tools/screen.py STRATEGY --base REF`: did a change to one strategy do anything in
+  play? Short paired starts of the strategy now against itself at REF, from live-play moments of a
+  run's replays; reports how often the change fired and a call by a fixed rule. Never a verdict, never
+  two strategies, never in the ledger. On trial until its calls match `evaluate.py`'s verdicts on real
+  changes (`docs/strategy_tools_plan.md`); until then evaluate whatever it says.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
   `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always

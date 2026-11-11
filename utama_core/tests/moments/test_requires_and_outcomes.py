@@ -24,7 +24,9 @@ def _tick(t, command, ball, ours):
 
 
 def _probe(**changes):
-    return dataclasses.replace(moments.template("probe", "a note", "NORMAL_START", ["*"]), **changes)
+    """A captured moment, renamed, with no requirements and every rule checked unless `changes` say."""
+    m = moments.load(moments.MOMENTS_DIR / "free_kick_defender_dodges_into_ball.json")
+    return dataclasses.replace(m, **{"name": "probe", "note": "a note", "checks": ["*"], "requires": [], **changes})
 
 
 # --- restart_lasts -------------------------------------------------------------------------------

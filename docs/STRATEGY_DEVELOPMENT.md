@@ -330,6 +330,13 @@ flowchart TD
   against the champion (12 matches, not the 66 of a full round-robin), defaulting to `--sim-noise
   reference:2` so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2. Read
   its STALLS section; a strategy's verdict still comes from `evaluate.py`.
+- **Screen** (`tools/screen.py STRATEGY --base REF`, on trial): before an evaluation, did a change to one
+  strategy do anything in play? It plays the strategy now and as it was at REF from the same 60 starts of
+  20 s of live play, drawn from a run's replays, against the base under the same noise, and reports how
+  often the two diverged ("fired") and the paired differences. Its call (`WORTH EVALUATING`, `SKIP: did
+  not fire`, `SKIP: fewer goals in the starts`) follows a rule fixed in advance; it never writes the
+  ledger and never compares two strategies. Until its track record is in
+  ([strategy_tools_plan.md](strategy_tools_plan.md), "The screen"), run `evaluate.py` whatever it says.
 - **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
   be clearly worse against opponents never used for selection. Then edit the champion in
   `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
@@ -488,9 +495,8 @@ The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `
 
 1. **Find it.** `tools/triage.py` is the one starting point for "what went wrong in a run" (see the
    start of this section). It flags thrashing and stalls, and restart geometry with `--restarts`.
-   Fouls are not in triage yet. To list our side's fouls by rule, use
-   `pixi run python tools/moments.py fouls replays/tournament_<id> --by strategy,rule`, after triage
-   and not instead of it. It counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
+   For our side's fouls by rule, `pixi run python tools/triage.py replays/tournament_<id> --fouls --by
+   strategy,rule` counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
    (`--skip-own-restart` drops fouls during our own restarts; `--json` writes either form as JSON).
@@ -537,8 +543,8 @@ for open play, go from the trace to the code and a unit test.
 A moment's `checks` are `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or referee rule names; its `requires` (`restart_lasts`,
 `robot_near_ball`) fail it with `did not arise` when the situation it tests never happened. A
 restart moment plays one strategy, since the referee override moves every outfield robot the same
-way whatever the strategy. `tools/moments.py new NAME --command CMD ...` writes a hand-made field
-state to edit. Moments are not a gate on strategies: they pin shared-code bugs.
+way whatever the strategy. Moments are captured from replays (`capture`); hand-made templates
+(`moments.py new`) were removed on 2026-11-11. Moments are not a gate on strategies: they pin shared-code bugs.
 
 | Symptom | Looked like | Cause | Fix | Test |
 |---|---|---|---|---|

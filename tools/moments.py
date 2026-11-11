@@ -32,23 +32,14 @@ Requires vs checks: a check says what must not happen. A requirement says the si
 a robot came near the ball. Without them a moment passes when the opponent
 does something else, the ball goes elsewhere, or our robot never gets there.
 
-Hand-made moments: `new` writes a template (both teams in a fixed formation, ours on the right,
-the reference noise with seed 1, source null) to edit by hand; `save` and `load` refuse an
-invalid one, naming each problem (ids, field lines, check and strategy names).
-
-List our side's fouls in a round-robin run, as starting points, each with the referee command
-active then and whether that restart is ours or theirs (`--skip-own-restart` leaves out ours):
-    pixi run python tools/moments.py fouls replays/tournament_<id> [--rule keep_out] [--skip-own-restart]
-(`--by strategy,rule` counts them per combination instead; `out_of_bounds`, the ball leaving the
-field, is a stoppage and is left out unless `--include-stoppages`.)
+A moment comes from a replay (`capture`); `save` and `load` refuse an invalid one, naming each
+problem (ids, field lines, check and strategy names). Starting points: our side's fouls in a run,
+`pixi run python tools/triage.py replays/tournament_<id> --fouls` (until 2026-11-11 `moments.py fouls`).
 Capture one from a replay (its noise and designated position come with it; `--out` writes
 elsewhere than utama_core/tests/moments/):
     pixi run python tools/moments.py capture replays/tournament_<id>/<a>_vs_<b>.npz --t 254.65 \\
         --name free_kick_defender_drives_in --check keeps_clear --strategy <a> --opponent <b> \\
         --note "..." [--out PATH]
-Write a hand-made one, then edit its positions in the JSON:
-    pixi run python tools/moments.py new <name> --command NORMAL_START [--ball X Y] \\
-        [--strategy NAME] [--seconds N] --check <checks> --note "..."
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):
     pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
 Play it under several seeds as one table, compare with the code at a git ref (a worktree under
@@ -73,7 +64,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections import Counter
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -87,11 +77,11 @@ from tools.evaluation.match import (  # noqa: E402
     OUTFIELD_ROBOT_IDS,
     TICKS_PER_SECOND,
 )
+from utama_core.analysis.fouls import restart_side  # noqa: E402
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
 from utama_core.replay.scenario import (  # noqa: E402
     RobotState,
     Scenario,
-    _referee_command_at,
     scenario_from_replay,
 )
 from utama_core.strategy.catalog import plain_name  # noqa: E402
@@ -116,7 +106,7 @@ MAX_EVENT_LINES = 30
 # `play --against`: worktrees live beside the repo (not in it), each with the compiled extensions
 # below copied in (gitignored, so a new worktree lacks them; without them the planner falls back to
 # Python and results differ).
-AGAINST_DIR = REPO_ROOT.parent / "moments-work-20261017" / "against"
+AGAINST_DIR = REPO_ROOT.parent / f"{REPO_ROOT.name}-moments-against"
 BUILD_ARTIFACTS = (
     "utama_core/motion_planning/src/fastpathplanning/_fastpathplanner.cpython-*.so",
     "utama_core/rsoccer_simulator/src/Simulators/robosim/_robosim.cpython-*.so",
@@ -312,50 +302,6 @@ def validate(m: Moment) -> None:
         raise MomentError(f"{m.name}:\n  " + "\n  ".join(problems))
 
 
-def template(
-    name: str,
-    note: str,
-    command: str,
-    checks: list[str],
-    ball: tuple[float, float] = (0.0, 0.0),
-    strategy: str = "all",
-    seconds: float = DEFAULT_SECONDS,
-) -> Moment:
-    """A hand-made moment: both teams in a fixed formation (ours yellow on the right, facing left),
-    the given ball and referee command, the reference noise with seed 1, source null."""
-    from utama_core.replay.scenario import RobotState
-
-    ours = [(4.0, 0.0), (2.2, 1.2), (2.2, -1.2), (1.0, 2.0), (1.0, -2.0), (0.6, 0.0)]
-
-    def robots(positions, facing):
-        return tuple(
-            RobotState(id=i, x=x, y=y, orientation=facing, vx=0.0, vy=0.0) for i, (x, y) in enumerate(positions)
-        )
-
-    from tools.evaluation.sim_settings import reference_noise
-
-    scenario = Scenario(
-        sim_time=0.0,
-        ball_x=ball[0],
-        ball_y=ball[1],
-        ball_vx=0.0,
-        ball_vy=0.0,
-        friendly_robots=robots(ours, math.pi),
-        enemy_robots=robots([(-x, y) for x, y in ours], 0.0),
-        referee_command=RefereeCommand[command],
-        source_replay=Path("hand-made"),
-    )
-    return Moment(
-        name=name,
-        note=note,
-        scenario=scenario,
-        checks=list(checks),
-        strategy=_full_name(strategy),
-        seconds=seconds,
-        sim_noise=reference_noise(seed=1),
-    )
-
-
 def with_seed(m: Moment, seed: int) -> Moment:
     """`m` played with its sim noise's seed replaced (`play --seed`), the JSON untouched."""
     if m.sim_noise is None:
@@ -374,18 +320,6 @@ class Tick:
     our_speeds: dict[int, float]
     our_foul: Optional[tuple[str, tuple[int, ...]]]  # (rule name, robot ids) charged to us this tick
     ball_speed: Optional[float] = None  # m/s, for `events`' kicks
-
-
-def restart_side(command: Optional[RefereeCommand], we_are_yellow: bool = True) -> Optional[str]:
-    """ "ours" for a restart our team takes, "theirs" for one the other team takes, None for
-    STOP, live play and timeouts."""
-    if command is None or command.name.startswith("TIMEOUT"):
-        return None
-    if command.name.endswith("YELLOW" if we_are_yellow else "BLUE"):
-        return "ours"
-    if command.name.endswith("BLUE" if we_are_yellow else "YELLOW"):
-        return "theirs"
-    return None
 
 
 def _restart_against_us(command: Optional[RefereeCommand], we_are_yellow: bool) -> bool:
@@ -702,92 +636,6 @@ def _designated_position(replay: Path, t: float) -> Optional[tuple[float, float]
     return tuple(designated) if designated else None
 
 
-def without_own_restarts(fouls: list[dict]) -> list[dict]:
-    """`fouls` minus those during a restart our team takes: `keeps_clear` does not apply there."""
-    return [f for f in fouls if f.get("restart") != "ours"]
-
-
-# Rules that stop play without being a rules foul: the ball leaving the field.
-STOPPAGE_RULES = frozenset({"out_of_bounds"})
-FOUL_COLUMNS = ("strategy", "rule", "tactic", "restart")
-
-
-def without_stoppages(fouls: list[dict]) -> list[dict]:
-    return [f for f in fouls if f["rule"] not in STOPPAGE_RULES]
-
-
-def _foul_column(f: dict, column: str) -> str:
-    if column == "strategy":
-        return short_name(f["config_a"])
-    if column == "restart":
-        return f.get("restart") or "live"
-    return str(f.get(column) or "-")
-
-
-def count_fouls(fouls: list[dict], columns: list[str]) -> list[tuple[tuple[str, ...], int]]:
-    """How many of `fouls` fall in each combination of `columns` (names from `FOUL_COLUMNS`),
-    most common first; ties in name order."""
-    counts = Counter(tuple(_foul_column(f, c) for c in columns) for f in fouls)
-    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
-
-
-def fouls_json(fouls: list[dict], columns: Optional[list[str]] = None) -> str:
-    """`fouls` as JSON: the foul dicts as they are, or with `columns` the `count_fouls` rows as
-    {column: value, ..., "count": n} objects, most common first."""
-    if columns is None:
-        data = fouls
-    else:
-        data = [{**dict(zip(columns, key)), "count": n} for key, n in count_fouls(fouls, columns)]
-    return json.dumps(data, indent=1, sort_keys=True)
-
-
-def print_fouls_by(fouls: list[dict], columns: list[str]) -> None:
-    """`count_fouls` as a table: a count column, then one column per name, then the total."""
-    rows = count_fouls(fouls, columns)
-    widths = [max([len(c)] + [len(key[i]) for key, _ in rows]) for i, c in enumerate(columns)]
-    print(f"{'count':>5}  " + "  ".join(f"{c:<{w}}" for c, w in zip(columns, widths)))
-    for key, n in rows:
-        print(f"{n:>5}  " + "  ".join(f"{v:<{w}}" for v, w in zip(key, widths)))
-    print(f"{sum(n for _, n in rows):>5}  total")
-
-
-def our_fouls(run_dir: Path, rule: Optional[str] = None) -> list[dict]:
-    """Every foul config_a (our side in the replay) committed in a round-robin run, from its
-    summary.json: the starting points for new moments. Each carries the referee `command` active
-    at its time (from the match's `.intentions.jsonl`, None if absent), its `restart` side
-    ("ours", "theirs", or None for live play and STOP) and its match's `replay` (the .npz, else the
-    .pkl, relative to the repo root; None if neither is there), for replay_trace and repro."""
-    run_dir = Path(run_dir)
-    summary = json.loads((run_dir / "summary.json").read_text())
-    out = []
-    for r in summary["results"]:
-        stem = run_dir / f"{short_name(r['config_a'])}_vs_{short_name(r['config_b'])}"
-        sidecar = Path(f"{stem}.intentions.jsonl")
-        replay = next((p for p in (Path(f"{stem}.npz"), Path(f"{stem}.pkl")) if p.exists()), None)
-        for f in (r.get("stats") or {}).get("fouls") or []:
-            if f.get("side") == "friendly" and (rule is None or f["rule"] == rule):
-                command = _referee_command_at(sidecar, f["sim_time"])
-                out.append(
-                    {
-                        "config_a": r["config_a"],
-                        "config_b": r["config_b"],
-                        **f,
-                        "command": command.name if command else None,
-                        "restart": restart_side(command),
-                        "replay": _repo_relative(replay) if replay is not None else None,
-                    }
-                )
-    return out
-
-
-def _repo_relative(path: Path) -> str:
-    """`path` relative to the repo root (as a string), or as given if it is outside the repo."""
-    try:
-        return str(Path(path).resolve().relative_to(REPO_ROOT))
-    except ValueError:
-        return str(path)
-
-
 def parse_seeds(spec: str) -> list[int]:
     """`0-4` or `0,2,3` (or both, `0-1,3`): the seeds in order, each once."""
     seeds = []
@@ -918,42 +766,6 @@ def main() -> None:
     p.add_argument("--designated-position", type=float, nargs=2, default=None)
     p.add_argument("--out", type=Path, default=None, help=f"where to write it (default {MOMENTS_DIR}/<name>.json)")
 
-    p = sub.add_parser("fouls", help="list our side's fouls in a round-robin run")
-    p.add_argument("run_dir", type=Path)
-    p.add_argument("--rule", default=None)
-    p.add_argument(
-        "--skip-own-restart",
-        action="store_true",
-        help="leave out fouls during our own restarts (keeps_clear does not apply there)",
-    )
-    p.add_argument(
-        "--include-stoppages",
-        action="store_true",
-        help="also list out_of_bounds (the ball leaving the field: a stoppage, not a rules foul)",
-    )
-    p.add_argument(
-        "--by",
-        default=None,
-        metavar="COLUMNS",
-        help=f"print counts per combination of these columns, comma-separated, of {', '.join(FOUL_COLUMNS)} "
-        "(e.g. strategy,rule), instead of one line per foul",
-    )
-    p.add_argument(
-        "--json",
-        action="store_true",
-        help="write JSON to stdout instead of text: the foul dicts, or with --by a list of {column: value, ..., "
-        "count} rows",
-    )
-
-    p = sub.add_parser("new", help="write a hand-made moment template to edit by hand")
-    p.add_argument("name", help="lowercase letters, digits and underscores")
-    p.add_argument("--command", required=True, choices=[c.name for c in RefereeCommand])
-    p.add_argument("--ball", type=float, nargs=2, default=(0.0, 0.0), metavar=("X", "Y"))
-    p.add_argument("--strategy", default="all")
-    p.add_argument("--seconds", type=float, default=DEFAULT_SECONDS)
-    p.add_argument("--check", nargs="+", required=True, help=f"checks ({', '.join(CHECKS)}), rule names or '*'")
-    p.add_argument("--note", required=True, help="what went wrong, and why it must not happen again")
-
     p = sub.add_parser("play", help="play a moment and print what broke its checks")
     p.add_argument("moment", type=Path)
     p.add_argument(
@@ -972,26 +784,7 @@ def main() -> None:
     p.add_argument("--json", type=Path, help=argparse.SUPPRESS)  # --against reads the other tree's results
 
     args = parser.parse_args()
-    if args.cmd == "new":
-        if not re.fullmatch(r"[a-z0-9_]+", args.name):
-            parser.error("the name must be lowercase letters, digits and underscores")
-        path = MOMENTS_DIR / f"{args.name}.json"
-        if path.exists():
-            parser.error(f"{path} exists")
-        try:
-            m = template(
-                args.name,
-                args.note,
-                args.command,
-                args.check,
-                ball=tuple(args.ball),
-                strategy=args.strategy,
-                seconds=args.seconds,
-            )
-            print(f"Wrote {save(m)}: edit its positions by hand, then `play` it")
-        except MomentError as e:
-            parser.error(str(e))
-    elif args.cmd == "capture":
+    if args.cmd == "capture":
         m = capture(
             args.replay,
             args.t,
@@ -1006,30 +799,6 @@ def main() -> None:
         print(
             f"Wrote {save(m, args.out)} ({m.scenario.referee_command.name if m.scenario.referee_command else 'no command'})"
         )
-    elif args.cmd == "fouls":
-        fouls = our_fouls(args.run_dir, args.rule)
-        if args.skip_own_restart:
-            fouls = without_own_restarts(fouls)
-        if not args.include_stoppages:
-            fouls = without_stoppages(fouls)
-        if args.by:
-            columns = [c.strip() for c in args.by.split(",")]
-            unknown = [c for c in columns if c not in FOUL_COLUMNS]
-            if unknown:
-                parser.error(f"--by: unknown column(s) {unknown}; choose from {', '.join(FOUL_COLUMNS)}")
-            if args.json:
-                print(fouls_json(fouls, columns))
-            else:
-                print_fouls_by(fouls, columns)
-        elif args.json:
-            print(fouls_json(fouls))
-        else:
-            for f in fouls:
-                print(
-                    f"{f['rule']:<28} t={f['sim_time']:>7.2f}  robot {f.get('robot_id')}  {f.get('tactic') or '':<24} "
-                    f"{(f['command'] or '?'):<22} {f['restart'] or 'live':<7} "
-                    f"{short_name(f['config_a'])} vs {short_name(f['config_b'])}"
-                )
     else:
         m = load(args.moment)
         if args.seed is not None and args.seeds:

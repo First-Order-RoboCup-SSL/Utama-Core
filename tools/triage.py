@@ -24,6 +24,15 @@ restart_stall) `restart_picture` at its restart. `OUT/index.md` is the report to
 their scores, the finding counts by kind, then each pictured finding with its message and picture path.
 
 `OUT` defaults to `RUN_DIR/triage/`. Read-only: nothing is played or changed.
+
+`--fouls` instead lists our side's (config_a's) fouls in a round-robin run, each with the referee command
+active then and whether that restart was ours or theirs: the starting points for a regression moment
+(`tools/moments.py capture`). `--rule NAME` keeps one rule, `--skip-own-restart` leaves out fouls during our
+own restarts, `--by strategy,rule` counts per combination instead (columns: strategy, rule, tactic,
+restart), `--json` writes JSON. `out_of_bounds`, the ball leaving the field, is a stoppage and is left out
+unless `--include-stoppages` (`utama_core/analysis/fouls.py`; until 2026-11-11 `moments.py fouls`).
+
+    pixi run python tools/triage.py replays/tournament_<id> --fouls [--rule keep_out] [--by strategy,rule]
 """
 
 from __future__ import annotations
@@ -49,6 +58,7 @@ if str(REPO_ROOT) not in sys.path:
 from tools import match_timeline
 from tools.evaluation.match import _short_name
 from tools.plan_trace import replay_game_at
+from utama_core.analysis import fouls as fouls_lib
 from utama_core.analysis.findings import Finding, write_jsonl
 from utama_core.analysis.matches import STEM, Match, load_match
 from utama_core.analysis.plan_trace import plan_findings, plan_trace
@@ -379,6 +389,32 @@ def triage(
     return write_index(out, run_dir, reports, max_pictures, restarts)
 
 
+def fouls_report(
+    run_dir: Path,
+    rule: Optional[str] = None,
+    skip_own_restart: bool = False,
+    include_stoppages: bool = False,
+    by: Optional[str] = None,
+    as_json: bool = False,
+) -> list[str]:
+    """`--fouls`: our side's fouls in `run_dir` as lines to print (see the module docstring)."""
+    found = fouls_lib.our_fouls(run_dir, rule)
+    if skip_own_restart:
+        found = fouls_lib.without_own_restarts(found)
+    if not include_stoppages:
+        found = fouls_lib.without_stoppages(found)
+    columns = [c.strip() for c in by.split(",")] if by else None
+    if columns:
+        unknown = [c for c in columns if c not in fouls_lib.FOUL_COLUMNS]
+        if unknown:
+            raise ValueError(f"--by: unknown column(s) {unknown}; choose from {', '.join(fouls_lib.FOUL_COLUMNS)}")
+    if as_json:
+        return [fouls_lib.fouls_json(found, columns)]
+    if columns:
+        return fouls_lib.fouls_by_table(found, columns)
+    return [fouls_lib.foul_line(f) for f in found]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter
@@ -390,7 +426,7 @@ def main() -> None:
         "--strategy",
         action="append",
         metavar="NAME",
-        help="only matches where this strategy is config_a (repeatable; short or build_*_kernel_strategy names)",
+        help="only matches where this strategy is config_a (repeatable; plain names, or the build_<name>_kernel_strategy names of old runs)",
     )
     parser.add_argument(
         "--matches", type=int, default=3, help="each strategy's N worst matches by goal difference (default 3)"
@@ -403,7 +439,23 @@ def main() -> None:
         action="store_true",
         help="also check every restart's referee override (restart_picture findings). SLOW: about 45 s a match",
     )
+    fouls = parser.add_argument_group("--fouls: list our side's fouls instead (see the module docstring)")
+    fouls.add_argument("--fouls", action="store_true", help="list our side's fouls in the run; nothing else")
+    fouls.add_argument("--rule", default=None, help="only this rule")
+    fouls.add_argument("--skip-own-restart", action="store_true", help="leave out fouls during our own restarts")
+    fouls.add_argument("--include-stoppages", action="store_true", help="also list out_of_bounds")
+    fouls.add_argument(
+        "--by", default=None, metavar="COLUMNS", help=f"counts per combination of {', '.join(fouls_lib.FOUL_COLUMNS)}"
+    )
+    fouls.add_argument("--json", action="store_true", help="JSON to stdout instead of text")
     args = parser.parse_args()
+    if args.fouls:
+        try:
+            print("\n".join(fouls_report(args.run_dir, args.rule, args.skip_own_restart, args.include_stoppages,
+                                          args.by, args.json)))  # fmt: skip
+        except ValueError as e:
+            parser.error(str(e))
+        return
     index = triage(
         args.run_dir,
         strategies=set(args.strategy) if args.strategy else None,
