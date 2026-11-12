@@ -262,9 +262,6 @@ def main(argv: Optional[list[str]] = None) -> None:
     env_args = {
         "duration_seconds": MAX_MATCH_SECONDS,
         "sim_noise": noise,
-        "control_scheme": "fpp",
-        "fuzz_seed": None,
-        "fuzz_interval_s": (25.0, 45.0),
     }
     graph = CodeGraph()
     env = match_results.environment(graph, **env_args)

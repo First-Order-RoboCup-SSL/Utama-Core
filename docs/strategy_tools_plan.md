@@ -71,8 +71,7 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    opponents, no `--vs-champion`, no standings. The strategies were renamed the same day
    (`catalog.RENAMED`).
 5. **One shared match and runner construction** for every tool. `tools/sim_setup.py` has `load_side` (a
-   catalog name, a `.strategy` file or `PATH.py:FUNCTION`), `sim_referee` (the referee, its kickoff team and
-   seeded restart fuzzing) and `sim_runner` (the rsim `StrategyRunner`). `repro_from_replay.py`, `moments.py`,
+   catalog name, a `.strategy` file or `PATH.py:FUNCTION`), `sim_referee` (the referee and its kickoff team) and `sim_runner` (the rsim `StrategyRunner`). `repro_from_replay.py`, `moments.py`,
    `debug_match.py`, `main.py` and `tools/evaluation/match.py` all build through them, so every tool plays
    `.strategy` files and the referee and runner exist in one place. `main.py` keeps its dashboard: the
    referee is built before the dashboard attaches, the runner after. `match.py`'s fingerprint changed with

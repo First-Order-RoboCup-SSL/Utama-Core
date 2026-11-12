@@ -3,6 +3,9 @@
 Status: plan, 2026-10-14 (priorities added 2026-10-16; Phases 0-2 are built, 2026-10-16/17).
 Nothing below is built yet unless it says so.
 
+*Strategy names:* results here were recorded before the 2026-11-12 renames and use the old names
+(`split_shape` is now `pendulum`, ...); the full map is the "Was" column in [`strategies.md`](strategies.md).
+
 ## Where this leads
 
 The end goal is **search over the structured strategy space**: tactics, their parameters, and

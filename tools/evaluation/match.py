@@ -7,7 +7,7 @@ two strategies from their names, construct a referee with
 the right kickoff-team/initial-command, wire up match_log/stats/replay paths,
 build and step a `StrategyRunner`, read back the score) that had drifted into
 two independent copies differing only in a few real parameters (duration,
-whether side/kickoff are fixed or swept, fuzzing). Correctness fixes found in
+whether side/kickoff are fixed or swept). Correctness fixes found in
 one copy (the `PREPARE_KICKOFF_*` vs `FORCE_START` kickoff-ceremony fix; the
 `_stats_to_dict` StallEvent-serialization fix) had to be manually ported to
 the other and could easily have been missed. This module is the single place
@@ -122,9 +122,6 @@ def run_match(
     a_kicks_off: bool = True,
     run_dir: Optional[Path] = None,
     match_tag_suffix: str = "",
-    control_scheme: str = "fpp",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     sim_noise: Optional[SimNoise] = None,
 ) -> MatchResult:
     """Play one match between two strategies, until the referee calls full
@@ -156,15 +153,7 @@ def run_match(
     `match_tag_suffix` is appended to the per-match file tag (e.g. a side/
     kickoff cell tag like `_Rk`) so cells for the same pair don't collide.
 
-    `control_scheme` is used for both sides (matching StrategyRunner's
-    default of falling back to `control_scheme` when `opp_control_scheme` is
-    unset) — these tournament drivers compare strategies against each other,
-    not motion planners against each other (see
-    `tools/motion_planning_benchmark.py` for that).
-
-    `fuzz_seed`, if set, swaps in `RestartFuzzingReferee` (see
-    `utama_core/custom_referee/restart_fuzzer.py`), so this match's referee, built by
-    `sim_setup.sim_referee`, injects extra seeded-random legal restarts during live play.
+    Both sides use the fpp planner (`tools/motion_planning_benchmark.py` compares planners).
 
     `sim_noise`, if set, plays the match with seeded latency, kick speed noise and vision noise
     (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`, `docs/sim_realism.md`). The draws
@@ -176,9 +165,7 @@ def run_match(
     strategy_a = load_side(config_a_name)
     strategy_b = load_side(config_b_name)
     # config_a kicks off unless told otherwise; the referee's kickoff team and the ceremony follow it.
-    referee = sim_referee(
-        kickoff_team="yellow" if a_kicks_off else "blue", fuzz_seed=fuzz_seed, fuzz_interval_s=fuzz_interval_s
-    )
+    referee = sim_referee(kickoff_team="yellow" if a_kicks_off else "blue")
     initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW if a_kicks_off else RefereeCommand.PREPARE_KICKOFF_BLUE
 
     match_tag = f"{_short_name(config_a_name)}_vs_{_short_name(config_b_name)}{match_tag_suffix}"
@@ -203,8 +190,6 @@ def run_match(
             replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
         )
 
-    resolved_scheme = None if control_scheme in (None, "auto") else control_scheme
-
     runner, _ = sim_runner(
         strategy_a,
         strategy_b,
@@ -212,7 +197,7 @@ def run_match(
         initial_command=initial_command,
         referee=referee,
         my_team_is_right=a_is_right,
-        control_scheme=resolved_scheme,
+        control_scheme="fpp",
         **extra_kwargs,
     )
 

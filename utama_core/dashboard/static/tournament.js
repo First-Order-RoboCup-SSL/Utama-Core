@@ -1,11 +1,11 @@
 // Tournament view: standings + per-match results, sortable/expandable.
 // Successor concern to hand-reading round-robin log output —
 // reads replays/<run_id>/summary.json via the tournament view's Python side.
-// A round_robin.py summary also carries a per-strategy table, stall
+// A round summary (`evaluate.py`, or an older round_robin.py run) also carries a per-strategy table, stall
 // incidents, restart outcomes and fouls (docs/STRATEGY_DEVELOPMENT.md
 // "Reading a tournament run"); those are shown when present. Each result's
 // `replay` is the path of its replay file, or null (added server-side).
-// `round_robin.py` writes `winner` as the literal string "draw" on
+// `evaluate.py` (like the older round_robin.py) writes `winner` as the literal string "draw" on
 // a tie (never null), and `standings` only carries wins/draws per config —
 // losses/GF/GA/win% are derived here from `results`, not shipped precomputed.
 
@@ -65,7 +65,7 @@
     return rows;
   }
 
-  // round_robin.py's per-strategy table (summary.json `strategies`).
+  // a round's per-strategy table (summary.json `strategies`).
   function strategyRows(run) {
     return Object.entries(run.strategies).map(([name, s]) => ({
       name,
@@ -170,7 +170,7 @@
   ];
 
   function cellLabel(r, pairA) {
-    // round_robin.py plays each pair once, config_a as yellow
+    // a round plays each pair once, config_a as yellow
     if (r.a_is_right === undefined) return `${short(r.config_a)} (yellow) vs ${short(r.config_b)}`;
     // r.config_a may be either physical config depending on which side of
     // the 4-cell product ran; re-express relative to pairA (the group's

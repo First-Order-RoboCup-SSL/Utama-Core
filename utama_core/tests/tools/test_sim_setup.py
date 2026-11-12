@@ -71,10 +71,3 @@ def test_sim_referee_gives_the_first_kickoff_to_the_team_asked(monkeypatch):
     sim_setup.sim_referee()
 
     assert [p.game.kickoff_team for p in profiles] == ["blue", "yellow"]
-
-
-def test_sim_referee_injects_restarts_only_for_a_seeded_run():
-    from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
-
-    assert isinstance(sim_setup.sim_referee(fuzz_seed=3), RestartFuzzingReferee)
-    assert not isinstance(sim_setup.sim_referee(), RestartFuzzingReferee)

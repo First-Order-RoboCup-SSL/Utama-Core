@@ -3,6 +3,9 @@
 What each strategy does well and badly, from the signals in [`signals.md`](signals.md), drawn
 from one round-robin. Standings are in [`strategies.md`](strategies.md); this shows why.
 
+*Strategy names:* results here were recorded before the 2026-11-12 renames and use the old names
+(`split_shape` is now `pendulum`, ...); the full map is the "Was" column in [`strategies.md`](strategies.md).
+
 **Run:** `tournament_20261017_151052` (sim-realism-20261016 at `423f63a0`, the 12 non-retired
 configs, 66 matches, sim noise `v3_seed2`). Regenerate the figures after a new full round-robin, then rewrite the notes:
 

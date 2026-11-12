@@ -77,13 +77,6 @@ def test_the_environment_covers_every_setting_but_the_noise_seed():
     assert mr.environment(g, duration_seconds=1200.0, sim_noise={**noise, "seed": 2}) == base
     assert mr.environment(g, duration_seconds=300.0, sim_noise=noise) != base
     assert mr.environment(g, duration_seconds=1200.0, sim_noise=None) != base
-    assert mr.environment(g, duration_seconds=1200.0, sim_noise=noise, control_scheme="dwa") != base
-    assert mr.environment(g, duration_seconds=1200.0, sim_noise=noise, fuzz_seed=1) != base
-    assert mr.environment(g, duration_seconds=1200.0, sim_noise=noise, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != (
-        mr.environment(g, duration_seconds=1200.0, sim_noise=noise, fuzz_seed=1)
-    )
-    # the fuzz interval only matters when fuzzing is on
-    assert mr.environment(g, duration_seconds=1200.0, sim_noise=noise, fuzz_interval_s=(1.0, 2.0)) == base
     # shared code edits move the environment
     assert mr.environment(_Graph("edited"), duration_seconds=1200.0, sim_noise=noise) != base
 

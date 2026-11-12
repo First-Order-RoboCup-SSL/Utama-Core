@@ -4,6 +4,9 @@ Every signal we record about how a strategy plays, grouped by the question it an
 when designing or debugging a strategy: find the question, read the signal, compare with the
 reference range, and follow "if it's off". Add a signal here when you add one anywhere else.
 
+*Strategy names:* results here were recorded before the 2026-11-12 renames and use the old names
+(`split_shape` is now `pendulum`, ...); the full map is the "Was" column in [`strategies.md`](strategies.md).
+
 Signals are diagnostics, not objectives: use them to explain a result, to find what a strategy
 does badly, and to notice a shared primitive (reception, carrying, the planner, the referee)
 failing every strategy at once. A strategy that never passes or shoots loses the ball least, so

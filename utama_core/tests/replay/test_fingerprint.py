@@ -13,7 +13,7 @@ import pytest
 
 from utama_core.replay import fingerprint as fp
 from utama_core.replay import match_results
-from utama_core.replay.fingerprint import REPO_ROOT, ROUND_ROBIN_ENTRY, CodeGraph
+from utama_core.replay.fingerprint import MATCH_ENTRY, REPO_ROOT, CodeGraph
 from utama_core.strategy import catalog
 
 PICKERS = """\
@@ -112,7 +112,7 @@ def repo(tmp_path: Path) -> Path:
 def _fingerprints(root: Path) -> dict[str, str]:
     g = CodeGraph(root)
     out = {c: g.strategy_fingerprint(c) for c in CONFIGS}
-    out["base"] = g.base_fingerprint([ROUND_ROBIN_ENTRY])
+    out["base"] = g.base_fingerprint([MATCH_ENTRY])
     return out
 
 
@@ -169,9 +169,6 @@ def _fixture(
     b,
     *,
     duration=65.0,
-    control_scheme="fpp",
-    fuzz_seed=None,
-    fuzz_interval_s=(25.0, 45.0),
     sim_noise=None,
     a_is_right=True,
     a_kicks_off=True,
@@ -181,9 +178,6 @@ def _fixture(
         g,
         duration_seconds=duration,
         sim_noise=sim_noise,
-        control_scheme=control_scheme,
-        fuzz_seed=fuzz_seed,
-        fuzz_interval_s=fuzz_interval_s,
     )
     seed = sim_noise.get("seed") if sim_noise else None
     return match_results.fixture_id(
@@ -282,27 +276,22 @@ def test_the_fixture_covers_every_setting(repo):
         _fixture(g, a, b, duration=20.0),
         _fixture(g, a, b, a_is_right=False),
         _fixture(g, a, b, a_kicks_off=False),
-        _fixture(g, a, b, control_scheme="dwa"),
-        _fixture(g, a, b, fuzz_seed=1),
         _fixture(g, a, b, sim_noise={"seed": 1}),
         _fixture(g, a, b, sim_noise={"seed": 2}),
     ]
     assert len({ref, *variants}) == 1 + len(variants)
-    # the fuzz interval only matters when fuzzing is on
-    assert _fixture(g, a, b, fuzz_interval_s=(1.0, 2.0)) == ref
-    assert _fixture(g, a, b, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
     # the noise seed is per match, the rest of the noise per environment
-    assert _fixture(g, a, b, sim_noise={"seed": 1, "kick_speed_sd": 0.2}) != variants[6]
+    assert _fixture(g, a, b, sim_noise={"seed": 1, "kick_speed_sd": 0.2}) != variants[4]
 
 
 def test_numerics_env_vars_change_the_base(repo, monkeypatch):
     monkeypatch.delenv("UTAMA_EXACT_MATH", raising=False)
-    before = CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY])
+    before = CodeGraph(repo).base_fingerprint([MATCH_ENTRY])
     monkeypatch.setenv("UTAMA_EXACT_MATH", "1")
-    assert CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY]) != before
-    with_exact = CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY])
+    assert CodeGraph(repo).base_fingerprint([MATCH_ENTRY]) != before
+    with_exact = CodeGraph(repo).base_fingerprint([MATCH_ENTRY])
     monkeypatch.setenv("UNRELATED_VAR", "1")
-    assert CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY]) == with_exact
+    assert CodeGraph(repo).base_fingerprint([MATCH_ENTRY]) == with_exact
 
 
 # --- this repo ----------------------------------------------------------------------------
@@ -346,9 +335,9 @@ _RUNNER_ONLY_RESETS = {
 
 def test_all_code_taken_out_of_the_base_is_in_every_players_fingerprint(graph):
     """Otherwise an edit there would change a match and no fingerprint at all."""
-    roots = [ROUND_ROBIN_ENTRY, *fp.SUBPROCESS_SCRIPTS]
+    roots = [MATCH_ENTRY, *fp.SUBPROCESS_SCRIPTS]
     resets = graph.closure(_RUNNER_ONLY_RESETS)
-    taken_out = graph.closure(roots) - graph.base_modules([ROUND_ROBIN_ENTRY]) - resets
+    taken_out = graph.closure(roots) - graph.base_modules([MATCH_ENTRY]) - resets
     for config in _players():
         assert taken_out <= graph.strategy_modules(config), (config, taken_out - graph.strategy_modules(config))
 
@@ -374,7 +363,7 @@ _RUNNER_REACHES_INTO_PLAYER_SIDE = {
 
 def test_the_match_process_reaches_into_player_side_code_only_where_listed(graph):
     found: dict[str, set[str]] = {}
-    for module in graph.base_modules([ROUND_ROBIN_ENTRY]):
+    for module in graph.base_modules([MATCH_ENTRY]):
         if module in fp.RUNNER_SIDE:
             continue
         for target in graph.imports(module):
@@ -386,13 +375,13 @@ def test_the_match_process_reaches_into_player_side_code_only_where_listed(graph
 
 def test_the_tactics_are_outside_the_base(graph):
     """Otherwise a tactic edit would rerun every match: the per-player split is the point."""
-    base = graph.base_modules([ROUND_ROBIN_ENTRY])
+    base = graph.base_modules([MATCH_ENTRY])
     for name in ("give_and_go", "press_and_contain", "shadow_and_mark", "switch_of_play", "defense"):
         assert f"utama_core.tactics.{name}" not in base
 
 
 def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
-    base = graph.base_modules([ROUND_ROBIN_ENTRY])
+    base = graph.base_modules([MATCH_ENTRY])
     assert set(fp.SUBPROCESS_SCRIPTS) <= base
     assert any("custom_referee/profiles/simulation.yaml" in row for row in graph.data_files(base))
 
@@ -455,7 +444,7 @@ AUDIT = {
 
 
 def test_every_reach_outside_the_import_graph_is_accounted_for(graph):
-    everything = graph.base_modules([ROUND_ROBIN_ENTRY]) | {m for c in _players() for m in graph.strategy_modules(c)}
+    everything = graph.base_modules([MATCH_ENTRY]) | {m for c in _players() for m in graph.strategy_modules(c)}
     assert graph.audit(everything) == AUDIT
 
 

@@ -1,8 +1,7 @@
 """Every match result the evaluation tools have played, in one store: `replays/match_results/`.
 
 An rsim match is deterministic, so its result is a function of its fixture: the environment (the
-shared code and machine, the match length, the planner, the sim noise without its seed and the
-restart fuzzing), both players' code fingerprints (`fingerprint.py`), their sides and the noise
+shared code and machine, the match length and the sim noise without its seed), both players' code fingerprints (`fingerprint.py`), their sides and the noise
 seed. `tools/evaluation/evaluate.py`'s `play_and_record` plays a fixture and returns its record;
 `evaluate.py` looks a fixture up first and plays it only when the store
 does not hold it, then stores the record. Reuse is automatic: there is no flag. A player whose code
@@ -27,7 +26,7 @@ import os
 from pathlib import Path
 from typing import Iterable, Optional
 
-from utama_core.replay.fingerprint import ROUND_ROBIN_ENTRY, CodeGraph, _digest
+from utama_core.replay.fingerprint import MATCH_ENTRY, CodeGraph, _digest
 
 STORE_NAME = "match_results"
 
@@ -42,24 +41,18 @@ def environment(
     *,
     duration_seconds: float,
     sim_noise: Optional[dict],
-    control_scheme: str = "fpp",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
 ) -> str:
     """Id of what every match of one evaluation or round-robin shares. `sim_noise` is
     `SimNoise.to_dict()`, its seed left out (the seed is part of the fixture)."""
     noise = {k: v for k, v in (sim_noise or {}).items() if k != "seed"}
     settings = {
         "duration_seconds": duration_seconds,
-        "control_scheme": control_scheme,
         "sim_noise": noise,
-        "fuzz_seed": fuzz_seed,
-        "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
     }
     return _digest(
         [
             "evaluation environment",
-            graph.base_fingerprint([ROUND_ROBIN_ENTRY]),
+            graph.base_fingerprint([MATCH_ENTRY]),
             json.dumps(settings, sort_keys=True),
         ]
     )[:16]

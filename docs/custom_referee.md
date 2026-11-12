@@ -130,22 +130,6 @@ unchanged. `CustomReferee.reset()` restores score/stage/command/timers for a new
 (`BaseRule.reset_for_new_episode()` also clears `GoalRule`'s cooldown); call `seed_clock()`
 again afterwards.
 
-## Restart fuzzing (`RestartFuzzingReferee`)
-
-`custom_referee/restart_fuzzer.py`: an opt-in subclass that injects legal restarts at
-seeded-random sim times during live play (never on top of a queued restart), via the same
-public `set_command` path an operator uses, so a stall it exposes is a real one. rsim is
-deterministic, so this is how an evaluation explores new restart geometries. Kinds: ball
-placement → `DIRECT_FREE_*` (position ≥0.25m infield, ≥0.2m from both defense areas),
-`PREPARE_KICKOFF_*`, and `STOP` → `FORCE_START`. `referee.injections` records each one; with a
-`MatchLog` attached, they are traced as `restart_fuzzer_injection`. No tool turns it on today (`evaluate.py --fuzz-restarts` was removed on
-2026-11-12): pass `fuzz_seed` to `tools/sim_setup.sim_referee` to use it.
-
-```python
-referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval_s=(8.0, 20.0),
-                                                  n_robots_yellow=6, n_robots_blue=6)
-```
-
 ## Known gaps
 
 - **Last-touch attribution needs contact data for both teams.** Enemy `has_ball` is filled

@@ -239,8 +239,8 @@ changes and run one evaluation over the batch.
 
 **Reuse is automatic.** A match the match results store holds (`replays/match_results/`,
 `replay/match_results.py`) is taken from it, not played; there is no flag. A match's fixture is its
-environment (the shared code and machine, the match length, the planner, the sim noise without its
-seed, the restart fuzzing), both players' fingerprints, their sides and the noise seed. So after a
+environment (the shared code and machine, the match length, the sim noise without its
+seed), both players' fingerprints, their sides and the noise seed. So after a
 change to one strategy only its matches play. What counts as "runs" is
 `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that imports
 (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole files),
@@ -406,9 +406,6 @@ whoever runs it.
   `diagnosis` (ball in goal / past a line, taker not closing on the ball, taker at the ball but
   not kicking). The tournament prints a STALLS section, and writes it to `summary.json`; a
   possession-pinned backstop flags what the watchdog misses.
-- **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
-  seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
-  schedule. No tool turns it on today (`sim_setup.sim_referee(fuzz_seed=...)`). Details: `docs/custom_referee.md`.
 - **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
   command latency per robot, kick speed and direction noise (a per-robot offset plus
   kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot

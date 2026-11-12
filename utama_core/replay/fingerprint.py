@@ -15,7 +15,7 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   name, version and build), the installed robosim binary, the CPU model and the environment
   variables that change numerics. Not the code behind the process boundary (`PLAYER_SIDE`): a
   `.strategy` file brings its own, so editing a skill replays no match between two files.
-- The run settings (duration, planner, sim noise, restart fuzzing, sides) and the two players'
+- The run settings (duration, sim noise, sides) and the two players'
   fingerprints make up a match's fixture in `replay/match_results.py`.
 
 `audit()` lists every place the code reaches outside the import graph
@@ -45,7 +45,7 @@ from typing import Iterable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STRATEGY_PACKAGE = "utama_core.strategy"
-ROUND_ROBIN_ENTRY = "tools.evaluation.match"
+MATCH_ENTRY = "tools.evaluation.match"
 
 # Behind the process boundary: a player's own code, which a `.strategy` file carries a copy of.
 PLAYER_SIDE = (

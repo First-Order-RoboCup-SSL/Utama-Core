@@ -4,8 +4,7 @@
 
 - `load_side(name)`: a strategy by catalog name, a `.strategy` file by path, or `PATH.py:FUNCTION` (a
   `build(outfield_robot_ids, motion_controller)` in a scratch file, to try a tactic without a repo change).
-- `sim_referee(...)`: the referee of an rsim match: the "simulation" profile, with the kickoff team and,
-  for a seeded run, the restart fuzzing (`custom_referee/restart_fuzzer.py`).
+- `sim_referee(...)`: the referee of an rsim match: the "simulation" profile, with the kickoff team.
 - `sim_runner(strategy, opponent, ...)`: the `StrategyRunner` for a 6-a-side rsim match against a referee
   (`sim_referee()` by default), our side yellow on the right, vision stream off.
 
@@ -24,7 +23,6 @@ from typing import Callable, Optional
 from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
 from utama_core.custom_referee import CustomReferee
 from utama_core.custom_referee.profiles.profile_loader import load_profile
-from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
@@ -75,22 +73,11 @@ def load_side(name: str, outfield_robot_ids: Optional[tuple[int, ...]] = None) -
     return AbstractStrategy(build=factory_for(name)(outfield_robot_ids or OUTFIELD_ROBOT_IDS))
 
 
-def sim_referee(
-    *,
-    kickoff_team: str = "yellow",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
-) -> CustomReferee:
-    """The referee of an rsim match: the "simulation" profile, `kickoff_team` taking the first kickoff.
-    With `fuzz_seed`, a `RestartFuzzingReferee` injecting seeded extra legal restarts `fuzz_interval_s`
-    apart."""
+def sim_referee(*, kickoff_team: str = "yellow") -> CustomReferee:
+    """The referee of an rsim match: the "simulation" profile, `kickoff_team` taking the first kickoff."""
     profile = load_profile("simulation")
     if kickoff_team != profile.game.kickoff_team:
         profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team=kickoff_team))
-    if fuzz_seed is not None:
-        return RestartFuzzingReferee(
-            profile, seed=fuzz_seed, interval_s=fuzz_interval_s, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS
-        )
     return CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
 
 
