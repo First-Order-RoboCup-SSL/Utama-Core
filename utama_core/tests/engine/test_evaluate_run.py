@@ -8,6 +8,7 @@ version. `tests/replay/test_match_results.py` covers the store itself.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,9 @@ class _Graph:
         return "base"
 
     def strategy_fingerprint(self, name):
+        if name.endswith(".strategy"):  # a frozen file: the code of the strategy it was built from, then
+            base = Path(name).stem.split("@")[0]
+            return f"{self.rig.frozen_version}-{base}"
         return f"{self.rig.version[name]}-{name}"  # version first: the tool keeps 16 characters
 
 
@@ -37,13 +41,21 @@ def rig(tmp_path, monkeypatch):
     rig.version = {n: 0 for n in [*CORE, *RESERVE, "c"]}
     rig.stats = {}  # (a, b) -> stats of that match
     rig.on_play = None
+    rig.frozen_version = 0  # a frozen file's code is its strategy at version 0
+    rig.score = lambda a, b, seed: (1, 0)
+    rig.crash = set()  # (a, b) pairs whose match raises
 
     def fake_run_match(a, b, run_dir=None, **kwargs):
         rig.played.append((a, b, kwargs["sim_noise"].seed))
         rig.kwargs.append(kwargs)
         if rig.on_play is not None:
             rig.on_play()
-        return MatchResult(config_a=a, config_b=b, score_a=1, score_b=0, stats=rig.stats.get((a, b), {"x": 1}))
+        if (a, b) in rig.crash:
+            raise RuntimeError("rsim died")
+        score_a, score_b = rig.score(a, b, kwargs["sim_noise"].seed)
+        return MatchResult(
+            config_a=a, config_b=b, score_a=score_a, score_b=score_b, stats=rig.stats.get((a, b), {"x": 1})
+        )
 
     players = tmp_path / "players.json"
     players.write_text(json.dumps({"champion": "a", "core": CORE}))
@@ -153,3 +165,79 @@ def test_a_reused_match_is_linked_into_the_new_rounds_folder_from_the_run_that_p
     assert linked.is_symlink() and linked.resolve() == (first / "round_1" / "a_vs_b.npz").resolve()
     assert (second / "round_1" / "a_vs_b.stats.json").read_text() == "ab"
     assert len(list((second / "round_1").glob("*.npz"))) == 3  # every match of the round, played or reused
+
+
+FROZEN_A = "replays/eval/frozen/a@v0.strategy"
+
+
+def test_the_frozen_champion_and_the_unchanged_champion_are_one_player(rig, monkeypatch):
+    # Right after a release the frozen champion is the working-tree champion's code: two names, one
+    # fingerprint. Both playing made the reference play itself and its matches go by either name.
+    monkeypatch.setattr(evaluate, "at_ref", lambda name, ref: FROZEN_A)
+    run_dir = rig.run("c")
+
+    assert not any("a" in (x, y) for x, y, _ in rig.played)  # the working-tree "a" is left out
+    assert ("c", FROZEN_A) in {(x, y) for x, y, _ in rig.played}
+    report = json.loads((run_dir / "report.json").read_text())
+    assert report["core"] == ["b", "d"]
+    assert report["candidates"]["c"]["per_opponent"]["b"]["matches"] >= 1  # paired against the reference
+
+    rig.version["a"] += 1  # the champion edited since the release: two players again
+    rig.run()
+    assert {("a", "b"), ("a", "d")} <= {(x, y) for x, y, _ in rig.played}
+
+
+def test_the_reference_is_the_champion_named_at_the_release_not_one_promoted_since(rig, monkeypatch):
+    real_git = evaluate._git
+    released = json.dumps({"champion": "b", "core": CORE})
+    monkeypatch.setattr(evaluate, "_git", lambda *a: released if a[0] == "show" else real_git(*a))
+    run_dir = rig.run()  # today's players.json names "a"
+    assert json.loads((run_dir / "report.json").read_text())["reference"] == "b"
+
+
+def test_the_champion_at_a_release_without_a_players_file_is_todays(monkeypatch):
+    monkeypatch.setattr(evaluate, "_git", lambda *a: None)
+    assert evaluate.champion_at("v2.5.0", "pendulum") == "pendulum"
+
+
+def test_no_release_tag_stops_instead_of_using_todays_code(monkeypatch):
+    monkeypatch.setattr(evaluate, "_git", lambda *a: None)
+    with pytest.raises(SystemExit, match="No release tag"):
+        evaluate.latest_release()
+
+
+def test_the_verdict_does_not_depend_on_later_rounds_already_in_the_store(rig, monkeypatch):
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 1)
+    first = json.loads((rig.run("c") / "report.json").read_text())["candidates"]["c"]
+
+    # a later run leaves round 2 in the store, with very different scores
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    rig.score = lambda a, b, seed: (1, 0) if seed == 1 else (9, 0)
+    rig.run("c")
+
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 1)
+    again = json.loads((rig.run("c") / "report.json").read_text())["candidates"]["c"]
+    assert rig.played == []
+    assert (again["p_better"], again["margin"], again["margin_sd"]) == (
+        first["p_better"],
+        first["margin"],
+        first["margin_sd"],
+    )
+
+
+def test_a_crashed_match_is_reported_not_stored_and_the_run_finishes(rig):
+    rig.crash = {("b", "d")}
+    run_dir = rig.run()
+
+    summary = json.loads((run_dir / "round_1" / "summary.json").read_text())
+    assert [(f["config_a"], f["config_b"]) for f in summary["failed"]] == [("b", "d")]
+    assert len(summary["results"]) == 2
+    assert json.loads((run_dir / "report.json").read_text())["failed"][0]["error"] == "RuntimeError('rsim died')"
+    rig.crash = set()
+    rig.run()
+    assert [(x, y) for x, y, _ in rig.played] == [("b", "d")]  # not stored, so played next time
+
+
+def test_same_code_keeps_the_first_name_of_each_fingerprint():
+    fps = {"ref": "1", "cand": "2", "a": "1", "b": "3", "c": "2"}
+    assert evaluate.same_code(["ref", "cand", "a", "b", "c"], fps) == {"a": "ref", "c": "cand"}

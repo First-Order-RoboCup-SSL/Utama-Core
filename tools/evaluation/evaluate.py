@@ -43,8 +43,10 @@ the same seed and colour, plus their head-to-head matches. P(candidate stronger 
 - **worse** once P <= DROP (0.2),
 - **undecided** after `MAX_ROUNDS` (6) rounds: not clearly better, which for a search means drop it.
 
-Thresholds come from simulating the rule (match noise SD 1.9 goals, six opponents, 6 rounds, paired
-results correlated 0 to 1): two equal strategies are called "better" at most 3% of the time. Unrelated
+Thresholds come from simulating the rule on 2026-11-11 (match noise SD 1.9 goals, six opponents, 6
+rounds, paired results correlated 0 to 1): two equal strategies were called "better" at most 3% of the
+time. Today's core gives five opponents and `ratings.NOISE_SD` is 1.6; the rates below are from that
+simulation, not re-checked for this setup. Unrelated
 strategies: one goal per match worse is dropped after ~2 rounds, one goal better found 61% of the time.
 A small change to a strategy (correlation ~0.9): one goal better found every time in ~3 rounds.
 
@@ -54,11 +56,15 @@ watchdog watches config_a only, so the report says how many matches each strateg
 Matches the match results store holds (replays/match_results/, `replay/match_results.py`) are taken from
 it, not played: after a change to one strategy only its matches play. Delete that folder to replay all.
 
+A match that crashes is reported (`failed` in summary.json and report.json), not stored, and missing
+from the verdict's pairs; the run goes on, and the next run plays it again.
+
 Writes replays/eval_<UTC time>/: `report.json` (verdicts, round 1's signals), and per round `round_<k>/`
 with each played match's replay, intention log and stats (`<a>_vs_<b>.*`), `summary.json` and
 `ball_losses.md` — the layout tools/find_bugs.py, tools/pitch_maps.py and goal_sources read.
 
-Promoting is a decision, not a side effect: set the champion by hand in reference/players.json.
+Promoting is a decision, not a side effect: set the champion by hand in reference/players.json. It is
+the reference from the next release on: the reference is read from players.json as it was at the release.
 """
 
 from __future__ import annotations
@@ -148,8 +154,35 @@ def resolve_names(requested: list[str]) -> list[str]:
 
 
 def latest_release() -> str:
-    """The latest release tag reachable from HEAD."""
-    return _git("describe", "--tags", "--abbrev=0") or "HEAD"
+    """The latest release tag reachable from HEAD. Without one there is no reference: stop rather
+    than quietly compare against today's code."""
+    tag = _git("describe", "--tags", "--abbrev=0")
+    if not tag:
+        raise SystemExit("No release tag reachable from HEAD (a shallow clone?): fetch the tags or pass --at REF.")
+    return tag
+
+
+def champion_at(ref: str, today: str) -> str:
+    """The champion that `reference/players.json` named at `ref`, or `today`'s if that commit has
+    none. The reference is the champion of the last release: a strategy promoted since (perhaps
+    one that didn't exist then) becomes the reference only at the next release."""
+    text = _git("show", f"{ref}:tools/evaluation/reference/players.json")
+    try:
+        return json.loads(text)["champion"] if text else today
+    except (ValueError, KeyError, TypeError):
+        return today
+
+
+def same_code(players: list[str], fps: dict[str, str]) -> dict[str, str]:
+    """Each player whose code is the same as an earlier player's in `players`, mapped to that
+    player. Right after a release the frozen champion is the working-tree champion's code: the two
+    would be one player under two names, so the later one is left out."""
+    first: dict[str, str] = {}
+    out = {}
+    for n in players:
+        out.update({n: first[fps[n]]} if fps[n] in first else {})
+        first.setdefault(fps[n], n)
+    return out
 
 
 def at_ref(name: str, ref: str) -> str:
@@ -254,7 +287,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     setup = load_players(args.players) if args.players else load_players()
     core = resolve_names(setup["core"])
     reserve = [n for n in _CONFIG_NAMES if n not in core] if args.all else []
-    reference = at_ref(resolve_names([setup["champion"]])[0], args.at or latest_release())
+    ref = args.at or latest_release()
+    reference = at_ref(resolve_names([champion_at(ref, setup["champion"])])[0], ref)
     candidates = [c for c in resolve_names(args.candidates) if c != reference]
 
     noise = SimNoise.from_dict(reference_noise()).to_dict()
@@ -266,16 +300,20 @@ def main(argv: Optional[list[str]] = None) -> None:
     graph = CodeGraph()
     env = match_results.environment(graph, **env_args)
     store = match_results.open_store(REPLAY_BASE_PATH)
-    everyone = {*candidates, reference, *core, *reserve}
+    everyone = list(dict.fromkeys([reference, *candidates, *core, *reserve]))
     fps = {n: graph.strategy_fingerprint(n)[:16] for n in everyone}
-    for c in list(candidates):
-        if fps[c] == fps[reference]:
-            print(f"{_short_name(c)} is skipped: it is the same code as the reference {_short_name(reference)}")
-            candidates.remove(c)
+    for n, first in (dupes := same_code(everyone, fps)).items():
+        print(f"{_short_name(n)} is left out: it is the same code as {_short_name(first)}")
+    candidates, core, reserve = ([n for n in group if n not in dupes] for group in (candidates, core, reserve))
+    fps = {n: fp for n, fp in fps.items() if n not in dupes}
 
     run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
-    while (Path(REPLAY_BASE_PATH) / run_id).exists():  # two runs started in the same second
-        run_id += "b"
+    while True:  # claim the folder: two runs (two worktrees) may start in the same second
+        try:
+            (Path(REPLAY_BASE_PATH) / run_id).mkdir(parents=True)
+            break
+        except FileExistsError:
+            run_id += "b"
     run_dir = Path(REPLAY_BASE_PATH) / run_id
     print(f"Reference {_short_name(reference)}; core {', '.join(_short_name(n) for n in core)}; environment {env}")
 
@@ -292,6 +330,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     rounds: list[dict] = []
     opponents_so_far: set[str] = set()
     played = reused = 0
+    failed: list[dict] = []
     executor = ProcessPoolExecutor(max_workers=WORKERS) if WORKERS > 1 else None
     try:
         for k in range(1, MAX_ROUNDS + 1):
@@ -329,6 +368,11 @@ def main(argv: Optional[list[str]] = None) -> None:
                     flush=True,
                 )
 
+            def fail(a: str, b: str, err: BaseException) -> None:
+                """A match that crashed: reported, not stored, missing from the verdict's pairs."""
+                print(f"  round {k}: {tag(a, b)} CRASHED: {err!r}", flush=True)
+                failed.append({"round": k, "config_a": a, "config_b": b, "error": repr(err)})
+
             def submit(a: str, b: str, seed: int) -> tuple:
                 kw = dict(a_fp=fps[a], b_fp=fps[b], env=env, seed=seed, source=run_id, run_dir=round_dir)
                 kw.update(run_kwargs, sim_noise=SimNoise.from_dict({**noise, "seed": seed}))
@@ -336,7 +380,12 @@ def main(argv: Optional[list[str]] = None) -> None:
 
             if executor is None:
                 for a, b, kw in (submit(*f) for f in todo):
-                    finish(a, b, play_and_record(a, b, **kw))
+                    try:
+                        rec = play_and_record(a, b, **kw)
+                    except Exception as err:  # noqa: BLE001 -- one bad match must not lose the run
+                        fail(a, b, err)
+                    else:
+                        finish(a, b, rec)
             else:
                 futures = {
                     executor.submit(play_and_record, a, b, **kw): (a, b) for a, b, kw in (submit(*f) for f in todo)
@@ -344,19 +393,26 @@ def main(argv: Optional[list[str]] = None) -> None:
                 while futures:
                     done, _ = wait(futures, return_when=FIRST_COMPLETED)
                     for future in done:
-                        finish(*futures.pop(future), future.result())
+                        a, b = futures.pop(future)
+                        try:
+                            rec = future.result()
+                        except Exception as err:  # noqa: BLE001 -- one bad match must not lose the run
+                            fail(a, b, err)
+                        else:
+                            finish(a, b, rec)
 
             rows = [result_row(rec, a, b, was_reused) for (a, b), (rec, was_reused) in recs.items()]
             names = sorted({n for pair in recs for n in pair})
             summary = {"run_id": f"{run_id}/round_{k}", "round": k, "seed": k, "config_names": names}
             summary["results"] = sorted(rows, key=lambda r: (r["config_a"], r["config_b"]))
+            summary["failed"] = [f for f in failed if f["round"] == k]
             summary.update(signals(summary, {pair: rec for pair, (rec, _) in recs.items()}, round_dir))
             (round_dir / "summary.json").write_text(json.dumps(summary, indent=2))
             rounds.append(summary)
 
             if candidates:
-                fit = _fit(store, env, fps, {*open_, reference, *opponents_so_far})
                 ledger = _up_to_round(store.load(env, fps=fps), k)
+                fit = _fit(ledger, fps, {*open_, reference, *opponents_so_far})
                 for c in list(open_):
                     diffs, h2h = paired(ledger, fps, c, reference, sorted(opponents_so_far))
                     margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
@@ -391,6 +447,8 @@ def main(argv: Optional[list[str]] = None) -> None:
         for line in stall_lines(r["stalls"], "candidate"):
             print(f"    {line}")
 
+    if failed:
+        print(f"\n{len(failed)} match(es) crashed (summary.json 'failed'); their pairs are missing from the verdicts.")
     out = run_dir / "report.json"
     out.write_text(
         json.dumps(
@@ -402,6 +460,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "environment": env,
                 "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": MAX_ROUNDS},
                 "candidates": report,
+                "failed": failed,
                 "rounds": [{"round": s["round"], "matches": len(s["results"])} for s in rounds],
                 "signals": {k: v for k, v in health.items() if k not in ("results",)},
             },
@@ -414,11 +473,13 @@ def main(argv: Optional[list[str]] = None) -> None:
 # --- the verdict's arithmetic -----------------------------------------------------------------
 
 
-def _fit(store: match_results.MatchResults, env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
-    """Ratings over every stored match in `env` between `players` at their current code."""
+def _fit(ledger: dict, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
+    """Ratings over the matches in `ledger` between `players` at their current code. Given the
+    matches of rounds 1..k only (`_up_to_round`), so the noise estimate, like the pairs, doesn't
+    depend on what earlier runs left in the store."""
     matches = [
         (e["a"], e["b"], e["score_a"] - e["score_b"])
-        for e in store.load(env, fps=fps).values()
+        for e in ledger.values()
         if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
     ]
     return ratings.fit(matches, names=sorted(players))
