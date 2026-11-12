@@ -22,5 +22,5 @@ def build_page() -> str:
         .replace("__LIVE_JS__", (_STATIC_DIR / "live.js").read_text())
         .replace("__TIMELINE_JS__", (_STATIC_DIR / "timeline.js").read_text())
         .replace("__REPLAY_JS__", (_STATIC_DIR / "replay.js").read_text())
-        .replace("__TOURNAMENT_JS__", (_STATIC_DIR / "tournament.js").read_text())
+        .replace("__STRATEGIES_JS__", (_STATIC_DIR / "strategies.js").read_text())
     )

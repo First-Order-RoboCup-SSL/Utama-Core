@@ -17,7 +17,7 @@ entry by its title, not its number.
 - **Goalkeeper overshoot** — `a4df59e`, `ba59c9e`.
 - **Stuck-match root causes** — `PressAndContainTactic` loose ball, `GiveAndGoTactic` hop timeout — `d6b3ff1`.
 - **Defense-area retrieval stall** — `7a8e717`; trajsample equivalent in `TrajectorySamplingPlanner._enemy_defense_area_retrieval_exempt`.
-- **Dashboard rebuild** — Live/Replay/Tournament views — `c3c389e`.
+- **Dashboard rebuild** — Live/Replay/Tournament views — `c3c389e`. The Tournament tab became the Strategies tab on 2026-11-12 (catalog, verdicts, signals, matches; no standings).
 - **Touchline avoidance + placement-into-defense-area stall** — `3513c59`.
 - **SSL §8.3/8.4 audit + 7 referee rules** — `434ab29`.
 - **Restart formations read real goalkeeper id; `referee_overrides` hook** — `7cd1f61`.

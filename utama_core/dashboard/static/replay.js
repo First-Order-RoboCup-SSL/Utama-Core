@@ -481,7 +481,7 @@ function framesFromColumns(c) {
   }
 
   function loadReplayByPath(path, atTime) {
-    // Entry point for other views (Tournament's "view replay" links) via
+    // Entry point for other views (the Strategies tab's "view replay" links) via
     // Dashboard.showReplay(path) — same load, but also syncs the dropdown.
     // The dropdown's options are only populated once loadList()'s fetch
     // resolves, so the value must be set inside that callback, not after

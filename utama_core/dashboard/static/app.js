@@ -1,4 +1,4 @@
-// Tab shell. Each view module (referee.js, live.js, replay.js, tournament.js)
+// Tab shell. Each view module (referee.js, live.js, replay.js, strategies.js)
 // registers itself via `Dashboard.registerView(name, { mount, onShow })`.
 // `mount` runs once; `onShow` runs each time the tab becomes active (views
 // that poll on an interval only should start when visible).
@@ -30,7 +30,7 @@ const Dashboard = (() => {
   }
 
   // Cross-view command: switch to the Replay tab and preload a specific
-  // path (used by the Tournament tab's "view replay" links). `replay.js`
+  // path (used by the Strategies tab's "view replay" links). `replay.js`
   // registers this itself, since only it knows how to load a replay — this
   // is just the addressable hook other views call into.
   let _showReplay = null;

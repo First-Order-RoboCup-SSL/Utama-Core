@@ -239,3 +239,23 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding: 16px 24px; font-size: 1rem; background: var(--halt); color: #fff;
   }
 }
+
+/* Strategies tab (strategies.js) */
+.subtab.active { border-color: var(--accent); color: var(--accent); }
+.strategies-layout { display: flex; gap: 8px; width: 100%; min-height: 0; align-items: flex-start; }
+.strategy-list { width: 280px; flex-shrink: 0; max-height: calc(100vh - 110px); overflow-y: auto; }
+.strategy-item { padding: 8px 10px; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; cursor: pointer; }
+.strategy-item:hover { background: var(--surface-2); }
+.strategy-item.active { border-left-color: var(--accent); background: var(--surface-2); }
+.strategy-summary { font-size: .72rem; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.strategy-doc { font-size: .75rem; margin-top: 6px; white-space: pre-wrap; }
+.signal-row { display: grid; grid-template-columns: 170px 1fr 56px 56px; gap: 8px; align-items: center; font-size: .75rem; padding: 2px 0; }
+.signal-bar { position: relative; height: 10px; background: var(--surface-2); border-radius: 2px; }
+.signal-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+.signal-field { position: absolute; top: -2px; width: 2px; height: 14px; margin-left: -1px; background: var(--text); }
+.verdict-card { padding: 8px 10px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+@media (max-width: 720px) {
+  .strategies-layout { flex-direction: column; }
+  .strategy-list { width: 100%; max-height: 40vh; }
+  .signal-row { grid-template-columns: 110px 1fr 44px 44px; }
+}

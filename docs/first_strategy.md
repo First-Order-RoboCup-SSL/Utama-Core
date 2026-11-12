@@ -165,6 +165,10 @@ Read two things:
 
 Ignore everything else in the output for now.
 
+To see it all in a browser, run `pixi run dashboard` and open http://localhost:8080.
+The **Strategies** tab shows every strategy: what it does, its verdicts, how it plays and its matches.
+Click ▶ on a match to watch its replay.
+
 ## 9. Now let an agent write one
 
 You know how a strategy works now. A coding agent (like Claude Code) can write and test new ones

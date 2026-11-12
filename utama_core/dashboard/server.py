@@ -56,7 +56,7 @@ class _StreamClient:
 def attach_dashboard(port: int = 8080) -> "DashboardServer":
     """Start the dashboard's HTTP server in a background daemon thread.
 
-    Tournament and Replay views are attached automatically — both are
+    Strategies and Replay views are attached automatically — both are
     stateless readers of files on disk (`replays/*/summary.json`, `*.pkl`),
     so every dashboard instance gets them working with no per-script wiring.
     The Referee and Live views depend on a specific running match/referee
@@ -65,11 +65,11 @@ def attach_dashboard(port: int = 8080) -> "DashboardServer":
     """
     from utama_core.dashboard.page import build_page
     from utama_core.dashboard.views import replay as replay_view
-    from utama_core.dashboard.views import tournament as tournament_view
+    from utama_core.dashboard.views import strategies as strategies_view
 
     server = DashboardServer(port)
     server.set_page(build_page())
-    tournament_view.attach(server)
+    strategies_view.attach(server)
     replay_view.attach(server)
     server.start()
     print(f"Dashboard  →  http://localhost:{port}")
@@ -83,7 +83,7 @@ class DashboardServer(threading.Thread):
     that channel receives it as one `data:` frame. Views register POST
     handlers with `add_command_handler(path, handler)` and static payload
     getters with `add_route(path, getter)` for simple `GET -> JSON` endpoints
-    (e.g. tournament summaries, replay frame lists).
+    (e.g. evaluation summaries, replay frame lists).
     """
 
     def __init__(self, port: int) -> None:
