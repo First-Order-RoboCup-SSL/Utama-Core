@@ -142,7 +142,7 @@ Watching one match is not enough. Football is full of luck.
 The evaluation plays many matches and tells you if your strategy beats the champion (our best strategy).
 
 ```
-pixi run python tools/evaluation/evaluate.py rookie
+pixi run evaluate rookie
 ```
 
 This takes a while: matches play in the background, several at a time.

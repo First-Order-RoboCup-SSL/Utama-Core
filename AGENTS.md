@@ -51,7 +51,7 @@ One term per thing; reuse these instead of coining new ones.
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Evaluation / reference / match results** — `tools/evaluation/evaluate.py`: is a candidate
+- **Evaluation / reference / match results** — `pixi run evaluate NAME` (`tools/evaluation/evaluate.py`): is a candidate
   stronger than the reference, the champion at the last release (`--at REF` for another
   release)? A screen on seeds 1-6 only drops; a candidate that survives it is accepted or not on fresh
   seeds 101-106 (paired t-test). Each round plays under one sim-noise seed in the simulated world and robots

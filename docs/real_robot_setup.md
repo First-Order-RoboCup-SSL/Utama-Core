@@ -275,4 +275,4 @@ far to trust them. An older log is measured again with
 | `tee: .../usbfs_memory_mb: No such file` | WSL loads USB support only once a device is attached; `/etc/modprobe.d/usbfs.conf` with `options usbcore usbfs_memory_mb=1000` sets it then |
 | Whole image tinted one colour | White balance stuck at an extreme (2800 K): auto, then lock |
 | `vision_check` sees nothing | Different networks, Wi-Fi multicast, `.wslconfig` not mirrored, or the firewall rule missing |
-| Dashboard: "Address already in use" | Another dashboard (`dashboard_server.py`) holds 8080: stop it |
+| Dashboard: "Address already in use" | Another dashboard (`pixi run dashboard`) holds 8080: stop it |

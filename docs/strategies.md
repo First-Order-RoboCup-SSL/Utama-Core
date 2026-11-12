@@ -5,9 +5,9 @@ is core or reserve, and the latest results.
 
 Run:
 
-- `pixi run python tools/evaluation/evaluate.py` — one round robin of the core and the champion
+- `pixi run evaluate` — one round robin of the core and the champion
   at the last release: stalls and signals (`--all` plays every strategy).
-- `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
+- `pixi run evaluate <name>` — judges a candidate against the champion
   at the last release. The way to judge a strategy. `--help` lists the flags.
 - `pixi run python tools/debug/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.

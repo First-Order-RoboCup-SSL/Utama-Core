@@ -1,7 +1,7 @@
-"""dashboard_server.py — standalone dashboard (Replay + Tournament only).
+"""utama_core/dashboard/__main__.py — standalone dashboard (Replay + Tournament only).
 
 Run:
-    pixi run python dashboard_server.py
+    pixi run dashboard          (or: python -m utama_core.dashboard)
     # open http://localhost:8080 in a browser
 
 No live match, no CustomReferee, no StrategyRunner — `attach_dashboard()`

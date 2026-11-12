@@ -11,8 +11,8 @@ New to the repo? You need only these ([first_strategy.md](first_strategy.md) wal
 |---|---|
 | `pixi run main A B` | Watch strategy A (yellow) play strategy B in the simulator |
 | `pixi run test`, `pixi run lint` | Check nothing broke, before every pull request |
-| `pixi run python tools/evaluation/evaluate.py NAME` | Is strategy NAME better than the champion? Read the verdict and the mean diff |
-| `pixi run python dashboard_server.py` | Browse recorded replays at http://localhost:8080 |
+| `pixi run evaluate NAME` | Is strategy NAME better than the champion? Read the verdict and the mean diff |
+| `pixi run dashboard` | Browse recorded replays at http://localhost:8080 |
 
 Everything below is for specialists.
 
@@ -70,7 +70,7 @@ For the four jobs that chain several of them, follow a skill in `.claude/skills/
 | `tools/evaluation/explain.py` | `explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`: positions (with and without the ball), shots for and against, and fouls by rule, for two strategies from the matches in a run dir (an `evaluate.py` round's, or an older round-robin's), plus `summary.json` with the numbers behind them; goals stay the verdict. |
 | `tools/evaluation/match.py` | Plays one match (`run_match`: the step loop to full time, the score and the stats) for `evaluate.py`, with the set-up from `utama_core/run/sim_setup.py` (not run directly) |
 | `tools/evaluation/sim_settings.py` | Not a script: loads the players and the simulated world and robots (`tools/evaluation/reference/players.json`, `world.json`, `robots.json`) for `evaluate.py`. Kept in `reference/` so a new champion does not rerun every stored match |
-| `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: recorded replays and run results |
+| `utama_core/dashboard/__main__.py` | `pixi run dashboard`: standalone browser dashboard at http://localhost:8080: recorded replays and run results |
 
 ## Evaluating strategies
 

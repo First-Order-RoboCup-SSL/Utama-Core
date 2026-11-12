@@ -56,7 +56,8 @@ Everything lives under `utama_core/`:
 - `entities/`, `config/`, `geometry/`: data classes, settings and constants, geometry helpers
 - `tests/`: all tests
 
-Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; see
+Scripts live in `tools/` (grouped by who uses them: `debug/`, `field/`, `realism/`, `dev/`; the
+strategy evaluation in `tools/evaluation/`) and `examples/`; see
 [docs/tools.md](docs/tools.md).
 
 ## Field conventions

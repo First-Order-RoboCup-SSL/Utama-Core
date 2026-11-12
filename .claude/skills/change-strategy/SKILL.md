@@ -42,7 +42,7 @@ to forget.
 Never start matches without the user's yes. Then:
 
 ```
-pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
+pixi run evaluate NAME [NAME ...]
 ```
 
 - Read the first line of each round: "N matches, X from the match results store, M to play".
