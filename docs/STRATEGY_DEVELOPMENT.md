@@ -170,6 +170,8 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 
 ## Writing and evaluating a strategy
 
+The steps from branch to pull request, as a checklist: the `change-strategy` skill (`.claude/skills/`).
+
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
 each gets. Most new strategies need no new tactic. When one does, add it as a new module in
 `tactics/` (on a strategy branch, never by changing an existing tactic: see below).
@@ -252,7 +254,7 @@ the store, or one environment's folder inside it, to play everything again. Each
 
 **What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against
 the champion at the last release. W-D-L and every other signal are diagnostics.
-Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
+Everything in [Reading a round](#reading-a-round) explains a result; none of
 it is a target. Don't tune a threshold until results move: a change needs a reason in game terms.
 
 ### Evaluating a strategy
@@ -398,7 +400,7 @@ whoever runs it.
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
   `tools/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
-  writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
+  writes `ball_losses.md`; see [Reading a round](#reading-a-round).
   `python -m utama_core.analysis.turnover_breakdown <run_dir>` re-runs it on an older run.
 - **Stall watchdog** (`engine/match_stats.py`) — records `StallEvent`s, never affects play:
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
@@ -426,7 +428,8 @@ whoever runs it.
 
 A foul or failure seen in a match is a symptom: the cause may be the robot, the shared referee
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
-this way (table below), two were the referee or the check, not the robot.
+this way (table below), two were the referee or the check, not the robot. The steps alone, as a
+checklist, are the `debug-incident` skill (`.claude/skills/`); this section keeps the reasons and the bugs found.
 
 Start with `tools/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
 and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it
@@ -456,7 +459,7 @@ The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `
 
 1. **Find it.** `tools/find_bugs.py` is the one starting point for "what went wrong in a run" (see the
    start of this section). It flags thrashing and stalls, and restart geometry with `--restarts`.
-   For our side's fouls by rule, `pixi run python tools/find_bugs.py replays/tournament_<id> --fouls --by
+   For our side's fouls by rule, `pixi run python tools/find_bugs.py ROUND_DIR --fouls --by
    strategy,rule` counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
@@ -543,7 +546,7 @@ original numpy paths, byte-identical to before (`8c191eea`); the evaluation's wo
 all inherit it. The two modes agree to 1e-9 per call but matches diverge after the first differing
 tick, so a baseline recorded in one mode is only comparable with a candidate run in the same mode.
 
-## Reading a tournament run
+## Reading a round
 
 Every `evaluate.py` run prints round 1's sections and writes each round's data to
 `replays/eval_<id>/round_<k>/summary.json` (older round-robins: `replays/tournament_<id>/`). [`docs/signals.md`](signals.md) lists every signal it records

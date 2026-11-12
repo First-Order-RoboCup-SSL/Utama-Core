@@ -9,7 +9,7 @@ Pick the tool by the question you have. Only tools that exist are named in this 
 *planned* are designed but not built: see [strategy_tools_plan.md](strategy_tools_plan.md), which also
 says why the tools are split this way.
 
-For the three jobs that chain several of them, follow a skill in `.claude/skills/`: `explain-result`,
+For the four jobs that chain several of them, follow a skill in `.claude/skills/`: `change-strategy`, `explain-result`,
 `debug-incident`, `field-session`.
 
 | Question | Tool |

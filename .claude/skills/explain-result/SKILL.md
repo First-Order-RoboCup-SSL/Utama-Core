@@ -30,7 +30,7 @@ they suggest changing, never a new ranking.
    the `debug-incident` skill.
 
 3. **Where do goals come from?**
-   `pixi run python -m utama_core.analysis.goal_sources ROUND_DIR --out /tmp/gs.json`.
+   `pixi run python -m utama_core.analysis.goal_sources ROUND_DIR --out ROUND_DIR/goal_sources.json`.
    Goals per match = Σ over situation types (restart or ball won, by third) of situations per
    match × P(goal). Tells whether a change should create more situations, convert better, or
    allow fewer. Situation names: AGENTS.md glossary and `docs/signals.md`, "Where do goals come
@@ -46,7 +46,7 @@ they suggest changing, never a new ranking.
      `report.json` gives it (a frozen file is named by its stem, e.g. `split_shape@cffe3a28`).
    - The whole field, for a doc figure: `pixi run python tools/signal_report.py ROUND_DIR`.
    - The signals marked *offline* in `docs/signals.md` (replays the run at 10 Hz, slow):
-     `pixi run python tools/metric_correlation.py ROUND_DIR --out /tmp/offline.md`.
+     `pixi run python tools/metric_correlation.py ROUND_DIR --out ROUND_DIR/offline.md`.
    Zones: use the names in `docs/pitch_zones.md` (defensive / middle / attacking third, wings, box).
 
 5. **Write it up** in a few lines: the verdict and margin; which opponents decided it; the
