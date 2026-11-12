@@ -1,4 +1,4 @@
-"""`examples/ball_trials.py`, the ball part of `pixi run calibrate`: each carry is the distance it
+"""`tools/field/ball_trials.py`, the ball part of `pixi run calibrate`: each carry is the distance it
 says from standing to standing, runs towards the middle of the field, and the ladder stops a
 direction at the first speed that loses the ball; every kick comes charged."""
 
@@ -10,15 +10,9 @@ from pathlib import Path
 
 import pytest
 
+import tools.field.ball_trials as ex
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import FieldBounds
-
-EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
-sys.path.insert(0, str(EXAMPLES))
-try:
-    import ball_trials as ex
-finally:
-    sys.path.remove(str(EXAMPLES))
 
 BOUNDS = FieldBounds(top_left=(-1.5, 1.125), bottom_right=(1.5, -1.125))
 

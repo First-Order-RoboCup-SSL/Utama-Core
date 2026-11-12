@@ -2,7 +2,7 @@
 
 Reads an SSL game log written by `GameLogWriter` (`StrategyRunner(game_log_path=...)`) on real
 robots: the radio packets as sent and the camera's raw detections, on one clock. Best from a
-`--calibrate` run of `examples/shooting_drill.py` (fixed moves, `ScriptedMovesTactic`);
+`--calibrate` run of `tools/field/shooting_drill.py` (fixed moves, `ScriptedMovesTactic`);
 any run works, with fewer clean steps.
 
 Per robot that was sent commands:
@@ -25,7 +25,7 @@ Per robot that was sent commands:
 - **Dribbling**: per constant command held at least `DRIBBLE_MIN_S` with the dribbler on, where
   the ball sat in the robot's frame (forward of its centre, to its left), how much of the time the
   ball sensor read on, and whether the ball was still on at the end (`BALL_LOST_M`). A
-  `examples/calibrate_robot.py` run holds, turns and drives with the ball, then kicks it 3 times.
+  `tools/field/calibrate_robot.py` run holds, turns and drives with the ball, then kicks it 3 times.
 
     pixi run python tools/field/robot_calibration.py replays/field/<run>.log [--json OUT]
 """

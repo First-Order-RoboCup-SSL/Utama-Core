@@ -16,8 +16,9 @@ try:
     import pass_receive
     import save_and_counter
     import score_goal
-    import shooting_drill
     import teleop
+
+    import tools.field.shooting_drill as shooting_drill
 finally:
     sys.path.remove(str(EXAMPLES))
 

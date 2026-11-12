@@ -1,15 +1,15 @@
 # ruff: noqa: E402
-"""examples/shooting_drill.py — one robot shoots at a goal the other defends, on a small field.
+"""tools/field/shooting_drill.py — one robot shoots at a goal the other defends, on a small field.
 
 The keeper feeds a ball it holds back to the attacker, so the drill loops; it is also where a
 test day's field, camera half and robot hardware are set (the other examples import them).
 
 Run:
-    pixi run python examples/shooting_drill.py            # real robots (MODE below)
-    pixi run python examples/shooting_drill.py --mode rsim
-    pixi run python examples/shooting_drill.py --mode grsim   # grSim must be running
+    pixi run python tools/field/shooting_drill.py            # real robots (MODE below)
+    pixi run python tools/field/shooting_drill.py --mode rsim
+    pixi run python tools/field/shooting_drill.py --mode grsim   # grSim must be running
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
-    pixi run python examples/shooting_drill.py --calibrate attacker   # or defender
+    pixi run python tools/field/shooting_drill.py --calibrate attacker   # or defender
 
 What it does:
   - Two robots, one per team, both ours on one radio: the attacker attacks the goal in
@@ -58,7 +58,7 @@ import sys
 from pathlib import Path
 
 # Run as `pixi run python examples/<this>.py`: utama_core is not installed, so put the repo on the path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import argparse
 import dataclasses

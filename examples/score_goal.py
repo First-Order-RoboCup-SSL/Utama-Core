@@ -5,17 +5,17 @@ Run:
     pixi run python examples/score_goal.py            # real robot
     pixi run python examples/score_goal.py --mode rsim
     pixi run python examples/score_goal.py --calibrate   # fixed moves from the dashboard;
-    # pixi run calibrate (examples/calibrate_robot.py) does it from the terminal, with the ball
+    # pixi run calibrate (tools/field/calibrate_robot.py) does it from the terminal, with the ball
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
-The field and the camera's view are `FIELD` and `CAMERA_HALF` in `shooting_drill.py`,
+The field and the camera's view are `FIELD` and `CAMERA_HALF` in `tools/field/shooting_drill.py`,
 so the two examples always agree; the robot is set below. It attacks the goal at +x (the right
 one in ssl-vision's coordinates) with `LeadAndSupportTactic`: alone, it goes to the ball, turns
 to the open corner and shoots. It starts in HALT, and the field check gates Force Start as in
-`shooting_drill.py`. Put the ball back and Force Start again for the next shot; Halt and
+`tools/field/shooting_drill.py`. Put the ball back and Force Start again for the next shot; Halt and
 Run in the Live tab's Strategy panel restarts the tactic.
 
-`--calibrate` measures the robot alone, as `shooting_drill.py --calibrate` does with two
+`--calibrate` measures the robot alone, as `tools/field/shooting_drill.py --calibrate` does with two
 (that one halts on the second robot it never sees): it plays fixed moves
 (`tactics/scripted_moves.py`) instead of shooting. Put it near the middle of the camera's view
 facing +x, with 0.8 m clear ahead and 0.6 m to its left, and a ball at rest in view; Force Start.
@@ -31,7 +31,7 @@ import argparse
 import time
 from typing import Optional
 
-from shooting_drill import (
+from tools.field.shooting_drill import (
     CAMERA_HALF,
     DASHBOARD_PORT,
     FIELD,
@@ -44,7 +44,6 @@ from shooting_drill import (
     _referee_profile,
     on_field,
 )
-
 from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view

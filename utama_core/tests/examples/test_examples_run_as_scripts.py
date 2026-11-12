@@ -10,28 +10,29 @@ from pathlib import Path
 
 import pytest
 
-EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
+REPO = Path(__file__).resolve().parents[3]
+EXAMPLES = REPO / "examples"
 
 
 @pytest.mark.parametrize(
     "name",
     [
-        "shooting_drill.py",
-        "score_goal.py",
-        "dribble_and_shoot.py",
-        "pass_receive.py",
-        "passing_rally.py",
-        "save_and_counter.py",
-        "calibrate_robot.py",
-        "planner_ab.py",
-        "demos.py",
-        "teleop.py",
-        "demo_referee_feedback_gui.py",
+        "tools/field/shooting_drill.py",
+        "examples/score_goal.py",
+        "examples/dribble_and_shoot.py",
+        "examples/pass_receive.py",
+        "examples/passing_rally.py",
+        "examples/save_and_counter.py",
+        "tools/field/calibrate_robot.py",
+        "examples/planner_ab.py",
+        "examples/demos.py",
+        "examples/teleop.py",
+        "examples/demo_referee_feedback_gui.py",
     ],
 )
 def test_an_example_with_options_prints_its_help_run_by_path(name, tmp_path):
     done = subprocess.run(
-        [sys.executable, str(EXAMPLES / name), "--help"], cwd=tmp_path, capture_output=True, text=True, timeout=120
+        [sys.executable, str(REPO / name), "--help"], cwd=tmp_path, capture_output=True, text=True, timeout=120
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert "usage:" in done.stdout
@@ -42,7 +43,7 @@ def test_the_field_example_holds_while_its_tactic_does_not_apply():
     raise, stopping the run the first time the defender played it."""
     sys.path.insert(0, str(EXAMPLES))
     try:
-        import shooting_drill as example
+        import tools.field.shooting_drill as example
     finally:
         sys.path.remove(str(EXAMPLES))
     robots = frozenset({1})

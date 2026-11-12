@@ -1,4 +1,4 @@
-"""`examples/calibrate_robot.py` writes what a run measured into the robot's profile, keeping
+"""`tools/field/calibrate_robot.py` writes what a run measured into the robot's profile, keeping
 what it did not measure; the profile file reads back as written."""
 
 from __future__ import annotations
@@ -8,18 +8,12 @@ from pathlib import Path
 
 import pytest
 
+import tools.field.calibrate_robot as ex
 from utama_core.team_controller.controllers.common.robot_profile import (
     RobotProfile,
     load_profile,
     save_profile,
 )
-
-EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
-sys.path.insert(0, str(EXAMPLES))
-try:
-    import calibrate_robot as ex
-finally:
-    sys.path.remove(str(EXAMPLES))
 
 KEPT = {
     "forward": 1.0,

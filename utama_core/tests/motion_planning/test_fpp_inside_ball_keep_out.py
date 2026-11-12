@@ -84,7 +84,7 @@ def test_a_robot_just_inside_the_ball_keep_out_is_sent_out_of_it_not_onto_its_ed
     assert distance_point_to_segment(np.zeros(2), np.array(us), carrot) >= np.linalg.norm(us) - 1e-6
 
 
-# The 3 m x 2.25 m lab field (`examples/shooting_drill.py`'s FIELD).
+# The 3 m x 2.25 m lab field (`tools/field/shooting_drill.py`'s FIELD).
 _LAB = FieldDimensions(
     full_field_half_length=1.5,
     full_field_half_width=1.125,

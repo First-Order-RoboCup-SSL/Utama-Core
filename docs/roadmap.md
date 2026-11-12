@@ -160,7 +160,7 @@ entry by its title, not its number.
     - *Open, not yet:* one profile per match day vs updated while playing; kick-to-kick
       spread in the sim (more realistic, but noisier round-robins).
     - *Measuring, built 2026-10-21:* every camera run records an SSL game log (raw vision,
-      referee, radio bytes both ways: `GameLogWriter`); `examples/shooting_drill.py
+      referee, radio bytes both ways: `GameLogWriter`); `tools/field/shooting_drill.py
       --calibrate` plays fixed moves (`tactics/scripted_moves.py`), and `tools/field/robot_calibration.py`
       measures loop delay, speed gain, acceleration, vision noise and kick speed from any such log.
       Checked on a synthetic robot (delay within 10 ms, acceleration within 15 %; turn
@@ -168,7 +168,7 @@ entry by its title, not its number.
       Not yet done: the numbers feed nothing (the sim's latency, the controller), and drift,
       dribbling, passes and chips are not measured. First real robot 2026-10-27: delay 79 ms,
       turn gain 1.09, sideways acceleration ~1.8 against ~5 m/s² forward. 2026-10-28:
-      `pixi run calibrate` (`examples/calibrate_robot.py`) runs it from the terminal, no
+      `pixi run calibrate` (`tools/field/calibrate_robot.py`) runs it from the terminal, no
       dashboard: prompts for each set-up, prints each move, DONE, then the analysis and a
       `.calibration.json`; it now also holds, turns and drives with the ball and kicks 3 times
       (kick speed and direction off the heading, where the ball sits, ball sensor share, kept or lost).
@@ -190,7 +190,7 @@ entry by its title, not its number.
       4. **Dribbling**: hold while turning and driving at rising speed until the ball is lost:
          the fastest turn and drive that keep it. Decides whether a placer may grab a ball
          from any side and turn with it, instead of going round it first (step 5). Built
-         2026-10-29: the carry ladder in `pixi run calibrate` (`examples/ball_trials.py`); not yet
+         2026-10-29: the carry ladder in `pixi run calibrate` (`tools/field/ball_trials.py`); not yet
          run on a real robot, so `CARRY_SPEED` 0.3 / `CARRY_TURN` 1.0 stand.
       5. **Receiving and grabbing**: the approach speed at which a robot still traps a ball,
          driving onto a still ball and receiving a rolling one (passes at a few speeds); whether

@@ -141,7 +141,7 @@ def test_no_fence_in_rsim_or_when_the_cameras_see_the_whole_field(mode, bounds):
     assert _runner(mode, bounds)._fenced(inner, _robot_on_the_half_way_line) is inner
 
 
-# The lab field's bottom half of its bottom-right quarter (examples/shooting_drill.py, KEEP_OUT).
+# The lab field's bottom half of its bottom-right quarter (tools/field/shooting_drill.py, KEEP_OUT).
 ZONE = FieldBounds(top_left=(0.0, -0.5625), bottom_right=(1.5, -1.125))
 
 

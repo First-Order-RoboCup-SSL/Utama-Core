@@ -1092,7 +1092,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def resume_after_auto_halt(self) -> bool:
         """Force Start once the field check passes again after a HALT it forced, for a run nobody
-        resumes from the dashboard (`examples/calibrate_robot.py`). True when it resumed."""
+        resumes from the dashboard (`tools/field/calibrate_robot.py`). True when it resumed."""
         if self._auto_halt is None or self._prev_custom_ref_command != RefereeCommand.HALT:
             return False
         if self.field_check.halt_reason(self._field_check_rows) is not None:

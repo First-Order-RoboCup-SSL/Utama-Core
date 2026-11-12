@@ -1,5 +1,5 @@
 # ruff: noqa: E402
-"""examples/ball_trials.py — the ball part of `pixi run calibrate`: the robot fetches the ball itself.
+"""tools/field/ball_trials.py — the ball part of `pixi run calibrate`: the robot fetches the ball itself.
 
 `BallTrialsTactic` measures how fast one robot can carry the ball and how its kicks leave, with no
 one placing the ball on its dribbler:
@@ -27,13 +27,12 @@ the edge of `bounds`, as after most kicks: roll it back towards the middle.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import math
 from typing import NamedTuple, Optional
 
-from pass_receive import take_ball_facing
-
+from examples.pass_receive import take_ball_facing
 from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag

@@ -3,7 +3,7 @@
 The procedure for a test day with real robots: ssl-vision on its own Linux laptop sending vision
 over the network, and our stack on a Windows laptop in WSL with the radio dongle. Each part is
 checked on its own before anything drives a robot: vision with `tools/field/vision_check.py`, the radio
-with teleop, then both together in the field check of `examples/shooting_drill.py`.
+with teleop, then both together in the field check of `tools/field/shooting_drill.py`.
 
 ```
 vision laptop (Linux)                      robot laptop (Windows + WSL)
@@ -131,9 +131,9 @@ radio IDs must differ across all robots on it.
 
 ### 4. Both together
 
-Set the "Test-day configuration" block of `examples/shooting_drill.py`: `FIELD`,
+Set the "Test-day configuration" block of `tools/field/shooting_drill.py`: `FIELD`,
 `CAMERA_HALF` (`"full"` when the cameras cover the whole field), each robot's vision and radio
-ID and working hardware. Then `pixi run python examples/shooting_drill.py`, open
+ID and working hardware. Then `pixi run python tools/field/shooting_drill.py`, open
 http://localhost:8080 and go through the Live tab's field check
 ([custom_referee_gui.md](custom_referee_gui.md#field-check-camera-runs)): every row green or
 amber, each robot under its own ID and colour, a ball in each corner inside the area in play,
@@ -187,7 +187,7 @@ robots), and the pattern that turned with it is its lid. It prints radio, lid an
 profile was calibrated on that lid (a profile's tag offset is its lid's: calibrate again after a
 swap), and the radios that did not answer and patterns no radio turned. The pairing is saved on
 this machine (`replays/field/robots_found.json`). The robots an example uses are chosen by radio
-(`RADIO_0`, `RADIO_1` in `shooting_drill.py`), one per colour, and no vision ID or colour is
+(`RADIO_0`, `RADIO_1` in `tools/field/shooting_drill.py`), one per colour, and no vision ID or colour is
 written by hand: on real robots an example starts by watching vision for 0.5 s (nothing moves).
 With each robot's saved lid in view it uses them; otherwise (never run here, a lid missing) it
 finds those robots again first (`find_robots.confirm`). It cannot tell two robots in use that
@@ -205,10 +205,10 @@ pixi run calibrate --radio 0 --check       # the new profile against the committ
 Without both `--robot colour:id` and `--radio` it looks the robot up: with `--radio`, as the
 examples do; with neither, by `find-robots`.
 
-No dashboard: it runs in the terminal (`examples/calibrate_robot.py`). Once vision sees the robot
+No dashboard: it runs in the terminal (`tools/field/calibrate_robot.py`). Once vision sees the robot
 it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
 0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s.
-Then the ball part (`examples/ball_trials.py`), where **the robot fetches the ball itself**:
+Then the ball part (`tools/field/ball_trials.py`), where **the robot fetches the ball itself**:
 
 - **Carry ladder**: it carries the ball 0.5 m forward, backward, left and right, and half a turn
   each way, at rising speeds (0.2 to 1 m/s, 0.5 to 4 rad/s), twice each (`--repeats`), from

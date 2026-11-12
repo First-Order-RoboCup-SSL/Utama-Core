@@ -1,4 +1,4 @@
-"""`examples/shooting_drill.py`'s demo keeper: it keeps goal, and a ball it holds goes back
+"""`tools/field/shooting_drill.py`'s demo keeper: it keeps goal, and a ball it holds goes back
 to the attacker, so the demo loops."""
 
 from __future__ import annotations
@@ -9,19 +9,13 @@ from pathlib import Path
 
 import pytest
 
+import tools.field.shooting_drill as ex
 from utama_core.config.enums import Mode
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D
 from utama_core.geometry.pass_and_score_geometry import reset_possession_state
 from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
-
-EXAMPLES = Path(__file__).resolve().parents[3] / "examples"
-sys.path.insert(0, str(EXAMPLES))
-try:
-    import shooting_drill as ex
-finally:
-    sys.path.remove(str(EXAMPLES))
 
 
 @pytest.fixture(autouse=True)

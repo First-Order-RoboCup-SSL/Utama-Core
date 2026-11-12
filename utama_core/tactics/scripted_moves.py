@@ -5,7 +5,7 @@ one robot it is given, then stands still. Run with a game log being recorded
 (`StrategyRunner(game_log_path=...)`), the log holds each command as sent and the robot's
 motion as the camera saw it; `tools/field/robot_calibration.py` turns that into the robot's
 numbers (vision noise, delay, speed and turn tracking, acceleration). The ball part of a
-calibration fetches the ball itself instead (`examples/ball_trials.py`).
+calibration fetches the ball itself instead (`tools/field/ball_trials.py`).
 
 Each move goes and comes back (forward then backward, left then right), so the robot
 ends near where it started; the longest is 0.8 m forward. Pauses (HALT, STOP) do not
@@ -17,7 +17,7 @@ drive back varies its command every tick, so the analysis, which takes constant 
 (`analysis/robot_calibration.py`), leaves it out.
 
 A move with a `prompt` holds the robot still until `proceed()`: the operator sets something up
-(a ball on the dribbler) and says so. `examples/calibrate_robot.py` asks in the terminal.
+(a ball on the dribbler) and says so. `tools/field/calibrate_robot.py` asks in the terminal.
 """
 
 from __future__ import annotations

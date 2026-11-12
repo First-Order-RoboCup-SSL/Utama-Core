@@ -15,17 +15,17 @@ What it does:
     collects it and passes again. A ball outside the field (or unseen) holds both robots until
     the operator puts it back.
   - Everything to edit for a test day is in the "Test-day configuration" block. The field, the
-    ball-sensor/kicker profile type and the referee rules are `shooting_drill.py`'s
+    ball-sensor/kicker profile type and the referee rules are `tools/field/shooting_drill.py`'s
     (`FIELD`, `TestRobot`, `RULES`), so the examples agree.
   - Nothing advances on its own: every mode starts in HALT, play starts and stops from the
     dashboard. Ctrl+C sends stop commands to the robots before exiting. The Live tab's Strategy
     panel can stand either robot still ("still") or restart it ("pass_receive"), while halted.
   - The field check on the Live tab must be all green or amber before Force Start, as in
-    `shooting_drill.py` (docs/real_robot_setup.md, "Each test day").
+    `tools/field/shooting_drill.py` (docs/real_robot_setup.md, "Each test day").
 
 Why two teams: the robots wear different pattern colours (yellow 1, blue 0), and a runner team
 is one colour: there is no way to map a blue pattern into the yellow team. So each robot is its
-own team (`strategy` and `opp_strategy`, as in `shooting_drill.py`), and each runs the
+own team (`strategy` and `opp_strategy`, as in `tools/field/shooting_drill.py`), and each runs the
 same `PassReceiveTactic`, which reads the other robot (its only "enemy") as its partner. The
 two never share state: each decides its role from the same world they both see (who is nearer
 the ball, where the ball is rolling, whether the partner is set), so the pass needs no new
@@ -56,7 +56,7 @@ import math
 import time
 from typing import Optional
 
-from shooting_drill import (
+from tools.field.shooting_drill import (
     FIELD,
     KEEP_OUT,
     RADIO_0,
@@ -67,7 +67,6 @@ from shooting_drill import (
     _referee_profile,
     on_field,
 )
-
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
@@ -101,7 +100,7 @@ from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 
 MODE = "real"  # "real", "rsim" or "grsim"; --mode overrides it
 
-# The part of the field the cameras see (see `shooting_drill.py`); both cameras: "full".
+# The part of the field the cameras see (see `tools/field/shooting_drill.py`); both cameras: "full".
 CAMERA_HALF = "full"
 
 # Swapping a robot is a change here only. They must wear different colours (one per team).

@@ -1,5 +1,5 @@
 # ruff: noqa: E402
-"""examples/calibrate_robot.py — measure one real robot and write its profile: no dashboard.
+"""tools/field/calibrate_robot.py — measure one real robot and write its profile: no dashboard.
 
 Run:
     pixi run calibrate                  # finds the robots on the field; asks which if several
@@ -15,7 +15,7 @@ the robot wearing `--robot`, the only one, or the one you pick. It waits until v
 camera's view facing +x (0.8 m clear ahead, 0.6 m to its left) with a ball at rest in view.
 It plays fixed moves first (`tactics/scripted_moves.py`, `CALIBRATION_SCRIPT`): about 65 s of
 driving and turning, its turns on the spot also showing where its tag sits. Then the ball part
-(`ball_trials.py`), where it fetches the ball itself:
+(`tools/field/ball_trials.py`), where it fetches the ball itself:
 - a carry ladder: forward, backward, sideways and turning with the ball at rising speeds,
   `--repeats` times each, a direction ending at the first speed that loses the ball;
 - `--kicks` kicks along the field, each with the kicker charged.
@@ -42,7 +42,7 @@ ball and how far the kicks missed. Commit the file if the new one is no worse.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import argparse
 import json
@@ -53,8 +53,8 @@ import time
 from dataclasses import replace
 from typing import Optional
 
-from ball_trials import BallTrialsTactic, at_caps
-from shooting_drill import (
+from tools.field.ball_trials import BallTrialsTactic, at_caps
+from tools.field.shooting_drill import (
     CAMERA_HALF,
     FIELD,
     KEEP_OUT,
@@ -63,7 +63,6 @@ from shooting_drill import (
     _one_robot_strategy,
     no_rules_referee,
 )
-
 from utama_core.analysis.robot_calibration import (
     FieldLog,
     ball_noise,
@@ -373,7 +372,7 @@ def _analyse(log_path: str, robot: tuple[str, int], radio: int, old: RobotProfil
 def committed_profile(radio: int) -> Optional[RobotProfile]:
     """The robot's profile as last committed (`git show HEAD:...`); None if it has none."""
     path = profile_path(radio)
-    rel = path.relative_to(Path(__file__).resolve().parents[1]).as_posix()
+    rel = path.relative_to(Path(__file__).resolve().parents[2]).as_posix()
     shown = subprocess.run(["git", "show", f"HEAD:{rel}"], capture_output=True, text=True)
     return RobotProfile(**json.loads(shown.stdout)["profile"]) if shown.returncode == 0 else None
 

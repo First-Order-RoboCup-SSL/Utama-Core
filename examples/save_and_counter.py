@@ -21,7 +21,7 @@ What it does:
   - A ball rolling towards a robot's goal (a shot, a clearance) has that robot keeping and the
     other attacking, so nobody leaves the goal to chase a shot. A ball outside the field (or
     unseen) holds both robots until the operator puts it back.
-  - The field, the robot hardware type and the referee rules are `shooting_drill.py`'s
+  - The field, the robot hardware type and the referee rules are `tools/field/shooting_drill.py`'s
     (`FIELD`, `TestRobot`, `RULES`): only goals are detected. After a goal play stops; put the
     ball back and Force Start. Both goals must be in view (`CAMERA_HALF = "full"`).
   - Every mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting. The Live
@@ -40,7 +40,7 @@ import math
 import time
 from typing import Optional
 
-from shooting_drill import (
+from tools.field.shooting_drill import (
     FIELD,
     KEEP_OUT,
     RADIO_0,
@@ -51,7 +51,6 @@ from shooting_drill import (
     _referee_profile,
     on_field,
 )
-
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
