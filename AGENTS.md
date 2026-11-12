@@ -45,15 +45,15 @@ One term per thing; reuse these instead of coining new ones.
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
-  `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always
+  `tools/pitch_maps.py` (and `tools/evaluation/explain.py` for a candidate against the champion), always
   turned so the strategy attacks right. Position map: a heatmap of where the outfield robots stand in
   live play, with the ball and without it, plus each robot's mean position. Shot map: every shot at
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 - **Evaluation / reference / match results** — `tools/evaluation/evaluate.py`: is a candidate
-  stronger than the reference, the champion at the last release (`--at REF`, or `--compare-with
-  NAME`)? Round k plays under sim-noise seed k in the simulated world and robots
+  stronger than the reference, the champion at the last release (`--at REF` for another
+  release)? Round k plays under sim-noise seed k in the simulated world and robots
   (`tools/evaluation/reference/world.json`, `robots.json`): every round the same round robin, repeated
   while a candidate is undecided, decided on paired results (candidate and reference against the same
   opponent under the same noise, `analysis/ratings.py`) and stopping once the answer is clear. Every

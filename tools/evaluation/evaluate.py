@@ -9,18 +9,11 @@ it plays rounds until each candidate is decided.
 
     --at REF            the reference is the champion as it was at git commit REF (default: the latest
                         release tag), played from a `.strategy` file built once into replays/eval/frozen/
-    --compare-with NAME the reference is NAME instead (a strategy in the working tree, or a .strategy
-                        file): a new version against the one it changes
     --all               every strategy in the catalog plays, not only the core (occasionally, for a
                         wider field)
-    --max-rounds N      rounds before a candidate is called undecided (default 6)
-    --max-workers N     matches at once (default 12; 1 plays in this process)
-    --strict            exit non-zero if any match of the run stalled
-    --fuzz-restarts SEED  inject seeded random legal restarts (custom_referee/restart_fuzzer.py);
-    --fuzz-interval LO HI sets the gap in sim seconds (default 25 45)
-    --control-scheme NAME planner for every robot (fpp, trajsample, ...; default fpp)
-    --explain           also write on-pitch pictures of each candidate against the reference to
-                        replays/eval/explain/<candidate>_<run id>/ (tools/evaluation/explain.py)
+
+Matches play in parallel, one fewer than the CPUs (at most 12). To explain a result: find_bugs.py,
+goal_sources, pitch_maps.py and explain.py on the run's round folders.
 
 Players
 -------
@@ -48,7 +41,7 @@ the same seed and colour, plus their head-to-head matches. P(candidate stronger 
 
 - **better** once P >= PROMOTE (0.99),
 - **worse** once P <= DROP (0.2),
-- **undecided** after `--max-rounds`: not clearly better, which for a search means drop it.
+- **undecided** after `MAX_ROUNDS` (6) rounds: not clearly better, which for a search means drop it.
 
 Thresholds come from simulating the rule (match noise SD 1.9 goals, six opponents, 6 rounds, paired
 results correlated 0 to 1): two equal strategies are called "better" at most 3% of the time. Unrelated
@@ -114,6 +107,7 @@ from utama_core.strategy import catalog  # noqa: E402
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
+WORKERS = min(12, max(1, (os.cpu_count() or 1) - 1))  # 1 plays in this process (tests)
 FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
 # A full match: two halves of 300 s of playing time, the clock stopped whenever no team may play the
 # ball, about 710-870 s of sim time. This only caps a match that can't reach full time.
@@ -231,30 +225,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("candidates", nargs="*")
     parser.add_argument("--at", metavar="REF")
-    parser.add_argument("--compare-with", metavar="NAME")
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
-    parser.add_argument("--max-workers", type=int, default=min(12, max(1, (os.cpu_count() or 1) - 1)))
-    parser.add_argument("--strict", action="store_true")
-    parser.add_argument("--fuzz-restarts", type=int, metavar="SEED")
-    parser.add_argument("--fuzz-interval", type=float, nargs=2, metavar=("LO", "HI"), default=(25.0, 45.0))
-    parser.add_argument("--control-scheme", default="fpp")
-    parser.add_argument("--explain", action="store_true")
     parser.add_argument("--players", type=Path, help=argparse.SUPPRESS)  # tests: another players.json
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> None:
     args = build_parser().parse_args(argv)
-    if args.at and args.compare_with:
-        raise SystemExit("--at and --compare-with both choose the reference: give one")
     setup = load_players(args.players) if args.players else load_players()
     core = resolve_names(setup["core"])
     reserve = [n for n in _CONFIG_NAMES if n not in core] if args.all else []
-    if args.compare_with:
-        reference = resolve_names([args.compare_with])[0]
-    else:
-        reference = at_ref(resolve_names([setup["champion"]])[0], args.at or latest_release())
+    reference = at_ref(resolve_names([setup["champion"]])[0], args.at or latest_release())
     candidates = [c for c in resolve_names(args.candidates) if c != reference]
 
     noise = SimNoise.from_dict(reference_noise()).to_dict()
@@ -262,9 +243,9 @@ def main(argv: Optional[list[str]] = None) -> None:
     env_args = {
         "duration_seconds": MAX_MATCH_SECONDS,
         "sim_noise": noise,
-        "control_scheme": args.control_scheme,
-        "fuzz_seed": args.fuzz_restarts,
-        "fuzz_interval_s": tuple(args.fuzz_interval),
+        "control_scheme": "fpp",
+        "fuzz_seed": None,
+        "fuzz_interval_s": (25.0, 45.0),
     }
     graph = CodeGraph()
     env = match_results.environment(graph, **env_args)
@@ -287,20 +268,15 @@ def main(argv: Optional[list[str]] = None) -> None:
             now.strategy_fingerprint(n)[:16] == fps[n] for n in (a, b)
         )
 
-    run_kwargs = {
-        "duration_seconds": MAX_MATCH_SECONDS,
-        "control_scheme": args.control_scheme,
-        "fuzz_seed": args.fuzz_restarts,
-        "fuzz_interval_s": tuple(args.fuzz_interval),
-    }
+    run_kwargs = {k: v for k, v in env_args.items() if k != "sim_noise"}
     open_ = list(candidates)
     report: dict[str, dict] = {}
     rounds: list[dict] = []
     opponents_so_far: set[str] = set()
     played = reused = 0
-    executor = ProcessPoolExecutor(max_workers=args.max_workers) if args.max_workers > 1 else None
+    executor = ProcessPoolExecutor(max_workers=WORKERS) if WORKERS > 1 else None
     try:
-        for k in range(1, args.max_rounds + 1):
+        for k in range(1, MAX_ROUNDS + 1):
             if k > 1 and not open_:
                 break
             opponents = [p for p in [*core, *reserve] if p not in candidates and p != reference]
@@ -367,16 +343,13 @@ def main(argv: Optional[list[str]] = None) -> None:
                     margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
                     p = ratings.p_positive(margin, sd)
                     print(f"after round {k}: {_short_name(c):<28} P(better) {p:.2f}  margin {margin:+.2f} ± {sd:.2f}")
-                    if (v := verdict(p, k, args.max_rounds)) is not None:
+                    if (v := verdict(p, k, MAX_ROUNDS)) is not None:
                         open_.remove(c)
                         report[c] = {"verdict": v, "rounds": k, "p_better": round(p, 3), "margin": round(margin, 2)}
                         report[c]["margin_sd"] = round(sd, 2)
     finally:
         if executor is not None:
             executor.shutdown(cancel_futures=True)
-
-    if args.explain:
-        _explain(run_dir, run_id, candidates, reference)
 
     health = rounds[0]
     print_signals(health, f"{run_id}/round_1")
@@ -408,7 +381,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "reference": reference,
                 "core": core,
                 "environment": env,
-                "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
+                "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": MAX_ROUNDS},
                 "candidates": report,
                 "rounds": [{"round": s["round"], "matches": len(s["results"])} for s in rounds],
                 "signals": {k: v for k, v in health.items() if k not in ("results",)},
@@ -417,27 +390,6 @@ def main(argv: Optional[list[str]] = None) -> None:
         )
     )
     print(f"\nReport: {out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out}")
-
-    stalled = [
-        r for s in rounds for r in s["results"] if (r["stats"] or {}).get("stall_events") or r["possession_backstop"]
-    ]
-    if args.strict and stalled:
-        raise SystemExit(f"--strict: {len(stalled)} match(es) stalled")
-
-
-def _explain(run_dir: Path, run_id: str, candidates: list[str], reference: str) -> None:
-    """`--explain`: pictures of each candidate against the reference, from this run's matches.
-    A failure is printed and never loses the verdicts."""
-    from tools.evaluation import explain  # matplotlib: imported only when asked for
-
-    for c in candidates:
-        out = Path(REPLAY_BASE_PATH) / "eval" / "explain" / f"{_short_name(c)}_{run_id}"
-        try:
-            for round_dir in sorted(run_dir.glob("round_*")):
-                explain.explain(round_dir, c, reference, out / round_dir.name)
-            print(f"explain: {_short_name(c)} vs {_short_name(reference)} written to {out}")
-        except Exception as exc:  # noqa: BLE001 - the pictures are optional; the verdicts are not
-            print(f"explain: {_short_name(c)} failed ({type(exc).__name__}: {exc}); verdicts are unaffected")
 
 
 # --- the verdict's arithmetic -----------------------------------------------------------------

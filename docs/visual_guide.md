@@ -21,7 +21,7 @@ so the studied strategy attacks right. Zone names (defensive third, the box, ...
 difference, among those it played as config_a), collects every problem the tools flag (tactic flip-backs,
 stalls, and with `--restarts` illegal restart targets), and draws the worst few with the picture for that
 kind. Read its `index.md` first: each problem's numbers, then the picture path. About 20 s a match
-(a minute with `--restarts`); `evaluate.py --explain` runs it on the candidate's two worst matches.
+(a minute with `--restarts`).
 
 A stall it found in `pendulum` against `weaver`: from 783 to 786 s, four of our robots
 oscillate with the ball frozen. The picture is the match timeline around it, recorded data only:
@@ -89,13 +89,11 @@ The rest of the strategy report, as numbers: [signal_report.md](signal_report.md
 ![candidate against champion, positions](img/explain/positions.png)
 
 The same maps for just two strategies, a candidate and the champion, side by side on one colour scale;
-`evaluate.py --explain` draws them (with shots, fouls and a `summary.json`) before an evaluation removes
-its replays. This example is drawn from the round-robin: `pendulum` holds 37% of its possession in the
+`tools/evaluation/explain.py` draws them (with shots, fouls and a `summary.json`). This example is drawn from the round-robin: `pendulum` holds 37% of its possession in the
 attacking half against `breakwater`'s 65%, yet takes 21.9 shots a match against 6.3, and commits
 twice the fouls (10.0 against 4.7 a match, mostly ball held in the defense area and crashing).
 
-Draw: `tools/evaluation/evaluate.py CANDIDATE --explain`, or `tools/evaluation/explain.py RUN_DIR
-CANDIDATE CHAMPION --out DIR` on any run dir.
+Draw: `tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR` on any run dir.
 
 ## 3. One match over time
 
@@ -191,7 +189,7 @@ Draw: `pixi run python tools/plan_trace.py REPLAY.npz --t0 S --t1 S --robot ID [
 | Question | Picture |
 |---|---|
 | How does this strategy play, overall? | pitch maps (1) |
-| Why did the candidate win or lose against the champion? | `--explain` (2) |
+| Why did the candidate win or lose against the champion? | `explain.py` (2) |
 | What were the robots doing in this stretch of a match? Thrashing, everyone chasing the ball? | match timeline (3) |
 | Where did the referee override put us at this restart, and was it legal? | restart picture (4) |
 | Is the planner itself good at driving, with no strategy involved? | benchmark (5) |

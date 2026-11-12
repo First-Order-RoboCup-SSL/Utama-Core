@@ -51,11 +51,14 @@ def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(evaluate, "CodeGraph", lambda: _Graph(rig))
     monkeypatch.setattr(evaluate, "_CONFIG_NAMES", [*CORE, *RESERVE, "c"])
+    monkeypatch.setattr(evaluate, "WORKERS", 1)  # in this process, so the stubs apply
+    monkeypatch.setattr(evaluate, "at_ref", lambda name, ref: name)  # the reference: the core's own "a"
+    monkeypatch.setattr(evaluate, "latest_release", lambda: "v0")
 
     def run(*argv):
         rig.played.clear()
         rig.kwargs.clear()
-        evaluate.main(["--players", str(players), "--max-workers", "1", *argv])
+        evaluate.main(["--players", str(players), *argv])
         (run_dir,) = sorted(tmp_path.glob("eval_*"))[-1:]
         return run_dir
 
@@ -65,7 +68,7 @@ def rig(tmp_path, monkeypatch):
 
 
 def test_with_no_candidate_one_round_plays_every_pair_of_the_core(rig):
-    run_dir = rig.run("--compare-with", "a")
+    run_dir = rig.run()
 
     # the core a, b, d; a is also the reference; the reserve r1, r2, r3 and c play only with --all
     assert sorted((x, y) for x, y, _ in rig.played) == [("a", "b"), ("a", "d"), ("b", "d")]
@@ -77,48 +80,33 @@ def test_with_no_candidate_one_round_plays_every_pair_of_the_core(rig):
 
 
 def test_all_adds_every_other_strategy_in_the_catalog(rig):
-    rig.run("--compare-with", "a", "--all")
+    rig.run("--all")
     assert len(rig.played) == 7 * 6 // 2  # a, b, d, r1, r2, r3, c: every pair once
 
 
 def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matches_play(rig):
-    rig.run("--compare-with", "a")
-    rig.run("--compare-with", "a")
+    rig.run()
+    rig.run()
     assert rig.played == []
 
     rig.version["d"] += 1
-    rig.run("--compare-with", "a")
+    rig.run()
     assert sorted((x, y) for x, y, _ in rig.played) == [("a", "d"), ("b", "d")]
 
 
-def test_a_later_round_is_the_same_round_robin_under_the_next_seed_with_colours_swapped(rig):
-    run_dir = rig.run("c", "--compare-with", "a", "--max-rounds", "2")
+def test_a_later_round_is_the_same_round_robin_under_the_next_seed_with_colours_swapped(rig, monkeypatch):
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    run_dir = rig.run("c")
 
     round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]  # equal results: undecided after round 1
     assert sorted(round_2) == [("a", "c"), ("b", "a"), ("b", "c"), ("d", "a"), ("d", "b"), ("d", "c")]
 
     rig.version["c"] += 1  # edit the candidate: only its matches play again, in both rounds
-    rig.run("c", "--compare-with", "a", "--max-rounds", "2")
+    rig.run("c")
     assert all("c" in (x, y) for x, y, _ in rig.played) and len(rig.played) == 6
     report = json.loads((run_dir / "report.json").read_text())
     assert report["candidates"]["c"]["verdict"] == "undecided"
     assert report["candidates"]["c"]["rounds"] == 2
-
-
-def test_strict_fails_a_run_with_a_stall_and_reports_it(rig):
-    rig.stats[("a", "b")] = {"stall_events": [{"kind": "RESTART_STALL", "sim_time": 5.0, "duration_s": 9.0}]}
-    with pytest.raises(SystemExit, match="1 match"):
-        rig.run("--compare-with", "a", "--strict")
-    rig.run("--compare-with", "a")  # without --strict the same (now stored) stall only reports
-
-
-def test_fuzzing_reaches_every_match_and_is_its_own_environment(rig):
-    rig.run("--compare-with", "a")
-    rig.run("--compare-with", "a", "--fuzz-restarts", "7", "--fuzz-interval", "10", "20")
-
-    assert len(rig.played) == 3  # a fuzzed run reuses no unfuzzed match
-    assert all(kw["fuzz_seed"] == 7 and kw["fuzz_interval_s"] == (10.0, 20.0) for kw in rig.kwargs)
-    assert len(list(rig.store.root.iterdir())) == 2
 
 
 def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
@@ -126,7 +114,7 @@ def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
         rig.version["d"] = 9
 
     rig.on_play = edit
-    rig.run("--compare-with", "a")
+    rig.run()
 
     stored = {(r["a"], r["b"]) for r in map(json.loads, map(lambda p: p.read_text(), rig.store.root.rglob("*.json")))}
     assert ("a", "b") in stored

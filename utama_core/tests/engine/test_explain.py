@@ -1,13 +1,13 @@
 """`tools/evaluation/explain.py` on a synthetic run dir of real columnar replays: the side assignment
 (a candidate's numbers come from its own matches, against any opponent), the goals from the final
-referee state, the paired goal difference, the four files, and `evaluate.py --explain` off by default."""
+referee state, the paired goal difference and the four files."""
 
 import json
 
 import pytest
 
 from tools import pitch_maps as pm
-from tools.evaluation import evaluate, explain
+from tools.evaluation import explain
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
@@ -134,16 +134,3 @@ def test_paired_difference_uses_same_opponent_seed_and_colour(run_dir, tmp_path)
 def test_explain_refuses_when_a_side_has_no_replay(run_dir, tmp_path):
     with pytest.raises(FileNotFoundError):
         explain.explain(run_dir, "nobody", CHAMP, tmp_path / "out", workers=1)
-
-
-def test_evaluate_explain_is_off_by_default():
-    assert evaluate.build_parser().parse_args(["x"]).explain is False
-    assert evaluate.build_parser().parse_args(["x", "--explain"]).explain is True
-
-
-def test_an_explain_failure_never_escapes(monkeypatch, tmp_path):
-    def boom(*args, **kwargs):
-        raise RuntimeError("no replays")
-
-    monkeypatch.setattr(explain, "explain", boom)
-    evaluate._explain(tmp_path, "eval_test", [CAND], CHAMP)  # must print and return, not raise

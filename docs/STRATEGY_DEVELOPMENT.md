@@ -290,8 +290,7 @@ flowchart TD
   code (skills, tactics, motion, engine) therefore moves the candidates and the working-tree
   strategies, never the reference. A bundled match equals the same match run normally, frame for frame; the
   referee and simulator are today's for both sides. An older commit may know the champion by its old
-  name (`catalog.RENAMED`); that is found. `--compare-with NAME` compares against NAME instead: a new
-  version against the one it changes.
+  name (`catalog.RENAMED`); that is found.
 - **Rounds.** Every round is the same round robin, every pair of players once, under noise seed k;
   after round 1 only the undecided candidates stay. The match results store makes it cheap: a match
   whose code is unchanged is never played again, so a run plays only the matches of edited strategies
@@ -310,17 +309,16 @@ flowchart TD
   far better against one opponent and worse against the rest is a matchup, not a better strategy.
 - **Stalls** are reported, never judged on. The watchdog watches config_a only
   (`run/strategy_runner.py` records stats for config_a), so the report says in how many matches each
-  strategy was checked; "unknown" means none was. `--strict` exits non-zero on any stall, for CI.
+  strategy was checked; "unknown" means none was.
 - **Output.** `replays/eval_<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
   per round `round_<k>/`: each played match's replay, intention log and stats as `<a>_vs_<b>.*`,
   `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
   read. Matches taken from the store have no replay in the run.
 - **Promoting** is a decision, not a side effect: change the champion line in `reference/players.json`
   in a pull request; the next release makes it the reference.
-- **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
+- **Pictures** (`tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`): for a candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
-  their fouls by rule, and a `summary.json` of the numbers behind them, written to
-  `replays/eval/explain/<name>_<run id>/`. They explain a verdict and never make one; matches taken
+  their fouls by rule, and a `summary.json` of the numbers behind them, written to DIR. They explain a verdict and never make one; matches taken
   from the store have no replay, so the pictures cover only what was played. Example
   (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
@@ -358,7 +356,7 @@ reaches `main` by pull request:
 5. Open a draft pull request into `main` with the evaluation result. An agent never merges: a person reviews and merges.
 
 Several branches can be worked on at once, each in its own worktree; they share
-`replays/match_results/`. `evaluate.py` uses 12 workers (`--max-workers N` to change it), so
+`replays/match_results/`. `evaluate.py` uses one worker fewer than the CPUs (at most 12), so
 concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
 more of them at once. How to organise a search (how many in parallel, which ideas) is up to
 whoever runs it.
@@ -396,8 +394,7 @@ whoever runs it.
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
-- **`tools/evaluation/evaluate.py`** — every match run (`--all`, `--max-workers N`, `--strict`,
-  `--fuzz-restarts SEED`, `--fuzz-interval LO HI`, `--control-scheme NAME`); see
+- **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`); see
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
   `tools/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
@@ -407,11 +404,11 @@ whoever runs it.
   `RESTART_STALL` (a restart/stoppage command held >15s) and `COMMITTED_FROZEN` (ball moved
   <5cm for >10s in live play while a slot is committed). Each `RESTART_STALL` carries a one-line
   `diagnosis` (ball in goal / past a line, taker not closing on the ball, taker at the ball but
-  not kicking). The tournament prints a STALLS section, writes it to `summary.json`, and `--strict` exits non-zero on any stall; a
+  not kicking). The tournament prints a STALLS section, and writes it to `summary.json`; a
   possession-pinned backstop flags what the watchdog misses.
 - **Restart fuzzing** (`custom_referee/restart_fuzzer.py`) — injects legal restarts at
   seeded-random times to exercise auto-advance paths; same seed and interval reproduce the
-  schedule. Details: `docs/custom_referee.md`.
+  schedule. No tool turns it on today (`sim_setup.sim_referee(fuzz_seed=...)`). Details: `docs/custom_referee.md`.
 - **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
   command latency per robot, kick speed and direction noise (a per-robot offset plus
   kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot
