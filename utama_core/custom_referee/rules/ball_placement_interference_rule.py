@@ -30,7 +30,7 @@ from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.custom_referee.rules.base_rule import BaseRule, RuleViolation
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import distance_point_to_segment
+from utama_core.geometry.math_utils import distance_point_to_segment
 
 _BALL_PLACEMENT_COMMANDS = {
     RefereeCommand.BALL_PLACEMENT_YELLOW,

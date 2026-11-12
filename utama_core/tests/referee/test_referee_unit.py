@@ -465,7 +465,7 @@ class TestBallPlacementOursStep:
         expected = referee_actions._clamp_to_field_or_ball(approach, game, ball_pos)
         # The placer starts on the designated side, so it routes round the ball to the
         # (clamped) approach point rather than straight at it.
-        from utama_core.global_utils.math_utils import detour_around_circle
+        from utama_core.geometry.math_utils import detour_around_circle
 
         expected = detour_around_circle(Vector2D(4.0, 0.0), expected, ball_pos, referee_actions._BALL_DETOUR_RADIUS_M)
         assert captured[0][1].x == pytest.approx(expected.x)
@@ -866,7 +866,7 @@ class TestBallPlacementOursCarry:
 
     @pytest.fixture(autouse=True)
     def _fresh_possession_state(self):
-        from utama_core.shared.pass_and_score_geometry import reset_possession_state
+        from utama_core.geometry.pass_and_score_geometry import reset_possession_state
 
         reset_possession_state()
         yield
@@ -2700,7 +2700,7 @@ class TestDetourAroundCircle:
     """`detour_around_circle`: robots crossing the ball's keep-out circle go round it."""
 
     def _detour(self, start, target):
-        from utama_core.global_utils.math_utils import detour_around_circle
+        from utama_core.geometry.math_utils import detour_around_circle
 
         return detour_around_circle(Vector2D(*start), Vector2D(*target), Vector2D(0.0, 0.0), 0.8)
 
@@ -2734,7 +2734,7 @@ class TestBallPlacementTheirsStep:
 
         from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
         from utama_core.custom_referee import actions as referee_actions
-        from utama_core.global_utils.math_utils import distance_point_to_segment
+        from utama_core.geometry.math_utils import distance_point_to_segment
 
         captured = {}
 

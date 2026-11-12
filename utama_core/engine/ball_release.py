@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Optional
 
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ANNOUNCE_PASS_RAD,
     RELEASE_LANE_CLEARANCE,
     open_teammate,

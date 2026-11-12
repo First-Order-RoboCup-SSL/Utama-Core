@@ -327,7 +327,7 @@ def test_every_tactic_a_strategy_builds_is_in_its_closure(graph):
 # Imported by the runner only to reset their per-match state, so a strategy that doesn't import
 # them isn't affected by them, and the one that does has them in its own closure.
 _RUNNER_ONLY_RESETS = {
-    "utama_core.shared.pass_and_score_geometry",
+    "utama_core.geometry.pass_and_score_geometry",
     "utama_core.skills.shielding",
     "utama_core.strategy.pickers",
 }
@@ -352,7 +352,7 @@ _RUNNER_REACHES_INTO_PLAYER_SIDE = {
     "utama_core.run.strategy_runner": {
         "utama_core.engine",
         "utama_core.motion_planning",  # builds a controller; a file's process builds its own
-        "utama_core.shared.pass_and_score_geometry",  # reset
+        "utama_core.geometry.pass_and_score_geometry",  # reset
         "utama_core.skills",  # reset
         "utama_core.strategy",  # reset
     },
@@ -418,7 +418,7 @@ AUDIT = {
     "module-level state": [
         "utama_core.motion_planning.fastpathplanning.planner",
         "utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper",
-        "utama_core.shared.pass_and_score_geometry",
+        "utama_core.geometry.pass_and_score_geometry",
         "utama_core.skills.shielding",
         "utama_core.strategy.pickers",
     ],

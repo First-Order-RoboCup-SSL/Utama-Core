@@ -27,11 +27,11 @@ from utama_core.custom_referee.geometry import RefereeGeometry
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import (
+from utama_core.geometry.math_utils import (
     detour_around_circle,
     distance_point_to_segment,
 )
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     enemy_goal_line,
     has_ball,
     kick_bend,
@@ -39,7 +39,7 @@ from utama_core.shared.pass_and_score_geometry import (
     oriented_towards,
     restart_support,
 )
-from utama_core.shared.tolerance import Sticky
+from utama_core.geometry.tolerance import Sticky
 from utama_core.skills.man_mark import mark_target
 from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 

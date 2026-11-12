@@ -1,7 +1,7 @@
 """Boundary-condition and randomized-invariant sweep over `pass_and_score_geometry`'s
 public functions.
 
-Public functions in `utama_core/shared/pass_and_score_geometry.py` (`def`/`class`
+Public functions in `utama_core/geometry/pass_and_score_geometry.py` (`def`/`class`
 not prefixed `_`, as of this writing): `reset_possession_state`, `has_ball`,
 `at_target`, `oriented_towards`, `clamp_to_field`, `intercept_point`,
 `enemy_positions`, `ball_is_loose`, `segment_clearance`, `segment_blocked`,
@@ -59,7 +59,7 @@ from utama_core.entities.game.field import Field
 from utama_core.entities.game.game import Game
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     at_target,
     ball_is_loose,
     clamp_to_field,

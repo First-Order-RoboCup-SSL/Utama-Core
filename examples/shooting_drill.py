@@ -82,8 +82,8 @@ from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.geometry.pass_and_score_geometry import has_ball, oriented_towards
 from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import has_ball, oriented_towards
 from utama_core.skills.utils.move_utils import kick, turn_on_spot
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic

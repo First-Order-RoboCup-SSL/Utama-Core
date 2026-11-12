@@ -20,7 +20,7 @@ from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ANNOUNCE_PASS_RAD,
     MAX_OPEN_TEAMMATE_M,
     open_teammate,

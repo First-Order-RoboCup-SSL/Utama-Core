@@ -63,12 +63,12 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     enemy_goal_line,
     has_ball,
     oriented_towards,
 )
+from utama_core.run import StrategyRunner
 from utama_core.skills.go_to_ball import go_to_ball
 from utama_core.skills.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.tactics._pass_and_score import FACE_GOAL_RAD

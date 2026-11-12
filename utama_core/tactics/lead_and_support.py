@@ -8,7 +8,7 @@ tactic makes that decision: closest-to-ball leads (dribble toward goal, shoot
 when a lane opens, or pass to the best-scoring support point), every other
 assigned robot continuously re-picks the best open support point on the
 attacking half. Reuses existing skill/geometry primitives
-(`go_to_ball`/`go_to_point`/`move`, and `shared/pass_and_score_geometry`'s
+(`go_to_ball`/`go_to_point`/`move`, and `geometry/pass_and_score_geometry`'s
 shot-finding and pass-scoring functions) — the primitives are fundamental
 motion/geometry, not tactical decisions, so they were kept rather than
 reinvented.
@@ -34,7 +34,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     clamp_outside_enemy_defense_area,
     enemy_goal_line,
     enemy_positions,

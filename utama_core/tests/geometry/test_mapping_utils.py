@@ -1,6 +1,6 @@
 import pytest
 
-from utama_core.global_utils.mapping_utils import (
+from utama_core.entities.game.mapping_utils import (
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )

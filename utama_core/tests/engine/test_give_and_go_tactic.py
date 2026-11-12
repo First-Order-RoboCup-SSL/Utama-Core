@@ -35,11 +35,11 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     MIN_OPEN_TEAMMATE_M,
     find_best_shot,
 )
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tactics.give_and_go import (
     _FIRST_TOUCH_FORCE_SHOT_TICKS,
     _MAX_FIRST_TOUCH_TICKS,

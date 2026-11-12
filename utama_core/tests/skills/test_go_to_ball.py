@@ -8,8 +8,8 @@ from utama_core.config.enums import Mode
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
+from utama_core.geometry.pass_and_score_geometry import enemy_defense_area_hold_point
 from utama_core.motion_planning.common.pose_ahead import PoseAhead
-from utama_core.shared.pass_and_score_geometry import enemy_defense_area_hold_point
 from utama_core.skills.go_to_ball import (
     _APPROACH_OVERSHOOT_M,
     _DRIBBLE_OVERSHOOT_M,

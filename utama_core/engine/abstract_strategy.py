@@ -26,10 +26,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import (
-    assert_contains,
-    assert_valid_bounding_box,
-)
+from utama_core.geometry.math_utils import assert_contains, assert_valid_bounding_box
 from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.skills.utils.move_utils import empty_command

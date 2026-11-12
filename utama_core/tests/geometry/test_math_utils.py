@@ -5,7 +5,7 @@ import pytest
 
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.math_utils import (
+from utama_core.geometry.math_utils import (
     angle_between_points,
     assert_valid_bounding_box,
     compute_bounding_zone_from_points,
@@ -220,7 +220,7 @@ def test_find_intersection_matches_numpy_version_bit_for_bit():
     """Random crossing, missing, parallel, degenerate and endpoint-touching
     segments, as float64 arrays, int arrays and tuples: same None-ness and
     exactly the same point as the numpy implementation."""
-    from utama_core.global_utils.math_utils import find_intersection
+    from utama_core.geometry.math_utils import find_intersection
 
     rng = np.random.default_rng(3)
     for _ in range(20000):

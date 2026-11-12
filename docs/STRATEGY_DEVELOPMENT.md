@@ -159,7 +159,7 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 - **`go_to_point()` always faces the ball.** If orientation matters while stationary (facing a
   pass target), use `move()` with `target_oren`. Check every `go_to_point(` call site — fixing
   one doesn't fix the pattern.
-- **`intercept_point()` (`shared/pass_and_score_geometry.py`) projects along the passer's
+- **`intercept_point()` (`geometry/pass_and_score_geometry.py`) projects along the passer's
   current orientation,** not toward the receiver. A mis-facing passer sends the receiver to a
   nonsense point; it fails quietly and looks like a vague stall.
 - **Every path that sets `is_committed()` True needs a path back to False** — success, failure

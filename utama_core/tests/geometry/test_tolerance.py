@@ -1,4 +1,4 @@
-"""Boundary-condition tests for `utama_core.shared.tolerance`.
+"""Boundary-condition tests for `utama_core.geometry.tolerance`.
 
 Every test here pins an exact boundary (at tolerance, just under/over it, a
 tie, an empty list, a vanished previous choice) rather than exercising happy
@@ -11,7 +11,7 @@ import random
 import pytest
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.shared.tolerance import Sticky, approx_eq
+from utama_core.geometry.tolerance import Sticky, approx_eq
 
 # ---------------------------------------------------------------------------
 # approx_eq — scalars

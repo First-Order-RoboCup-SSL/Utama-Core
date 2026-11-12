@@ -40,7 +40,7 @@ flip-flopping it would repeatedly redirect the runner mid-run.
 Reuses `_pass_and_score`'s `_pass_exec`/`_score_goal` for the two legs of the
 relay and the final shot (generic two-robot ball transfer / shot-taking, same
 reuse rationale every other attack tactic here gives), and
-`shared/pass_and_score_geometry` for the weak-side read and shot check. What's
+`geometry/pass_and_score_geometry` for the weak-side read and shot check. What's
 new is only the weak-side decision, the pivot/runner positioning, and the
 3-leg phase sequence layered on top.
 
@@ -64,7 +64,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     at_target,
     ball_line_receive_point,
     enemy_goal_line,

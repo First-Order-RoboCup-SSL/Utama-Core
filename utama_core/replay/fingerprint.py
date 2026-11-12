@@ -54,7 +54,7 @@ PLAYER_SIDE = (
     "utama_core.skills",
     "utama_core.motion_planning",
     "utama_core.engine",
-    "utama_core.shared.pass_and_score_geometry",
+    "utama_core.geometry.pass_and_score_geometry",
 )
 # The parts of those the match process runs itself, whoever plays: looking a strategy up, the base
 # class a `.strategy` file's proxy inherits, and the log and stats it writes.
@@ -169,7 +169,7 @@ class CodeGraph:
             mod = _Module(name, base.with_suffix(".py"), is_package=False)
         elif (base / "__init__.py").is_file():
             mod = _Module(name, base / "__init__.py", is_package=True)
-        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/skills
+        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/motion_planning/common
             return _Module(name, None, is_package=True)
         else:
             return None

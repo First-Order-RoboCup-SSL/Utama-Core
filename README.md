@@ -43,7 +43,7 @@ Coding agents: read [AGENTS.md](AGENTS.md) first (`CLAUDE.md` is a symlink to it
 Everything lives under `utama_core/`:
 
 - `strategy/`: the strategies (one module each, named after the strategy)
-- `tactics/`, `skills/`, `shared/`: reusable tactics, per-robot skills, and geometry they share
+- `tactics/`, `skills/`, `geometry/`: reusable tactics, per-robot skills, and the geometry they share
 - `engine/`: the tactic-kernel infrastructure (`Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee overrides)
 - `custom_referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
 - `motion_planning/`: path planning and motion control
@@ -53,7 +53,7 @@ Everything lives under `utama_core/`:
 - `rsoccer_simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
 - `team_controller/`, `data_processing/`: vision, robot radio and referee input
 - `dashboard/`: the browser dashboard
-- `entities/`, `config/`, `global_utils/`: data classes, settings and constants, utilities
+- `entities/`, `config/`, `geometry/`: data classes, settings and constants, geometry helpers
 - `tests/`: all tests
 
 Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; see

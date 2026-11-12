@@ -103,7 +103,7 @@ One term per thing; reuse these instead of coining new ones.
   `restart_outcomes`, `stuck_detector`, `render_window`, `render_clip`, `list_runs`). Imports
   `replay/`; `replay/` never imports it.
 - Everything else (`motion_planning/`, `rsoccer_simulator/`, `team_controller/`,
-  `data_processing/`, `entities/`, `global_utils/`) is infrastructure the strategy layer
+  `data_processing/`, `entities/`, `geometry/`) is infrastructure the strategy layer
   sits on top of. Writing a strategy rarely needs to change it, but it is the main work area
   for planner, simulator, vision and hardware work: see the Work areas table above.
 

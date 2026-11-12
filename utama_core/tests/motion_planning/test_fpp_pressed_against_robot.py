@@ -11,7 +11,7 @@ import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import distance_point_to_segment
+from utama_core.geometry.math_utils import distance_point_to_segment
 from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _leaving,

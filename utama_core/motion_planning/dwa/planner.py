@@ -7,7 +7,7 @@ from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.settings import TIMESTEP
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, Robot
-from utama_core.global_utils.math_utils import normalise_heading
+from utama_core.geometry.math_utils import normalise_heading
 from utama_core.motion_planning.dwa.config import DynamicWindowConfig
 from utama_core.motion_planning.planning.geometry import (
     AxisAlignedRectangle,

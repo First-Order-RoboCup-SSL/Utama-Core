@@ -2,7 +2,7 @@ import abc
 
 from utama_core.config.settings import OFF_PITCH_OFFSET
 from utama_core.entities.game.field import FieldBounds
-from utama_core.global_utils.math_utils import in_field_bounds
+from utama_core.geometry.math_utils import in_field_bounds
 
 
 class AbstractSimController:

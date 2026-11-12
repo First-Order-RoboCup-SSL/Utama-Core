@@ -46,7 +46,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_own_defense_area,
     clamp_outside_own_defense_area,
     enemy_positions,
@@ -55,7 +55,7 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     segment_clearance,
 )
-from utama_core.shared.tolerance import Sticky
+from utama_core.geometry.tolerance import Sticky
 from utama_core.skills.go_to_ball import go_to_ball
 from utama_core.skills.go_to_point import go_to_point
 from utama_core.skills.utils.move_utils import kick, turn_on_spot
@@ -136,13 +136,13 @@ def _clearance_candidates(game: Game, ball_p: Vector2D) -> list[Vector2D]:
 def _best_clear_target(game: Game, ball_p: Vector2D, prev_target: Optional[Vector2D]) -> Vector2D:
     """Openest upfield lane, with hysteresis toward the previous choice.
 
-    Uses `shared.tolerance.Sticky` — this function (along with
+    Uses `geometry.tolerance.Sticky` — this function (along with
     `pass_and_shoot.assign_passer_receiver`) is the real-world shape
     `Sticky` was designed to fit: a fixed candidate set scored fresh each
     tick, sticking with the incumbent unless a challenger clears a margin.
     Confirmed behaviour-identical to the previous hand-rolled fold via
     `test_sticky_matches_hand_rolled_margin_logic_seeded_random`
-    (`tests/shared/test_tolerance.py`), 300 seeded-random candidate sets,
+    (`tests/geometry/test_tolerance.py`), 300 seeded-random candidate sets,
     zero mismatches.
     """
     enemies = enemy_positions(game)

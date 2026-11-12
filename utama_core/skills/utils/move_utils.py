@@ -7,7 +7,7 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.math_utils import normalise_heading, rotate_vector
+from utama_core.geometry.math_utils import normalise_heading, rotate_vector
 from utama_core.motion_planning.common.motion_controller import MotionController
 
 # Off its target orientation by more than this, a robot turns at least `MotionController.min_turn`.

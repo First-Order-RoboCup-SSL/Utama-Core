@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from utama_core.data_processing.refiners.filters import kalman
-from utama_core.global_utils import math_utils
+from utama_core.geometry import math_utils
 from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _same_segment,

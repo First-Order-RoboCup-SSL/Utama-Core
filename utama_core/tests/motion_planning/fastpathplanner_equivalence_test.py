@@ -19,11 +19,11 @@ import numpy as np
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.global_utils.math_utils import (
+from utama_core.geometry.math_utils import (
     _closest_point_on_segment_numpy as closest_point_on_segment,
 )
-from utama_core.global_utils.math_utils import _distance_numpy as distance
-from utama_core.global_utils.math_utils import (
+from utama_core.geometry.math_utils import _distance_numpy as distance
+from utama_core.geometry.math_utils import (
     distance_point_to_segment,
     find_intersection,
     rotate_vector,

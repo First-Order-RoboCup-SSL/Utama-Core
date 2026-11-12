@@ -16,14 +16,14 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
-from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_enemy_defense_area,
     ball_in_own_defense_area,
     clamp_outside_enemy_defense_area,
     clamp_outside_own_defense_area,
 )
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
 
 # We are on the right: our box spans x >= 3.5, the opponent's x <= -3.5 (standard field).
 _ENEMY_BOX = Vector2D(-4.0, 0.0)

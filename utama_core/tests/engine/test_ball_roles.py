@@ -18,7 +18,7 @@ from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     _DEEP_NEAR_LINE_M,
     _INTERCEPT_MIN_M,
     _PASS_ROLLING_MPS,

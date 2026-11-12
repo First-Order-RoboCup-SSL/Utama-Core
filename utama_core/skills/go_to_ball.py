@@ -42,13 +42,13 @@ from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_enemy_defense_area,
     ball_intercept_point,
     clamp_outside_own_defense_area,
     enemy_defense_area_hold_point,
 )
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.skills.go_to_point import go_to_point
 from utama_core.skills.shielding import shielded_approach_angle
 from utama_core.skills.utils.move_utils import move

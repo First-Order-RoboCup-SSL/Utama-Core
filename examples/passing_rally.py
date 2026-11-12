@@ -49,8 +49,8 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.robot import Robot
+from utama_core.geometry.pass_and_score_geometry import clamp_to_field
 from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import clamp_to_field
 
 # ---------------------------------------------------------------------------
 # Test-day configuration (the robots and the pass distance are pass_receive.py's)

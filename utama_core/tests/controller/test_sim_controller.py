@@ -281,7 +281,7 @@ class TestRemoveBall:
         ctrl.remove_ball()
         x, y, _, _ = ctrl.teleport_ball_calls[0]
         # The removed position must be outside the controller's own field bounds
-        from utama_core.global_utils.math_utils import in_field_bounds
+        from utama_core.geometry.math_utils import in_field_bounds
 
         assert not in_field_bounds((x, y), ctrl.field_bounds)
 

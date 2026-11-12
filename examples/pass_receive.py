@@ -80,9 +80,8 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import detour_around_circle
-from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.math_utils import detour_around_circle
+from utama_core.geometry.pass_and_score_geometry import (
     ORIENTATION_TOLERANCE_RAD,
     ball_line_receive_point,
     clamp_outside_enemy_defense_area,
@@ -92,6 +91,7 @@ from utama_core.shared.pass_and_score_geometry import (
     kick_bend,
     oriented_towards,
 )
+from utama_core.run import StrategyRunner
 from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 

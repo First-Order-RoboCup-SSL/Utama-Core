@@ -40,7 +40,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import FieldBounds, Game
-from utama_core.shared.pass_and_score_geometry import kick_bend
+from utama_core.geometry.pass_and_score_geometry import kick_bend
 from utama_core.skills.utils.move_utils import turn_on_spot
 
 CARRY_M = 0.5  # how far a carry goes

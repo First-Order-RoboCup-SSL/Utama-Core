@@ -46,8 +46,8 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.git_utils import git_revision
 from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.replay.git_utils import git_revision
 from utama_core.run import StrategyRunner
 from utama_core.skills.utils.move_utils import move
 from utama_core.team_controller.controllers import AbstractSimController

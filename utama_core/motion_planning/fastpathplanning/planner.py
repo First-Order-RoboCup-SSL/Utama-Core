@@ -12,7 +12,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.math_utils import (
+from utama_core.geometry.math_utils import (
     closest_point_on_segment,
     detour_around_circle,
     distance,

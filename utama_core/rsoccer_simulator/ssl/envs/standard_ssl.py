@@ -16,11 +16,7 @@ from utama_core.config.settings import (
 from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.referee import RefereeData
-from utama_core.global_utils.math_utils import (
-    deg_to_rad,
-    normalise_heading_deg,
-    rad_to_deg,
-)
+from utama_core.geometry.math_utils import deg_to_rad, normalise_heading_deg, rad_to_deg
 from utama_core.rsoccer_simulator.Entities import Ball, Frame, Robot
 from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.rsoccer_simulator.Utils import KDTree

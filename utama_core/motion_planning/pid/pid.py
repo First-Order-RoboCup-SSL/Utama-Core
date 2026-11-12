@@ -3,7 +3,7 @@ import time
 
 from utama_core.config.enums import Mode
 from utama_core.entities.data.vector import Vector2D
-from utama_core.global_utils.math_utils import normalise_heading
+from utama_core.geometry.math_utils import normalise_heading
 from utama_core.motion_planning.pid.configs import (
     OrientationPIDConfigs,
     TranslationPIDConfigs,

@@ -27,14 +27,14 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.data_processing.predictors.position import predict_ball_pos_at_x
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ANNOUNCE_PASS_RAD,
     ball_in_own_defense_area,
     has_ball,
     open_teammate,
     oriented_towards,
 )
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.skills.go_to_point import go_to_point
 from utama_core.skills.kick_upfield import kick_upfield
 from utama_core.skills.utils.defense_utils import (

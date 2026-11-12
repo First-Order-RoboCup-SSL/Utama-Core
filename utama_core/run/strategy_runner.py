@@ -41,13 +41,14 @@ from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.mapping_utils import (
+from utama_core.entities.game.mapping_utils import (
     map_colors_to_friendly_enemy,
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-from utama_core.global_utils.math_utils import assert_valid_bounding_box
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.geometry.math_utils import assert_valid_bounding_box
+from utama_core.geometry.pass_and_score_geometry import reset_possession_state
 from utama_core.motion_planning.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.replay.columnar_writer import (
@@ -74,7 +75,6 @@ from utama_core.run.sim_recovery import (  # noqa: F401; noqa: F401 (re-exported
 )
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
 from utama_core.run.vision_stream_status import VisionStreamStatusMixin
-from utama_core.shared.pass_and_score_geometry import reset_possession_state
 from utama_core.skills.shielding import reset_shield_state
 from utama_core.strategy.pickers import reset_closer_to_ball_state
 from utama_core.team_controller.controllers import (

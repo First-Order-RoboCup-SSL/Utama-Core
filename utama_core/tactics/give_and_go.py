@@ -46,7 +46,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     MIN_OPEN_TEAMMATE_M,
     ball_in_own_defense_area,
     ball_line_receive_point,

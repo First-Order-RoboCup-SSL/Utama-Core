@@ -39,7 +39,7 @@ docstring for the original rationale): a **decoy** (the ball carrier) and an
 Reuses `_pass_and_score`'s `_pass_exec`/`_score_goal` for the mechanics of
 the pass/shot (generic two-robot ball transfer and shot-taking, not specific
 to any one tactic's phase sequence — same reuse rationale `GiveAndGoTactic`
-gives), and `go_to_point`/`shared.pass_and_score_geometry` for movement and
+gives), and `go_to_point`/`geometry.pass_and_score_geometry` for movement and
 shot-lane checks. What's new is only the lure decision and the dragged-marker
 detection layered on top.
 
@@ -61,7 +61,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import ObjectType, TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     carry_exhausted,
     carry_origin,
     clamp_outside_enemy_defense_area,

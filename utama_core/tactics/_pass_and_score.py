@@ -22,8 +22,8 @@ from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.field_scaling import scale_point_from_standard_field
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.field_scaling import scale_point_from_standard_field
+from utama_core.geometry.pass_and_score_geometry import (
     ANNOUNCE_PASS_RAD,
     at_target,
     ball_line_receive_point,

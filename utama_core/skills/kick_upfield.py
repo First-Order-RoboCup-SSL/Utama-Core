@@ -8,8 +8,11 @@ our goal before a carry or hold foul. Shared by `goalkeep` and
 """
 
 from utama_core.entities.game import Game
+from utama_core.geometry.pass_and_score_geometry import (
+    oriented_towards,
+    upfield_heading,
+)
 from utama_core.motion_planning.common.motion_controller import MotionController
-from utama_core.shared.pass_and_score_geometry import oriented_towards, upfield_heading
 from utama_core.skills.utils.move_utils import kick, turn_on_spot
 
 # A clearance only has to go upfield, not along a line: kick within ~11 degrees of it. With the

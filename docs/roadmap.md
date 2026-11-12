@@ -35,7 +35,7 @@ entry by its title, not its number.
 - **Directional-tube enemy obstacle** — trajsample's moving-obstacle obstacle is a capsule expanded along the obstacle's velocity instead of an inflated circle (`utama_core/motion_planning/trajsampling/obstacles.py:132-149`) — `a1b8bdd6`.
 - **FastPathPlanner `mirror_swap` stall** — the 0.52 m shortfall was the defense-area keep-out clamp, not a planner local minimum: back-row targets moved to |x| = 2.9 and the xfail went (`5f97199b`, in #141); #147 separately cleared the detour-side-flip corner case (`fastpathplanner_corner_test.py`) — `0ce4e2a2`. trajsample passes all 29 scenarios of the current table; fpp passed all 19 of the one before it.
 - **Geometric intention overlays in the Replay tab** — `MatchLog.trace_if_changed` overlays drawn by `dashboard/static/field_canvas.js` with its `_drawArrow` primitive: `shadow_and_mark.marks`, `give_and_go.shot_lane`/`pass_target`, `defense.shadow_post`, `block_shape.screen_line`, `press_and_contain.press`, `clear_ball.clear_target`, `dribble.segment_target`, `decoy_and_overload.lure`, `committed_robot_ids` — `c47f7549`, `b6e69b44`.
-- **Shared hysteresis helper** — `Sticky` in `shared/tolerance.py` (`fd87c7f6`), now used by `PassAndShootTactic`'s passer choice, `ClearBallTactic`'s target choice and `PressAndContainTactic`'s presser choice instead of per-site margins — `0ce4e2a2`. (`pickers.friendly_closer_to_ball` keeps its own tick-count hysteresis.)
+- **Shared hysteresis helper** — `Sticky` in `geometry/tolerance.py` (`fd87c7f6`), now used by `PassAndShootTactic`'s passer choice, `ClearBallTactic`'s target choice and `PressAndContainTactic`'s presser choice instead of per-site margins — `0ce4e2a2`. (`pickers.friendly_closer_to_ball` keeps its own tick-count hysteresis.)
 
 ## Open
 
@@ -122,7 +122,7 @@ entry by its title, not its number.
     - *Setup for role-based tactics* (passer/receiver, committed slots): which robot gets the
       ball, and in which phase.
     - *Rule constants:* tactics still copy limits (`CARRY_LIMIT_M` in
-      `shared/pass_and_score_geometry.py`) instead of importing them from the referee rules;
+      `geometry/pass_and_score_geometry.py`) instead of importing them from the referee rules;
       decide whether to share one source.
     Expect each failing tactic to be a real fix with its own regression test.
 

@@ -17,8 +17,7 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.fastpathplanning.config import fastpathplanningconfig
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
     _DEFENSE_AREA_CLAMP_MARGIN,
     _GOAL_POST_SAFETY_MARGIN,
@@ -45,6 +44,7 @@ from utama_core.shared.pass_and_score_geometry import (
     score_pass_setup,
     shot_heading_reachable,
 )
+from utama_core.motion_planning.fastpathplanning.config import fastpathplanningconfig
 
 _FIELD = Field(
     my_team_is_right=True, field_dims=STANDARD_FIELD_DIMS, field_bounds=STANDARD_FIELD_DIMS.full_field_bounds
@@ -702,7 +702,7 @@ def test_carry_origin_starts_at_pickup_and_clears_when_the_ball_is_dropped():
     from types import SimpleNamespace
 
     from utama_core.entities.data.vector import Vector3D
-    from utama_core.shared.pass_and_score_geometry import (
+    from utama_core.geometry.pass_and_score_geometry import (
         CARRY_LIMIT_M,
         carry_exhausted,
         carry_origin,
@@ -733,7 +733,7 @@ def test_carry_exhausted_counts_the_distance_needed_to_stop():
     from types import SimpleNamespace
 
     from utama_core.entities.data.vector import Vector2D, Vector3D
-    from utama_core.shared.pass_and_score_geometry import carry_exhausted
+    from utama_core.geometry.pass_and_score_geometry import carry_exhausted
 
     origin = Vector2D(0.0, 0.0)
     moving = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(1.6, 0.0, 0.0)))
@@ -756,7 +756,7 @@ def test_carry_exhausted_counts_the_reaction_time_before_braking():
     from types import SimpleNamespace
 
     from utama_core.entities.data.vector import Vector2D, Vector3D
-    from utama_core.shared.pass_and_score_geometry import carry_exhausted
+    from utama_core.geometry.pass_and_score_geometry import carry_exhausted
 
     origin = Vector2D(0.0, 0.0)
     lure = SimpleNamespace(ball=SimpleNamespace(p=Vector3D(0.5, 0.0, 0.0), v=Vector3D(1.2, 0.0, 0.0)))

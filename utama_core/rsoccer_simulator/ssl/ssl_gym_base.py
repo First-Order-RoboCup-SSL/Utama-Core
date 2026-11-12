@@ -10,7 +10,7 @@ from typing import List, Optional
 import numpy as np
 import pygame
 
-from utama_core.global_utils.math_utils import rad_to_deg
+from utama_core.geometry.math_utils import rad_to_deg
 from utama_core.rsoccer_simulator.Entities import Ball, Field, Frame, Robot
 from utama_core.rsoccer_simulator.Render import (
     COLORS,

@@ -20,9 +20,7 @@ import numpy as np
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, Robot
-from utama_core.global_utils.math_utils import (
-    angle_between_points as _angle_between_points,
-)
+from utama_core.geometry.math_utils import angle_between_points as _angle_between_points
 
 logger = logging.getLogger(__name__)
 
