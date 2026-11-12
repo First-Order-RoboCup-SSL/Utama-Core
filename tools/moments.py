@@ -212,7 +212,7 @@ def save(m: Moment, path: Optional[Path] = None) -> Path:
 
 def catalog() -> list[str]:
     """The round-robin's strategies: every strategy in the catalog."""
-    from tools.evaluation.round_robin import _CONFIG_NAMES
+    from tools.evaluation.match import _CONFIG_NAMES
 
     return list(_CONFIG_NAMES)
 

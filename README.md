@@ -14,9 +14,12 @@ strategy layer that decides what every robot does.
 2. `pixi install` in the repository root, then `pixi run precommit-install` so every commit is
    linted.
 3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
-4. Play one headless match between two strategies and save its replay:
+4. Play one headless match between two strategies:
 
-       pixi run python tools/evaluation/round_robin.py --pair tiki_taka low_block
+       pixi run python tools/debug_match.py --strategy pendulum --opponent riptide
+
+   `pixi run python tools/evaluation/evaluate.py` plays a full round robin and keeps its replays
+   under `replays/eval_<id>/`.
 
 5. `pixi run python dashboard_server.py` and open http://localhost:8080 to watch replays and
    browse tournament results.

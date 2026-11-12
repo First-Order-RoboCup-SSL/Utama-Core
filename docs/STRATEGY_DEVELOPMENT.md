@@ -212,8 +212,8 @@ flowchart TD
 
 **Writing one.** Add `strategy/<name>.py` with `build(outfield_robot_ids, motion_controller)`,
 returning a `Strategy(tactics={...}, partitioner=...)`, and the pickers only it uses. The file is
-all it takes: `strategy/catalog.py` finds it, so it joins round-robins and `evaluate.py` as
-`<name>`. Reuse the shared partitioner
+all it takes: `strategy/catalog.py` finds it, so it joins `evaluate.py` as `<name>`
+(a reserve player until it is added to the core). Reuse the shared partitioner
 pieces in `strategy/pickers.py` rather than re-deriving them:
 - `friendly_closer_to_ball(game)` — the possession edge. True/False is a clear edge; None is a
   near-tie or unreadable state, where a sticky picker keeps its previous split.
@@ -224,135 +224,109 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
 
 `tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
 kernel invariants. Give its partitioner pure-function tests in `tests/strategy/test_<name>.py` (a
-`Game` built by hand, no rsim), and add a row to `docs/strategies.md`'s round-robin table.
+`Game` built by hand, no rsim), and add a row to `docs/strategies.md`'s table.
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
-2. **One saved match** against a few opponents: `round_robin.py --pair <name> <opp>`.
-   Saved, so stalls are recorded (`--no-save` cannot see them). A stall is a bug to fix
-   before anything else.
-3. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
-   is it better than the champion in `tools/evaluation/reference/opponents.json`, worse, or not clearly either? Several candidates go in
-   one call. A strict round-robin (`round_robin.py --strict`) is the check for stalls
-   and the occasional health check of the whole catalog, no longer the way to judge one change.
+2. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
+   is it better than the champion at the last release, worse, or not clearly either? Several
+   candidates go in one call. Its round 1 is a round robin, so the same run reports stalls and
+   signals; a stall is a bug to fix before anything else.
 
 A change to `tactics/`, `skills/` or `pickers.py` is the other way round: reuse saves little,
 because most strategies import the changed code and their matches all rerun. Batch such
-changes and run one round-robin over the batch.
+changes and run one evaluation over the batch.
 
 **Reuse is automatic.** A match the match results store holds (`replays/match_results/`,
 `replay/match_results.py`) is taken from it, not played; there is no flag. A match's fixture is its
 environment (the shared code and machine, the match length, the planner, the sim noise without its
 seed, the restart fuzzing), both players' fingerprints, their sides and the noise seed. So after a
-change to one strategy only its matches play, one per other config. A default round-robin plays the
-12 strategies of the catalog, so a change to one of them replays 11 of its 66 matches. What counts as "runs" is
+change to one strategy only its matches play. What counts as "runs" is
 `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that imports
 (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole files),
 and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing
-`pickers.py` reruns every config that imports it, which is most of them; changing shared code reruns
-everything, correctly. The store does not check itself (the spot-check of earlier versions is gone):
-if a fingerprint misses a dependency, delete the store, or one environment's folder inside it, to play
-everything again. A round-robin prints "N taken from replays/match_results ... M to play" first; read it.
+`pickers.py` reruns every strategy that imports it, which is most of them; changing shared code reruns
+everything, correctly. The store does not check itself: if a fingerprint misses a dependency, delete
+the store, or one environment's folder inside it, to play everything again. Each round prints
+"N matches, X from the match results store, M to play" first; read it.
 
-**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference opponents. A round-robin's W-D-L is a diagnostic.
+**What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against
+the champion at the last release. W-D-L and every other signal are diagnostics.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
-it is a target. Don't tune a threshold until results move: a change needs a reason in game
-terms. Two round-robins of near-identical code agree
-at Spearman +0.97, but that is not a ceiling: rsim is deterministic, so they agree largely
-because the code is near-identical.
+it is a target. Don't tune a threshold until results move: a change needs a reason in game terms.
 
 ### Evaluating a strategy
 
-`tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...]` answers one question per candidate: is
-it stronger than the champion of a fixed set of reference opponents, in goals, under the realistic sim noise?
-
-The flowchart contrasts it with the round-robin, which answers a different question.
+`tools/evaluation/evaluate.py [CANDIDATE ...]` is the one tool for matches. With no candidate it
+plays one round, a round robin: the health check of the catalog (stalls, fouls, every signal). With
+candidates it also answers, per candidate: is it stronger than the champion at the last release, in
+goals, under the realistic sim noise?
 
 ```mermaid
 flowchart TD
-    subgraph rr["round_robin.py: is the whole catalog healthy?"]
-        r1["Every strategy plays<br/>every other once (one full match per pair)"]
-        r2["Stall and error check<br/>--strict fails on a stall"]
-        r3["Standings in summary.json<br/>not a verdict on any one strategy"]
-        r1 --> r2 --> r3
-    end
-
-    subgraph ev["evaluate.py: is this candidate stronger than the champion?"]
-        e1["Reference opponents.json: champion, six opponents,<br/>three held-out opponents; world and robots, sim noise"]
-        e2["Round k, noise seed k<br/>candidate and champion each play every opponent"]
-        e7["Every match stored in the match results<br/>replays/match_results/"]
-        e3{"P(candidate stronger), paired<br/>with the champion's results"}
-        e4["better: P >= 0.99<br/>then --held-out before promoting"]
-        e5["worse: P <= 0.2<br/>drop it"]
-        e6["undecided after 6 rounds<br/>drop it"]
-        e1 --> e2 --> e3
-        e2 -.-> e7
-        e3 -- "P >= 0.99" --> e4
-        e3 -- "P <= 0.2" --> e5
-        e3 -- "neither, rounds left" --> e2
-        e3 -- "neither, no rounds left" --> e6
-    end
+    p["Players: core (reference/players.json) + 2 reserve rotated by seed<br/>+ the reference: the champion at the last release, a .strategy file"]
+    r1["Round 1, noise seed 1: every pair once, candidates included<br/>signals and stalls of every player"]
+    rk["Round k, seed k: only undecided candidates'<br/>matches, and the reference's against the same opponents"]
+    st["Every match stored in the match results<br/>replays/match_results/"]
+    d{"P(candidate stronger), paired<br/>with the reference's results"}
+    b["better: P >= 0.99<br/>promote by hand in players.json"]
+    w["worse: P <= 0.2<br/>drop it"]
+    u["undecided after 6 rounds<br/>drop it"]
+    p --> r1 --> d
+    r1 -.-> st
+    rk -.-> st
+    d -- "P >= 0.99" --> b
+    d -- "P <= 0.2" --> w
+    d -- "neither, rounds left" --> rk --> d
+    d -- "neither, no rounds left" --> u
 ```
 
-- **The reference opponents** (`tools/evaluation/reference/opponents.json`): a champion, six
-  opponents chosen for spread of styles and three held-out opponents. The simulated world and
-  robots are `world.json` and `robots.json` in the same folder (`sim_settings.py` loads them).
-  It changes only on purpose, so a result means the same thing next month; it does not follow
-  the latest standings.
-- **Rounds.** In round k every candidate plays each opponent and the champion once, and the
-  champion plays each opponent, all with noise seed k and the side under test in the same colour
-  (the noise is drawn per colour and robot, so one seed can favour a colour by half a goal). A
-  candidate and the champion are compared on the same opponents under the same noise.
+- **Players** (`tools/evaluation/reference/players.json`): the champion and the core strategies,
+  which play every round. Every other strategy in the catalog is reserve: two play each round, rotated
+  by the round's seed, so the field stays diverse without twelve strategies every round (`--all`
+  plays them all). The simulated world and robots are `world.json` and `robots.json` in the same
+  folder (`sim_settings.py` loads them).
+- **The reference** is the champion as it was at the latest release tag (`--at REF` for another
+  commit), played from a `.strategy` file built once into `replays/eval/frozen/`. A change to shared
+  code (skills, tactics, motion, engine) therefore moves the candidates and the working-tree
+  strategies, never the reference. A bundled match equals the same match run normally, frame for frame; the
+  referee and simulator are today's for both sides. An older commit may know the champion by its old
+  name (`catalog.RENAMED`); that is found. `--compare-with NAME` compares against NAME instead: a new
+  version against the one it changes.
+- **Rounds.** Round k plays with noise seed k. Round 1 plays every pair of players once. Later rounds
+  play only the undecided candidates: each against the reference and the round's opponents, and the
+  reference against the same opponents. The candidate (then the reference) is config_a in odd rounds
+  and config_b in even ones, so both meet each opponent in the same colour under the same noise (the
+  noise is drawn per colour and robot, so one seed can favour a colour by half a goal).
 - **The decision** (`ratings.paired_difference`): the candidate's goal difference against each
-  opponent minus the champion's, same opponent, seed and colour, from rounds 1..k, plus their
+  opponent minus the reference's, same opponent, seed and colour, from rounds 1..k, plus their
   head-to-head matches. Paired results face the same noise, so much of it cancels: all of it
-  for identical code (a byte copy of the champion gets 24 diffs of exactly 0 and stays
-  undecided), little for unrelated strategies. P(candidate stronger) >= 0.99 is **better**,
+  for identical code, little for unrelated strategies. P(candidate stronger) >= 0.99 is **better**,
   <= 0.2 **worse**, and after 6 rounds it is **undecided**: not clearly better, so drop it.
   Simulated (match noise SD 1.9 goals): two equal strategies are called better at most 3% of the
-  time. An unrelated strategy one goal per match worse is dropped after ~2 rounds (~14
-  matches), one goal better found 61% of the time, half a goal 20%. A small edit of the champion
-  (paired results correlated ~0.9): one goal better found every time in ~3 rounds, half a goal
-  55%. Small gains of unrelated strategies are below what matches resolve at this cost.
-- **Ratings** (`analysis/ratings.py`): a strength per strategy in goals per match with its SD,
-  fitted on every match in the match results; printed at the end, and the match noise for the decision.
-- **Match results** (`replays/match_results/`, `replay/match_results.py`): one record per match from
-  evaluate.py and round-robins, keyed by its fixture (the code that played it). A match is never played twice;
-  the champion's matches are played once per seed and reused by every candidate, and editing a
-  strategy starts its record afresh. Replays are not kept, except during a `--explain` run (rerun one with `round_robin.py --pair
-  A B --sim-noise reference:<seed>`).
-- **Stalls** are reported after each candidate's and the champion's verdict, for post-analysis only:
-  they never change a verdict or stop a run. "stalls checked in N of M ... (watchdog covers config_a
-  only)" counts the matches where the watchdog could see that side (`run/strategy_runner.py` records
-  stats for config_a only). A match where the side was config_b, or whose stats were not collected,
-  counts as unchecked; "unknown" means none was checked. The JSON report has them under
-  `candidates[...].stalls` and `champion_stalls`.
-- **Health check.** After a shared-code change, `round_robin.py --vs-champion` plays each strategy once
-  against the champion (12 matches, not the 66 of a full round-robin), defaulting to `--sim-noise
-  reference:2` so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2. Read
-  its STALLS section; a strategy's verdict still comes from `evaluate.py`.
-- **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
-  be clearly worse against opponents never used for selection. Then edit the champion in
-  `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
-  against the rest is a matchup, not a better strategy.
-- **A change to shared code** (skills, tactics, motion, engine) moves every strategy, so a normal run compares
-  worse with worse as easily as better with better. `evaluate.py <name> --frozen v2.5.0` plays the champion and
-  the opponents from `.strategy` files of that commit (`replays/eval/frozen/`, built once) and the candidate from
-  the working tree. A bundled match equals the same match run normally, frame for frame. The referee and the
-  simulator are today's for both sides, so a frozen side meets rule changes it was not written for. A file and
-  the same code are one player in the match results, and matches between two files are replayed only when the referee,
-  the simulator or the match runner change: a skills or tactics edit reruns only the candidate's matches.
+  time. An unrelated strategy one goal per match worse is dropped after ~2 rounds, one goal better
+  found 61% of the time, half a goal 20%. A small edit (paired results correlated ~0.9): one goal
+  better found every time in ~3 rounds, half a goal 55%. Check the per-opponent table: a candidate
+  far better against one opponent and worse against the rest is a matchup, not a better strategy.
+- **Stalls** are reported, never judged on. The watchdog watches config_a only
+  (`run/strategy_runner.py` records stats for config_a), so the report says in how many matches each
+  strategy was checked; "unknown" means none was. `--strict` exits non-zero on any stall, for CI.
+- **Output.** `replays/eval_<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
+  per round `round_<k>/`: each played match's replay, intention log and stats as `<a>_vs_<b>.*`,
+  `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
+  read. Matches taken from the store have no replay in the run.
+- **Promoting** is a decision, not a side effect: change the champion line in `reference/players.json`
+  in a pull request; the next release makes it the reference.
 - **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
   their fouls by rule, and a `summary.json` of the numbers behind them, written to
-  `replays/eval/explain/<name>_<run id>/`. The run's matches are kept until they are written. They
-  explain a verdict and never make one: the verdict is still goals, and a picture is not a ranking.
-  Matches taken from the match results have no replay in the run, so the pictures cover only what was
-  played; the paired goal difference in `summary.json` is only as complete as that. Example, from a
-  round-robin (`explain.py replays/tournament_<id> pendulum breakwater --out ...`):
+  `replays/eval/explain/<name>_<run id>/`. They explain a verdict and never make one; matches taken
+  from the store have no replay, so the pictures cover only what was played. Example
+  (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
-- **Cost.** ~45 min of laptop per 66 matches on 8 workers. A clearly worse candidate costs ~14
-  matches (~10 min), a close one up to 42.
+- **Cost.** Round 1 with nothing stored is 28 matches (8 players) of up to 1200 s, roughly 30-40 min on
+  12 workers; a later round is about 2 x 7 matches per candidate. A clearly worse candidate is decided
+  after 1-2 rounds.
 
 ### Strategy branches
 
@@ -375,16 +349,15 @@ reaches `main` by pull request:
    no changing attributes of what it imports. CI checks all of this statically, from `main`'s
    copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
    directly.
-4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
+4. Write, test and evaluate it as above, and record the verdict in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
-   a round-robin, read the "N taken from ... M to play" line it prints: M much larger
+   an evaluation, read the "X from the match results store, M to play" line it prints: M much larger
    than your own matches means the store is stale (shared code changed since it was filled).
-   Let it run anyway (a full round-robin of 600 s matches has taken from about 1 h 50 min, on 15 workers plugged in, to 4.7 h for `tournament_20261005_170958`; matches are now two halves of 300 s of playing time: about 710 s of sim time on average by the final run's stoppages, 785 s in two measured matches, so expect roughly 20-30% longer): the other
-   strategies' matches run `main`'s code, so they refill the store for everyone.
-4. Open a draft pull request into `main` with the round-robin result. An agent never merges: a person reviews and merges.
+   Let it run anyway: the other strategies' matches run `main`'s code, so they refill the store for everyone.
+5. Open a draft pull request into `main` with the evaluation result. An agent never merges: a person reviews and merges.
 
 Several branches can be worked on at once, each in its own worktree; they share
-`replays/match_results/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
+`replays/match_results/`. `evaluate.py` uses 12 workers (`--max-workers N` to change it), so
 concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
 more of them at once. How to organise a search (how many in parallel, which ideas) is up to
 whoever runs it.
@@ -421,12 +394,11 @@ whoever runs it.
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
-- **`docs/strategies.md`** — every factory, whether a round-robin plays it or it is retired,
-  and the latest results.
-- **`tools/evaluation/round_robin.py`** — round-robin runner (`--max-workers N`, `--both-sides`,
-  `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED`, `--fuzz-interval LO HI`,
-  `--sim-noise JSON`, `--no-save`, `--pair A B` for one fixture with A as config_a — reruns a stalled match from a
-  round-robin; see the determinism caveat below).
+- **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
+- **`tools/evaluation/evaluate.py`** — every match run (`--all`, `--max-workers N`, `--strict`,
+  `--fuzz-restarts SEED`, `--fuzz-interval LO HI`, `--control-scheme NAME`); see
+  [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
+  `tools/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
   writes `ball_losses.md`; see [Reading a tournament run](#reading-a-tournament-run).
   `python -m utama_core.analysis.turnover_breakdown <run_dir>` re-runs it on an older run.
@@ -464,8 +436,8 @@ this way (table below), two were the referee or the check, not the robot.
 Start with `tools/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
 and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it
 means, and confirm with the numbers in its message (or `replay_trace.py --events`) before concluding anything. `find_bugs.py` reads only the friendly side of
-each match (the intentions log is written for it): a strategy's matches where it is config_a. In a round-robin each pair plays once,
-so a strategy gets only the pairs where it comes first in the config order.
+each match (the intentions log is written for it): a strategy's matches where it is config_a. In a round each pair plays once,
+so a strategy is config_a in only some of its matches (`summary.json`'s `stalls_checked` counts them).
 
 The same steps as a flowchart; the moment branch is the optional step 5.
 
@@ -561,28 +533,28 @@ ball, and the carry curves off line), a real-robot item.
 writes into the sim (e.g. `teleport_robot`) must negate y *and* heading — `543741e` fixed a
 teleported robot facing the mirrored heading, which had silently corrupted teleported scenarios.
 
-**Determinism:** an rsim match is reproducible: `--pair A B` replays a round-robin match exactly (13 of
+**Determinism:** an rsim match is reproducible: playing the same fixture again gives the same match exactly (13 of
 13 sampled from `tournament_20260928_221404` at `1de1e18d`, every replay array and sidecar).
 One cause of "differs run to run" was state that outlived a match: `has_ball`'s and shielding's
 hysteresis were module dicts keyed by robot id, shared by both teams and carried from match to
-match in a round-robin worker process (`c27bfad7`). Module-level state in a tactic or
+match in an evaluation worker process (`c27bfad7`). Module-level state in a tactic or
 skill must be keyed by team and cleared at match start (`StrategyRunner.__init__`). If a
-round-robin match and its `--pair` rerun still differ, suspect more of the same; compare the two
+match and its rerun (delete its record from the store and evaluate again) still differ, suspect more of the same; compare the two
 replays' `ball_p` to find the first differing tick.
 
 **Fast and exact numerics:** the motion planner, refiners and Kalman filter use faster float code
 by default (about 19% less wall time per match under full load). `UTAMA_EXACT_MATH=1` restores the
-original numpy paths, byte-identical to before (`8c191eea`); the round-robin pools and rsim
+original numpy paths, byte-identical to before (`8c191eea`); the evaluation's worker pool and rsim
 all inherit it. The two modes agree to 1e-9 per call but matches diverge after the first differing
 tick, so a baseline recorded in one mode is only comparable with a candidate run in the same mode.
 
 ## Reading a tournament run
 
-Every saved `round_robin.py` run prints its sections and writes the same data to
-`replays/<run>/summary.json`. [`docs/signals.md`](signals.md) lists every signal it records
+Every `evaluate.py` run prints round 1's sections and writes each round's data to
+`replays/eval_<id>/round_<k>/summary.json` (older round-robins: `replays/tournament_<id>/`). [`docs/signals.md`](signals.md) lists every signal it records
 (and the offline ones), grouped by the question each answers: is something broken, does it
 create chances, keep and move the ball, defend, take restarts. Each comes with where to find
-it, a reference range from the latest round-robin and what an off value usually means. Look
+it, a reference range from the latest run and what an off value usually means. Look
 there before adding a metric: it probably exists.
 
 These are diagnostics, not objectives. Fewer losses is not better on its own: a strategy that

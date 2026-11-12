@@ -3,9 +3,9 @@
 An rsim match is deterministic, so its result is a function of its fixture: the environment (the
 shared code and machine, the match length, the planner, the sim noise without its seed and the
 restart fuzzing), both players' code fingerprints (`fingerprint.py`), their sides and the noise
-seed. `tools/evaluation/match.py`'s `play_and_record` plays a fixture and returns its record; the
-callers (`round_robin.py`, `evaluate.py`) look a fixture up first and play it only when the store
-does not hold it, then store the record. Reuse is automatic: there is no flag. A player whose code
+seed. `tools/evaluation/evaluate.py`'s `play_and_record` plays a fixture and returns its record;
+`evaluate.py` looks a fixture up first and plays it only when the store
+does not hold it, then stores the record. Reuse is automatic: there is no flag. A player whose code
 changed has new fingerprints, so only its matches play again.
 
 Layout: one JSON file per fixture, under its environment: `replays/match_results/<env>/<fixture>.json`.

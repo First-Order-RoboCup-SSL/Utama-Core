@@ -1,119 +1,158 @@
-"""evaluate.py — is a candidate strategy better than the champion? As few matches as that takes.
+"""evaluate.py — how the strategies play, and whether a candidate beats the champion at the last release.
 
 Run:
-    pixi run python tools/evaluation/evaluate.py CANDIDATE [CANDIDATE ...] [flags]
+    pixi run python tools/evaluation/evaluate.py [CANDIDATE ...] [flags]
 
-    --opponents PATH  the champion, opponents and held-out opponents (default
-                      tools/evaluation/reference/opponents.json). The sim is always the reference
-                      world and robots (reference/world.json, reference/robots.json)
-    --held-out        play the held-out opponents instead (the check before promoting)
-    --baseline NAME   compare against this strategy instead of the champion: a new version
-                      against the one it changes. The baseline takes the champion's role, the
-                      champion joins the opponents, and a baseline among the opponents leaves them
-    --frozen REF      judge today's code against the past: the champion and every opponent are
-                      played from `.strategy` files of git commit REF (built once, kept in
-                      replays/eval/frozen/), the candidates from the working tree. The check for a
-                      change to shared code, which otherwise moves both sides of every match
-    --max-rounds N    rounds before a candidate is called undecided (default 6)
-    --max-workers N   matches at once (default 8)
-    --explain         also write on-pitch pictures of each candidate against the champion to
-                      replays/eval/explain/<candidate>_<run id>/ (positions, shots, fouls and a
-                      summary; see tools/evaluation/explain.py). Explains the verdict, never
-                      changes it. Off by default; the matches are kept until it has run.
+With no candidate it plays one round: a round robin of the players, the health check (stalls, fouls,
+every signal). With candidates (strategy names, played from the working tree, or `.strategy` files)
+it plays rounds until each candidate is decided.
+
+    --at REF            the reference is the champion as it was at git commit REF (default: the latest
+                        release tag), played from a `.strategy` file built once into replays/eval/frozen/
+    --compare-with NAME the reference is NAME instead (a strategy in the working tree, or a .strategy
+                        file): a new version against the one it changes
+    --all               every strategy in the catalog plays, not only the core and two reserve
+    --max-rounds N      rounds before a candidate is called undecided (default 6)
+    --max-workers N     matches at once (default 12; 1 plays in this process)
+    --strict            exit non-zero if any match of the run stalled
+    --fuzz-restarts SEED  inject seeded random legal restarts (custom_referee/restart_fuzzer.py);
+    --fuzz-interval LO HI sets the gap in sim seconds (default 25 45)
+    --control-scheme NAME planner for every robot (fpp, trajsample, ...; default fpp)
+    --explain           also write on-pitch pictures of each candidate against the reference to
+                        replays/eval/explain/<candidate>_<run id>/ (tools/evaluation/explain.py)
+
+Players
+-------
+`reference/players.json` names the champion and the core strategies, which play every round. Every
+other strategy in the catalog is reserve: two of them play each round, rotated by the round's seed
+(diversity without playing all twelve every time); `--all` plays them all. The reference (the champion
+at the last release) plays every round too. It is a frozen file, so a change to shared code moves the
+candidates and the working-tree strategies, never the reference.
+
+Rounds
+------
+Round k plays under sim-noise seed k (the reference world and robots, reference/world.json and
+robots.json). Round 1 plays every pair of players once, candidates included. Later rounds play only the
+undecided candidates' matches: each against the reference and the round's opponents, and the reference
+against those opponents. In every match the candidate (then the reference) is config_a in odd rounds and
+config_b in even ones, so a candidate and the reference meet each opponent with the same colour and
+noise. Matches are 1200 s of sim time at most (two 300 s halves of playing time, `MAX_MATCH_SECONDS`).
 
 How it decides
 --------------
-Matches are played in rounds. In round k each candidate plays every opponent and the champion
-once, and the champion plays every opponent, all with sim-noise seed k, so the candidate and the
-champion meet the same opponents under the same noise. The candidate is config_a in odd rounds
-and config_b in even ones.
-
-After each round the candidate is compared with the champion on paired matches
-(`ratings.paired_difference`): its goal difference minus the champion's against the same
-opponent with the same seed and colour, from every match in the match results store
-(`replay/match_results.py`: this run's, earlier runs', round-robins'), plus their head-to-head matches. Paired results share
-the opponent and the noise, so their difference cancels much of it: all of it for identical
-code, little for unrelated strategies; the spread is estimated from the differences themselves.
-P(candidate stronger than champion) decides:
+After each round each candidate is compared with the reference on paired matches
+(`ratings.paired_difference`): its goal difference minus the reference's against the same opponent with
+the same seed and colour, plus their head-to-head matches. P(candidate stronger than reference):
 
 - **better** once P >= PROMOTE (0.99),
 - **worse** once P <= DROP (0.2),
 - **undecided** after `--max-rounds`: not clearly better, which for a search means drop it.
 
-Thresholds come from simulating the rule (match noise SD 1.9 goals, six opponents, 6 rounds,
-paired results correlated 0 to 1): two equal strategies are called "better" at most 3% of the
-time. Unrelated strategies (correlation 0): one goal per match worse is dropped after ~2 rounds,
-one goal better found 61% of the time, half a goal better 20%. A small change to a strategy
-(correlation ~0.9): one goal better found every time in ~3 rounds, half a goal better 55%.
-Strengths printed at the end come from the ratings over all matches (`analysis/ratings.py`).
+Thresholds come from simulating the rule (match noise SD 1.9 goals, six opponents, 6 rounds, paired
+results correlated 0 to 1): two equal strategies are called "better" at most 3% of the time. Unrelated
+strategies: one goal per match worse is dropped after ~2 rounds, one goal better found 61% of the time.
+A small change to a strategy (correlation ~0.9): one goal better found every time in ~3 rounds.
 
-Stalls (the stall watchdog's `StallEvent`s, see `engine/match_stats.py`) are reported for
-post-analysis only: each candidate's and the champion's stalls, and how many of their matches
-were checked (the watchdog covers config_a only; a match whose stats were not collected counts as
-unchecked). They never change a verdict or stop a run.
+Signals and stalls are reported, never judged on: they explain a result (docs/signals.md). The stall
+watchdog watches config_a only, so the report says how many matches each strategy was checked in.
 
-A fixture already in the match results store is never played again, so the champion's matches are
-played once per seed and reused by every candidate. Replays are not kept: a match is a pure function
-of its fixture, so `round_robin.py --pair A B --sim-noise reference:<seed>` plays it again.
+Matches the match results store holds (replays/match_results/, `replay/match_results.py`) are taken from
+it, not played: after a change to one strategy only its matches play. Delete that folder to replay all.
 
-Promoting is a decision, not a side effect: a candidate called better should pass `--held-out`
-(it must not lose clearly to opponents never used for selection) before you set it as the
-champion by hand in `reference/opponents.json`.
+Writes replays/eval_<UTC time>/: `report.json` (verdicts, round 1's signals), and per round `round_<k>/`
+with each played match's replay, intention log and stats (`<a>_vs_<b>.*`), `summary.json` and
+`ball_losses.md` — the layout tools/find_bugs.py, tools/pitch_maps.py and goal_sources read.
+
+Promoting is a decision, not a side effect: set the champion by hand in reference/players.json.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
-import shutil
+
+# One thread per match process: several matches run at once.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
+import argparse
+import dataclasses
+import itertools
+import json
+import subprocess
 import sys
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.evaluation.match import _short_name  # noqa: E402
-from tools.evaluation.round_robin import (  # noqa: E402
-    MAX_MATCH_SECONDS,
-    _resolve_config_names,
-    _run_metadata,
-    play_and_record,
+from tools.evaluation.match import (  # noqa: E402
+    _CONFIG_NAMES,
+    TICKS_PER_SECOND,
+    _short_name,
+    run_match,
 )
-from tools.evaluation.sim_settings import (  # noqa: E402
-    DEFAULT_OPPONENTS,
-    load_opponents,
-    reference_noise,
+from tools.evaluation.sim_settings import load_players, reference_noise  # noqa: E402
+from utama_core.analysis import (  # noqa: E402
+    ratings,
+    restart_outcomes,
+    turnover_breakdown,
 )
-from utama_core.analysis import ratings  # noqa: E402
-from utama_core.bundle.strategy_file import frozen  # noqa: E402
+from utama_core.analysis.strategy_table import strategy_table  # noqa: E402
+from utama_core.bundle.strategy_file import SUFFIX, frozen  # noqa: E402
 from utama_core.config.settings import REPLAY_BASE_PATH  # noqa: E402
 from utama_core.replay import match_results  # noqa: E402
 from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E402
+from utama_core.strategy import catalog  # noqa: E402
 
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
+RESERVE_PER_ROUND = 2
 FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
+# A full match: two halves of 300 s of playing time, the clock stopped whenever no team may play the
+# ball, about 710-870 s of sim time. This only caps a match that can't reach full time.
+MAX_MATCH_SECONDS = 1200.0
 
 
-def round_fixtures(candidates: list[str], champion: str, opponents: list[str], k: int) -> list[tuple[str, str, int]]:
-    """Round `k`'s (config_a, config_b, seed): each candidate against every opponent and the
-    champion, and the champion against every opponent; the side under test is config_a in odd
-    rounds."""
+# --- who plays what ---------------------------------------------------------------------------
+
+
+def round_players(core: list[str], reserve: list[str], k: int, everyone: bool = False) -> list[str]:
+    """The strategies of round `k`: the core, and `RESERVE_PER_ROUND` reserve rotated by `k`."""
+    if everyone or not reserve:
+        return [*core, *reserve]
+    picks = [reserve[(RESERVE_PER_ROUND * (k - 1) + i) % len(reserve)] for i in range(RESERVE_PER_ROUND)]
+    return list(dict.fromkeys([*core, *picks]))
+
+
+def round_fixtures(
+    k: int, candidates: list[str], reference: str, opponents: list[str], full: bool
+) -> list[tuple[str, str, int]]:
+    """Round `k`'s (config_a, config_b, seed). `full`: every pair of candidates, reference and
+    opponents; otherwise each candidate against the reference and every opponent, and the reference
+    against every opponent. The earlier of the two in (candidates, reference, opponents) order is
+    config_a in odd rounds, so candidates and reference face each opponent with the same colour."""
+    order = list(dict.fromkeys([*candidates, reference, *opponents]))
+    rank = {n: i for i, n in enumerate(order)}
+    if full:
+        pairs = list(itertools.combinations(order, 2))
+    else:
+        pairs = [(c, o) for c in candidates for o in [reference, *opponents]] + [(reference, o) for o in opponents]
     out = []
-    for side in [*candidates, champion]:
-        rivals = opponents if side == champion else [*opponents, champion]
-        for o in rivals:
-            out.append((side, o, k) if k % 2 else (o, side, k))
+    for x, y in pairs:
+        if x == y:
+            continue
+        first, second = sorted((x, y), key=rank.__getitem__)
+        out.append((first, second, k) if k % 2 else (second, first, k))
     return list(dict.fromkeys(out))
 
 
-def verdict(p_better: float, rounds: int, max_rounds: int) -> str | None:
+def verdict(p_better: float, rounds: int, max_rounds: int) -> Optional[str]:
     """The candidate's verdict after `rounds` rounds, or None to play another."""
     if p_better >= PROMOTE:
         return "better"
@@ -122,23 +161,361 @@ def verdict(p_better: float, rounds: int, max_rounds: int) -> str | None:
     return "undecided" if rounds >= max_rounds else None
 
 
-def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool, fps: dict, env: str, source: str) -> dict:
-    """One fixture's stored record, played as a round-robin's match is (`round_robin.play_and_record`).
-    Its replay files are deleted unless `keep` (`--explain` reads them)."""
-    return play_and_record(
-        a,
-        b,
-        a_fp=fps[a],
-        b_fp=fps[b],
-        env=env,
-        seed=seed,
-        source=source,
-        run_dir=run_dir,
-        keep_files=keep,
-        match_tag_suffix=f"_s{seed}",
-        duration_seconds=MAX_MATCH_SECONDS,
-        sim_noise=SimNoise.from_dict({**noise, "seed": seed}),
+def resolve_names(requested: list[str]) -> list[str]:
+    """Strategy names (today's or old ones) in catalog order, then `.strategy` files as given."""
+    files = [n for n in requested if n.endswith(SUFFIX)]
+    wanted = {catalog.current_name(n) for n in requested if n not in files}
+    names = [n for n in _CONFIG_NAMES if n in wanted]
+    if unknown := wanted - set(names):
+        raise SystemExit(f"Unknown strategy name(s): {sorted(unknown)}. Available: {sorted(_CONFIG_NAMES)}")
+    return names + files
+
+
+def latest_release() -> str:
+    """The latest release tag reachable from HEAD."""
+    return _git("describe", "--tags", "--abbrev=0") or "HEAD"
+
+
+def at_ref(name: str, ref: str) -> str:
+    """Strategy `name` as it was at `ref`, as a `.strategy` file's path (built once, then kept). An
+    older commit may know the strategy by its old name (`catalog.RENAMED`)."""
+    for n in [name, *(old for old, new in catalog.RENAMED.items() if new == name)]:
+        try:
+            return frozen(n, ref, FROZEN_DIR).as_posix()
+        except ValueError:
+            continue
+    raise SystemExit(f"no strategy {name} (or an old name of it) at {ref}")
+
+
+# --- playing ----------------------------------------------------------------------------------
+
+
+def analyse_replay(npz: Path) -> tuple[list[dict], dict]:
+    """A played match's restart episodes and ball-loss record, from its replay. Kept out of `match.py`
+    (the environment's entry point), so changing an analysis replays no match."""
+    return restart_outcomes.analyse_match(npz), turnover_breakdown.analyse_match(str(npz))
+
+
+def tag(a: str, b: str) -> str:
+    """A match's file stem in a round directory."""
+    return f"{_short_name(a)}_vs_{_short_name(b)}"
+
+
+def play_and_record(
+    config_a: str, config_b: str, *, a_fp: str, b_fp: str, env: str, seed: Optional[int], source: str,
+    run_dir: Path, **run_kwargs,
+) -> dict:  # fmt: skip
+    """Play one match into `run_dir` and return its stored record (`match_results.record`), with its
+    replay analysed. `run_kwargs` go to `match.run_match`."""
+    result = run_match(config_a, config_b, run_dir=run_dir, **run_kwargs)
+    restarts = losses = None
+    npz = Path(run_dir) / f"{tag(config_a, config_b)}.npz"
+    if npz.exists():  # no replay: crashed before it was written
+        restarts, losses = analyse_replay(npz)
+    return match_results.record(
+        env, a_fp, b_fp, dataclasses.asdict(result), seed=seed, source=source, restarts=restarts, losses=losses
     )
+
+
+def result_row(rec: dict, a: str, b: str, reused: bool) -> dict:
+    """A record as a `summary.json` result, under this run's names for the two players."""
+    winner = a if rec["score_a"] > rec["score_b"] else b if rec["score_b"] > rec["score_a"] else "draw"
+    return {
+        "config_a": a,
+        "config_b": b,
+        "score_a": rec["score_a"],
+        "score_b": rec["score_b"],
+        "winner": winner,
+        "seed": rec["seed"],
+        "stats": rec["stats"],
+        "possession_backstop": possession_backstop(rec["stats"]),
+        "reused": reused,
+    }
+
+
+def possession_backstop(stats: Optional[dict]) -> bool:
+    """A stall the watchdog missed: possession pinned at 100/0 with the ball barely moving."""
+    if not stats:
+        return False
+    poss = stats.get("possession_pct") or {}
+    pinned = {poss.get("friendly"), poss.get("enemy")} == {0.0, 1.0}
+    return pinned and (stats.get("ball_travel_m") or 0.0) < 1.0
+
+
+# --- the run ----------------------------------------------------------------------------------
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("candidates", nargs="*")
+    parser.add_argument("--at", metavar="REF")
+    parser.add_argument("--compare-with", metavar="NAME")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
+    parser.add_argument("--max-workers", type=int, default=min(12, max(1, (os.cpu_count() or 1) - 1)))
+    parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--fuzz-restarts", type=int, metavar="SEED")
+    parser.add_argument("--fuzz-interval", type=float, nargs=2, metavar=("LO", "HI"), default=(25.0, 45.0))
+    parser.add_argument("--control-scheme", default="fpp")
+    parser.add_argument("--explain", action="store_true")
+    parser.add_argument("--players", type=Path, help=argparse.SUPPRESS)  # tests: another players.json
+    return parser
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = build_parser().parse_args(argv)
+    if args.at and args.compare_with:
+        raise SystemExit("--at and --compare-with both choose the reference: give one")
+    setup = load_players(args.players) if args.players else load_players()
+    core = resolve_names(setup["core"])
+    reserve = [n for n in _CONFIG_NAMES if n not in core]
+    if args.compare_with:
+        reference = resolve_names([args.compare_with])[0]
+    else:
+        reference = at_ref(resolve_names([setup["champion"]])[0], args.at or latest_release())
+    candidates = [c for c in resolve_names(args.candidates) if c != reference]
+
+    noise = SimNoise.from_dict(reference_noise()).to_dict()
+    noise.pop("seed", None)
+    env_args = {
+        "duration_seconds": MAX_MATCH_SECONDS,
+        "sim_noise": noise,
+        "control_scheme": args.control_scheme,
+        "fuzz_seed": args.fuzz_restarts,
+        "fuzz_interval_s": tuple(args.fuzz_interval),
+    }
+    graph = CodeGraph()
+    env = match_results.environment(graph, **env_args)
+    store = match_results.open_store(REPLAY_BASE_PATH)
+    everyone = {*candidates, reference, *core, *reserve}
+    fps = {n: graph.strategy_fingerprint(n)[:16] for n in everyone}
+    for c in list(candidates):
+        if fps[c] == fps[reference]:
+            print(f"{_short_name(c)} is skipped: it is the same code as the reference {_short_name(reference)}")
+            candidates.remove(c)
+
+    run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
+    run_dir = Path(REPLAY_BASE_PATH) / run_id
+    print(f"Reference {_short_name(reference)}; core {', '.join(_short_name(n) for n in core)}; environment {env}")
+
+    def still_current(a: str, b: str) -> bool:
+        """Store a played match only if the code it ran is still the code on disk."""
+        now = CodeGraph()
+        return match_results.environment(now, **env_args) == env and all(
+            now.strategy_fingerprint(n)[:16] == fps[n] for n in (a, b)
+        )
+
+    run_kwargs = {
+        "duration_seconds": MAX_MATCH_SECONDS,
+        "control_scheme": args.control_scheme,
+        "fuzz_seed": args.fuzz_restarts,
+        "fuzz_interval_s": tuple(args.fuzz_interval),
+    }
+    open_ = list(candidates)
+    report: dict[str, dict] = {}
+    rounds: list[dict] = []
+    opponents_so_far: set[str] = set()
+    played = reused = 0
+    executor = ProcessPoolExecutor(max_workers=args.max_workers) if args.max_workers > 1 else None
+    try:
+        for k in range(1, args.max_rounds + 1):
+            if k > 1 and not open_:
+                break
+            opponents = [p for p in round_players(core, reserve, k, args.all) if p not in candidates and p != reference]
+            opponents_so_far |= set(opponents)
+            fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, full=k == 1)
+            round_dir = run_dir / f"round_{k}"
+            round_dir.mkdir(parents=True, exist_ok=True)
+            recs: dict[tuple[str, str], tuple[dict, bool]] = {}
+            todo = []
+            for a, b, seed in fixtures:
+                rec = store.get(env, match_results.fixture_id(env, fps[a], fps[b], seed))
+                if rec is None:
+                    todo.append((a, b, seed))
+                else:
+                    recs[(a, b)] = (rec, True)
+            reused += len(recs)
+            print(
+                f"\nRound {k}: {len(fixtures)} matches, {len(recs)} from the match results store, {len(todo)} to play"
+            )
+
+            def finish(a: str, b: str, rec: dict) -> None:
+                nonlocal played
+                played += 1
+                recs[(a, b)] = (rec, False)
+                if still_current(a, b):
+                    store.put(rec)
+                else:
+                    print(f"  {tag(a, b)} not stored: its code changed while the run played", flush=True)
+                print(
+                    f"  round {k}: {_short_name(a):<24} {rec['score_a']} - {rec['score_b']} {_short_name(b)}",
+                    flush=True,
+                )
+
+            def submit(a: str, b: str, seed: int) -> tuple:
+                kw = dict(a_fp=fps[a], b_fp=fps[b], env=env, seed=seed, source=run_id, run_dir=round_dir)
+                kw.update(run_kwargs, sim_noise=SimNoise.from_dict({**noise, "seed": seed}))
+                return a, b, kw
+
+            if executor is None:
+                for a, b, kw in (submit(*f) for f in todo):
+                    finish(a, b, play_and_record(a, b, **kw))
+            else:
+                futures = {
+                    executor.submit(play_and_record, a, b, **kw): (a, b) for a, b, kw in (submit(*f) for f in todo)
+                }
+                while futures:
+                    done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        finish(*futures.pop(future), future.result())
+
+            rows = [result_row(rec, a, b, was_reused) for (a, b), (rec, was_reused) in recs.items()]
+            names = sorted({n for pair in recs for n in pair})
+            summary = {"run_id": f"{run_id}/round_{k}", "round": k, "seed": k, "config_names": names}
+            summary["results"] = sorted(rows, key=lambda r: (r["config_a"], r["config_b"]))
+            summary.update(signals(summary, {pair: rec for pair, (rec, _) in recs.items()}, round_dir))
+            (round_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+            rounds.append(summary)
+
+            if candidates:
+                fit = _fit(store, env, fps, {*open_, reference, *opponents_so_far})
+                ledger = _up_to_round(store.load(env, fps=fps), k)
+                for c in list(open_):
+                    diffs, h2h = paired(ledger, fps, c, reference, sorted(opponents_so_far))
+                    margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
+                    p = ratings.p_positive(margin, sd)
+                    print(f"after round {k}: {_short_name(c):<28} P(better) {p:.2f}  margin {margin:+.2f} ± {sd:.2f}")
+                    if (v := verdict(p, k, args.max_rounds)) is not None:
+                        open_.remove(c)
+                        report[c] = {"verdict": v, "rounds": k, "p_better": round(p, 3), "margin": round(margin, 2)}
+                        report[c]["margin_sd"] = round(sd, 2)
+    finally:
+        if executor is not None:
+            executor.shutdown(cancel_futures=True)
+
+    if args.explain:
+        _explain(run_dir, run_id, candidates, reference)
+
+    health = rounds[0]
+    print_signals(health, f"{run_id}/round_1")
+    ledger = store.load(env, fps=fps)
+    if candidates:
+        print(f"\nVerdicts against {_short_name(reference)} ({played} matches played, {reused} from the store):")
+    for c in candidates:
+        r = report[c]
+        print(
+            f"  {_short_name(c):<28} {r['verdict'].upper():<10} P(better) {r['p_better']:.2f}  "
+            f"margin {r['margin']:+.2f} ± {r['margin_sd']:.2f} goals/match  after {r['rounds']} round(s)"
+        )
+        upto = _up_to_round(ledger, r["rounds"])
+        r["per_opponent"] = _per_opponent(upto, fps, c, reference, sorted(opponents_so_far))
+        r["stalls"] = stall_coverage(upto, fps, c)
+        print(f"    {'opponent':<26} {'candidate GD':>12} {'reference GD':>12} {'matches':>8} (same seed and colour)")
+        for o, row in r["per_opponent"].items():
+            name = o if o == "head-to-head" else _short_name(o)
+            print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
+        for line in stall_lines(r["stalls"], "candidate"):
+            print(f"    {line}")
+
+    out = run_dir / "report.json"
+    out.write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "run": _run_metadata(),
+                "reference": reference,
+                "core": core,
+                "environment": env,
+                "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
+                "candidates": report,
+                "rounds": [{"round": s["round"], "matches": len(s["results"])} for s in rounds],
+                "signals": {k: v for k, v in health.items() if k not in ("results",)},
+            },
+            indent=2,
+        )
+    )
+    print(f"\nReport: {out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out}")
+
+    stalled = [
+        r for s in rounds for r in s["results"] if (r["stats"] or {}).get("stall_events") or r["possession_backstop"]
+    ]
+    if args.strict and stalled:
+        raise SystemExit(f"--strict: {len(stalled)} match(es) stalled")
+
+
+def _explain(run_dir: Path, run_id: str, candidates: list[str], reference: str) -> None:
+    """`--explain`: pictures of each candidate against the reference, from this run's matches.
+    A failure is printed and never loses the verdicts."""
+    from tools.evaluation import explain  # matplotlib: imported only when asked for
+
+    for c in candidates:
+        out = Path(REPLAY_BASE_PATH) / "eval" / "explain" / f"{_short_name(c)}_{run_id}"
+        try:
+            for round_dir in sorted(run_dir.glob("round_*")):
+                explain.explain(round_dir, c, reference, out / round_dir.name)
+            print(f"explain: {_short_name(c)} vs {_short_name(reference)} written to {out}")
+        except Exception as exc:  # noqa: BLE001 - the pictures are optional; the verdicts are not
+            print(f"explain: {_short_name(c)} failed ({type(exc).__name__}: {exc}); verdicts are unaffected")
+
+
+# --- the verdict's arithmetic -----------------------------------------------------------------
+
+
+def _fit(store: match_results.MatchResults, env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
+    """Ratings over every stored match in `env` between `players` at their current code."""
+    matches = [
+        (e["a"], e["b"], e["score_a"] - e["score_b"])
+        for e in store.load(env, fps=fps).values()
+        if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
+    ]
+    return ratings.fit(matches, names=sorted(players))
+
+
+def _up_to_round(ledger: dict, k: int) -> dict:
+    """The stored matches of rounds 1..k (seeds 1..k): a verdict after round k uses those only,
+    whatever later rounds the store already holds, so it doesn't depend on earlier runs."""
+    return {f: e for f, e in ledger.items() if e["seed"] is not None and e["seed"] <= k}
+
+
+def _margins(ledger: dict, fps: dict, side: str, o: str) -> dict[tuple, int]:
+    """{(seed, side is config_a): goal difference} for `side` against `o`, at current code."""
+    out = {}
+    for e in ledger.values():
+        if e["a_fp"] != fps.get(e["a"]) or e["b_fp"] != fps.get(e["b"]):
+            continue
+        if (e["a"], e["b"]) == (side, o):
+            out[(e["seed"], True)] = e["score_a"] - e["score_b"]
+        elif (e["a"], e["b"]) == (o, side):
+            out[(e["seed"], False)] = e["score_b"] - e["score_a"]
+    return out
+
+
+def paired(ledger: dict, fps: dict, candidate: str, reference: str, opponents: list[str]) -> tuple[list, list]:
+    """The candidate's goal difference minus the reference's against each opponent, over the matches
+    both played with the same seed and colour, and the candidate's margins against the reference:
+    `ratings.paired_difference`'s inputs."""
+    diffs = []
+    for o in opponents:
+        c, ref = _margins(ledger, fps, candidate, o), _margins(ledger, fps, reference, o)
+        diffs += [c[k] - ref[k] for k in sorted(set(c) & set(ref))]
+    return diffs, list(_margins(ledger, fps, candidate, reference).values())
+
+
+def _per_opponent(ledger: dict, fps: dict, candidate: str, reference: str, opponents: list[str]) -> dict:
+    """Goal difference against each opponent, the candidate's and the reference's, over the matches
+    both played with the same seed and colour (so the two columns face the same noise)."""
+    rows = {}
+    for o in opponents:
+        c, ref = _margins(ledger, fps, candidate, o), _margins(ledger, fps, reference, o)
+        common = sorted(set(c) & set(ref))
+        rows[o] = {
+            "candidate": sum(c[k] for k in common),
+            "champion": sum(ref[k] for k in common),
+            "matches": len(common),
+        }
+    h2h = _margins(ledger, fps, candidate, reference)
+    rows["head-to-head"] = {"candidate": sum(h2h.values()), "champion": -sum(h2h.values()), "matches": len(h2h)}
+    return rows
 
 
 def stall_coverage(ledger: dict, fps: dict, side: str) -> dict:
@@ -176,221 +553,274 @@ def stall_lines(cov: dict, name: str) -> list[str]:
     return lines
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("candidates", nargs="+")
-    parser.add_argument("--opponents", type=Path, default=DEFAULT_OPPONENTS)
-    parser.add_argument("--held-out", action="store_true")
-    parser.add_argument("--baseline")
-    parser.add_argument("--frozen", metavar="REF", help="champion and opponents from this git commit (see above)")
-    parser.add_argument("--max-rounds", type=int, default=MAX_ROUNDS)
-    parser.add_argument("--max-workers", type=int, default=min(8, max(1, (os.cpu_count() or 1) - 1)))
-    parser.add_argument("--explain", action="store_true", help="also write on-pitch pictures per candidate (see above)")
-    return parser
+# --- signals ----------------------------------------------------------------------------------
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-
-    reference = load_opponents(args.opponents)
-    champion = _resolve_config_names([args.baseline or reference["champion"]])[0]
-    opponents = _resolve_config_names(reference["held_out"] if args.held_out else reference["opponents"])
-    reference_champion = _resolve_config_names([reference["champion"]])[0]
-    if champion != reference_champion:
-        opponents.append(reference_champion)  # against a baseline, the champion is one more opponent
-    opponents = [o for o in opponents if o != champion]  # a baseline among the opponents leaves its seat
-    if args.frozen:
-        champion, *opponents = [frozen(n, args.frozen, FROZEN_DIR).as_posix() for n in [champion, *opponents]]
-    candidates = [c for c in _resolve_config_names(args.candidates) if c != champion]
-    noise = SimNoise.from_dict(reference_noise()).to_dict()
-    noise.pop("seed", None)
-
-    graph = CodeGraph()
-    env = match_results.environment(graph, duration_seconds=MAX_MATCH_SECONDS, sim_noise=noise)
-    store = match_results.open_store(REPLAY_BASE_PATH)
-    fps = {n: graph.strategy_fingerprint(n)[:16] for n in {*candidates, champion, *opponents}}
-    for c in list(candidates):
-        twin = next((r for r in [champion, *opponents] if fps[r] == fps[c]), None)
-        if twin is not None:
-            print(f"{_short_name(c)} is skipped: it is the same code as {_short_name(twin)}")
-            candidates.remove(c)
-
-    def fixture_id(f: tuple[str, str, int]) -> str:
-        a, b, seed = f
-        return match_results.fixture_id(env, fps[a], fps[b], seed)
-
-    run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
-    run_dir = Path(REPLAY_BASE_PATH) / run_id  # replay files must sit directly under replays/
-    run_dir.mkdir(parents=True, exist_ok=True)
-    print(
-        f"{'Held-out opponents' if args.held_out else 'Opponents'}: "
-        f"{'baseline' if args.baseline else 'champion'} {_short_name(champion)}; "
-        f"opponents {', '.join(_short_name(o) for o in opponents)}; environment {env}\n"
-    )
-
-    open_ = list(candidates)
-    report: dict[str, dict] = {}
-    played = reused = 0
-    with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-        for k in range(1, args.max_rounds + 1):
-            if not open_:
-                break
-            ledger = store.load(env, fps=fps)
-            todo = [f for f in round_fixtures(open_, champion, opponents, k) if fixture_id(f) not in ledger]
-            reused += len(round_fixtures(open_, champion, opponents, k)) - len(todo)
-            futures = {executor.submit(play, *f, noise, run_dir, args.explain, fps, env, run_id): f for f in todo}
-            while futures:
-                done, _ = wait(futures, return_when=FIRST_COMPLETED)
-                for future in done:
-                    a, b, seed = futures.pop(future)
-                    result = future.result()
-                    store.put(result)
-                    played += 1
-                    print(
-                        f"  round {k}: {_short_name(a):<24} {result['score_a']} - {result['score_b']} {_short_name(b)}",
-                        flush=True,
-                    )
-
-            fit = _fit(store, env, fps, {*open_, champion, *opponents})
-            ledger = _up_to_round(store.load(env, fps=fps), k)
-            for c in list(open_):
-                margin, sd = ratings.paired_difference(*paired(ledger, fps, c, champion, opponents), fit.noise_sd)
-                p = ratings.p_positive(margin, sd)
-                v = verdict(p, k, args.max_rounds)
-                print(f"after round {k}: {_short_name(c):<28} P(better) {p:.2f}  margin {margin:+.2f} ± {sd:.2f}")
-                if v is not None:
-                    open_.remove(c)
-                    report[c] = {"verdict": v, "rounds": k, "p_better": round(p, 3), "margin": round(margin, 2)}
-                    report[c]["margin_sd"] = round(sd, 2)
-            print()
-    if args.explain:
-        _explain(run_dir, run_id, candidates, champion)
-    shutil.rmtree(run_dir, ignore_errors=True)  # this run's own scratch dir; results are in the match results store
-
-    final = _fit(store, env, fps, {*candidates, champion, *opponents})
-    ledger = store.load(env, fps=fps)
-    print(f"Verdicts ({played} matches played, {reused} reused from the match results):")
-    for c in candidates:
-        r = report[c]
-        print(
-            f"  {_short_name(c):<28} {r['verdict'].upper():<10} P(better) {r['p_better']:.2f}  "
-            f"margin {r['margin']:+.2f} ± {r['margin_sd']:.2f} goals/match  after {r['rounds']} round(s)"
-        )
-        r["per_opponent"] = _per_opponent(_up_to_round(ledger, r["rounds"]), fps, c, champion, opponents)
-        r["stalls"] = stall_coverage(_up_to_round(ledger, r["rounds"]), fps, c)
-        print(f"    {'opponent':<26} {'candidate GD':>12} {'champion GD':>12} {'matches':>8} (same seed and colour)")
-        for o, row in r["per_opponent"].items():
-            name = o if o == "head-to-head" else _short_name(o)
-            print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
-        for line in stall_lines(r["stalls"], "candidate"):
-            print(f"    {line}")
-        if r["verdict"] == "better" and not args.held_out and not args.frozen:
-            print(
-                f"    -> next: evaluate.py {_short_name(c)} --held-out, then set it as champion in reference/opponents.json"
-            )
-    champion_stalls = None
-    if candidates:
-        rounds = max(report[c]["rounds"] for c in candidates)
-        champion_stalls = stall_coverage(_up_to_round(ledger, rounds), fps, champion)
-        for line in stall_lines(champion_stalls, "champion"):
-            print(line)
-    print("\nStrengths (goals per match, ± SD):")
-    for n in sorted(final.names, key=lambda n: -final.strength(n)[0]):
-        m, sd = final.strength(n)
-        print(f"  {_short_name(n):<28} {m:+.2f} ± {sd:.2f}")
-
-    out = Path(REPLAY_BASE_PATH) / "eval" / "reports" / f"{run_id}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps(
-            {
-                "run_id": run_id,
-                "run": _run_metadata(),
-                "opponents": str(args.opponents),
-                "held_out": args.held_out,
-                "frozen": args.frozen,
-                "environment": env,
-                "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": args.max_rounds},
-                "candidates": report,
-                "champion_stalls": champion_stalls,
-                "strengths": {n: final.strength(n) for n in final.names},
-                "noise_sd": final.noise_sd,
-            },
-            indent=2,
-        )
-    )
-    print(f"\nReport: {out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out}")
-
-
-def _explain(run_dir: Path, run_id: str, candidates: list[str], champion: str) -> None:
-    """`--explain`: pictures of each candidate against the champion, from this run's kept matches.
-    Runs before the scratch dir is removed; a failure is printed and never loses the verdicts."""
-    from tools.evaluation import explain  # matplotlib: imported only when asked for
-
-    for c in candidates:
-        out = Path(REPLAY_BASE_PATH) / "eval" / "explain" / f"{_short_name(c)}_{run_id}"
-        try:
-            explain.explain(run_dir, c, champion, out)
-            print(f"explain: {_short_name(c)} vs {_short_name(champion)} written to {out}")
-        except Exception as exc:  # noqa: BLE001 - the pictures are optional; the verdicts are not
-            print(f"explain: {_short_name(c)} failed ({type(exc).__name__}: {exc}); verdicts are unaffected")
-
-
-def _fit(store: match_results.MatchResults, env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
-    """Ratings over every stored match in `env` between `players` at their current code."""
-    matches = [
-        (e["a"], e["b"], e["score_a"] - e["score_b"])
-        for e in store.load(env, fps=fps).values()
-        if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
-    ]
-    return ratings.fit(matches, names=sorted(players))
-
-
-def _up_to_round(ledger: dict, k: int) -> dict:
-    """The stored matches of rounds 1..k (seeds 1..k): a verdict after round k uses those only,
-    whatever later rounds the store already holds, so it doesn't depend on earlier runs."""
-    return {f: e for f, e in ledger.items() if e["seed"] is not None and e["seed"] <= k}
-
-
-def _margins(ledger: dict, fps: dict, side: str, o: str) -> dict[tuple, int]:
-    """{(seed, side is config_a): goal difference} for `side` against `o`, at current code."""
-    out = {}
-    for e in ledger.values():
-        if e["a_fp"] != fps.get(e["a"]) or e["b_fp"] != fps.get(e["b"]):
-            continue
-        if (e["a"], e["b"]) == (side, o):
-            out[(e["seed"], True)] = e["score_a"] - e["score_b"]
-        elif (e["a"], e["b"]) == (o, side):
-            out[(e["seed"], False)] = e["score_b"] - e["score_a"]
+def signals(summary: dict, by_tag: dict[tuple[str, str], dict], round_dir: Optional[Path]) -> dict:
+    """A round's signals (docs/signals.md) from its `summary["results"]` and their stored records
+    (by (config_a, config_b) under this run's names): restarts, ball losses, the per-strategy table,
+    fouls, stalls and how many matches checked them."""
+    rows = summary["results"]
+    out: dict = {}
+    restarts = [e for r in rows for e in (by_tag.get((r["config_a"], r["config_b"]), {}).get("restarts") or [])]
+    out["restarts"] = restart_outcomes.summarise(restarts)
+    losses = {
+        tag(r["config_a"], r["config_b"]): {**rec["losses"], "match": tag(r["config_a"], r["config_b"])}
+        for r in rows
+        if (rec := by_tag.get((r["config_a"], r["config_b"]))) and rec.get("losses") is not None
+    }
+    real_losses = chances = None
+    if losses:
+        ordered = [losses[t] for t in sorted(losses)]
+        out["ball_losses"] = turnover_breakdown.breakdown(ordered)
+        if round_dir is not None:
+            report = turnover_breakdown.report(summary["run_id"], ordered, summary)
+            (round_dir / "ball_losses.md").write_text(report)
+        real_losses = {t: turnover_breakdown.real_loss_kinds(r) for t, r in losses.items()}
+        chances = {t: r["chances"] for t, r in losses.items() if "chances" in r}
+    out["strategies"] = strategy_table(rows, real_losses, chances or {})
+    out["fouls"] = foul_table(rows)
+    out["stall_incidents"] = stall_incidents(rows)
+    out["stalls_checked"] = {
+        n: {
+            "checked": sum(1 for r in rows if r["config_a"] == n and r["stats"] is not None),
+            "matches": sum(1 for r in rows if n in (r["config_a"], r["config_b"])),
+        }
+        for n in summary["config_names"]
+    }
     return out
 
 
-def paired(ledger: dict, fps: dict, candidate: str, champion: str, opponents: list[str]) -> tuple[list, list]:
-    """The candidate's goal difference minus the champion's against each opponent, over the
-    matches both played with the same seed and colour, and the candidate's margins against the
-    champion: `ratings.paired_difference`'s inputs."""
-    diffs = []
-    for o in opponents:
-        c, ch = _margins(ledger, fps, candidate, o), _margins(ledger, fps, champion, o)
-        diffs += [c[k] - ch[k] for k in sorted(set(c) & set(ch))]
-    return diffs, list(_margins(ledger, fps, candidate, champion).values())
+def stall_incidents(results: list[dict]) -> list[dict]:
+    """Stall events over `summary.json`-shaped `results`, with deterministic duplicates merged: the
+    same kind, onset tick and duration tick in matches that share a strategy is one freeze seen
+    against two opponents that hadn't diverged yet (rsim is deterministic), not two separate
+    problems. In order of first appearance."""
+    incidents: list[dict] = []
+    by_key: dict[tuple, dict] = {}
+    for r in results:
+        t = tag(r["config_a"], r["config_b"])
+        for e in (r.get("stats") or {}).get("stall_events") or []:
+            ticks = (e["kind"], round(e["sim_time"] * TICKS_PER_SECOND), round(e["duration_s"] * TICKS_PER_SECOND))
+            keys = [(name, *ticks) for name in (r["config_a"], r["config_b"])]
+            incident = next((by_key[k] for k in keys if k in by_key), None)
+            if incident is None:
+                incident = {"kind": e["kind"], "sim_time": e["sim_time"], "duration_s": e["duration_s"], "matches": []}
+                incidents.append(incident)
+            if t not in incident["matches"]:
+                incident["matches"].append(t)
+            for k in keys:
+                by_key.setdefault(k, incident)
+    return incidents
 
 
-def _per_opponent(ledger: dict, fps: dict, candidate: str, champion: str, opponents: list[str]) -> dict:
-    """Goal difference against each opponent, the candidate's and the champion's, over the
-    matches both played with the same seed and colour (so the two columns face the same noise)."""
-    rows = {}
-    for o in opponents:
-        c, ch = _margins(ledger, fps, candidate, o), _margins(ledger, fps, champion, o)
-        common = sorted(set(c) & set(ch))
-        rows[o] = {
-            "candidate": sum(c[k] for k in common),
-            "champion": sum(ch[k] for k in common),
-            "matches": len(common),
-        }
-    h2h = _margins(ledger, fps, candidate, champion)
-    rows["head-to-head"] = {"candidate": sum(h2h.values()), "champion": -sum(h2h.values()), "matches": len(h2h)}
-    return rows
+def foul_table(results: list[dict]) -> dict[str, dict]:
+    """Every logged foul (`MatchStats.fouls`, both sides) by rule, then by "strategy/tactic" of the
+    offending robot. `inferred` counts fouls whose rule only named a team, attributed to that side's
+    robot nearest the ball."""
+    table: dict[str, dict] = {}
+    for r in results:
+        for foul in (r.get("stats") or {}).get("fouls") or []:
+            strategy = _short_name(r["config_a"] if foul["side"] == "friendly" else r["config_b"])
+            row = table.setdefault(foul["rule"], {"total": 0, "inferred": 0, "by_tactic": {}})
+            row["total"] += 1
+            row["inferred"] += bool(foul["inferred"])
+            key = f"{strategy}/{foul['tactic'] or 'unknown'}"
+            row["by_tactic"][key] = row["by_tactic"].get(key, 0) + 1
+    for row in table.values():
+        row["by_tactic"] = dict(sorted(row["by_tactic"].items(), key=lambda kv: -kv[1]))
+    return dict(sorted(table.items(), key=lambda kv: -kv[1]["total"]))
+
+
+def print_signals(summary: dict, run_label: str) -> None:
+    """The printed health check: stalls with their coverage, then every signal table."""
+    rows = summary["results"]
+    stalled = [r for r in rows if (r["stats"] or {}).get("stall_events")]
+    backstop = [r for r in rows if r["possession_backstop"] and r not in stalled]
+    checked = summary["stalls_checked"]
+    print(f"\nSTALLS in round 1: {len(stalled)} match(es), {len(summary['stall_incidents'])} distinct incident(s)")
+    print(
+        "  checked as config_a (the watchdog watches config_a only): "
+        + ", ".join(f"{_short_name(n)} {c['checked']}/{c['matches']}" for n, c in checked.items())
+    )
+    for r in stalled:
+        for e in r["stats"]["stall_events"]:
+            tactics = f" tactics={e['tactic_ids']}" if e.get("tactic_ids") else ""
+            diagnosis = f" -- {e['diagnosis']}" if e.get("diagnosis") else ""
+            print(
+                f"  {tag(r['config_a'], r['config_b']):<50} {e['kind']:<17} onset t={e['sim_time']:.1f}s "
+                f"referee={e.get('referee_command')}{tactics}{diagnosis}"
+            )
+    for r in backstop:
+        poss = r["stats"]["possession_pct"]
+        print(
+            f"  {tag(r['config_a'], r['config_b']):<50} {'POSSESSION_BACKSTOP':<17} "
+            f"possession {poss['friendly']:.0%}/{poss['enemy']:.0%} ball_travel {r['stats']['ball_travel_m']:.2f}m"
+        )
+    _print_restarts(summary["restarts"])
+    if "ball_losses" in summary:
+        _print_ball_losses(summary["ball_losses"], run_label)
+    _print_strategy_table(summary["strategies"])
+    _print_loss_kinds(summary["strategies"])
+    _print_chances(summary["strategies"])
+    _print_foul_table(summary["fouls"])
+    _print_motion_planning_table(summary["strategies"])
+
+
+def _print_restarts(restarts: dict) -> None:
+    if not restarts["restarts"]:
+        return
+    print(
+        f"\nRESTARTS: {restarts['restarts']}, {restarts['reached_normal_start'] / restarts['restarts']:.0%} "
+        "reached NORMAL_START"
+    )
+    for kind, row in restarts["by_kind"].items():
+        outcomes = ", ".join(f"{k} {n}" for k, n in row["outcomes"].items())
+        print(f"  {kind:<16} {row['n']:>4}  reached {row['reached_normal_start'] / row['n']:>4.0%}  {outcomes}")
+
+
+def _print_foul_table(table: dict[str, dict]) -> None:
+    if not table:
+        return
+    print("\nFOULS (both sides; top strategy/tactic of the offending robot; * = rule named only a team):")
+    for rule, row in table.items():
+        top = ", ".join(f"{k} {c}" for k, c in list(row["by_tactic"].items())[:4])
+        star = "*" if row["inferred"] else ""
+        print(f"  {rule + star:<30} {row['total']:>5}  {top}")
+
+
+def _print_strategy_table(table: dict[str, dict]) -> None:
+    print("\nSTRATEGIES (per match; losses = real ball losses, as config_a only):")
+    print(
+        f"  {'strategy':<32} {'W-D-L':>9} {'GF':>5} {'GA':>5} {'shots':>6} {'passes':>7} {'entries':>8} {'fouls':>6} {'losses':>7} {'stalled':>8}"
+    )
+    for name, t in sorted(table.items()):
+        n = max(1, t["matches"])
+        losses = f"{t['real_losses_as_a'] / t['matches_as_a']:.1f}" if t["matches_as_a"] else "-"
+        print(
+            f"  {_short_name(name):<32} {t['wins']:>3}-{t['draws']}-{t['losses']:<3} {t['goals_for'] / n:>5.2f} "
+            f"{t['goals_against'] / n:>5.2f} {t['shots'] / n:>6.2f} {t['completed_passes'] / n:>7.1f} "
+            f"{t['attacking_third_entries'] / n:>8.1f} {t['fouls'] / n:>6.1f} {losses:>7} {t['stalled']:>8}"
+        )
+
+
+def _print_loss_kinds(table: dict[str, dict]) -> None:
+    """Real ball losses per match as config_a, by kind: where each strategy gives the ball away."""
+    rows = {name: t for name, t in table.items() if t["matches_as_a"]}
+    if not rows:
+        return
+    totals: dict[str, int] = {}
+    for t in rows.values():
+        for kind, n in t["real_loss_kinds_as_a"].items():
+            totals[kind] = totals.get(kind, 0) + n
+    kinds = sorted(totals, key=lambda k: -totals[k])
+    short = {
+        "shot_saved_or_blocked": "shot_saved",
+        "ball_out_after_kick": "out_kick",
+        "ball_out_other": "out_other",
+        "pass_intercepted": "intercepted",
+        "loose_ball_lost": "loose_lost",
+    }
+    print("\nLOSS KINDS (real ball losses per match as config_a, by kind; see ball_losses.md):")
+    print(f"  {'strategy':<32} " + " ".join(f"{short.get(k, k)[:11]:>11}" for k in kinds))
+    for name, t in sorted(rows.items(), key=lambda kv: -kv[1]["real_losses_as_a"] / kv[1]["matches_as_a"]):
+        n = t["matches_as_a"]
+        print(
+            f"  {_short_name(name):<32} " + " ".join(f"{t['real_loss_kinds_as_a'].get(k, 0) / n:>11.2f}" for k in kinds)
+        )
+
+
+def _print_chances(table: dict[str, dict]) -> None:
+    """Chances created and conceded per strategy, both sides (`analysis.chances`)."""
+    rows = {name: t for name, t in table.items() if t["chances"]["matches"]}
+    if not rows:
+        return
+
+    def pct(v: Optional[float]) -> str:
+        return f"{v:.0%}" if v is not None else "-"
+
+    def num(v: Optional[float]) -> str:
+        return f"{v:.1f}" if v is not None else "-"
+
+    print(
+        "\nCHANCES (both sides; conv = goals per shot, open = goal mouth unblocked at the shot, "
+        "regain>shot = open-play regains shot from within 10 s, danger = s/match the enemy held "
+        "the ball in our defensive third, fk>shot = free kicks shot from within 10 s, "
+        "progress = m gained per completed pass):"
+    )
+    print(
+        f"  {'strategy':<28} {'shots':>6} {'conv':>5} {'dist':>5} {'open':>5} {'save':>5} {'open vs':>7} "
+        f"{'regain>shot':>11} {'secs':>5} {'danger':>6} {'fk>shot':>7} {'progress':>8} {'fwd':>4}"
+    )
+    for name, t in sorted(rows.items()):
+        c = t["chances"]
+        print(
+            f"  {_short_name(name):<28} {c['shots'] / c['matches']:>6.1f} {pct(c['conversion']):>5} "
+            f"{num(c['shot_distance_m']):>5} {pct(c['shot_open_goal']):>5} {pct(c['save_rate']):>5} "
+            f"{pct(c['faced_open_goal']):>7} {pct(c['regain_to_shot']):>11} {num(c['regain_to_shot_s']):>5} "
+            f"{num(c['danger_s_per_match']):>6} {pct(c['free_kick_to_shot']):>7} "
+            f"{num(t['pass_progress_m']):>8} {pct(t['forward_pass_share']):>4}"
+        )
+
+
+def _print_motion_planning_table(table: dict[str, dict]) -> None:
+    if not any(t.get("worst_clearance_m") is not None or t.get("robot_overlap_ticks", 0) > 0 for t in table.values()):
+        return
+    print(
+        "\nMOTION PLANNING (per match averages; tm_coll = teammate overlap s (incidents), "
+        "total_coll = all overlap s (incidents), near_miss = near miss s <5cm, min_clr = worst clearance):"
+    )
+    print(f"  {'strategy':<32} {'tm_coll':>18} {'total_coll':>20} {'near_miss':>11} {'min_clr':>10}")
+    for name, t in sorted(table.items()):
+        n = max(1, t["matches"])
+        tm = f"{t.get('teammate_overlap_ticks', 0) / n / TICKS_PER_SECOND:.2f}s ({t.get('teammate_overlap_incidents', 0) / n:.1f})"
+        tot = f"{t.get('robot_overlap_ticks', 0) / n / TICKS_PER_SECOND:.2f}s ({t.get('robot_overlap_incidents', 0) / n:.1f})"
+        near = t.get("near_miss_ticks", 0) / n / TICKS_PER_SECOND
+        wc = t.get("worst_clearance_m")
+        clr = f"{wc * 100:.1f} cm" if wc is not None else "-"
+        print(f"  {_short_name(name):<32} {tm:>18} {tot:>20} {near:>10.2f}s {clr:>10}")
+
+
+def _print_ball_losses(b: dict, run_label: str) -> None:
+    def top(counts: dict[str, int], k: int = 5) -> str:
+        return ", ".join(f"{name} {c}" for name, c in list(counts.items())[:k]) or "none"
+
+    print(
+        f"\nBALL LOSSES (config_a side): {b['real_losses']} real ({b['real_losses_per_match']}/match; "
+        f"{b['raw_turnovers']} raw MatchStats turnovers)"
+    )
+    print(f"  by kind:   {top(b['by_kind'])}")
+    print(f"  fouls:     {top(b['fouls_by_rule'])}")
+    print(f"  by tactic: {top(b['by_tactic'])}")
+    rec = b.get("receptions")
+    if rec and rec["passes"]:
+        print(
+            f"  passes:    {top(rec['by_outcome'])}; {rec['catch_rate'] or 0:.0%} of reachable caught, "
+            f"missed median facing off {rec['missed']['median_facing_off_deg']} deg"
+        )
+    print(f"  full breakdown: replays/{run_label}/ball_losses.md")
+
+
+# --- run metadata -----------------------------------------------------------------------------
+
+
+def _git(*args: str) -> Optional[str]:
+    try:
+        out = subprocess.run(["git", *args], capture_output=True, text=True, check=True, cwd=REPO_ROOT)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return out.stdout.strip()
+
+
+def _run_metadata() -> dict:
+    """What produced this run: enough to reproduce it or line it up against another."""
+    status = _git("status", "--porcelain", "--untracked-files=no")
+    return {
+        "git_commit": _git("rev-parse", "HEAD"),
+        "git_dirty": bool(status) if status is not None else None,
+        "argv": sys.argv[1:],
+        "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
 
 
 if __name__ == "__main__":

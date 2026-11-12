@@ -1,0 +1,148 @@
+"""`evaluate.py` end to end with matches, fingerprints and the catalog stubbed: which matches each round
+plays, what the match results store saves them from, and what the flags change.
+
+A player's fingerprint is its name plus a version number, so "editing" a strategy is bumping its
+version. `tests/replay/test_match_results.py` covers the store itself.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from tools.evaluation import evaluate
+from tools.evaluation.match import MatchResult
+from utama_core.replay import match_results
+
+CORE = ["a", "b"]
+RESERVE = ["r1", "r2", "r3"]
+
+
+class _Graph:
+    def __init__(self, rig):
+        self.rig = rig
+
+    def base_fingerprint(self, entries):
+        return "base"
+
+    def strategy_fingerprint(self, name):
+        return f"{self.rig.version[name]}-{name}"  # version first: the tool keeps 16 characters
+
+
+@pytest.fixture
+def rig(tmp_path, monkeypatch):
+    rig = type("Rig", (), {})()
+    rig.played, rig.kwargs = [], []
+    rig.version = {n: 0 for n in [*CORE, *RESERVE, "c"]}
+    rig.stats = {}  # (a, b) -> stats of that match
+    rig.on_play = None
+
+    def fake_run_match(a, b, run_dir=None, **kwargs):
+        rig.played.append((a, b, kwargs["sim_noise"].seed))
+        rig.kwargs.append(kwargs)
+        if rig.on_play is not None:
+            rig.on_play()
+        return MatchResult(config_a=a, config_b=b, score_a=1, score_b=0, stats=rig.stats.get((a, b), {"x": 1}))
+
+    players = tmp_path / "players.json"
+    players.write_text(json.dumps({"champion": "a", "core": CORE}))
+    monkeypatch.setattr(evaluate, "run_match", fake_run_match)
+    monkeypatch.setattr(evaluate, "REPLAY_BASE_PATH", tmp_path)
+    monkeypatch.setattr(evaluate, "CodeGraph", lambda: _Graph(rig))
+    monkeypatch.setattr(evaluate, "_CONFIG_NAMES", [*CORE, *RESERVE, "c"])
+
+    def run(*argv):
+        rig.played.clear()
+        rig.kwargs.clear()
+        evaluate.main(["--players", str(players), "--max-workers", "1", *argv])
+        (run_dir,) = sorted(tmp_path.glob("eval_*"))[-1:]
+        return run_dir
+
+    rig.run = run
+    rig.store = match_results.open_store(tmp_path)
+    return rig
+
+
+def test_with_no_candidate_one_round_plays_every_pair_of_the_round_players(rig):
+    run_dir = rig.run("--compare-with", "a")
+
+    # core a, b; reserve r1, r2 in round 1 (c and r3 wait for another seed); a is also the reference
+    assert sorted((x, y) for x, y, _ in rig.played) == [
+        ("a", "b"),
+        ("a", "r1"),
+        ("a", "r2"),
+        ("b", "r1"),
+        ("b", "r2"),
+        ("r1", "r2"),
+    ]
+    assert {seed for *_, seed in rig.played} == {1}
+    summary = json.loads((run_dir / "round_1" / "summary.json").read_text())
+    assert len(summary["results"]) == 6 and "strategies" in summary
+    assert not (run_dir / "round_2").exists()
+    assert json.loads((run_dir / "report.json").read_text())["candidates"] == {}
+
+
+def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matches_play(rig):
+    rig.run("--compare-with", "a")
+    rig.run("--compare-with", "a")
+    assert rig.played == []
+
+    rig.version["r1"] += 1
+    rig.run("--compare-with", "a")
+    assert sorted((x, y) for x, y, _ in rig.played) == [("a", "r1"), ("b", "r1"), ("r1", "r2")]
+
+
+def test_later_rounds_play_only_the_candidates_and_references_matches_with_sides_swapped(rig):
+    run_dir = rig.run("c", "--compare-with", "a", "--max-rounds", "2")
+
+    round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]
+    assert round_2  # equal results: undecided after round 1
+    assert all("c" in pair or "a" in pair for pair in round_2)
+    assert ("r3", "c") in round_2 and ("r3", "a") in round_2  # round 2's reserve; c and a are config_b
+    assert ("a", "c") in round_2
+    report = json.loads((run_dir / "report.json").read_text())
+    assert report["candidates"]["c"]["verdict"] == "undecided"
+    assert report["candidates"]["c"]["rounds"] == 2
+
+
+def test_strict_fails_a_run_with_a_stall_and_reports_it(rig):
+    rig.stats[("a", "b")] = {"stall_events": [{"kind": "RESTART_STALL", "sim_time": 5.0, "duration_s": 9.0}]}
+    with pytest.raises(SystemExit, match="1 match"):
+        rig.run("--compare-with", "a", "--strict")
+    rig.run("--compare-with", "a")  # without --strict the same (now stored) stall only reports
+
+
+def test_fuzzing_reaches_every_match_and_is_its_own_environment(rig):
+    rig.run("--compare-with", "a")
+    rig.run("--compare-with", "a", "--fuzz-restarts", "7", "--fuzz-interval", "10", "20")
+
+    assert len(rig.played) == 6  # a fuzzed run reuses no unfuzzed match
+    assert all(kw["fuzz_seed"] == 7 and kw["fuzz_interval_s"] == (10.0, 20.0) for kw in rig.kwargs)
+    assert len(list(rig.store.root.iterdir())) == 2
+
+
+def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
+    def edit():
+        rig.version["r2"] = 9
+
+    rig.on_play = edit
+    rig.run("--compare-with", "a")
+
+    stored = {(r["a"], r["b"]) for r in map(json.loads, map(lambda p: p.read_text(), rig.store.root.rglob("*.json")))}
+    assert ("a", "b") in stored
+    assert not any("r2" in pair for pair in stored)
+
+
+def test_at_ref_falls_back_to_the_name_a_strategy_had_at_that_commit(monkeypatch, tmp_path):
+    built = []
+
+    def fake_frozen(name, ref, directory):
+        built.append(name)
+        if name != "split_shape":
+            raise ValueError(f"no strategy {name}")
+        return tmp_path / f"{name}@abc.strategy"
+
+    monkeypatch.setattr(evaluate, "frozen", fake_frozen)
+    assert evaluate.at_ref("pendulum", "v2.5.0").endswith("split_shape@abc.strategy")
+    assert built == ["pendulum", "split_shape"]

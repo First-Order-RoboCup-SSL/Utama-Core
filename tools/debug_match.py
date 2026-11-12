@@ -131,7 +131,7 @@ def main() -> None:
         default=None,
         help=(
             "If set, also accumulate and write the same possession/shots/ball-travel "
-            "summary round_robin.py records (utama_core.engine.match_stats.MatchStats) to "
+            "summary evaluate.py records (utama_core.engine.match_stats.MatchStats) to "
             "this path. Off by default since most debugging sessions only care about the "
             "match_log/trace output, not aggregate stats."
         ),

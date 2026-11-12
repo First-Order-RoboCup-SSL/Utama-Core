@@ -1,5 +1,5 @@
 """Tournament view — reads `replays/<run_id>/summary.json` written by
-`round_robin.py` and exposes it to the dashboard.
+`evaluate.py` and exposes it to the dashboard.
 
 Fully standalone: no coupling to a running match or `StrategyRunner`. Just a
 `GET /tournament/runs` route returning every run's full summary inline
@@ -33,7 +33,10 @@ def _load_runs() -> List[dict]:
         return []
 
     summaries = []
-    for summary_path in REPLAY_BASE_PATH.glob("*/summary.json"):
+    # Older round-robins: replays/tournament_<id>/summary.json; evaluate.py: one per round,
+    # replays/eval_<id>/round_<k>/summary.json.
+    paths = [*REPLAY_BASE_PATH.glob("*/summary.json"), *REPLAY_BASE_PATH.glob("eval_*/round_*/summary.json")]
+    for summary_path in paths:
         try:
             with open(summary_path) as f:
                 summary = json.load(f)
@@ -52,7 +55,7 @@ def _short(config: str) -> str:
 
 
 def _replay_path(run_dir: Path, result: dict) -> Optional[str]:
-    """The result's replay, relative to `REPLAY_BASE_PATH`: `round_robin.py` writes
+    """The result's replay, relative to `REPLAY_BASE_PATH`: `evaluate.py` writes
     `<a>_vs_<b>.npz`. Older runs (the retired `ladder.py`, `full_match_tournament.py`) wrote
     side and kickoff tags, `<a>_vs_<b>_<R|L><K|k>` (as `.pkl` for the latter)."""
     stem = f"{_short(result['config_a'])}_vs_{_short(result['config_b'])}"

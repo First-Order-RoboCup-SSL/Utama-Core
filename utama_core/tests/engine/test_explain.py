@@ -55,7 +55,7 @@ def _referee(score_yellow, score_blue):
 
 def _write_match(run_dir, a, b, score_a, score_b, seed=None):
     """A three-tick match, config_a (yellow, friendly) scoring `score_a`; the team with the ball is
-    always the friendly one. Written the way `evaluate.py`/`round_robin.py` name their files."""
+    always the friendly one. Written the way `evaluate.py` names their files."""
     stem = f"{pm.sr.short(a)}_vs_{pm.sr.short(b)}" + ("" if seed is None else f"_s{seed}")
     path = run_dir / f"{stem}.npz"
     cfg = ColumnarReplayWriterConfig(replay_name=stem, overwrite_existing=True, checkpoint_every_s=0)

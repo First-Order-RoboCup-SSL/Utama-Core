@@ -66,7 +66,7 @@ flowchart TD
 ## Match data flow
 
 Every rsim match writes files under `replays/` (`REPLAY_BASE_PATH`), and the analyses, tools and
-evaluation read them back. A match's file stem is `A_vs_B` (`round_robin.py`'s `_tag`); the names
+evaluation read them back. A match's file stem is `A_vs_B` (`evaluate.py`'s `tag`); the names
 below are from a real run directory. The match results store (`replays/match_results/`) is read first:
 a match it holds is not played again, so only matches whose fingerprint changed are played.
 

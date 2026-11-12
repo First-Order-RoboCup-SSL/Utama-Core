@@ -100,7 +100,7 @@ config_a defending the right goal. Replays written before this have one side thr
 
 When the second half's time is up, the stage becomes `POST_GAME` with a plain
 `STOP` (no `designated_position`, so the sim runner doesn't restart play), and violations are
-ignored from then on. `round_robin.py` ends a match there.
+ignored from then on. `evaluate.py` ends a match there.
 
 `force_start_after_goal` is a legacy path (STOP → FORCE_START after `stop_duration_seconds`).
 Scripts resume play with `referee.set_command(RefereeCommand.NORMAL_START, timestamp=...)`.
@@ -135,11 +135,11 @@ again afterwards.
 `custom_referee/restart_fuzzer.py`: an opt-in subclass that injects legal restarts at
 seeded-random sim times during live play (never on top of a queued restart), via the same
 public `set_command` path an operator uses, so a stall it exposes is a real one. rsim is
-deterministic, so this is how a round-robin explores new restart geometries. Kinds: ball
+deterministic, so this is how an evaluation explores new restart geometries. Kinds: ball
 placement → `DIRECT_FREE_*` (position ≥0.25m infield, ≥0.2m from both defense areas),
 `PREPARE_KICKOFF_*`, and `STOP` → `FORCE_START`. `referee.injections` records each one; with a
 `MatchLog` attached, they are traced as `restart_fuzzer_injection`. Used by
-`round_robin.py --fuzz-restarts SEED`.
+`evaluate.py --fuzz-restarts SEED`.
 
 ```python
 referee = RestartFuzzingReferee.from_profile_name("simulation", seed=1, interval_s=(8.0, 20.0),

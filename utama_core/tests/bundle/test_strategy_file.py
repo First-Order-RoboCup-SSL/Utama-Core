@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.evaluation import match, round_robin
+from tools.evaluation import evaluate, match
 from utama_core.bundle import archive, host, strategy_file, wire
 from utama_core.config.enums import Mode
 from utama_core.engine.abstract_strategy import AbstractStrategy
@@ -312,7 +312,7 @@ def test_the_runner_reads_the_same_from_a_bundled_strategy_as_from_the_same_stra
 
 
 def test_a_strategy_file_is_named_like_any_strategy():
-    names = round_robin._resolve_config_names(["pendulum", "replays/x@abc.strategy"])
+    names = evaluate.resolve_names(["split_shape", "replays/x@abc.strategy"])  # an old name works too
     assert names == [STRATEGY, "replays/x@abc.strategy"]
 
 

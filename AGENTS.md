@@ -27,13 +27,13 @@ exists yet: say so in your change rather than guessing.
 
 One term per thing; reuse these instead of coining new ones.
 
-- **Round-robin / tournament run** — every strategy config plays every other once
-  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the match results store (`replays/match_results/`).
-  The check for stalls and the occasional health check of the whole catalog; a single
-  strategy is judged with `evaluate.py` (below). A match the store already holds is not played again, so only matches whose code changed rerun.
-- **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
-  or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
-  verdict on a strategy; see Evaluation.
+- **Round robin / health check** — round 1 of `evaluate.py` (below): every player meets every other
+  once; with no candidate it is the whole run. Reports stalls (with how many matches checked them) and
+  every signal, in `replays/eval_<id>/round_1/summary.json`. Older runs of the deleted `round_robin.py`
+  are `replays/tournament_<id>/`. W-D-L there is a signal, never a verdict: there are no standings.
+- **Core / reserve strategies** — the core (`tools/evaluation/reference/players.json`) plays every
+  round; every other strategy in the catalog is reserve, two rotated in per round by its seed (`--all`
+  plays them all), for a diverse field without playing twelve every time.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
 - **Moment / regression moment** — a field state (captured from a replay) that reproduced a
@@ -51,21 +51,21 @@ One term per thing; reuse these instead of coining new ones.
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Evaluation / ratings / reference opponents / match results** — `tools/evaluation/evaluate.py`: is a
-  candidate stronger than the champion of a fixed set of reference opponents
-  (`tools/evaluation/reference/opponents.json`: the champion, six opponents, three held-out
-  opponents)? Rounds of matches against those opponents in the simulated world and robots
-  (`tools/evaluation/reference/world.json`, `robots.json`) under seeded sim noise, decided on
-  paired results (candidate and champion against the same opponent under the same noise) and
-  stopping once the answer is clear; ratings (strength ± SD in goals per match,
-  `analysis/ratings.py`) over every match in the match results store (`replays/match_results/`, `replay/match_results.py`).
+- **Evaluation / reference / match results** — `tools/evaluation/evaluate.py`: is a candidate
+  stronger than the reference, the champion at the last release (`--at REF`, or `--compare-with
+  NAME`)? Round k plays under sim-noise seed k in the simulated world and robots
+  (`tools/evaluation/reference/world.json`, `robots.json`): round 1 a round robin, later rounds only the
+  undecided candidates' matches, decided on paired results (candidate and reference against the same
+  opponent under the same noise, `analysis/ratings.py`) and stopping once the answer is clear. Every
+  match goes to the match results store (`replays/match_results/`, `replay/match_results.py`); a match
+  the store holds is never played again. Promoting is a one-line change to `players.json` in a PR.
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
-- **Strategy file / frozen baseline** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a
+- **Strategy file** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a
   zip of one strategy and the whole `utama_core` package at one commit; it plays in its own process, game frames in and
-  robot commands out, in simulation or on real robots (`BundledStrategy(path, robot_ids)`). `evaluate.py CANDIDATE --frozen REF` plays the champion and the opponents from
-  such files of commit REF (the frozen baseline, kept in `replays/eval/frozen/`), so a change to shared code moves only
-  the candidate. The referee and the simulator stay today's for both sides. A file is a player like any strategy name wherever one is named (`evaluate.py`, `round_robin.py`, `opponents.json`), with the same replays, stats and logs. Its fingerprint is computed like the code's, so a file and the code it was built from are one player in the ledger.
+  robot commands out, in simulation or on real robots (`BundledStrategy(path, robot_ids)`). `evaluate.py` plays the reference from
+  such a file of the last release (kept in `replays/eval/frozen/`), so a change to shared code never moves
+  the reference. The referee and the simulator stay today's for both sides. A file is a player like any strategy name wherever one is named (`evaluate.py`, `players.json`), with the same replays, stats and logs. Its fingerprint is computed like the code's, so a file and the code it was built from are one player in the match results.
 - **World / robot capability** — simulator settings fall into two kinds: the world (ball
   friction, vision noise and dropouts, latency) comes from measurements; robot capability (kick,
   dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
@@ -77,7 +77,7 @@ One term per thing; reuse these instead of coining new ones.
   P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
   kickoff or penalty, force start. See `docs/signals.md`.
 - **Situation rates** — how often each situation type happens per team per live minute, from
-  real Division B matches or our round-robin (`goal_sources --rates PATH`).
+  real Division B matches or our matches (`goal_sources --rates PATH`).
 
 ## Repo map
 
@@ -175,7 +175,7 @@ need most:
   answers, with where it lives in `summary.json`, a reference range and what an off value means.
   Read it when designing or debugging a strategy, and before adding a metric; they are
   diagnostics, not objectives.
-- `docs/strategies.md` — strategy catalog: status, description, and real round-robin
+- `docs/strategies.md` — strategy catalog: core or reserve, description, and real match
   results per strategy.
 - `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,

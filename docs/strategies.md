@@ -1,45 +1,46 @@
 # Strategy catalog
 
-Every strategy in `utama_core/strategy/` (one module each, named after the strategy), whether a
-round-robin plays it, and the latest results.
+Every strategy in `utama_core/strategy/` (one module each, named after the strategy), whether it
+is core or reserve, and the latest results.
 
 Run:
 
-- `pixi run python tools/evaluation/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
-  named ones). Common flags: `--strict`, `--pair A B` (one match); `--help` lists all.
+- `pixi run python tools/evaluation/evaluate.py` — one round robin of the core, two reserve and the
+  champion at the last release: stalls and signals (`--all` plays every strategy).
 - `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
-  of the reference opponents (`tools/evaluation/reference/opponents.json`). The way to judge a strategy.
+  at the last release. The way to judge a strategy. `--help` lists the flags.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
-rsim is deterministic: re-running an identical pair gives an identical result. Variance comes
-only from `--both-sides`, side/kickoff cells, or `--fuzz-restarts`.
+rsim is deterministic: re-running an identical match gives an identical result. Variance comes
+from the seeded sim noise: `evaluate.py`'s round k plays with seed k.
 
-**In the round-robin**, in order of the 2026-10-10 standings (below). A round-robin with no
-strategies named plays these.
+**The catalog.** Core strategies play every round of `evaluate.py`; reserve ones rotate in, two per
+round (`tools/evaluation/reference/players.json`). Names changed on 2026-11-12; the results
+below were played under the old names (column "Was"), which `catalog.RENAMED` still loads.
 
-| Strategy | Description |
-|---|---|
-| `pendulum` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
-| `riptide` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
-| `chameleon` | `riptide` plus a late-half scoreline shift (protect a lead / chase). |
-| `terrier` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
-| `breakwater` | `firebreak` plus `weaver`'s final-third overload. |
-| `wolfpack` | Same pair as `terrier`, fixed 80/20 attack-heavy split ignoring possession. |
-| `weaver` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
-| `ricochet` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
-| `avalanche` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
-| `tripwire` | `riptide`, but an all-in press when the ball is lost in our own third. |
-| `mirage` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
-| `firebreak` | `riptide` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
+| Strategy | Was | Role | Description |
+|---|---|---|---|
+| `avalanche` | `overload_press` | core | 4-robot overload/switch attack + 1 block, built to outnumber a shadow line. |
+| `breakwater` | `clear_press_plus` | core | `firebreak` plus `weaver`'s final-third overload. |
+| `mirage` | `decoy_and_overload` | core | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
+| `pendulum` | `split_shape` | core | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
+| `wolfpack` | `high_press` | core | Same pair as `terrier`, fixed 80/20 attack-heavy split ignoring possession. |
+| `chameleon` | `score_aware_counter_flow` | reserve | `riptide` plus a late-half scoreline shift (protect a lead / chase). |
+| `firebreak` | `clear_danger` | reserve | `riptide` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
+| `ricochet` | `give_and_go_solo` | reserve | Whole pool runs `GiveAndGoTactic`, no defense slot. |
+| `riptide` | `counter_flow` | reserve | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
+| `terrier` | `press_and_pass` | reserve | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
+| `tripwire` | `press_trigger_flow` | reserve | `riptide`, but an all-in press when the ball is lost in our own third. |
+| `weaver` | `tiki_taka_plus` | reserve | Short passing, handing off to `DecoyOverloadTactic`'s duet in the final third. |
 
 **Deleted** (2026-11-12): the ten strategies retired on 2026-10-10 (`tiki_taka`, `counter_press`,
 `high_line_zone`, `three_slot`, `switch_of_play`, `low_block`, `zone_fluid`, `score_aware_zone_flow`,
 `overload_flow`, `shadow_switch`), because nobody knew whether they still worked. Git history keeps them.
 
-`default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
+`default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from the catalog `evaluate.py` plays.
 
-Strategies are judged with `evaluate.py` against the reference opponents (`tools/evaluation/reference/`)
+Strategies are judged with `evaluate.py` against the champion at the last release
 (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). The round-robin results below are a
 snapshot of the catalog, not the verdict on any one strategy.
 
@@ -84,9 +85,9 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
 
 ## Updating this file
 
-- New strategy → add a row with a one-line description to the round-robin table.
+- New strategy → add a row with a one-line description to the table (it starts as reserve).
 - New tournament → replace the matching results table (one table per tournament type) and
   record the run directory; don't append narrative. Findings belong in commit messages.
 - Strategy abandoned after losing → delete its module and its row.
-- Only single matches (`--pair`), no round-robin → put them in the pull request, not here: this
-  file holds round-robin and full-match results only.
+- Only single matches, no evaluation → put them in the pull request, not here: this
+  file holds round-robin and evaluation results only.

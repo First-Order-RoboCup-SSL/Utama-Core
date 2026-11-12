@@ -8,7 +8,7 @@ Run:
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
 Yellow (the first strategy) starts on the right and kicks off. For many matches with
-results, use `tools/evaluation/round_robin.py`.
+results, use `tools/evaluation/evaluate.py`.
 """
 
 import argparse

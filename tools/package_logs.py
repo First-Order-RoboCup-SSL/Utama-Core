@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import re
 import shutil
 import sys
 import tarfile
@@ -27,8 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def find_latest_tournament(replays_dir: Path) -> Optional[Path]:
-    """Find the most recent tournament_* directory in replays_dir."""
-    runs = sorted(replays_dir.glob("tournament_*"))
+    """The most recent run directory in replays_dir: an evaluate.py round or an older round-robin."""
+    runs = sorted(
+        [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*")],
+        key=lambda p: re.sub(r"^\D*", "", p.relative_to(replays_dir).as_posix()),
+    )
     return runs[-1] if runs else None
 
 

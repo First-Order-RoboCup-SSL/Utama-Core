@@ -2,7 +2,7 @@
 
 Lives in `utama_core` so the analysis code can rebuild a `summary.json`'s `strategies`
 table without importing the `tools/` scripts (which are not part of the installed package).
-`tools/evaluation/round_robin.py` re-exports it.
+`tools/evaluation/evaluate.py` prints it.
 """
 
 from __future__ import annotations

@@ -3,20 +3,35 @@ import pytest
 from tools.evaluation import evaluate
 
 
-def test_round_fixtures_pair_candidate_and_champion_on_the_same_opponents_and_seed():
-    fixtures = evaluate.round_fixtures(["c"], "ch", ["o1", "o2"], 1)
-    assert set(fixtures) == {("c", "o1", 1), ("c", "o2", 1), ("c", "ch", 1), ("ch", "o1", 1), ("ch", "o2", 1)}
+def test_round_one_is_every_pair_once_and_later_rounds_only_the_candidates_matches():
+    full = evaluate.round_fixtures(1, ["c"], "ref", ["o1", "o2"], full=True)
+    assert len(full) == 6 and {f[2] for f in full} == {1}
+    assert ("o1", "o2", 1) in full
+    later = evaluate.round_fixtures(2, ["c"], "ref", ["o1", "o2"], full=False)
+    assert set(later) == {("ref", "c", 2), ("o1", "c", 2), ("o2", "c", 2), ("o1", "ref", 2), ("o2", "ref", 2)}
 
 
-def test_round_fixtures_swap_sides_in_even_rounds():
-    assert ("o1", "c", 2) in evaluate.round_fixtures(["c"], "ch", ["o1"], 2)
-    assert ("ch", "c", 2) in evaluate.round_fixtures(["c"], "ch", ["o1"], 2)
+def test_candidate_and_reference_meet_each_opponent_with_the_same_colour():
+    for k in (1, 2, 3):
+        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o"], full=k == 1)
+        c_is_a = ("c", "o", k) in fixtures
+        assert c_is_a == (k % 2 == 1)
+        assert (("ref", "o", k) in fixtures) == c_is_a
 
 
-def test_two_candidates_share_the_champions_fixtures():
-    fixtures = evaluate.round_fixtures(["c1", "c2"], "ch", ["o1"], 1)
-    assert fixtures.count(("ch", "o1", 1)) == 1
-    assert ("c1", "c2", 1) not in fixtures
+def test_two_candidates_share_the_references_fixtures_and_meet_only_in_round_one():
+    later = evaluate.round_fixtures(3, ["c1", "c2"], "ref", ["o1"], full=False)
+    assert later.count(("ref", "o1", 3)) == 1
+    assert not any({"c1", "c2"} == {a, b} for a, b, _ in later)
+    assert ("c1", "c2", 1) in evaluate.round_fixtures(1, ["c1", "c2"], "ref", ["o1"], full=True)
+
+
+def test_reserve_rotates_two_per_round_and_all_plays_everyone():
+    core, reserve = ["a", "b"], ["r1", "r2", "r3"]
+    assert evaluate.round_players(core, reserve, 1) == ["a", "b", "r1", "r2"]
+    assert evaluate.round_players(core, reserve, 2) == ["a", "b", "r3", "r1"]
+    assert evaluate.round_players(core, reserve, 5, everyone=True) == core + reserve
+    assert evaluate.round_players(core, ["r1"], 1) == ["a", "b", "r1"]  # one reserve is not played twice
 
 
 def test_verdict_thresholds_are_inclusive_and_cap_rounds():
@@ -64,11 +79,13 @@ def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
     assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
 
 
-def test_the_reference_opponents_load():
-    from tools.evaluation.sim_settings import load_opponents
+def test_the_players_load_and_the_core_is_in_the_catalog():
+    from tools.evaluation.match import _CONFIG_NAMES
+    from tools.evaluation.sim_settings import load_players
 
-    reference = load_opponents()
-    assert reference["champion"] and reference["opponents"] and reference["held_out"]
+    players = load_players()
+    assert players["champion"] in players["core"]
+    assert set(players["core"]) <= set(_CONFIG_NAMES)
 
 
 def test_the_reference_world_and_robots_make_one_valid_sim_noise():
@@ -96,14 +113,6 @@ def test_the_reference_sim_does_not_draw_robot_motor_limits():
     from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 
     assert not SimNoise.from_dict(reference_noise()).motion_limits
-
-
-def test_sim_noise_spec_forms():
-    from tools.evaluation.sim_settings import sim_noise_from_spec
-
-    assert sim_noise_from_spec("reference").seed == 0
-    assert sim_noise_from_spec("reference:7").seed == 7
-    assert sim_noise_from_spec('{"seed": 2, "kick_speed_sd": 0.3}').kick_speed_sd == 0.3
 
 
 FPS = {"c": "fc", "o": "fo", "ch": "fch"}

@@ -1,6 +1,6 @@
 """List the tournament runs under ./replays (`pixi run runs`).
 
-One line per `replays/tournament_*` directory, oldest first: when it started, the
+One line per run directory (`replays/tournament_*`, and `replays/eval_*/round_*` from evaluate.py), oldest first: when it started, the
 git commit it ran on (`*` if the tree was dirty), how many matches finished, how
 many stalled, and its command-line arguments -- all read from the run's
 `summary.json`. A run still in progress, or from before a field existed, shows `-`
@@ -8,14 +8,21 @@ for what its summary doesn't have.
 """
 
 import json
+import re
 from pathlib import Path
 
 from utama_core.config.settings import REPLAY_BASE_PATH
 
 
+def _started(run: str) -> str:
+    """A run's name from its timestamp on, so both kinds of run sort oldest first."""
+    return re.sub(r"^\D*", "", run)
+
+
 def run_rows(replays_dir: Path) -> list[dict]:
     rows = []
-    for run_dir in sorted(replays_dir.glob("tournament_*")):
+    runs = [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*")]
+    for run_dir in sorted(runs, key=lambda p: _started(p.relative_to(replays_dir).as_posix())):
         if not run_dir.is_dir():
             continue
         try:
@@ -28,7 +35,7 @@ def run_rows(replays_dir: Path) -> list[dict]:
         argv = run.get("argv")
         rows.append(
             {
-                "run": run_dir.name,
+                "run": run_dir.relative_to(replays_dir).as_posix(),
                 "started": run.get("started_utc", "-"),
                 "commit": (commit[:8] + ("*" if run.get("git_dirty") else "")) if commit else "-",
                 "matches": len(results) if isinstance(results, list) else "-",

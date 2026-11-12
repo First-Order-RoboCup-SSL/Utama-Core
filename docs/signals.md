@@ -49,25 +49,25 @@ match results store (`replays/match_results/`).
 
 ## Where they come from
 
-Every saved `tools/evaluation/round_robin.py` run prints its sections and writes the same data to
-`replays/<run>/summary.json`:
+Every `tools/evaluation/evaluate.py` run prints round 1's sections and writes each round's data to
+`replays/eval_<id>/round_<k>/summary.json` (round 1's also in `report.json`; older round-robins:
+`replays/tournament_<id>/summary.json`, with `standings` and `ratings` too):
 
 | Printed section | `summary.json` key | Computed by |
 |---|---|---|
-| Standings, STRATEGIES | `standings`, `strategies[*]` | `MatchStats` (live, every match) |
+| STRATEGIES | `strategies[*]` | `MatchStats` (live, every match) |
 | LOSS KINDS, BALL LOSSES, `passes:` line | `strategies[*].real_loss_kinds_as_a`, `ball_losses` (tables in `ball_losses.md`) | `analysis/turnover_breakdown.py` |
 | CHANCES | `strategies[*].chances`, `pass_progress_m`, `forward_pass_share` | `analysis/chances.py` |
-| None (in `summary.json` only) | `ratings` | `analysis/ratings.py` ([Ranking](#ranking)) |
 | FOULS | `fouls` | `MatchStats` |
-| STALLS | `stalled_match_count`, `stall_incidents`, per-match `stats.stall_events` | `MatchStats` stall watchdog |
+| STALLS | `stall_incidents`, `stalls_checked` (matches each strategy was checked in, as config_a), per-match `stats.stall_events` | `MatchStats` stall watchdog |
 | RESTARTS | `restarts` | `analysis/restart_outcomes.py` |
 | — | `results[*].stats` | per-match `MatchStats`, everything above per match |
 | — | `run` | git commit, dirty flag, argv: compare runs only at clean commits |
 
 **Figures:** [`signal_report.md`](signal_report.md) draws the main signals for the latest full
-round-robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on what stands out.
+round robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on what stands out.
 
-**Offline only** (not in a round-robin's output): `tools/metric_correlation.py <run_dir> ...`
+**Offline only** (not in `evaluate.py`'s output): `tools/metric_correlation.py <run_dir> ...`
 replays a run at 10 Hz for the signals marked *offline* below, and
 `python -m utama_core.analysis.goal_sources <run_dir>` writes the goal sources
 ([Where do goals come from?](#where-do-goals-come-from)).
@@ -86,7 +86,7 @@ Check these first: a broken strategy's other signals mean nothing.
 
 | Signal | Where | Meaning | Reference | If it's off |
 |---|---|---|---|---|
-| Stalls | STALLS; `stats.stall_events` | `RESTART_STALL`: a restart held > 15 s, with a one-line diagnosis. `COMMITTED_FROZEN`: ball moved < 5 cm for > 10 s in live play while a slot was committed, with who holds the ball | 10 of 231 matches | A bug to fix before anything else. Rerun with `round_robin.py --pair A B`, look with `tools/replay_trace.py` and `render_window()` |
+| Stalls | STALLS; `stats.stall_events` | `RESTART_STALL`: a restart held > 15 s, with a one-line diagnosis. `COMMITTED_FROZEN`: ball moved < 5 cm for > 10 s in live play while a slot was committed, with who holds the ball | 10 of 231 matches | A bug to fix before anything else. Restart it from its replay with `tools/repro_from_replay.py`, look with `tools/replay_trace.py` and `render_window()` |
 | Possession backstop | `results[*].possession_backstop` | possession pinned 100/0 with the ball barely moving: a freeze the watchdog missed | 0 | Same as a stall |
 | Restarts not taken | RESTARTS; `restarts.by_kind[*].outcomes` | a kickoff, free kick or penalty `voided`, `timeout`, `stopped_before_kick` instead of `taken` | free kicks: 3414 taken of 3467 | The taker can't reach or kick the ball: restart positioning, a planner clamp, a keep-out circle |
 | Fouls by rule | FOULS; `fouls` | every foul by rule, then strategy/tactic of the offending robot | per strategy 6.3 (`chameleon`) · 7.9 · 23.3 (`three_slot`); run: out_of_bounds 2938, excessive_dribbling 448, defense_area 310, crashing 307 | One tactic dominating a rule is its bug: dribbling too far, entering the box, driving into robots |
@@ -196,11 +196,11 @@ in game terms, and say what to do when it's off; correlation with results is not
 Put it where it's cheapest:
 
 - a count the match can keep as it plays: `MatchStats` (`engine/match_stats.py`). Changing it
-  changes every match's fingerprint, so the next round-robin plays everything again;
+  changes every match's fingerprint, so the next evaluation plays everything again;
 - anything else derived from replays, both sides: `ChanceTracker` (`analysis/chances.py`), fed
   from the replay pass the ball-loss breakdown already makes. Cached records keep the analysis
   they were stored with: delete the store to refresh them (`utama_core/replay/match_results.py`);
 - needing the intentions log (which tactic, which robot's role): `analysis/turnover_breakdown.py`,
   config_a only.
 
-Then add its row here with a reference range from a full round-robin.
+Then add its row here with a reference range from a full round robin (`evaluate.py --all`).
