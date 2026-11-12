@@ -109,7 +109,7 @@ MAX_EVENT_LINES = 30
 AGAINST_DIR = REPO_ROOT.parent / f"{REPO_ROOT.name}-moments-against"
 BUILD_ARTIFACTS = (
     "utama_core/motion_planning/fastpathplanning/_fastpathplanner.cpython-*.so",
-    "utama_core/rsoccer_simulator/Simulators/robosim/_robosim.cpython-*.so",
+    "utama_core/simulator/simulators/robosim/_robosim.cpython-*.so",
 )
 
 
@@ -525,7 +525,7 @@ def label(name: str) -> str:
 def play(m: Moment, strategy: str) -> list[Tick]:
     """Play `m` with `strategy` on our side (yellow) for `m.seconds`."""
     from utama_core.replay.scenario import apply_scenario
-    from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
+    from utama_core.simulator.utils.sim_noise import SimNoise
 
     def side(name: str):
         try:

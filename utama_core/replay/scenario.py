@@ -14,7 +14,7 @@ can start ticking (with `match_log` tracing on) from just before the stall.
 Coordinate frame: `GameFrame.friendly_robots`/`enemy_robots`/`ball` store
 positions in plain pitch-frame metres — the same frame
 `AbstractSimController.teleport_ball`/`teleport_robot` take directly (see
-`utama_core/rsoccer_simulator/ssl/ssl_gym_base.py`'s `teleport_ball`/
+`utama_core/simulator/ssl/ssl_gym_base.py`'s `teleport_ball`/
 `teleport_robot`, which do the y-flip into rsim's internal frame themselves;
 callers, including the teleport accuracy test in
 `utama_core/tests/run/test_teleport_position_accuracy.py`, pass

@@ -8,7 +8,7 @@ from utama_core.motion_planning.common.pose_ahead import (
     PoseAhead,
     control_latency_s,
 )
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 
 class MotionController(ABC):

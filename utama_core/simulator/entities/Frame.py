@@ -1,7 +1,7 @@
 from typing import Dict
 
-from utama_core.rsoccer_simulator.Entities.Ball import Ball
-from utama_core.rsoccer_simulator.Entities.Robot import Robot
+from utama_core.simulator.entities.Ball import Ball
+from utama_core.simulator.entities.Robot import Robot
 
 
 class Frame:

@@ -97,8 +97,8 @@ from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
-from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 from utama_core.run.sim_setup import load_side, sim_runner
+from utama_core.simulator.utils.sim_noise import SimNoise
 from utama_core.strategy import catalog
 
 _STILL_STALLED_WINDOW_S = 10.0

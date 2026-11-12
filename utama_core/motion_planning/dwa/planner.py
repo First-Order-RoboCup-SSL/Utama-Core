@@ -14,7 +14,7 @@ from utama_core.motion_planning.planning.geometry import (
     point_segment_distance,
 )
 from utama_core.motion_planning.planning.obstacles import ObstacleRegion, to_rectangles
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 
 class DynamicWindowPlanner:

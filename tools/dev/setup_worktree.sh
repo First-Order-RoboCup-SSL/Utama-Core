@@ -32,7 +32,7 @@ fi
 
 for rel in \
     utama_core/motion_planning/fastpathplanning \
-    utama_core/rsoccer_simulator/Simulators/robosim; do
+    utama_core/simulator/simulators/robosim; do
     for src in "$main_root/$rel"/_*.cpython-*.so; do
         [ -e "$src" ] || continue
         name="$(basename "$src")"

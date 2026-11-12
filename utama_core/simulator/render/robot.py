@@ -1,7 +1,7 @@
 import numpy as np
 import pygame
 
-from utama_core.rsoccer_simulator.Render.utils import COLORS, TAG_ID_COLORS
+from utama_core.simulator.render.utils import COLORS, TAG_ID_COLORS
 
 
 class RenderRobot:

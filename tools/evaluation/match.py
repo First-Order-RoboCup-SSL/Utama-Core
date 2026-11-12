@@ -29,10 +29,6 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
-from utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper import (
-    enable_sim_reuse,
-)
-from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 from utama_core.run.sim_setup import (  # noqa: F401 -- re-exported
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
@@ -40,6 +36,8 @@ from utama_core.run.sim_setup import (  # noqa: F401 -- re-exported
     sim_referee,
     sim_runner,
 )
+from utama_core.simulator.simulators.robosim.robosim_wrapper import enable_sim_reuse
+from utama_core.simulator.utils.sim_noise import SimNoise
 from utama_core.strategy import catalog
 from utama_core.strategy.catalog import plain_name
 
@@ -165,7 +163,7 @@ def run_match(
     Both sides use the fpp planner (`tools/motion_planning_benchmark.py` compares planners).
 
     `sim_noise`, if set, plays the match with seeded latency, kick speed noise and vision noise
-    (`utama_core/rsoccer_simulator/Utils/sim_noise.py`, `docs/sim_realism.md`). The draws
+    (`utama_core/simulator/utils/sim_noise.py`, `docs/sim_realism.md`). The draws
     depend on the seed, team colour and robot id only, so the same `sim_noise` gives every
     pairing the same physics.
     """

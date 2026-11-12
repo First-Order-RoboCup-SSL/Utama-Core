@@ -70,7 +70,7 @@ PLAYER_ROOTS = ("utama_core.motion_planning.common.control_schemes",)
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.
-SUBPROCESS_SCRIPTS = ("utama_core.rsoccer_simulator.Simulators.robosim.robosim_subprocess",)
+SUBPROCESS_SCRIPTS = ("utama_core.simulator.simulators.robosim.robosim_subprocess",)
 
 # Environment variables that change play: UTAMA_EXACT_MATH (`config/settings.py`) and the
 # thread/JIT knobs of numba and the BLAS numpy links against.

@@ -428,7 +428,7 @@ whoever runs it.
   `diagnosis` (ball in goal / past a line, taker not closing on the ball, taker at the ball but
   not kicking). The tournament prints a STALLS section, and writes it to `summary.json`; a
   possession-pinned backstop flags what the watchdog misses.
-- **Sim noise** (`rsoccer_simulator/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
+- **Sim noise** (`simulator/utils/sim_noise.py`, `--sim-noise JSON`) — seeded
   command latency per robot, kick speed and direction noise (a per-robot offset plus
   kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot
   speed and braking limits applied to the commands the sim acts on (hardware caps, the 4 m/s^2 command cap, no per-match acceleration draw,

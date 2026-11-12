@@ -79,7 +79,7 @@ def test_format_caps_the_lines_and_counts_the_rest():
 
 
 def test_resolve_sim_noise_uses_the_replays_own_settings_by_default():
-    from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
+    from utama_core.simulator.utils.sim_noise import SimNoise
 
     settings = SimNoise(seed=2, latency_s=(0.03, 0.15), kick_speed_sd=0.45).to_dict()
     noise, line = repro.resolve_sim_noise(None, {"settings": settings, "draw": {}})
@@ -109,7 +109,7 @@ def test_the_replays_stored_settings_redraw_the_same_robots():
     """The repro's draw is `SimNoise.draw` on the stored settings, so with the same robot counts and
     time step it is the match's own draw: latency ticks and kick offsets per robot, exactly."""
     from utama_core.config.settings import TIMESTEP
-    from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
+    from utama_core.simulator.utils.sim_noise import SimNoise
 
     noise = SimNoise(seed=2, latency_s=(0.03, 0.15), kick_speed_offset_sd=0.2, max_accel=(1.5, 3.5))
     counts = {"team_blue": 6, "team_yellow": 6}

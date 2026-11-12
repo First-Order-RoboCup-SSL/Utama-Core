@@ -33,7 +33,7 @@ from utama_core.motion_planning.fastpathplanning.numba_kernels import (
     scan_collides_nb,
     scan_find_subgoal_nb,
 )
-from utama_core.rsoccer_simulator.ssl.envs.standard_ssl import SSLStandardEnv
+from utama_core.simulator.ssl.envs.standard_ssl import SSLStandardEnv
 
 try:
     from utama_core.motion_planning.fastpathplanning import _fastpathplanner

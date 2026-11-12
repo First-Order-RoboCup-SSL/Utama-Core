@@ -467,7 +467,7 @@ Removed 2026-11-09: simulation models the measured world and assumes robots work
 A robot's calibrated profile now drives its kick in rsim when a run gives the profile (the
 examples do): ball speed `kick_speed` (yellow 0 2.19 m/s, blue 0 1.31, the medians of
 2026-10-28's kicks), direction bias + bend × ball offset + normal scatter of `kick_spread_deg`
-(`utama_core/rsoccer_simulator/Utils/real_kick.py`). rsim's ball leaves 0.26 m/s slower than
+(`utama_core/simulator/utils/real_kick.py`). rsim's ball leaves 0.26 m/s slower than
 the kick speed commanded, at 1 to 5 m/s, so the command adds that back. The strategy evaluation
 passes no profiles, so its matches are unchanged: whether evaluation should use our kick is the
 Phase 4 / roadmap 2a decision, not this one. Latency is not in this kick profile: rsim's latency is `SimNoise`'s (`reference/world.json`), and real robots predict their

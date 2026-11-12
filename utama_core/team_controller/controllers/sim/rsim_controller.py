@@ -2,7 +2,7 @@ from typing import Tuple
 
 from utama_core.config.settings import ADD_Y_COORD, REMOVAL_Y_COORD, TELEPORT_X_COORDS
 from utama_core.entities.game.field import FieldBounds
-from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
+from utama_core.simulator.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.team_controller.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )

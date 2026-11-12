@@ -17,11 +17,11 @@ from utama_core.entities.data.command import RobotResponse
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.data.referee import RefereeData
 from utama_core.geometry.math_utils import deg_to_rad, normalise_heading_deg, rad_to_deg
-from utama_core.rsoccer_simulator.Entities import Ball, Frame, Robot
-from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
-from utama_core.rsoccer_simulator.Utils import KDTree
-from utama_core.rsoccer_simulator.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.rsoccer_simulator.Utils.sim_noise import (
+from utama_core.simulator.entities import Ball, Frame, Robot
+from utama_core.simulator.ssl.ssl_gym_base import SSLBaseEnv
+from utama_core.simulator.utils import KDTree
+from utama_core.simulator.utils.gaussian_noise import RsimGaussianNoise
+from utama_core.simulator.utils.sim_noise import (
     CommandDelay,
     KickAngleNoise,
     KickSpeedNoise,

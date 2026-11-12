@@ -3,7 +3,7 @@ from enum import Enum
 
 import pygame
 
-from utama_core.rsoccer_simulator.Render.utils import COLORS
+from utama_core.simulator.render.utils import COLORS
 
 
 class OverlayType(Enum):

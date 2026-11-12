@@ -5,7 +5,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.motion_planning.pid.pid import get_pids
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 
 class PIDController(MotionController):

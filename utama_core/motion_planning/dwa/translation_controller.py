@@ -5,7 +5,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.motion_planning.common.acceleration_limiter import AccelerationLimiter
 from utama_core.motion_planning.dwa.config import DynamicWindowConfig
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 from .planner import DynamicWindowPlanner
 

@@ -25,8 +25,8 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.referee import CustomReferee
 from utama_core.referee.profiles.profile_loader import load_profile
-from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
+from utama_core.simulator.utils.sim_noise import SimNoise
 from utama_core.strategy import catalog
 
 N_OUTFIELD = 5  # + 1 goalkeeper per side

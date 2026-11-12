@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from utama_core.entities.data.command import RobotCommand, RobotResponse
-from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
+from utama_core.simulator.ssl.ssl_gym_base import SSLBaseEnv
 from utama_core.team_controller.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )

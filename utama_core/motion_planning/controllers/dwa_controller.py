@@ -7,7 +7,7 @@ from utama_core.motion_planning.dwa.translation_controller import (
     DWATranslationController,
 )
 from utama_core.motion_planning.pid import PID, get_pids
-from utama_core.rsoccer_simulator.ssl.envs.standard_ssl import SSLStandardEnv
+from utama_core.simulator.ssl.envs.standard_ssl import SSLStandardEnv
 
 
 class DWAController(MotionController):

@@ -26,7 +26,7 @@ from typing import Optional
 
 import numpy as np
 
-from utama_core.rsoccer_simulator.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.simulator.utils.gaussian_noise import RsimGaussianNoise
 
 COLOURS = ("team_blue", "team_yellow")
 

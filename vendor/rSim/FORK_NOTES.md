@@ -246,7 +246,7 @@ cmake --build build/rsim-py310 -j2
 mkdir -p build/rsim-override/robosim
 echo "from ._robosim import SSL, VSS" > build/rsim-override/robosim/__init__.py
 ln -s $(pwd)/build/rsim-py310/_robosim.cpython-310-x86_64-linux-gnu.so build/rsim-override/robosim/
-PYTHONPATH=$(pwd)/build/rsim-override pixi run pytest utama_core/tests/rsoccer_simulator --headless
+PYTHONPATH=$(pwd)/build/rsim-override pixi run pytest utama_core/tests/simulator --headless
 ```
 
 Installing for everyone is then a copy of that `.so` over

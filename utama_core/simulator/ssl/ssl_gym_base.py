@@ -11,19 +11,19 @@ import numpy as np
 import pygame
 
 from utama_core.geometry.math_utils import rad_to_deg
-from utama_core.rsoccer_simulator.Entities import Ball, Field, Frame, Robot
-from utama_core.rsoccer_simulator.Render import (
+from utama_core.simulator.entities import Ball, Field, Frame, Robot
+from utama_core.simulator.render import (
     COLORS,
     RenderBall,
     RenderSSLRobot,
     SSLRenderField,
 )
-from utama_core.rsoccer_simulator.Render.overlay import (
+from utama_core.simulator.render.overlay import (
     OverlayObject,
     OverlayType,
     RenderOverlay,
 )
-from utama_core.rsoccer_simulator.Simulators.rsim import RSimSSL
+from utama_core.simulator.simulators.rsim import RSimSSL
 
 
 class SSLBaseEnv:

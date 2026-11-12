@@ -5,7 +5,7 @@ Durable context for any coding agent (not just Claude) working in this repo.
 ## What this repo is
 
 Utama-Core is the RoboCup SSL (Small Size League) team's robot-control stack: vision
-ingestion, motion planning, robot control, a simulator (`rsoccer_simulator`, "rsim"), and
+ingestion, motion planning, robot control, a simulator (`utama_core/simulator`, "rsim"), and
 the strategy layer that decides what each robot does. `Utama-Strategy` is a sibling repo
 and is stale — all active strategy work happens here, on top of the tactic-kernel model.
 
@@ -20,7 +20,7 @@ exists yet: say so in your change rather than guessing.
 | Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/referee/` | `docs/referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
-| Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
+| Simulation | `utama_core/simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `utama_core/simulator` is the Python env on top of it |
 | Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
 
 ## Glossary
@@ -102,7 +102,7 @@ One term per thing; reuse these instead of coining new ones.
 - `utama_core/analysis/` — offline analyses of tournament runs and replays (`turnover_breakdown`,
   `restart_outcomes`, `stuck_detector`, `render_window`, `render_clip`, `list_runs`). Imports
   `replay/`; `replay/` never imports it.
-- Everything else (`motion_planning/`, `rsoccer_simulator/`, `team_controller/`,
+- Everything else (`motion_planning/`, `simulator/`, `team_controller/`,
   `data_processing/`, `entities/`, `geometry/`) is infrastructure the strategy layer
   sits on top of. Writing a strategy rarely needs to change it, but it is the main work area
   for planner, simulator, vision and hardware work: see the Work areas table above.

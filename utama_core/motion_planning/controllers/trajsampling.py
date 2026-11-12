@@ -43,7 +43,7 @@ from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.motion_planning.pid.pid import get_pids
 from utama_core.motion_planning.trajsampling.config import trajsamplingconfig as config
 from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 _PARAMS_BY_MODE = {Mode.RSIM: RSIM_PARAMS, Mode.GRSIM: GRSIM_PARAMS, Mode.REAL: REAL_PARAMS}
 

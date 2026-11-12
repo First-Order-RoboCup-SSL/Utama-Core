@@ -9,8 +9,8 @@ from utama_core.config.robot_params import REAL_PARAMS
 from utama_core.motion_planning.controllers.fastpathplanning import (
     FastPathPlanningController,
 )
-from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 from utama_core.run.strategy_runner import StrategyRunner
+from utama_core.simulator.utils.sim_noise import SimNoise
 
 TEAM = SimpleNamespace(motion_controller=FastPathPlanningController)
 

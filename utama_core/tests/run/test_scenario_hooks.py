@@ -3,8 +3,8 @@ from unittest.mock import Mock
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.referee import CustomReferee
-from utama_core.rsoccer_simulator.ssl import ssl_gym_base
 from utama_core.run.strategy_runner import StrategyRunner
+from utama_core.simulator.ssl import ssl_gym_base
 
 
 def test_strategy_runner_step_once_delegates_to_single_step_loop():

@@ -46,14 +46,14 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.referee import CustomReferee, RefereeGeometry
-from utama_core.rsoccer_simulator.Render import COLORS, SSLRenderField
-from utama_core.rsoccer_simulator.Render.ball import RenderBall
-from utama_core.rsoccer_simulator.Render.overlay import (
+from utama_core.simulator.render import COLORS, SSLRenderField
+from utama_core.simulator.render.ball import RenderBall
+from utama_core.simulator.render.overlay import (
     OverlayObject,
     OverlayType,
     RenderOverlay,
 )
-from utama_core.rsoccer_simulator.Render.robot import RenderSSLRobot
+from utama_core.simulator.render.robot import RenderSSLRobot
 
 # ---------------------------------------------------------------------------
 # Scene definition

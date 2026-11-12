@@ -3,13 +3,9 @@
 import numpy as np
 import pytest
 
-from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.rsoccer_simulator.Utils.sim_noise import (
-    CommandDelay,
-    KickSpeedNoise,
-    SimNoise,
-)
+from utama_core.simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.utils.gaussian_noise import RsimGaussianNoise
+from utama_core.simulator.utils.sim_noise import CommandDelay, KickSpeedNoise, SimNoise
 
 N = {"team_blue": 2, "team_yellow": 2}
 TICK = 1 / 60

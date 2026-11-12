@@ -2,8 +2,8 @@ from typing import Dict, List
 
 import numpy as np
 
-from utama_core.rsoccer_simulator.Entities import Field, Frame, FrameSSL
-from utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper import (
+from utama_core.simulator.entities import Field, Frame, FrameSSL
+from utama_core.simulator.simulators.robosim.robosim_wrapper import (
     RSimSubprocessWrapper,
     acquire_simulator,
 )
