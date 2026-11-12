@@ -43,11 +43,6 @@ One term per thing; reuse these instead of coining new ones.
   the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
-- **Screen** — `tools/screen.py STRATEGY --base REF`: did a change to one strategy do anything in
-  play? Short paired starts of the strategy now against itself at REF, from live-play moments of a
-  run's replays; reports how often the change fired and a call by a fixed rule. Never a verdict, never
-  two strategies, never in the ledger. On trial until its calls match `evaluate.py`'s verdicts on real
-  changes (`docs/strategy_tools_plan.md`); until then evaluate whatever it says.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
   `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always

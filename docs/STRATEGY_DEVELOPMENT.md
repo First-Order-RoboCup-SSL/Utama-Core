@@ -330,13 +330,6 @@ flowchart TD
   against the champion (12 matches, not the 66 of a full round-robin), defaulting to `--sim-noise
   reference:2` so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2. Read
   its STALLS section; a strategy's verdict still comes from `evaluate.py`.
-- **Screen** (`tools/screen.py STRATEGY --base REF`, on trial): before an evaluation, did a change to one
-  strategy do anything in play? It plays the strategy now and as it was at REF from the same 60 starts of
-  20 s of live play, drawn from a run's replays, against the base under the same noise, and reports how
-  often the two diverged ("fired") and the paired differences, in about 4 minutes. Its call (`WORTH EVALUATING`, `SKIP: did
-  not fire`, `SKIP: fewer goals in the starts`) follows a rule fixed in advance; it never writes the
-  ledger and never compares two strategies. Until its track record is in
-  ([strategy_tools_plan.md](strategy_tools_plan.md), "The screen"), run `evaluate.py` whatever it says.
 - **Before promoting** a candidate called better, run `evaluate.py <name> --held-out`: it must not
   be clearly worse against opponents never used for selection. Then edit the champion in
   `reference/opponents.json` by hand. Check its per-opponent table: a candidate far better against one opponent and worse
