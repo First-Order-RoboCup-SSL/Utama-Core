@@ -199,7 +199,7 @@ class _OscillatingObstacleTactic(BaseTactic[_OscillateMem]):
 def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
     """`obstacle_configs`: list of objects with `center_position`,
     `oscillation_axis`, `amplitude`, `direction_up_or_right`, `speed`
-    (matching `MovingObstacleConfig` in `single_robot_moving_obstacle_test.py`)
+    (matching `MovingObstacleConfig` in `test_single_robot_moving_obstacle.py`)
     — obstacle_id is assigned by list position (0, 1, 2, ...), matching the
     deleted BT strategy's convention."""
     configs = [

@@ -27,7 +27,7 @@ Setup
 
 Running
 -------
-    pixi run pytest utama_core/tests/strategy_runner/test_ball_placement_rsim.py -v
+    pixi run pytest utama_core/tests/run/test_ball_placement_rsim.py -v
 
 Known gap
 ---------

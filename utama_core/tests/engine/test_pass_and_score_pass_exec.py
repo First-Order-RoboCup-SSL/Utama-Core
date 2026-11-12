@@ -30,7 +30,7 @@ def runner():
     # `runner_factory` (not shared via conftest — duplicated here rather
     # than introducing new shared test infra for one extra file).
     from utama_core.run.strategy_runner import StrategyRunner
-    from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+    from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
     r = StrategyRunner(
         strategy=DummyStrategy(),

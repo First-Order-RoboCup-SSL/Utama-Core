@@ -666,7 +666,7 @@ class FastPathPlanner:
         # `multiple` (and which obstacle blocked last) changes, so this loops
         # instead, computing the direction once. Same arithmetic, same order,
         # so the same subgoal bit-for-bit (pinned against the recursive
-        # version in fastpathplanner_equivalence_test.py).
+        # version in test_fastpathplanner_equivalence.py).
         direction = target - robot_pos
         direction_norm = math.hypot(direction[0], direction[1])
         unitvec = None
@@ -1301,7 +1301,7 @@ class FastPathPlanner:
         # A first subgoal sitting exactly on the robot (the detour recursion can
         # produce one) has no direction to normalise: dividing by its zero length
         # returned a NaN carrot. Skip such segments. Found by
-        # fastpathplanner_corner_test.py (a robot beside two blockers at the
+        # test_fastpathplanner_corner.py (a robot beside two blockers at the
         # enemy box corner).
         while len(trajectory) > 1 and math.hypot(*(trajectory[0][1] - robot_position)) == 0.0:
             trajectory = trajectory[1:]

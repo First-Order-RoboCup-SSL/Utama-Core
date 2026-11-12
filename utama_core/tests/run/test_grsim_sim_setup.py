@@ -7,7 +7,7 @@ from utama_core.entities.game.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
 
 class _FakeGRSimController:

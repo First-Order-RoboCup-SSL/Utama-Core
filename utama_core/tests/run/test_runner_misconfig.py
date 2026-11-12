@@ -13,7 +13,7 @@ from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run.referee_source import OfficialReferee
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
 
 @pytest.fixture

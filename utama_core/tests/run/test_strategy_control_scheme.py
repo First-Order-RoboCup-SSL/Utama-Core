@@ -13,7 +13,7 @@ from utama_core.motion_planning.controllers import (
 )
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.strategy.catalog import builder
-from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
 
 def _dummy_factory(motion_controller):

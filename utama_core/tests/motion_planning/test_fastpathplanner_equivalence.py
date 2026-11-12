@@ -10,7 +10,7 @@ ticks -- and requires exactly equal results.
 
 This is the exact-numerics contract (`EXACT_MATH`, settings.py), so every
 test here runs with the exact implementations selected whatever the
-environment says; fastpathplanner_fast_math_test.py covers the fast ones.
+environment says; test_fastpathplanner_fast_math.py covers the fast ones.
 """
 
 import math

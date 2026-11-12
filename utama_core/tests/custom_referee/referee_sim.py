@@ -1,7 +1,7 @@
 """Visual RSim simulation for verifying referee command behaviour.
 
 Run with:
-    pixi run python utama_core/tests/referee/referee_sim.py
+    pixi run python utama_core/tests/custom_referee/referee_sim.py
 
 What it does:
   - Starts a 3v3 RSim with WanderingTactic as the base strategy.
@@ -31,7 +31,7 @@ from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import wandering_strategy
+from utama_core.tests.custom_referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration

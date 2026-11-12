@@ -1,7 +1,7 @@
 """Boundary-condition and randomized-invariant sweep over `BangBang1D`/
 `Trajectory2D` (`utama_core/motion_planning/trajsampling/bang_bang.py`).
 
-`trajsampling_correctness_test.py` (read before writing this file) already
+`test_trajsampling_correctness.py` (read before writing this file) already
 covers: rejecting non-positive `v_max`/`a_max`; endpoint/kinematic invariants
 for a handful of hand-picked (p0, v0, p1, v_max, a_max) tuples, including one
 opposing-v0 case; position-continuity at the trajectory's own end time;
@@ -393,7 +393,7 @@ def test_trajectory_2d_random_velocity_cap_and_continuity(seed):
 @pytest.mark.parametrize("seed", range(50))
 def test_trajectory_2d_p0_equals_p1_with_nonzero_v0(seed):
     """The degenerate zero-distance case (pins fe6a07e's fix at the
-    `Trajectory2D` level, complementing `trajsampling_correctness_test.py`'s
+    `Trajectory2D` level, complementing `test_trajsampling_correctness.py`'s
     single hand-picked case with a random sweep): braking uses v0's own
     direction, not a fixed axis, so the full speed is captured and the
     robot actually comes to rest at p0."""

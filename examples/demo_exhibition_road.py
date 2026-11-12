@@ -49,7 +49,7 @@ from utama_core.custom_referee.profiles.profile_loader import (
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import wandering_strategy
+from utama_core.tests.custom_referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration

@@ -47,7 +47,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
         ".github/workflows/ci.yml",
         # Prefix matches on whole directory names only.
         "utama_core/strategy_runner/x.py",
-        "utama_core/tests/strategy_runner/test_x.py",
+        "utama_core/tests/run/test_x.py",
         "docs/strategies.md.bak",
     ],
 )

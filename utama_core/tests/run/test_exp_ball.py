@@ -21,7 +21,7 @@ from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
 )
-from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 

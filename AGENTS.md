@@ -143,7 +143,7 @@ declarations) — check there before reintroducing one of them.
   In rsim, `run_test`'s `episode_timeout` is game time (rsim runs several times faster than
   real time), so a test's budget doesn't depend on machine load.
 - A known defect is a `strict=True` xfail on exactly the cases that hit it (see
-  `bang_bang_edge_cases_test.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
+  `test_bang_bang_edge_cases.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
   a regression elsewhere fails. Don't chase rsim-only dribble test failures as if they were
   kernel bugs; verify on grsim if genuinely unsure.
 - Before trusting any test result (yours or another agent's), prefer independently
@@ -186,6 +186,6 @@ need most:
   diagnostics, not objectives.
 - `docs/strategies.md` — strategy catalog: core or reserve, description, and real match
   results per strategy.
-- `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
+- `utama_core/tests/engine/` and `utama_core/tests/run/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.

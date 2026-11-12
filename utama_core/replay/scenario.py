@@ -17,7 +17,7 @@ positions in plain pitch-frame metres — the same frame
 `utama_core/rsoccer_simulator/ssl/ssl_gym_base.py`'s `teleport_ball`/
 `teleport_robot`, which do the y-flip into rsim's internal frame themselves;
 callers, including the teleport accuracy test in
-`utama_core/tests/strategy_runner/teleport_position_accuracy_test.py`, pass
+`utama_core/tests/run/test_teleport_position_accuracy.py`, pass
 plain (x, y) metres and get them back unchanged on the next frame). There is
 no additional per-team-color mirroring at the `GameFrame` layer — that only
 exists one level up, in kernel-tactic target *storage* (see
@@ -26,7 +26,7 @@ not `GameFrame` positions). So `scenario_from_replay` can read a frame's
 `p.x`/`p.y`/`orientation` and hand them to `apply_scenario` unchanged; this
 is verified by `apply_scenario` itself reading back the first post-teleport
 `GameFrame` and asserting positions match within a few cm (mirroring
-`teleport_position_accuracy_test.py`'s `POSITION_TOLERANCE`).
+`test_teleport_position_accuracy.py`'s `POSITION_TOLERANCE`).
 
 A replay only ever records one side's perspective (`ReplayWriterConfig`/
 `ColumnarReplayWriterConfig.is_my_perspective`, and
@@ -100,7 +100,7 @@ from utama_core.strategy.catalog import plain_name
 
 logger = logging.getLogger(__name__)
 
-_POSITION_TOLERANCE_M = 0.15  # mirrors teleport_position_accuracy_test.py's POSITION_TOLERANCE
+_POSITION_TOLERANCE_M = 0.15  # mirrors test_teleport_position_accuracy.py's POSITION_TOLERANCE
 _VERIFY_MAX_TICKS = 10  # see apply_scenario's verify=True docstring for why more than 1 tick is needed
 _SHOWING_WINDOW_S = 0.5  # how far past `t_seconds` `scenario_from_replay(showing=...)` looks
 _CLOCK_EPS_S = 1e-6  # float slack when a frame time sits exactly on a window edge
@@ -428,7 +428,7 @@ def _overwrite_current_game_frame(side, scenario: Scenario, *, my_is_friendly: b
 def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     """Teleport `runner`'s ball and every robot into `scenario`'s field
     state, through `runner.sim_controller` (the same public attribute
-    `teleport_position_accuracy_test.py` drives directly).
+    `test_teleport_position_accuracy.py` drives directly).
 
     Friendly robots are teleported as `runner.my_team_is_yellow`'s color,
     enemy robots as the opposite color — matching how the replay was
@@ -456,7 +456,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     a coordinate-frame regression fails loudly instead of silently
     producing a wrong repro. More than one tick is needed in practice, not
     just the "one frame of physics settling"
-    `teleport_position_accuracy_test.py`'s `POSITION_TOLERANCE` was sized
+    `test_teleport_position_accuracy.py`'s `POSITION_TOLERANCE` was sized
     for: a robot/ball teleported far from wherever the runner's initial
     formation placed it (the normal case here — a real match's positions
     are essentially always far from a fresh runner's starting formation,
@@ -492,7 +492,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     # direction of travel (observed: robot teleported to x=0.68 landed at
     # x=1.35 one tick later — reproduces exactly from the filter's own
     # closed-form update, not noise or a coordinate-frame bug).
-    # `teleport_position_accuracy_test.py` never hits this because it
+    # `test_teleport_position_accuracy.py` never hits this because it
     # teleports inside `reset_field()`, which `StrategyRunner._reset_game()`
     # always follows with `position_refiner.reset()` *and* a full
     # `GameGater`-driven `_load_game()` reload — which is what actually

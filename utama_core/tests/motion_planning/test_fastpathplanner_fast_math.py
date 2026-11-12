@@ -1,7 +1,7 @@
 """The fast numerics (`EXACT_MATH` off, the default) compute what the exact
 ones do, up to rounding: on random scenes every fast planner step makes the
 same choice (same obstacle, same None/not-None) and lands within 1e-9 m of
-the exact result. fastpathplanner_equivalence_test.py pins the exact ones bit
+the exact result. test_fastpathplanner_equivalence.py pins the exact ones bit
 for bit against the pre-rewrite code."""
 
 import math

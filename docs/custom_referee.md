@@ -140,7 +140,7 @@ last-touch heuristic and its yellow default (replaced by `infer_last_touch_team`
 ball speed, full-episode reset, teams changing ends at half-time,
 `bt_nodes` → `debug_status` rename, auto-advance after goals/timeouts, keep-out during bare
 `STOP`, blue-perspective goal tests, `StrategyRunner` integration tests
-(`tests/strategy_runner/test_referee_rsim.py`, `test_ball_placement_rsim.py`),
+(`tests/run/test_referee_rsim.py`, `test_ball_placement_rsim.py`),
 `force_start_after_goal`.
 
 ## Running
