@@ -46,8 +46,9 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
 ```
 
 - Read the first line of each round: "N matches, X from the match results store, M to play".
-  After a change to one strategy, M is about its own 5 matches per round. Much more means
-  shared code changed since the store was filled; say so before waiting on it.
+  After a change to one strategy, M is its own matches: one against each other player (5 with
+  today's core, 6 for a new strategy). Much more means shared code changed since the store was
+  filled (then the whole round robin plays); say so before waiting on it.
 - Round 1 is a round robin: a stall reported there is a bug. Fix it (the `debug-incident`
   skill) before reading the verdict.
 - The verdict is goals only: better (P ≥ 0.99), worse (P ≤ 0.2) or undecided after 6 rounds.
@@ -56,10 +57,12 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
 ## 5. Record and promote
 
 - Add or update the strategy's row in `docs/strategies.md` with the verdict and margin.
-- Better than the champion: promoting is one line in `tools/evaluation/reference/players.json`
-  (`champion`, and the core if it should play every round), in the pull request. It becomes the
-  reference at the next release.
 - Open a draft pull request into `main` with the result. An agent never merges.
+- Better than the champion: promoting is one line in `tools/evaluation/reference/players.json`
+  (`champion`, and the core if it should play every round), in its own small pull request after
+  the strategy's is merged: CI rejects a `strategy/*` branch that touches anything outside the
+  strategy files. It becomes the reference at the next release (evaluate.py reads the champion
+  from `players.json` as it was at that release).
 
 ## Rules
 

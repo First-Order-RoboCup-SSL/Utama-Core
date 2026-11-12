@@ -1,6 +1,6 @@
 """Figures of a round-robin's strategy signals (`docs/signals.md`) for `docs/signal_report.md`.
 
-    pixi run python tools/signal_report.py replays/tournament_<id> [--out docs/img/signals]
+    pixi run python tools/signal_report.py replays/eval_<id>/round_1 [--out docs/img/signals]
 
 Replays the run's saved matches through `turnover_breakdown.analyse_match` (which carries
 `chances`), so it works on runs recorded before chances were measured; it covers the matches

@@ -1,7 +1,7 @@
 """The matches in a run dir: which two strategies a replay is between, and the score it ended on.
 
-A match file's stem is `<config_a>_vs_<config_b>` (round-robin) or `<config_a>_vs_<config_b>_s<seed>` (an
-evaluate.py run). config_a is the friendly side (yellow) in every run. Shared by `tools/evaluation/explain.py`
+A match file's stem is `<config_a>_vs_<config_b>` (an evaluate.py round folder, or an old round-robin);
+evaluate.py runs before 2026-11-12 added `_s<seed>`, still read. config_a is the friendly side (yellow) in every run. Shared by `tools/evaluation/explain.py`
 and `tools/find_bugs.py`.
 """
 

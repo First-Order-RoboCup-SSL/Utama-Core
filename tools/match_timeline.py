@@ -2,7 +2,7 @@
 # ruff: noqa: E402
 """One match window as swimlanes: referee command, each robot's tactic, distance to the ball, events.
 
-    pixi run python tools/match_timeline.py replays/tournament_<id>/<a>_vs_<b>.npz 100 160 --side friendly
+    pixi run python tools/match_timeline.py replays/eval_<id>/round_1/<a>_vs_<b>.npz 100 160 --side friendly
 
 Stacked panels on one time axis (Gantt-style, no dual axes):
 1. the referee command band: live play, STOP, kickoff, free kick, penalty, placement, HALT (goal and

@@ -521,7 +521,7 @@ Writing `ball_seen` into converted logs would let a later pass tell hidden from 
 
 Built instead of a cheaper outcome (V, shots, xG, stat combinations: all rejected, see
 `docs/signals.md`, "Ranking"): `tools/evaluation/evaluate.py` judges a candidate against the
-champion of a fixed set of reference opponents (`tools/evaluation/reference/opponents.json`) in rounds of seeded
+champion at the last release, in rounds of the same round robin of the core (`tools/evaluation/reference/players.json`) under seeded
 noisy matches, with ratings from goal margins (`analysis/ratings.py`) and a store of every
 match (`replays/match_results/`); see `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy".
 This covers Phase 4's "several seeds per pairing, paired seeds for A/B".

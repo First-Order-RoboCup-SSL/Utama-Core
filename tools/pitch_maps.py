@@ -1,6 +1,6 @@
 """On-pitch pictures of how each strategy plays, from one round-robin run.
 
-    pixi run python tools/pitch_maps.py replays/tournament_<id> [--out docs/img/signals]
+    pixi run python tools/pitch_maps.py replays/eval_<id>/round_1 [--out docs/img/signals]
 
 Every strategy gets one panel per figure, in `signal_report`'s order (points per match). All
 panels use one frame: the strategy attacks toward +x, its own goal is on the left (-x), and

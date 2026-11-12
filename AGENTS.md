@@ -58,7 +58,7 @@ One term per thing; reuse these instead of coining new ones.
   while a candidate is undecided, decided on paired results (candidate and reference against the same
   opponent under the same noise, `analysis/ratings.py`) and stopping once the answer is clear. Every
   match goes to the match results store (`replays/match_results/`, `replay/match_results.py`); a match
-  the store holds is never played again. Promoting is a one-line change to `players.json` in a PR.
+  the store holds is never played again. Promoting is a one-line change to `players.json` in a PR; it takes effect as the reference at the next release.
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
 - **Strategy file** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a

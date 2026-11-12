@@ -34,10 +34,10 @@ does something else, the ball goes elsewhere, or our robot never gets there.
 
 A moment comes from a replay (`capture`); `save` and `load` refuse an invalid one, naming each
 problem (ids, field lines, check and strategy names). Starting points: our side's fouls in a run,
-`pixi run python tools/find_bugs.py replays/tournament_<id> --fouls` (until 2026-11-11 `moments.py fouls`).
+`pixi run python tools/find_bugs.py replays/eval_<id>/round_1 --fouls` (until 2026-11-11 `moments.py fouls`).
 Capture one from a replay (its noise and designated position come with it; `--out` writes
 elsewhere than utama_core/tests/moments/):
-    pixi run python tools/moments.py capture replays/tournament_<id>/<a>_vs_<b>.npz --t 254.65 \\
+    pixi run python tools/moments.py capture replays/eval_<id>/round_1/<a>_vs_<b>.npz --t 254.65 \\
         --name free_kick_defender_drives_in --check keeps_clear --strategy <a> --opponent <b> \\
         --note "..." [--out PATH]
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):

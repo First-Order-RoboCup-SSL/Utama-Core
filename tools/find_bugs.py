@@ -32,7 +32,7 @@ own restarts, `--by strategy,rule` counts per combination instead (columns: stra
 restart), `--json` writes JSON. `out_of_bounds`, the ball leaving the field, is a stoppage and is left out
 unless `--include-stoppages` (`utama_core/analysis/fouls.py`; until 2026-11-11 `moments.py fouls`).
 
-    pixi run python tools/find_bugs.py replays/tournament_<id> --fouls [--rule keep_out] [--by strategy,rule]
+    pixi run python tools/find_bugs.py replays/eval_<id>/round_1 --fouls [--rule keep_out] [--by strategy,rule]
 """
 
 from __future__ import annotations
@@ -420,7 +420,9 @@ def main() -> None:
         description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "run_dir", type=Path, help="a round-robin dir (replays/tournament_<id>) or any dir of match .npz files"
+        "run_dir",
+        type=Path,
+        help="a round folder (replays/eval_<id>/round_<k>), an old replays/tournament_<id>, or any dir of match .npz files",
     )
     parser.add_argument(
         "--strategy",

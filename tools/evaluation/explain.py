@@ -5,8 +5,8 @@
 Explains a verdict; it never makes one. Goals (`evaluate.py`'s verdict) are the only ranking;
 these pictures and numbers show how the two strategies played, so a search agent can see WHY a
 candidate won or lost. Each strategy's view is every match it played in the run dir, against any
-opponent (`find_matches`): a match file's stem is `<config_a>_vs_<config_b>` (round-robin) or
-`<config_a>_vs_<config_b>_s<seed>` (an evaluate.py run), and config_a is the friendly side.
+opponent (`find_matches`): a match file's stem is `<config_a>_vs_<config_b>` (an evaluate.py round folder or an old round-robin; evaluate.py runs before
+2026-11-12 added `_s<seed>`), and config_a is the friendly side.
 
 Writes to DIR:
 

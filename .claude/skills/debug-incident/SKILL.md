@@ -22,7 +22,8 @@ then confirm with the numbers in its message. Only the friendly side (config_a) 
 
 ## 2. Look at it
 
-Pick the tool by the question; each picture tool takes `--findings` to write its flags as JSON.
+Pick the tool by the question. `match_timeline.py`, `restart_picture.py` and `plan_trace.py` take
+`--findings` to write their flags as JSON.
 
 | Question | Command |
 |---|---|

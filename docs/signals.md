@@ -54,7 +54,7 @@ match results store (`replays/match_results/`).
 
 Every `tools/evaluation/evaluate.py` run prints round 1's sections and writes each round's data to
 `replays/eval_<id>/round_<k>/summary.json` (round 1's also in `report.json`; older round-robins:
-`replays/tournament_<id>/summary.json`, with `standings` and `ratings` too):
+`replays/tournament_<id>/summary.json`, which also had `standings` and `ratings`; evaluate.py has neither):
 
 | Printed section | `summary.json` key | Computed by |
 |---|---|---|
