@@ -53,6 +53,8 @@ genuinely useful passes from one racking up short, pointless ones, so this
 gives post-match tooling that signal directly from `MatchStats` without a
 replay re-trace. See `MatchStats.pass_distances_m`'s docstring for the exact
 definitions and `_record_pass_quality` for where they're computed.
+
+`tools/metric_correlation.py`, cited below, was deleted on 2026-11-12; it is in git history.
 """
 
 from __future__ import annotations

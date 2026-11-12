@@ -45,7 +45,7 @@ pixi run python tools/field/robot_calibration.py replays/field/<run>.log.gz
 - **Dribbler Retention**: Sustained carry velocity and turn rate caps before the ball escapes (0.3 m/s, 0.6 rad/s).
 - **Output**: Writes `<run>.calibration.json`.
 
-### Tag Alignment Calibration (`tools/tag_calibration.py`)
+### Tag Alignment Calibration (`utama_core/analysis/tag_calibration.py`)
 Measures optical tag placement relative to the chassis center:
 ```bash
 pixi run python -m utama_core.analysis.tag_calibration replays/field/<run>.log.gz

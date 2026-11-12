@@ -8,7 +8,7 @@ Run:
 What it does:
   - Uses GREAT_EXHIBITION_FIELD_DIMS (4 m × 3 m) — the compact field sized
     for the Exhibition Road festival venue.
-  - Builds a custom RefereeProfile inline (same style as Utama-Strategy/main.py)
+  - Builds a custom RefereeProfile inline (same style as `main.py`, run with `pixi run main` in this repo)
     with all rules enabled and human-operator auto-advance settings so a
     festival steward can control the game from the browser GUI.
   - 2v2 format: two yellow robots vs two blue robots, matching the small field.

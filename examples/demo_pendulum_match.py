@@ -1,5 +1,5 @@
 # ruff: noqa: E402
-"""Visible grsim 6v6: both teams run the split-shape kernel Strategy against each other.
+"""Visible grsim 6v6: both teams run the pendulum Strategy against each other.
 
 Not a test — a manual/visual smoke run for reviewing LeadAndSupportTactic /
 ShadowAndMarkTactic / the possession-split picker actually contesting an

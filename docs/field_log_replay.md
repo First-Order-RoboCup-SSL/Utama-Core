@@ -32,7 +32,7 @@ Missing:
 - a per-tick view that sets the raw camera, the refined world and the command side by side;
 - rerunning the decision code on the recorded inputs.
 
-## The tool: `tools/field_replay.py`
+## The tool (not built yet)
 
 Three subcommands, each one step of the loop.
 
