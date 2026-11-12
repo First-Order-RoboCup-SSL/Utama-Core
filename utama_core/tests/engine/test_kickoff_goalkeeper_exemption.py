@@ -59,10 +59,10 @@ def _set_referee_command(
 
 
 @pytest.fixture
-def split_shape_runner():
+def pendulum_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -87,7 +87,7 @@ def nonzero_keeper_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
     strategy = AbstractStrategy(
-        build=builder("split_shape", (0, 1, 2, 4, 5)),
+        build=builder("pendulum", (0, 1, 2, 4, 5)),
         goalkeeper_id=3,
     )
     runner = StrategyRunner(
@@ -181,23 +181,23 @@ def test_their_kickoff_nonzero_keeper_is_never_in_defensive_wall(nonzero_keeper_
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"non-keeper robot {rid} inside centre keep-out zone"
 
 
-def test_our_kickoff_default_keeper_id_zero_still_exempt(split_shape_runner):
+def test_our_kickoff_default_keeper_id_zero_still_exempt(pendulum_runner):
     """Regression check for the common case: with the default `goalkeeper_id=0`
     (matching `TeamInfo`'s default `goalkeeper=0`), robot 0 must still be
     excluded from both kicker-selection and the support formation — this
     isn't relying on "any non-zero ID," it must hold for the original
     id-0 case too. As with the non-zero-keeper tests above, "exempt" means
     "goes to GoalkeeperTactic's own-goal tracking," not "frozen.\" """
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
-    split_shape_runner.sim_controller.teleport_robot(True, 0, -3.0, 2.0, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 0, -3.0, 2.0, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW, yellow_goalkeeper=0)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW, yellow_goalkeeper=0)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     keeper = game.friendly_robots[0]
     dist_keeper_to_ball = math.hypot(keeper.p.x - game.ball.p.x, keeper.p.y - game.ball.p.y)
@@ -309,7 +309,7 @@ def test_our_kickoff_with_only_keeper_present_does_not_raise(nonzero_keeper_runn
     assert step.blackboard.cmd_map == {}
 
 
-def test_their_kickoff_from_the_wrong_half_goes_round_the_centre_circle(split_shape_runner):
+def test_their_kickoff_from_the_wrong_half_goes_round_the_centre_circle(pendulum_runner):
     """After a goal the conceding team is still in the scorer's half (STOP only clears
     robots near the ball). At PREPARE_KICKOFF they drove straight at their own-half
     spots through the centre circle and lingered inside the keep-out radius, so
@@ -321,7 +321,7 @@ def test_their_kickoff_from_the_wrong_half_goes_round_the_centre_circle(split_sh
     from utama_core.custom_referee.geometry import RefereeGeometry
     from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
 
-    runner = split_shape_runner
+    runner = pendulum_runner
     game = runner.my.game
     runner.step_once()
     # my_team_is_right=True: our half is +x. Line the outfield robots up in the

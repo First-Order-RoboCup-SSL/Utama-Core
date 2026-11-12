@@ -494,7 +494,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # open, otherwise carry it toward one (`_score_goal`), so "assess"
             # never advancing past itself is fine. It used to hold the ball
             # where it stood, which held it forever: at its own corner free
-            # kicks overload_press's lone switch robot stopped 0.13 m from the
+            # kicks avalanche's lone switch robot stopped 0.13 m from the
             # ball (inside the visual has_ball box, short of contact) for 10 s
             # until no_progress, with the overload slot committed and waiting
             # (tournament_20261005_170958: vs split_shape t=479, vs three_slot

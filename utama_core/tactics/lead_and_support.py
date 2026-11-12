@@ -73,7 +73,7 @@ def _candidate_support_points(game: Game, count: int) -> list[Vector2D]:
     # boundary itself, right through the enemy defense area — an outfield
     # robot standing there is an attacker-infringement foul
     # (`DefenseAreaRule`). Found via 20 `defense_area` fouls in one live
-    # match (`overload_press`'s "counter" slot uses this tactic on every
+    # match (`avalanche`'s "counter" slot uses this tactic on every
     # tick it doesn't have the ball). Clamp the deep edge with the same
     # box-avoidance helper `decoy_and_overload.py`'s `_overload_target` uses.
     clamped_edge = clamp_outside_enemy_defense_area(game, Vector2D(x_hi, 0.0)).x

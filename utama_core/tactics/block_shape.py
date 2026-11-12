@@ -23,7 +23,7 @@ continuous shape, not an action):
   sense as a "slow the carrier down" standoff, which is meaningless once there is
   no carrier at all; without this a loose ball near (but wide of) our own box just
   sits there with the first defender parked on an axis nobody is threatening.
-  Found live: a `clear_danger` vs `low_block`-shaped match pinned 28 seconds this
+  Found live: a `firebreak` vs `low_block`-shaped match pinned 28 seconds this
   way (see `tactics/defense.py`'s matching fix for the sibling case in
   `DefenseTactic`).
 - **screen** (everyone else): holds the line at `_SCREEN_OFFSET` in front of our

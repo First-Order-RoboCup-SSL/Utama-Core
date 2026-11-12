@@ -54,7 +54,7 @@ sequenceDiagram
     participant AS as AbstractStrategy<br/>engine/abstract_strategy.py
     participant S as Strategy<br/>engine/strategy.py
     participant RO as RefereeOverride<br/>engine/referee_override.py
-    participant P as Partitioner<br/>e.g. strategy/split_shape.py
+    participant P as Partitioner<br/>e.g. strategy/pendulum.py
     participant T as Tactic<br/>tactics/*.py
     participant SK as Skills<br/>skills/src/
     participant RC as robot controller
@@ -174,7 +174,7 @@ A strategy is a combination of existing tactics plus a partitioner that decides 
 each gets. Most new strategies need no new tactic. When one does, add it as a new module in
 `tactics/` (on a strategy branch, never by changing an existing tactic: see below).
 
-How a strategy composes tactics, using `split_shape`: two tactic slots and
+How a strategy composes tactics, using `pendulum`: two tactic slots and
 one hand-written partitioner that switches on which side has the ball.
 
 ```mermaid
@@ -185,7 +185,7 @@ flowchart TD
     free["free pool = outfield robots not pinned"]
     avail{"both slots available?<br/>(not pinned, applicable)"}
     only["the one available slot<br/>takes every free robot"]
-    subgraph picker["_possession_split_picker<br/>strategy/split_shape.py"]
+    subgraph picker["_possession_split_picker<br/>strategy/pendulum.py"]
         order["carrier_first(game, free)<br/>strategy/pickers.py: ball carrier first"]
         edge{"friendly closer to the ball<br/>than the enemy?"}
         hi["attack = (n+1)//2 + 1"]
@@ -219,7 +219,7 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
   near-tie or unreadable state, where a sticky picker keeps its previous split.
 - `carrier_first(game, free)` / `clearer_first(game, ordered)` — robot order for a slot that
   must take the ball: the carrier (or the kicker at a still ball) first, else the nearest.
-- `fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `split_shape.py`) — the
+- `fixed_ratio_picker` (in `pickers.py`), `_possession_split_picker` (in `pendulum.py`) — the
   two common split shapes.
 
 `tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
@@ -349,7 +349,7 @@ flowchart TD
   explain a verdict and never make one: the verdict is still goals, and a picture is not a ranking.
   Matches taken from the match results have no replay in the run, so the pictures cover only what was
   played; the paired goal difference in `summary.json` is only as complete as that. Example, from a
-  round-robin (`explain.py replays/tournament_<id> split_shape clear_press_plus --out ...`):
+  round-robin (`explain.py replays/tournament_<id> pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
 - **Cost.** ~45 min of laptop per 66 matches on 8 workers. A clearly worse candidate costs ~14
   matches (~10 min), a close one up to 42.
@@ -413,11 +413,11 @@ whoever runs it.
   The dashboard draws the same lanes under the Replay tab's controls (click to seek; hover for what
   each mark is) and live in the Live tab. Beside a replay, its Play list reads the match as
   situations: who had the ball from which restart or regain, for how long, and how it ended.
-  Thrashing in `split_shape` against `tiki_taka_plus`: robots 2-4 flip between the attack and defence
-  slots about every 1.5 s, in pairs of rows at the same tick. It is not split_shape's alone: most
+  Thrashing in `pendulum` against `weaver`: robots 2-4 flip between the attack and defence
+  slots about every 1.5 s, in pairs of rows at the same tick. It is not pendulum's alone: most
   strategies that split attack and defence on possession take a tactic for under 1 s and revert about
   5 times a minute (the `tactic_thrash` finding, with the numbers per strategy in `match_timeline.py`):
-  ![split_shape lanes thrashing between attack and defence slots](img/match_timeline/split_shape_100-160.png)
+  ![pendulum lanes thrashing between attack and defence slots](img/match_timeline/pendulum_100-160.png)
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.

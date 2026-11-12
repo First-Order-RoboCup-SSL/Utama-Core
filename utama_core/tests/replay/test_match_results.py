@@ -101,11 +101,11 @@ def test_load_reads_only_the_environment_asked_for(tmp_path):
 def test_load_names_a_player_by_its_fingerprint(tmp_path):
     """A frozen file and the same code in the repo are one player, whichever played the match."""
     store = MatchResults(tmp_path)
-    store.put(_rec(a="split_shape", a_fp="1", b="other", b_fp="2"))
+    store.put(_rec(a="pendulum", a_fp="1", b="other", b_fp="2"))
 
-    loaded = store.load("e", fps={"frozen/split_shape@abc.strategy": "1"})
+    loaded = store.load("e", fps={"frozen/pendulum@abc.strategy": "1"})
     (rec,) = loaded.values()
-    assert (rec["a"], rec["b"]) == ("frozen/split_shape@abc.strategy", "other")
+    assert (rec["a"], rec["b"]) == ("frozen/pendulum@abc.strategy", "other")
 
 
 def test_a_torn_file_is_skipped_and_the_rest_still_load(tmp_path):

@@ -23,7 +23,7 @@ without touching `custom_referee/actions.py` itself. This file covers:
   `self._goalkeeper_id not in cmd_map` gate
   (`test_goalkeeper_ticks_normally_when_override_omits_it`)
 
-Uses the same `split_shape_runner`/`_set_referee_command` pattern as
+Uses the same `pendulum_runner`/`_set_referee_command` pattern as
 `test_referee_override.py` for the end-to-end cases (a real rsim `Game` via
 `AbstractStrategy`/`StrategyRunner`, since the override integration point —
 `AbstractStrategy.load_motion_controller` assigning `Strategy.referee_overrides`
@@ -194,7 +194,7 @@ def override_runner():
         return {1: _SENTINEL_COMMAND}
 
     strategy = AbstractStrategy(
-        build=builder("split_shape", (1, 2, 3, 4, 5)),
+        build=builder("pendulum", (1, 2, 3, 4, 5)),
         referee_overrides={RefereeCommand.PREPARE_KICKOFF_YELLOW: kickoff_override},
     )
     runner = StrategyRunner(

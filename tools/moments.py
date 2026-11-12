@@ -7,7 +7,7 @@ A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays 
 
     {"name": ..., "note": what went wrong and why it must not happen again,
      "source": {"replay": ..., "t": ...} or null for a hand-made one,
-     "strategy": "all" or one strategy, "opponent": the other side (default split_shape),
+     "strategy": "all" or one strategy, "opponent": the other side (default pendulum),
      "seconds": how long to play (default 3),
      "checks": names from `CHECKS` below, or referee rule names our side must not break
                (`custom_referee/rules/`, "*" for any),
@@ -87,7 +87,7 @@ from utama_core.replay.scenario import (  # noqa: E402
 from utama_core.strategy.catalog import plain_name  # noqa: E402
 
 MOMENTS_DIR = REPO_ROOT / "utama_core" / "tests" / "moments"
-DEFAULT_OPPONENT = "split_shape"
+DEFAULT_OPPONENT = "pendulum"
 DEFAULT_SECONDS = 3.0
 
 # Rulebook distances (`custom_referee/rules/keep_out_rule.py`, `robot_stop_speed_rule.py`).

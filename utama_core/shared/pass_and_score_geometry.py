@@ -244,7 +244,7 @@ def carry_exhausted(game: Game, origin: Optional[Vector2D], stops_after: bool = 
     reaction time (`_CARRY_REACTION_S`) included -- without it a ~1.4m/s lure braked
     another ~0.4m and fouled at 1.01m anyway. Leave
     False for a carrier that kicks while moving (GiveAndGo): counting it there ended
-    carries ~0.5m early and cost give_and_go_solo half its goals in an A/B
+    carries ~0.5m early and cost ricochet half its goals in an A/B
     (tournament_20260924_092119 bisect)."""
     if origin is None or game.ball is None:
         return False
@@ -954,7 +954,7 @@ def no_shot_reposition_target(
     the blocker is about to move on its own. Against a stationary keeper
     covering the whole goal from close range (the common case once a carrier
     reaches the goal mouth) nothing about that position ever changes, so the
-    freeze is permanent: this was the actual mechanism behind a `clear_danger`
+    freeze is permanent: this was the actual mechanism behind a `firebreak`
     vs `low_block` match pinning 0-0 for 48 straight seconds (see
     `docs/strategies.md`'s "Known open bugs" and
     `docs/investigation_default_vs_lowblock_stalemate.md` for the sibling

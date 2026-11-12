@@ -85,9 +85,9 @@ def test_events_of_nothing_is_nothing():
 
 
 def test_factory_for_resolves_a_catalog_name_to_its_builder():
-    from utama_core.strategy.split_shape import build
+    from utama_core.strategy.pendulum import build
 
-    assert moments.factory_for("split_shape")((1, 2)).func is build
+    assert moments.factory_for("pendulum")((1, 2)).func is build
 
 
 def test_factory_for_imports_a_build_from_a_scratch_file(tmp_path):

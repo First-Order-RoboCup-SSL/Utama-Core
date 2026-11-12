@@ -15,10 +15,10 @@ from utama_core.strategy.catalog import builder
 
 
 @pytest.fixture
-def split_shape_runner():
+def pendulum_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -32,9 +32,9 @@ def split_shape_runner():
     runner.close()
 
 
-def test_debug_status_covers_goalkeeper_and_all_outfield_robots(split_shape_runner):
-    split_shape_runner.step_once()
-    strategy = split_shape_runner.my.strategy
+def test_debug_status_covers_goalkeeper_and_all_outfield_robots(pendulum_runner):
+    pendulum_runner.step_once()
+    strategy = pendulum_runner.my.strategy
     status = strategy.debug_status()
 
     assert status[0][:2] == ["goalkeeper", ""]
@@ -43,9 +43,9 @@ def test_debug_status_covers_goalkeeper_and_all_outfield_robots(split_shape_runn
         assert len(status[robot_id]) == 3  # [label, tag, steps]
 
 
-def test_debug_status_labels_match_active_partition(split_shape_runner):
-    split_shape_runner.step_once()
-    strategy = split_shape_runner.my.strategy
+def test_debug_status_labels_match_active_partition(pendulum_runner):
+    pendulum_runner.step_once()
+    strategy = pendulum_runner.my.strategy
     status = strategy.debug_status()
     partition = strategy._kernel_strategy.active_partition
 
@@ -54,10 +54,10 @@ def test_debug_status_labels_match_active_partition(split_shape_runner):
             assert status[robot_id][0].startswith(tactic_id)
 
 
-def test_slot_status_reports_committed_flag(split_shape_runner):
-    split_shape_runner.step_once()
-    strategy = split_shape_runner.my.strategy
-    game = split_shape_runner.my.game
+def test_slot_status_reports_committed_flag(pendulum_runner):
+    pendulum_runner.step_once()
+    strategy = pendulum_runner.my.strategy
+    game = pendulum_runner.my.game
     status = strategy._kernel_strategy.slot_status(game)
 
     for tactic_id, info in status.items():
@@ -65,12 +65,12 @@ def test_slot_status_reports_committed_flag(split_shape_runner):
         assert info["robots"]
 
 
-def test_debug_status_tag_is_the_assigned_tactics_own_tag(split_shape_runner):
+def test_debug_status_tag_is_the_assigned_tactics_own_tag(pendulum_runner):
     # The dashboard colours each robot by this second element, so it must be the tag the
     # tactic currently holding the robot declares, not a per-robot or per-strategy guess.
-    split_shape_runner.step_once()
-    strategy = split_shape_runner.my.strategy
-    game = split_shape_runner.my.game
+    pendulum_runner.step_once()
+    strategy = pendulum_runner.my.strategy
+    game = pendulum_runner.my.game
     status = strategy.debug_status()
 
     for tactic_id, info in strategy._kernel_strategy.slot_status(game).items():
@@ -84,7 +84,7 @@ def test_debug_status_leaves_out_a_goalkeeper_whose_robot_is_not_on_the_field():
     phantom "goalkeeper" row for a robot ID that is not there."""
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build=builder("split_shape", (0, 1)), goalkeeper_id=15)
+    strategy = AbstractStrategy(build=builder("pendulum", (0, 1)), goalkeeper_id=15)
     runner = StrategyRunner(
         strategy=strategy, my_team_is_yellow=True, my_team_is_right=True, mode="rsim", exp_friendly=2, exp_enemy=0
     )
@@ -98,14 +98,14 @@ def test_debug_status_leaves_out_a_goalkeeper_whose_robot_is_not_on_the_field():
 
 
 def _refereed_runner(command, notifier=None):
-    """`split_shape` under our own referee, seeded with `command`; `notifier` stands in for a dashboard."""
+    """`pendulum` under our own referee, seeded with `command`; `notifier` stands in for a dashboard."""
     from utama_core.custom_referee import CustomReferee
     from utama_core.run.strategy_runner import StrategyRunner
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=3)
     if notifier is not None:
         referee.attach_dashboard_notifier(notifier)
-    strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
     return StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,

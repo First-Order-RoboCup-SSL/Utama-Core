@@ -30,8 +30,8 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
     profile = load_profile("simulation")
     profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, half_duration_seconds=HALF_S))
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build=builder("tiki_taka_plus", tuple(range(1, N_OUTFIELD + 1)))),
-        opp_strategy=AbstractStrategy(build=builder("tiki_taka_plus", tuple(range(1, N_OUTFIELD + 1)))),
+        strategy=AbstractStrategy(build=builder("weaver", tuple(range(1, N_OUTFIELD + 1)))),
+        opp_strategy=AbstractStrategy(build=builder("weaver", tuple(range(1, N_OUTFIELD + 1)))),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",
@@ -92,7 +92,7 @@ def _robot(x: float, y: float) -> Robot:
 
 
 def test_a_robot_turned_from_past_the_goal_line_stands_on_the_far_line():
-    # A robot in the run-off at x=-4.594 (a real one, clear_danger vs decoy_and_overload)
+    # A robot in the run-off at x=-4.594 (a real one, firebreak vs decoy_and_overload)
     # turned to x=+4.594, and the sim refused the teleport: the match crashed at half-time.
     bounds = FieldBounds(top_left=(-4.5, 3.0), bottom_right=(4.5, -3.0))
     turned = _turned(_robot(-4.594, 2.399), bounds)

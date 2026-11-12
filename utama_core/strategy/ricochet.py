@@ -1,4 +1,4 @@
-"""The `give_and_go_solo` kernel strategy: `give_and_go_solo` and the pickers only it uses."""
+"""`ricochet` (until 2026-11-12 `give_and_go_solo`): all one-twos, no defence. The pickers only it uses are here."""
 
 from __future__ import annotations
 

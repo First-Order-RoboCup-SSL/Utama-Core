@@ -208,7 +208,7 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
     team always attacks toward `+x` — for `my_team_is_right=False` (attacking
     `-x`), every candidate this produced sat *behind* the ball, toward this
     team's own goal, not ahead of it. Found live investigating a real "these
-    strategies never shoot" bug (`high_press`/`overload_flow`/
+    strategies never shoot" bug (`wolfpack`/`overload_flow`/
     `score_aware_zone_flow`, 2026-09-05, `docs/roadmap.md`): traced replay
     showed `give_and_go.shot_lane.open=True` 132 times in one match, yet the
     carrier's x-position never advanced past -1.10 toward a goal at -4.5 —

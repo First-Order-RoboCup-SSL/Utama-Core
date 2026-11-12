@@ -87,7 +87,7 @@ One term per thing; reuse these instead of coining new ones.
   specifically to avoid colliding with "kernel strategy" — the model's own established
   vocabulary — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
 - `utama_core/strategy/` — the actual strategies people write, run, and compare
-  (`tiki_taka`, `counter_flow`, etc.), one module per strategy (`strategy/<name>.py`, with one
+  (`tiki_taka`, `riptide`, etc.), one module per strategy (`strategy/<name>.py`, with one
   `build(outfield_robot_ids, motion_controller)` and the pickers only it uses) plus `pickers.py`
   for helpers shared by several. The module's name is the strategy's name and `catalog.py` finds
   them, so a new strategy is a new file. This is where day-to-day strategy-dev edits land.

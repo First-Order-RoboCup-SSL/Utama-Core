@@ -12,7 +12,7 @@ from utama_core.entities.referee.referee_command import RefereeCommand
     [
         ("scratch/try.py:build_x", True),
         ("/abs/path/try.py:build", True),
-        ("split_shape", False),
+        ("pendulum", False),
         ("try.py:", False),  # no factory named
         ("try.txt:build", False),
         ("a.strategy", False),
@@ -23,11 +23,11 @@ def test_is_file_spec_needs_a_py_path_and_a_factory(name, expected):
 
 
 def test_a_catalog_name_loads_an_abstract_strategy():
-    assert isinstance(sim_setup.load_side("split_shape"), AbstractStrategy)
+    assert isinstance(sim_setup.load_side("pendulum"), AbstractStrategy)
 
 
 def test_an_unknown_name_lists_the_catalog():
-    with pytest.raises(sim_setup.UnknownStrategy, match="unknown strategy 'nope'; strategies: .*split_shape"):
+    with pytest.raises(sim_setup.UnknownStrategy, match="unknown strategy 'nope'; strategies: .*pendulum"):
         sim_setup.load_side("nope")
 
 
@@ -51,8 +51,8 @@ def test_a_scratch_file_without_the_factory_is_named(tmp_path):
 
 def test_sim_runner_plays_us_yellow_on_the_right_with_six_a_side():
     runner, referee = sim_setup.sim_runner(
-        sim_setup.load_side("split_shape"),
-        sim_setup.load_side("high_press"),
+        sim_setup.load_side("pendulum"),
+        sim_setup.load_side("wolfpack"),
         initial_command=RefereeCommand.STOP,
     )
     try:

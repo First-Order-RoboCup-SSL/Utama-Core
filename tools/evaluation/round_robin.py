@@ -9,7 +9,7 @@ ceremony, run_dir file layout) lives in `match.py`.
 Run:
     pixi run python tools/evaluation/round_robin.py [config ...] [flags]
 
-Configs are short names (`split_shape`); none means every strategy in the catalog. Flags:
+Configs are short names (`pendulum`); none means every strategy in the catalog. Flags:
     --pair A B              one match, A as config_a
     --vs-champion           the day-to-day health check: one match per active strategy against the
                             champion (reference/opponents.json), plus champion vs the first opponent;
@@ -121,7 +121,7 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.replay import match_results
 from utama_core.replay.fingerprint import CodeGraph
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
-from utama_core.strategy.catalog import plain_name
+from utama_core.strategy.catalog import current_name, plain_name
 
 # A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped
 # whenever no team may play the ball (`custom_referee/state_machine.py`), so about 710 s of
@@ -692,7 +692,7 @@ def _tag(pair: tuple[str, str]) -> str:
 def _resolve_config_names(requested_names: list[str]) -> list[str]:
     """The strategies named, in catalog order, then any `.strategy` files as given."""
     files = [name for name in requested_names if name.endswith(SUFFIX)]
-    requested = {plain_name(name) for name in requested_names if name not in files}
+    requested = {current_name(name) for name in requested_names if name not in files}
     config_names = [name for name in _CONFIG_NAMES if name in requested]
     unmatched = requested - set(config_names)
     if unmatched:

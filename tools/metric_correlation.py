@@ -1183,7 +1183,7 @@ def main() -> None:
     # uniform: 46% of matches in that check had zero out_of_bounds events,
     # but a few pathological matches hit 40-58 in a single 65s window, and
     # the per-strategy rate spanned an 8-10x range (switch_of_play/
-    # counter_press/high_line_zone/clear_press_plus far above tiki_taka/
+    # counter_press/high_line_zone/breakwater far above tiki_taka/
     # three_slot/decoy_and_overload) -- worth its own metric to track
     # whether that skew is a specific strategy's aim/geometry issue (e.g. a
     # cross-field switch-of-play pass overshooting the sideline) rather than

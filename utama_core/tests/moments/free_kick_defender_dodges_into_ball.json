@@ -6,7 +6,7 @@
     "t": 254.65
   },
   "strategy": "all",
-  "opponent": "split_shape",
+  "opponent": "pendulum",
   "seconds": 2.0,
   "checks": [
     "keeps_clear"

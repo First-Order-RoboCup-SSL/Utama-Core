@@ -1,4 +1,4 @@
-"""The `press_and_pass` kernel strategy: `press_and_pass` and the pickers only it uses."""
+"""`terrier` (until 2026-11-12 `press_and_pass`): presses, then plays quick one-twos. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
 
-def _press_and_pass_split_picker(
+def _terrier_split_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
@@ -59,8 +59,8 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
 
     Wires `GiveAndGoTactic` ("attack") and `PressAndContainTactic`
     ("defense") as two concurrently active slots, split by
-    `_press_and_pass_split_picker`. Sibling to
-    `split_shape`, same shape, different tactic pair —
+    `_terrier_split_picker`. Sibling to
+    `pendulum`, same shape, different tactic pair —
     lets the give-and-go/press-and-contain tactics be driven end to end via
     `StrategyRunner` instead of only unit-level `tick()` calls.
 
@@ -72,7 +72,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
     ctx = TickContext(motion_controller=motion_controller)
     return KernelSchedulerStrategy(
         tactics={"attack": GiveAndGoTactic(), "defense": PressAndContainTactic()},
-        partitioner=_press_and_pass_split_picker,
+        partitioner=_terrier_split_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

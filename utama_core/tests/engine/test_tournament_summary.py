@@ -126,21 +126,21 @@ def _stalled(a: str, b: str, sim_time: float, duration_s: float = 11.3) -> dict:
 
 def test_one_deterministic_freeze_against_two_opponents_is_one_incident():
     """RR 2026-09-28: overload_flow froze at t=20.5 for 11.3 s against both
-    press_trigger_flow and score_aware_counter_flow -- the same freeze, since rsim is
+    tripwire and chameleon -- the same freeze, since rsim is
     deterministic and neither opponent had diverged yet. The same times with no shared
     strategy, or a tick apart, are different incidents."""
     results = [
-        _stalled("overload_flow", "press_trigger_flow", 20.5),
-        _stalled("overload_flow", "score_aware_counter_flow", 20.5 + 1e-9),
+        _stalled("overload_flow", "tripwire", 20.5),
+        _stalled("overload_flow", "chameleon", 20.5 + 1e-9),
         _stalled("tiki_taka", "zone_fluid", 20.5),
         _stalled("overload_flow", "low_block", 20.5 + 1 / 60),
-        _result("overload_flow", "high_press", 0, 0),
+        _result("overload_flow", "wolfpack", 0, 0),
     ]
 
     incidents = stall_incidents(results)
 
     assert [i["matches"] for i in incidents] == [
-        ["overload_flow_vs_press_trigger_flow", "overload_flow_vs_score_aware_counter_flow"],
+        ["overload_flow_vs_tripwire", "overload_flow_vs_chameleon"],
         ["tiki_taka_vs_zone_fluid"],
         ["overload_flow_vs_low_block"],
     ]

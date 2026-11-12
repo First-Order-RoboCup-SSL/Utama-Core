@@ -359,7 +359,7 @@ def test_first_touch_stuck_eventually_force_shoots_instead_of_repositioning_fore
 # ---------------------------------------------------------------------------
 #
 # Found live investigating a real "these strategies never shoot" bug
-# (high_press/overload_flow/score_aware_zone_flow, 2026-09-05,
+# (wolfpack/overload_flow/score_aware_zone_flow, 2026-09-05,
 # docs/roadmap.md): `_relocate_target` generated candidates at
 # `ball_x + dx` with hardcoded positive `dx` -- correct for a team attacking
 # +x, but for `my_team_is_right=True` (this codebase's convention: the enemy

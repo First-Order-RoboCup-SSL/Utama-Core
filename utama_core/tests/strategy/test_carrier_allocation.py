@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from utama_core.entities.data.object import TeamType
-from utama_core.strategy.clear_press_plus import _clear_press_plus_picker
+from utama_core.strategy.breakwater import _breakwater_picker
 
 
 def _final_third_game(carrier_id):
@@ -21,7 +21,7 @@ def test_the_robot_holding_the_ball_goes_to_the_ball_side_slot():
     # clear_press_plus_vs_zone_fluid (2026-09-28): the final-third handoff gave
     # "overload" the two lowest ids and put carrier 4 in "block", which held the
     # ball still while the overload decoy waited on it — frozen for 38 s.
-    partition = _clear_press_plus_picker(
+    partition = _breakwater_picker(
         _final_third_game(carrier_id=4),
         frozenset({1, 2, 3, 4, 5}),
         {"attack": frozenset({3, 4, 5})},

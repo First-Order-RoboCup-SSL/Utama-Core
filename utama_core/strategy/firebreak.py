@@ -1,4 +1,4 @@
-"""The `clear_danger` kernel strategy: `clear_danger` and the pickers only it uses."""
+"""`firebreak` (until 2026-11-12 `clear_danger`): `riptide` that clears the ball out of its own third when it is in danger. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -21,13 +21,13 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
 
-def _clear_danger_picker(
+def _firebreak_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
     available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
-    """Safety-valve posture: counter_flow's proven attack/press/block postures,
+    """Safety-valve posture: riptide's proven attack/press/block postures,
     plus a danger valve — when the ball is deep in our own third AND contested
     (`ClearBallTactic.applicable()`, the real §15 gate this config exists to
     exercise), one robot clears it long while everyone else holds the screen.
@@ -36,19 +36,19 @@ def _clear_danger_picker(
       other postures: building out of a contested own-third pocket is exactly
       what `GiveAndGoTactic` should not be doing (its hops are short by design),
       and pressing leaves nobody removing the ball.
-    - Lost, no danger: counter_flow's defensive posture — press 3 + block 2
+    - Lost, no danger: riptide's defensive posture — press 3 + block 2
       when something is pressable, all-block otherwise.
-    - Won: counter_flow's attacking posture — attack 3 + block 2.
+    - Won: riptide's attacking posture — attack 3 + block 2.
 
     The press slot is NOT optional here (an earlier draft dropped it in favour
     of block-everyone-unless-danger): traced live, that team never contests any
     ball anywhere — possession collapsed to ~1% as the opponent's carrier parked
     unpressured at midfield, and the ball never even reached our third, so the
     valve itself never fired. Ball control, not territory, is the bottleneck
-    (the same lesson as `go_to_ball`'s shield fix); counter_flow's press stays,
+    (the same lesson as `go_to_ball`'s shield fix); riptide's press stays,
     the valve rides on top of it.
 
-    Sticky possession edge, same fix `_counter_flow_picker`/`_high_line_zone_picker`
+    Sticky possession edge, same fix `_riptide_picker`/`_high_line_zone_picker`
     needed: re-reading `friendly_closer_to_ball` every tick flips constantly in
     a genuinely contested match and resets `GiveAndGoTactic`'s hop cycle before
     a single hop completes. `prev_partition` ("did we hold attack last tick") is
@@ -98,12 +98,12 @@ def _clear_danger_picker(
 
 
 def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
-    """Safety-valve team: counter_flow's postures plus a danger-clearance valve.
+    """Safety-valve team: riptide's postures plus a danger-clearance valve.
 
     Four concurrent slots — `GiveAndGoTactic` ("attack"),
     `ClearBallTactic` ("clear"), `PressAndContainTactic` ("press"), and
-    `BlockShapeTactic` ("block") — allocated by `_clear_danger_picker`.
-    Identical to `counter_flow` whenever the ball is not deep-and-contested in
+    `BlockShapeTactic` ("block") — allocated by `_firebreak_picker`.
+    Identical to `riptide` whenever the ball is not deep-and-contested in
     our own third; when it is, the valve takes one robot and removes the ball
     instead of only screening it. Fills the one hole the catalog has: no
     existing tactic ever deliberately kicks the ball out of danger (the only
@@ -123,7 +123,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "press": PressAndContainTactic(),
             "block": BlockShapeTactic(),
         },
-        partitioner=_clear_danger_picker,
+        partitioner=_firebreak_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

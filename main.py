@@ -2,9 +2,9 @@
 round-robin matches are.
 
 Run:
-    pixi run main                          # split_shape vs high_press
-    pixi run main split_shape counter_flow   # any two names from docs/strategies.md
-    pixi run main a.strategy high_press    # or a .strategy file (tools/build_strategy.py)
+    pixi run main                          # pendulum vs wolfpack
+    pixi run main pendulum riptide   # any two names from docs/strategies.md
+    pixi run main a.strategy wolfpack    # or a .strategy file (tools/build_strategy.py)
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
 Yellow (the first strategy) starts on the right and kicks off. For many matches with
@@ -30,8 +30,8 @@ def _strategy(name: str) -> AbstractStrategy:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("yellow", nargs="?", default="split_shape")
-    parser.add_argument("blue", nargs="?", default="high_press")
+    parser.add_argument("yellow", nargs="?", default="pendulum")
+    parser.add_argument("blue", nargs="?", default="wolfpack")
     args = parser.parse_args()
     yellow, blue = _strategy(args.yellow), _strategy(args.blue)  # fail on a bad name before the dashboard starts
 

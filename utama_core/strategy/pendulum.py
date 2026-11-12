@@ -1,4 +1,4 @@
-"""The `split_shape` kernel strategy: `split_shape` and the pickers only it uses."""
+"""`pendulum` (until 2026-11-12 `split_shape`): swings between attack and defence with possession. The pickers only it uses are here."""
 
 from __future__ import annotations
 

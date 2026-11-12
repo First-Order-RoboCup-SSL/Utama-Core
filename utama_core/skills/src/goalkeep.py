@@ -16,7 +16,7 @@ one function that could legally go in and do something about it, but never
 did: it always drove to a goal-line intercept regardless of where the ball
 actually was, so a ball that rolled dead in the box (not heading at goal,
 `predict_ball_pos_at_x` returns `None` for a near-stationary ball) just sat
-there for the rest of the match. Found live: a `clear_danger` vs `low_block`
+there for the rest of the match. Found live: a `firebreak` vs `low_block`
 match pinned for the last 28 s of a 60 s game this way (see
 `docs/strategies.md`'s "Known open bugs").
 """

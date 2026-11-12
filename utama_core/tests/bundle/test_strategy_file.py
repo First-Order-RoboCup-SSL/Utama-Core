@@ -22,7 +22,7 @@ from utama_core.motion_planning.src.common.control_schemes import get_control_sc
 from utama_core.replay.fingerprint import CodeGraph
 from utama_core.strategy import catalog
 
-STRATEGY = "split_shape"
+STRATEGY = "pendulum"
 
 
 def _robot(rid: int, friendly: bool, x: float, y: float) -> Robot:
@@ -115,7 +115,7 @@ def test_a_bundle_holds_its_code_and_no_tests(tmp_path):
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         manifest = json.loads(archive.read("manifest.json"))
-    assert {"utama_core/bundle/host.py", "utama_core/strategy/split_shape.py"} <= names
+    assert {"utama_core/bundle/host.py", "utama_core/strategy/pendulum.py"} <= names
     assert not any(name.startswith("utama_core/tests/") for name in names)
     assert manifest["strategy"] == STRATEGY and manifest["format"] == strategy_file.FORMAT_VERSION
 
@@ -127,7 +127,7 @@ def test_a_strategy_that_does_not_exist_is_refused(tmp_path):
 
 def test_a_frozen_file_is_named_after_its_commit_and_never_rebuilt(tmp_path):
     first = strategy_file.frozen(STRATEGY, "HEAD", tmp_path)
-    assert first.name == f"split_shape@{strategy_file._commit_of('HEAD')[:8]}.strategy"
+    assert first.name == f"pendulum@{strategy_file._commit_of('HEAD')[:8]}.strategy"
     first.write_bytes(b"kept")
     assert strategy_file.frozen(STRATEGY, "HEAD", tmp_path).read_bytes() == b"kept"
 
@@ -168,7 +168,7 @@ def test_what_a_file_adds_around_the_code_is_not_part_of_the_player(tmp_path, mo
 @pytest.mark.parametrize(
     "member",
     [
-        "utama_core/strategy/split_shape.py",
+        "utama_core/strategy/pendulum.py",
         "utama_core/skills/src/go_to_ball.py",
         "utama_core/motion_planning/src/common/control_schemes.py",
     ],
@@ -182,8 +182,8 @@ def test_a_file_of_different_code_is_a_different_player(tmp_path, monkeypatch, m
 
 
 def test_a_frozen_player_and_the_same_strategy_today_get_different_match_tags():
-    assert match._short_name("replays/eval/frozen/split_shape@09493fd2.strategy") == "split_shape@09493fd2"
-    assert match._short_name(STRATEGY) == "split_shape"
+    assert match._short_name("replays/eval/frozen/pendulum@09493fd2.strategy") == "pendulum@09493fd2"
+    assert match._short_name(STRATEGY) == "pendulum"
 
 
 class _Commands:
@@ -312,7 +312,7 @@ def test_the_runner_reads_the_same_from_a_bundled_strategy_as_from_the_same_stra
 
 
 def test_a_strategy_file_is_named_like_any_strategy():
-    names = round_robin._resolve_config_names(["split_shape", "replays/x@abc.strategy"])
+    names = round_robin._resolve_config_names(["pendulum", "replays/x@abc.strategy"])
     assert names == [STRATEGY, "replays/x@abc.strategy"]
 
 

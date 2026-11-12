@@ -1,7 +1,7 @@
 """FastPathPlanner must route around the opponent's defense area.
 
 Found via a live grsim run of the split-shape kernel strategy
-(`demo_split_shape_match.py`): an outfield attacker chasing the ball drove
+(`demo_pendulum_match.py`): an outfield attacker chasing the ball drove
 straight into the opponent's defense area — an SSL rule violation flagged by
 the referee GUI. `FastPathPlanner._get_obstacles` treated only robots and the
 field boundary as obstacles; nothing represented the opponent's defense area

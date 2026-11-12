@@ -1,9 +1,9 @@
 """Comprehensive, table-driven tests over every strategy
 in `utama_core/strategy/`.
 
-Replaces the earlier one-file-per-config pattern (`test_split_shape_kernel_strategy.py`,
-`test_press_and_pass_kernel_strategy.py`, `test_high_press_kernel_strategy.py`,
-`test_give_and_go_solo_kernel_strategy.py`), each of which re-asserted the same
+Replaces the earlier one-file-per-config pattern (`test_pendulum_kernel_strategy.py`,
+`test_terrier_kernel_strategy.py`, `test_wolfpack_kernel_strategy.py`,
+`test_ricochet_kernel_strategy.py`), each of which re-asserted the same
 handful of generic properties ("builds a Strategy", "runs N ticks without
 error", "partition covers every outfield robot", "goalkeeper stays pinned")
 around a near-identical `StrategyRunner`/rsim fixture. A single parametrized
@@ -28,11 +28,11 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.strategy import Strategy
 from utama_core.entities.data.object import TeamType
 from utama_core.strategy import catalog
+from utama_core.strategy.breakwater import _breakwater_picker
 from utama_core.strategy.catalog import builder
-from utama_core.strategy.clear_danger import _clear_danger_picker
-from utama_core.strategy.clear_press_plus import _clear_press_plus_picker
-from utama_core.strategy.counter_flow import _counter_flow_picker
+from utama_core.strategy.firebreak import _firebreak_picker
 from utama_core.strategy.pickers import fixed_ratio_picker
+from utama_core.strategy.riptide import _riptide_picker
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
@@ -70,7 +70,7 @@ def make_runner():
 def test_partitions_every_outfield_robot_and_never_the_keeper_for_30_ticks(name, make_runner):
     """30 ticks, not 5-10: enough for PressAndContainTactic's applicable()
     to plausibly flip in configs that use it, exercising the exact hazard
-    `_press_and_pass_split_picker`/`_three_way_picker` exist to avoid (a
+    `_terrier_split_picker`/`_three_way_picker` exist to avoid (a
     Partitioner proposing robots for a currently-inapplicable tactic)."""
     runner = make_runner(name)
     strategy = runner.my.strategy
@@ -90,7 +90,7 @@ def test_partitions_every_outfield_robot_and_never_the_keeper_for_30_ticks(name,
 _NOBODY_ON_BALL = SimpleNamespace(friendly_robots={})
 
 
-def test_fixed_ratio_picker_high_press_split():
+def test_fixed_ratio_picker_wolfpack_split():
     picker = fixed_ratio_picker("attack", "defense", attack_fraction=0.8)
     partition = picker(
         game=_NOBODY_ON_BALL,
@@ -118,8 +118,8 @@ def test_fixed_ratio_picker_defense_heavy_split_respects_min_attack_floor():
     assert len(partition["defense"]) == 3
 
 
-def test_give_and_go_solo_always_assigns_everyone_to_attack(make_runner):
-    runner = make_runner("give_and_go_solo")
+def test_ricochet_always_assigns_everyone_to_attack(make_runner):
+    runner = make_runner("ricochet")
     runner.step_once()
     partition = runner.my.strategy._kernel_strategy.active_partition
     assert partition == {"attack": frozenset(_OUTFIELD_IDS)}
@@ -166,10 +166,10 @@ _FIVE = frozenset({1, 2, 3, 4, 5})
 _CLEAR_ALL = frozenset({"attack", "press", "block", "clear"})
 
 
-def test_clear_danger_valve_takes_one_robot_when_applicable():
+def test_firebreak_valve_takes_one_robot_when_applicable():
     """Danger read fires (kernel reports 'clear' applicable): 1 clearer + block
     screen with the rest, regardless of the possession edge."""
-    partition = _clear_danger_picker(
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=3.0),  # losing, deep
         _FIVE,
         None,
@@ -180,8 +180,8 @@ def test_clear_danger_valve_takes_one_robot_when_applicable():
     assert frozenset().union(*partition.values()) == _FIVE
 
 
-def test_clear_danger_valve_folds_everyone_in_when_block_unavailable():
-    partition = _clear_danger_picker(
+def test_firebreak_valve_folds_everyone_in_when_block_unavailable():
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=3.0),
         _FIVE,
         None,
@@ -190,8 +190,8 @@ def test_clear_danger_valve_folds_everyone_in_when_block_unavailable():
     assert partition == {"clear": _FIVE}
 
 
-def test_clear_danger_uses_counter_flow_press_posture_when_lost_no_danger():
-    partition = _clear_danger_picker(
+def test_firebreak_uses_riptide_press_posture_when_lost_no_danger():
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
         _FIVE,
         None,
@@ -201,8 +201,8 @@ def test_clear_danger_uses_counter_flow_press_posture_when_lost_no_danger():
     assert len(partition["block"]) == 2
 
 
-def test_clear_danger_attacks_with_three_when_won_no_danger():
-    partition = _clear_danger_picker(
+def test_firebreak_attacks_with_three_when_won_no_danger():
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=0.3, enemy_dist=1.5, ball_x=0.0),
         _FIVE,
         None,
@@ -212,12 +212,12 @@ def test_clear_danger_attacks_with_three_when_won_no_danger():
     assert len(partition["block"]) == 2
 
 
-def test_clear_danger_attack_stays_on_unknown_possession_edge():
-    """Sticky possession edge (same fix counter_flow/high_line_zone needed):
+def test_firebreak_attack_stays_on_unknown_possession_edge():
+    """Sticky possession edge (same fix riptide/high_line_zone needed):
     while we held attack last tick, an unreadable edge must not reset the
     give-and-go trio — only a clear loss (enemy strictly closer) does."""
     prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
-    partition = _clear_danger_picker(
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=None, enemy_dist=None, ball_x=0.0),
         _FIVE,
         prev,
@@ -226,11 +226,11 @@ def test_clear_danger_attack_stays_on_unknown_possession_edge():
     assert len(partition["attack"]) == 3
 
 
-def test_clear_danger_valve_overrides_standing_attack():
+def test_firebreak_valve_overrides_standing_attack():
     """Danger fires while we were attacking last tick: the valve still takes its
     robot — danger is depth+pressure, not just possession."""
     prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
-    partition = _clear_danger_picker(
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=0.5, enemy_dist=1.5, ball_x=3.0),  # we're closer BUT deep+contested
         _FIVE,
         prev,
@@ -249,10 +249,10 @@ def test_clear_danger_valve_overrides_standing_attack():
 # picker now decides from the possession edge alone.
 
 
-def test_clear_danger_ignores_a_prior_clear_robot_missing_from_the_free_pool():
+def test_firebreak_ignores_a_prior_clear_robot_missing_from_the_free_pool():
     free = frozenset({2, 3, 4, 5})  # robot 1 held "clear" last tick, is not free now
     prev = {"clear": frozenset({1})}
-    partition = _clear_danger_picker(
+    partition = _firebreak_picker(
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),  # we're closer: attack
         free,
         prev,
@@ -262,10 +262,10 @@ def test_clear_danger_ignores_a_prior_clear_robot_missing_from_the_free_pool():
     assert len(partition["block"]) == 1
 
 
-def test_clear_press_plus_ignores_a_prior_clear_robot_missing_from_the_free_pool():
+def test_breakwater_ignores_a_prior_clear_robot_missing_from_the_free_pool():
     free = frozenset({2, 3, 4, 5})
     prev = {"clear": frozenset({1})}
-    partition = _clear_press_plus_picker(
+    partition = _breakwater_picker(
         _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
         free,
         prev,
@@ -290,13 +290,13 @@ def _clear_game(positions: dict[int, tuple[float, float]], carrier: int | None =
 _SPREAD = {1: (-2.0, 1.0), 2: (0.0, -1.0), 3: (1.0, 1.0), 4: (2.7, 0.2), 5: (-1.0, 0.0)}
 
 
-def test_clear_danger_valve_goes_to_the_robot_nearest_the_ball():
-    partition = _clear_danger_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL)
+def test_firebreak_valve_goes_to_the_robot_nearest_the_ball():
+    partition = _firebreak_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL)
     assert partition["clear"] == frozenset({4})
 
 
-def test_clear_press_plus_valve_goes_to_the_robot_nearest_the_ball():
-    partition = _clear_press_plus_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL | {"overload"})
+def test_breakwater_valve_goes_to_the_robot_nearest_the_ball():
+    partition = _breakwater_picker(_clear_game(_SPREAD), _FIVE, None, _CLEAR_ALL | {"overload"})
     assert partition["clear"] == frozenset({4})
 
 
@@ -304,13 +304,13 @@ def test_clear_valve_keeps_the_carrier_even_when_another_robot_is_nearer():
     # Robot 2 holds the ball (so it is first from `carrier_first`); robot 4 happens to
     # be nearer the ball's reported position. The carrier keeps the clearance.
     game = _clear_game(_SPREAD, carrier=2)
-    assert _clear_danger_picker(game, _FIVE, None, _CLEAR_ALL)["clear"] == frozenset({2})
-    assert _clear_press_plus_picker(game, _FIVE, None, _CLEAR_ALL | {"overload"})["clear"] == frozenset({2})
+    assert _firebreak_picker(game, _FIVE, None, _CLEAR_ALL)["clear"] == frozenset({2})
+    assert _breakwater_picker(game, _FIVE, None, _CLEAR_ALL | {"overload"})["clear"] == frozenset({2})
 
 
 def test_clear_valve_breaks_a_distance_tie_by_lowest_id():
     tied = {1: (2.0, 1.0), 2: (2.0, -1.0), 3: (-2.0, 0.0), 4: (-2.0, 1.0), 5: (-2.0, -1.0)}
-    partition = _clear_danger_picker(_clear_game(tied), _FIVE, None, _CLEAR_ALL)
+    partition = _firebreak_picker(_clear_game(tied), _FIVE, None, _CLEAR_ALL)
     assert partition["clear"] == frozenset({1})
 
 
@@ -319,28 +319,28 @@ def test_clear_valve_breaks_a_distance_tie_by_lowest_id():
 _COUNTER_FLOW_ALL = frozenset({"attack", "press", "block"})
 
 
-def test_counter_flow_keeps_attack_through_a_near_tie_for_the_ball():
+def test_riptide_keeps_attack_through_a_near_tie_for_the_ball():
     """Friendly 3 cm behind the nearest enemy is inside `CLOSER_TO_BALL_MARGIN`:
     undecided, so a side that held attack last tick keeps it (the documented
     hysteresis). `friendly_closer_to_ball` used to return False here, which
     dropped attack on noise-level gaps."""
     prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
-    partition = _counter_flow_picker(
+    partition = _riptide_picker(
         _stub_game(friendly_dist=0.33, enemy_dist=0.30, ball_x=0.0), _FIVE, prev, _COUNTER_FLOW_ALL
     )
     assert len(partition["attack"]) == 3
 
 
-def test_counter_flow_without_prior_attack_stays_conservative_on_a_near_tie():
-    partition = _counter_flow_picker(
+def test_riptide_without_prior_attack_stays_conservative_on_a_near_tie():
+    partition = _riptide_picker(
         _stub_game(friendly_dist=0.33, enemy_dist=0.30, ball_x=0.0), _FIVE, {}, _COUNTER_FLOW_ALL
     )
     assert "attack" not in partition
 
 
-def test_counter_flow_drops_attack_on_a_clear_loss():
+def test_riptide_drops_attack_on_a_clear_loss():
     prev = {"attack": frozenset({1, 2, 3}), "block": frozenset({4, 5})}
-    partition = _counter_flow_picker(
+    partition = _riptide_picker(
         _stub_game(friendly_dist=0.5, enemy_dist=0.30, ball_x=0.0), _FIVE, prev, _COUNTER_FLOW_ALL
     )
     assert "attack" not in partition

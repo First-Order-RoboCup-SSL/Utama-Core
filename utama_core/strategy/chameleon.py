@@ -1,4 +1,4 @@
-"""The `score_aware_counter_flow` kernel strategy: `score_aware_counter_flow` and the pickers only it uses."""
+"""`chameleon` (until 2026-11-12 `score_aware_counter_flow`): `riptide` that changes its play with the score. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -21,35 +21,35 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
 # ---------------------------------------------------------------------------
-# score_aware_counter_flow (2026-09-02 addition)
+# chameleon (2026-09-02 addition)
 #
 # `score_aware_zone_flow` validated the scoreline-aware attack/defense split
 # shift as a free improvement grafted onto `zone_fluid`'s picker with zero
 # other changes -- but `zone_fluid` is one of the catalog's weaker bases
 # (2W-6D-5L in the 2026-08-21 backfill). This strategy applies the identical
 # mechanism (shrink the attacking commitment when ahead late, grow it when
-# behind late) to `counter_flow`'s picker instead -- the catalog's only
+# behind late) to `riptide`'s picker instead -- the catalog's only
 # undefeated strategy, 0L across every backfill/tournament to date. Every
 # other axis is left untouched: same 3 tactics (`GiveAndGoTactic`/
 # `PressAndContainTactic`/`BlockShapeTactic`), same sticky possession-edge
 # hysteresis, same 3/2 split everywhere except the late-game scoreline
-# branch -- so any observed difference from plain `counter_flow` is
+# branch -- so any observed difference from plain `riptide` is
 # attributable to the new scoreline input alone, not a different base.
 # ---------------------------------------------------------------------------
 
 
-def _score_aware_counter_flow_picker(
+def _chameleon_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
     available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
-    """`_counter_flow_picker`'s allocation, with the attacking commitment size
+    """`_riptide_picker`'s allocation, with the attacking commitment size
     shifted late in a half by whether we're ahead or behind -- see
     `_score_aware_zone_flow_picker` for the identical mechanism applied to a
     different base.
 
-    Not late, tied, or score unreadable: identical to `_counter_flow_picker`
+    Not late, tied, or score unreadable: identical to `_riptide_picker`
     (3 attack/2 block when we hold the edge, 3 press/2 block when we don't).
     Late and ahead: only 2 attack, 3 block -- protect the lead behind a
     heavier screen. Late and behind: 4 attack, 1 block -- chase an
@@ -98,12 +98,12 @@ def _score_aware_counter_flow_picker(
 
 
 def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
-    """`counter_flow` (the catalog's only undefeated strategy) with the same
+    """`riptide` (the catalog's only undefeated strategy) with the same
     scoreline-aware attack-commitment shift `score_aware_zone_flow` validated
-    on a weaker base. Same three tactics/slots as `counter_flow`
+    on a weaker base. Same three tactics/slots as `riptide`
     (`GiveAndGoTactic`/`PressAndContainTactic`/`BlockShapeTactic`) and the
     same sticky possession-edge hysteresis -- only the picker's late-game
-    attack-count decision differs. See `_score_aware_counter_flow_picker`.
+    attack-count decision differs. See `_chameleon_picker`.
 
     Returns a `build(motion_controller)` callable suitable
     for `AbstractStrategy`'s constructor argument of the same name.
@@ -116,7 +116,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "press": PressAndContainTactic(),
             "block": BlockShapeTactic(),
         },
-        partitioner=_score_aware_counter_flow_picker,
+        partitioner=_chameleon_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

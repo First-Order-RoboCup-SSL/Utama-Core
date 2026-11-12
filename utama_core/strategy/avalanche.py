@@ -1,4 +1,4 @@
-"""The `overload_press` kernel strategy: `overload_press` and the pickers only it uses."""
+"""`avalanche` (until 2026-11-12 `overload_press`): floods one area with four robots, one blocks. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ from utama_core.tactics.switch_of_play import SwitchOfPlayTactic
 # ---------------------------------------------------------------------------
 
 
-def _overload_press_picker(
+def _avalanche_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
@@ -102,7 +102,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
 
     Four concurrent slots — `DecoyOverloadTactic` ("overload"),
     `SwitchOfPlayTactic` ("switch"), `LeadAndSupportTactic` ("counter"), and
-    `BlockShapeTactic` ("block") — allocated by `_overload_press_picker`:
+    `BlockShapeTactic` ("block") — allocated by `_avalanche_picker`:
     4 robots overload/switch the attack (more bodies than tiki_taka's 2-robot
     defense slot ever marks) with 1 held on the block screen while we have
     the ball; on loss, the whole team goes direct via the counter rather than
@@ -121,7 +121,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "counter": LeadAndSupportTactic(),
             "block": BlockShapeTactic(),
         },
-        partitioner=_overload_press_picker,
+        partitioner=_avalanche_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

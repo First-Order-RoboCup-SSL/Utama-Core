@@ -46,7 +46,7 @@ Usage:
         --trace-out /tmp/repro_trace.jsonl
 
 `--strategy` / `--opponent` take the name of a strategy in
-`utama_core/strategy/` (e.g. `clear_press_plus`, `counter_flow`), the same names as the
+`utama_core/strategy/` (e.g. `breakwater`, `riptide`), the same names as the
 replay's `summary.json` config names. The trace shows the tactics those strategies use, not
 the strategy names (e.g. `decoy_and_overload.*` keys come from a strategy's DecoyOverloadTactic).
 
@@ -115,7 +115,7 @@ def _resolve_config_name(explicit: Optional[str], from_scenario: Optional[str], 
         )
     if name.endswith(SUFFIX):
         return name
-    name = catalog.plain_name(name)
+    name = catalog.current_name(name)
     if name not in catalog.names():
         raise SystemExit(
             f"Unknown strategy config {name!r} (from {'CLI override' if explicit else 'replay metadata'})."
@@ -248,13 +248,13 @@ def main() -> None:
     parser.add_argument(
         "--strategy",
         default=None,
-        help="override the friendly (config_a) strategy: the short name (e.g. clear_press_plus) or the factory "
-        "name (e.g. clear_press_plus); default: the replay's summary.json",
+        help="override the friendly (config_a) strategy: the short name (e.g. breakwater) or the factory "
+        "name (e.g. breakwater); default: the replay's summary.json",
     )
     parser.add_argument(
         "--opponent",
         default=None,
-        help="override the enemy (config_b) strategy, same two name forms (e.g. counter_flow); default: the "
+        help="override the enemy (config_b) strategy, same two name forms (e.g. riptide); default: the "
         "replay's summary.json",
     )
     parser.add_argument(

@@ -20,18 +20,18 @@ strategies named plays these.
 
 | Strategy | Description |
 |---|---|
-| `split_shape` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
-| `counter_flow` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
-| `score_aware_counter_flow` | `counter_flow` plus a late-half scoreline shift (protect a lead / chase). |
-| `press_and_pass` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
-| `clear_press_plus` | `clear_danger` plus `tiki_taka_plus`'s final-third overload. |
-| `high_press` | Same pair as `press_and_pass`, fixed 80/20 attack-heavy split ignoring possession. |
-| `tiki_taka_plus` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
-| `give_and_go_solo` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
-| `overload_press` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
-| `press_trigger_flow` | `counter_flow`, but an all-in press when the ball is lost in our own third. |
-| `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
-| `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
+| `pendulum` | `LeadAndSupportTactic` + `ShadowAndMarkTactic`, split by possession edge. |
+| `riptide` | Give-and-go attack, press on the ball, `BlockShapeTactic` screen; 3/2 with possession hysteresis. |
+| `chameleon` | `riptide` plus a late-half scoreline shift (protect a lead / chase). |
+| `terrier` | `GiveAndGoTactic` + `PressAndContainTactic`, possession-edge split. |
+| `breakwater` | `firebreak` plus `weaver`'s final-third overload. |
+| `wolfpack` | Same pair as `terrier`, fixed 80/20 attack-heavy split ignoring possession. |
+| `weaver` | `tiki_taka`, handing off to `DecoyOverloadTactic`'s duet in the final third. |
+| `ricochet` | Whole pool runs `GiveAndGoTactic`, no defense slot. |
+| `avalanche` | 4-robot overload/switch attack + 1 block, built to outnumber tiki_taka's shadow line. |
+| `tripwire` | `riptide`, but an all-in press when the ball is lost in our own third. |
+| `mirage` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
+| `firebreak` | `riptide` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
 
 **Deleted** (2026-11-12): the ten strategies retired on 2026-10-10 (`tiki_taka`, `counter_press`,
 `high_line_zone`, `three_slot`, `switch_of_play`, `low_block`, `zone_fluid`, `score_aware_zone_flow`,
@@ -55,23 +55,23 @@ reached NORMAL_START.
 Against the 2026-10-10 run: rsim is our fork with the v3 sim noise (latency, motion limits, ball
 friction, kick direction), and restarts, ball placement and the carry limit were fixed, so goals
 fell from 7.1 a match to 4.0 and the results are not comparable with earlier runs.
-`split_shape` is still first, unbeaten; `counter_flow`, second before, is eleventh.
+`pendulum` is still first, unbeaten; `riptide`, second before, is eleventh.
 What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
-| `split_shape` | 10-1-0 | 66-14 | 2.82 |
-| `clear_press_plus` | 5-5-1 | 14-9 | 1.82 |
-| `overload_press` | 6-2-3 | 22-18 | 1.82 |
-| `clear_danger` | 5-2-4 | 20-24 | 1.55 |
-| `tiki_taka_plus` | 5-1-5 | 23-21 | 1.45 |
-| `high_press` | 4-3-4 | 24-27 | 1.36 |
-| `press_trigger_flow` | 4-1-6 | 13-19 | 1.18 |
-| `give_and_go_solo` | 3-3-5 | 20-30 | 1.09 |
-| `press_and_pass` | 3-3-5 | 14-28 | 1.09 |
-| `decoy_and_overload` | 3-2-6 | 16-27 | 1.00 |
-| `counter_flow` | 2-4-5 | 17-21 | 0.91 |
-| `score_aware_counter_flow` | 2-1-8 | 16-27 | 0.64 |
+| `pendulum` | 10-1-0 | 66-14 | 2.82 |
+| `breakwater` | 5-5-1 | 14-9 | 1.82 |
+| `avalanche` | 6-2-3 | 22-18 | 1.82 |
+| `firebreak` | 5-2-4 | 20-24 | 1.55 |
+| `weaver` | 5-1-5 | 23-21 | 1.45 |
+| `wolfpack` | 4-3-4 | 24-27 | 1.36 |
+| `tripwire` | 4-1-6 | 13-19 | 1.18 |
+| `ricochet` | 3-3-5 | 20-30 | 1.09 |
+| `terrier` | 3-3-5 | 14-28 | 1.09 |
+| `mirage` | 3-2-6 | 16-27 | 1.00 |
+| `riptide` | 2-4-5 | 17-21 | 0.91 |
+| `chameleon` | 2-1-8 | 16-27 | 0.64 |
 
 ## Known open bugs
 

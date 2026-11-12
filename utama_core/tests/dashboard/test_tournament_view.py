@@ -21,7 +21,7 @@ def test_each_match_carries_the_path_of_its_replay_when_the_file_exists(tmp_path
         tmp_path,
         [
             {"config_a": "low_block", "config_b": "three_slot"},
-            {"config_a": "tiki_taka", "config_b": "counter_flow"},
+            {"config_a": "tiki_taka", "config_b": "riptide"},
         ],
     )
     (run / "low_block_vs_three_slot.npz").write_bytes(b"")

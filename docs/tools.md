@@ -143,7 +143,7 @@ the field logs in `replays/field/`.
 
 | Script | Purpose |
 |---|---|
-| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `split_shape` vs `high_press`. |
+| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `pendulum` vs `wolfpack`. |
 | `examples/demo_custom_referee.py` | Every `CustomReferee` rule in a scripted scenario, in a pygame window; no simulator needed |
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
@@ -165,4 +165,4 @@ the field logs in `replays/field/`.
 | `utama_core/analysis/close_calls.py` | Where two robots came within 0.25 m of each other in field logs (`replays/field/*.log`): how near, how fast they were closing, and the referee command in force; only the robots the run drove, `--tag` per robot. `python -m utama_core.analysis.close_calls replays/field/*real*.log` |
 | `examples/planner_ab.py` | Two robots swap ends head on and cross, again and again, in blocks alternating the planner (fpp, trajsample): contacts, close calls, nearest approach and time per planner; every block a game log. The field A/B of the motion planners |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
-| `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |
+| `examples/demo_pendulum_match.py` | Visible grSim 6v6 of `pendulum` against itself |

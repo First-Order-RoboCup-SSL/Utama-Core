@@ -1,4 +1,4 @@
-"""The `clear_press_plus` kernel strategy: `clear_press_plus` and the pickers only it uses."""
+"""`breakwater` (until 2026-11-12 `clear_press_plus`): breaks attacks, clears danger from its own third, then overloads the final third. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
 # ---------------------------------------------------------------------------
-# clear_press_plus (2026-09-02 addition)
+# breakwater (2026-09-02 addition)
 #
 # Stacks the catalog's two most validated single-wrinkle additions onto one
-# base instead of picking between them: `clear_danger`'s safety valve (a
+# base instead of picking between them: `firebreak`'s safety valve (a
 # deep-and-contested own-third clearance, the one situational gap no other
-# strategy fills) plus `tiki_taka_plus`'s final-third overload handoff (the
+# strategy fills) plus `weaver`'s final-third overload handoff (the
 # only other single-wrinkle addition with a confirmed independent win --
 # 10W-6D in its most recent tournament, clearing the field outright). The
 # two wrinkles fire in disjoint game states by construction (the valve needs
@@ -38,19 +38,19 @@ from utama_core.tactics.press_and_contain import PressAndContainTactic
 # ---------------------------------------------------------------------------
 
 
-def _clear_press_plus_picker(
+def _breakwater_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
     available_tactic_ids: frozenset[str],
 ) -> dict[str, frozenset[RobotId]]:
-    """`_clear_danger_picker`'s allocation, with `_tiki_taka_plus_picker`'s
+    """`_firebreak_picker`'s allocation, with `_weaver_picker`'s
     final-third handoff grafted onto its attacking branch: when we hold the
     ball and it is not deep-and-contested in our own third, the final third
     hands off from the give-and-go trio to the 2-robot overload duet instead
     of running give-and-go the length of the pitch. The clearance valve and
     the losing-possession press/block branches are unchanged from
-    `_clear_danger_picker`.
+    `_firebreak_picker`.
     """
     ordered = carrier_first(game, free_robots)
     if not ordered:
@@ -98,15 +98,15 @@ def _clear_press_plus_picker(
 
 
 def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
-    """`clear_danger` plus `tiki_taka_plus`'s final-third overload handoff.
+    """`firebreak` plus `weaver`'s final-third overload handoff.
 
     Five concurrent slots -- `GiveAndGoTactic` ("attack"),
     `DecoyOverloadTactic` ("overload"), `ClearBallTactic` ("clear"),
     `PressAndContainTactic` ("press"), and `BlockShapeTactic` ("block") --
-    allocated by `_clear_press_plus_picker`: identical to `clear_danger`
+    allocated by `_breakwater_picker`: identical to `firebreak`
     except the attacking branch hands off from give-and-go to the overload
     duet once the ball reaches the final third, the same swap
-    `tiki_taka_plus` validated on `tiki_taka`'s base.
+    `weaver` validated on `tiki_taka`'s base.
 
     Returns a `build(motion_controller)`
     callable suitable for `AbstractStrategy`'s constructor argument of the
@@ -122,7 +122,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "press": PressAndContainTactic(),
             "block": BlockShapeTactic(),
         },
-        partitioner=_clear_press_plus_picker,
+        partitioner=_breakwater_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

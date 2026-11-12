@@ -1,4 +1,4 @@
-"""The `tiki_taka_plus` kernel strategy: `tiki_taka_plus` and the pickers only it uses."""
+"""`weaver` (until 2026-11-12 `tiki_taka_plus`): short passing, then a two-robot move in the final third. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -21,19 +21,19 @@ from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
 # ---------------------------------------------------------------------------
-# tiki_taka_plus (2026-08-23 addition)
+# weaver (2026-08-23 addition)
 #
-# Every "beat tiki_taka" attempt in the catalog (`overload_press`,
-# `high_line_zone`, `counter_flow`) targeted the same weakness: tiki_taka's
+# Every "beat tiki_taka" attempt in the catalog (`avalanche`,
+# `high_line_zone`, `riptide`) targeted the same weakness: tiki_taka's
 # defensive cover is a flat 2 robots in *every* posture, with no
 # specialization anywhere on the pitch. The two attempts that tried to
 # outnumber that thin line lost before the numbers edge ever mattered --
 # tiki_taka's own 3-robot press smothered them in the transition window
-# first. `counter_flow` won instead by matching tiki_taka's engine
+# first. `riptide` won instead by matching tiki_taka's engine
 # (`GiveAndGoTactic`, same press numbers) and adding a wrinkle tiki_taka
 # itself lacks (a space-denying block screen instead of man-marking).
 #
-# `tiki_taka_plus` applies that same lesson *to* tiki_taka rather than
+# `weaver` applies that same lesson *to* tiki_taka rather than
 # *against* it: keep tiki_taka's proven build-up/press engine untouched, and
 # add the one wrinkle it doesn't have -- a distinct final-third finishing
 # move. `_zone_flow_picker` already validated handing the attacking slot
@@ -52,13 +52,13 @@ from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 # presses with 3 robots (not just the 2 original cover robots) any time the
 # ball is lost. tiki_taka's cover pair already gets folded into the press
 # the moment possession is lost -- there is no separate "poaching" gap to
-# close at the picker level. So `tiki_taka_plus` only implements the
+# close at the picker level. So `weaver` only implements the
 # final-third handoff; it reuses `_tiki_taka_picker`'s possession-edge and
 # press logic unchanged.
 # ---------------------------------------------------------------------------
 
 
-def _tiki_taka_plus_picker(
+def _weaver_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
@@ -122,22 +122,22 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
     build-up and press-on-loss engine, but the attacking slot hands off to
     `DecoyOverloadTactic`'s two-role duet once the ball reaches the final
     third, instead of running the give-and-go trio the whole length of the
-    pitch. See the "tiki_taka_plus" comment block above
-    `_tiki_taka_plus_picker` for the full design rationale, including why a
+    pitch. See the "weaver" comment block above
+    `_weaver_picker` for the full design rationale, including why a
     second considered change (press applicability for the cover pair) turned
     out to already be present in tiki_taka's existing structure.
 
     Four concurrent slots -- `GiveAndGoTactic` ("attack"),
     `DecoyOverloadTactic` ("overload"), `PressAndContainTactic` ("press"),
     and `ShadowAndMarkTactic` ("defense") -- allocated by
-    `_tiki_taka_plus_picker`: 3+2 attack/cover in the own/mid thirds, 2+3
+    `_weaver_picker`: 3+2 attack/cover in the own/mid thirds, 2+3
     overload/cover in the final third, 3+2 press/cover when the ball is
     lost.
 
     Promoted into `full_match_tournament.py`'s `competitive` tier 2026-08-23
     on its first decoupled side x kickoff round-robin result (6W-7D over 16
-    matches, tying `counter_flow` for most wins and clearly outperforming its
-    own base `tiki_taka`, 3W-10D) -- see `docs/strategies.md`'s "tiki_taka_plus
+    matches, tying `riptide` for most wins and clearly outperforming its
+    own base `tiki_taka`, 3W-10D) -- see `docs/strategies.md`'s "weaver
     added" section for the full writeup, including the caveat that one
     40-match run isn't yet enough to rule out variance at this sample size.
 
@@ -154,7 +154,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "press": PressAndContainTactic(),
             "defense": ShadowAndMarkTactic(),
         },
-        partitioner=_tiki_taka_plus_picker,
+        partitioner=_weaver_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

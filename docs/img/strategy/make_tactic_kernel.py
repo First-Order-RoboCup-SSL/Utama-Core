@@ -32,7 +32,7 @@ NAMES = [
     "utama_core/engine/tactic.py",
     "utama_core/engine/context.py",
     "utama_core/engine/match_log.py",
-    "utama_core/strategy/split_shape.py",
+    "utama_core/strategy/pendulum.py",
     "utama_core/tactics",
     "utama_core/skills/src",
 ]
@@ -104,7 +104,7 @@ d.box(
     46,
     12,
     "Partitioner",
-    "strategy/split_shape.py and similar: splits\nthe free robots over the applicable tactics",
+    "strategy/pendulum.py and similar: splits\nthe free robots over the applicable tactics",
     kind="decision",
 )
 d.main((M, 67.5), (M, 60))

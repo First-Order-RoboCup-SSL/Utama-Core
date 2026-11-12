@@ -9,7 +9,7 @@ referee_view.attach(server, referee, profile)   # utama_core.dashboard.views.ref
 ```
 
 `examples/demo_referee_gui_rsim.py` does this with RSim, the `human` profile and
-`tiki_taka_plus` (constants `PROFILE`, `N_ROBOTS`, `MY_TEAM_IS_YELLOW`, `MY_TEAM_IS_RIGHT` at
+`weaver` (constants `PROFILE`, `N_ROBOTS`, `MY_TEAM_IS_YELLOW`, `MY_TEAM_IS_RIGHT` at
 the top of the file):
 
 ```bash

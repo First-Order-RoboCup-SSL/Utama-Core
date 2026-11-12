@@ -62,8 +62,8 @@ def test_fuzz_restarts_and_interval_parsed_and_passed_to_run_match(tmp_path, mon
             "--fuzz-interval",
             "5",
             "10",
-            "split_shape",
-            "tiki_taka_plus",
+            "pendulum",
+            "weaver",
         ],
     )
 
@@ -94,8 +94,8 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
         [
             "tournament.py",
             "--sequential",
-            "split_shape",
-            "tiki_taka_plus",
+            "pendulum",
+            "weaver",
         ],
     )
 
@@ -126,13 +126,11 @@ def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkey
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(
-        "sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "tiki_taka_plus", "split_shape"]
-    )
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "weaver", "pendulum"])
 
     tournament.main()
 
-    assert calls == [("tiki_taka_plus", "split_shape")]
+    assert calls == [("weaver", "pendulum")]
 
 
 def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
@@ -186,8 +184,8 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
             "--sequential",
             "--sim-noise",
             '{"seed": 3, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.2}',
-            "split_shape",
-            "tiki_taka_plus",
+            "pendulum",
+            "weaver",
         ],
     )
 
@@ -202,14 +200,12 @@ def test_match_seconds_is_part_of_the_environment_so_each_length_has_its_own_res
     # A shortened run's matches must not be taken for full-length ones: each match length is its own
     # environment in the store, and the length is recorded in the summary.
     monkeypatch.setattr(tournament, "run_match", _stub_result)
-    monkeypatch.setattr(
-        "sys.argv", ["tournament.py", "--sequential", "--match-seconds", "300", "split_shape", "tiki_taka_plus"]
-    )
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "--match-seconds", "300", "pendulum", "weaver"])
     tournament.main()
     (summary_path,) = tmp_path.glob("tournament_*/summary.json")
     assert json.loads(summary_path.read_text())["max_match_seconds"] == 300.0
 
-    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "split_shape", "tiki_taka_plus"])
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "pendulum", "weaver"])
     tournament.main()
 
     envs = sorted((tmp_path / "match_results").iterdir())

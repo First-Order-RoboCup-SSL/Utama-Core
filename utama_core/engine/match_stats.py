@@ -430,7 +430,7 @@ _POSSESSION_RADIUS_M = 2 * ROBOT_RADIUS + 0.05
 # tools/metric_correlation.py's `_PASS_RELEASE_MPS`, which itself matches
 # this file's own `_SHOT_LOCK_RELEASE_MPS`).
 _PASS_RELEASE_MPS = 1.0
-_MIN_PASS_M = 0.5  # 90% of overload_press's "148 passes" per match were shorter (2026-11-09)
+_MIN_PASS_M = 0.5  # 90% of avalanche's "148 passes" per match were shorter (2026-11-09)
 # Hysteresis band around the attacking-third boundary (half_length +
 # _SHOT_ATTACKING_THIRD_M) so oscillation on that line doesn't double-count
 # entries. Matches tools/metric_correlation.py's `_ENTRY_HYSTERESIS_M`.

@@ -35,8 +35,8 @@ DURATION_SECONDS = 90
 
 
 def main():
-    my_strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
-    opp_strategy = AbstractStrategy(build=builder("split_shape", (1, 2, 3, 4, 5)))
+    my_strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
+    opp_strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
 
     profile = load_profile("simulation")
     referee = CustomReferee(profile, n_robots_yellow=6, n_robots_blue=6)

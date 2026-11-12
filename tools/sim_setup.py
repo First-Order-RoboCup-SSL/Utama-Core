@@ -50,9 +50,9 @@ def factory_for(name: str) -> Callable:
     """`f(outfield_robot_ids)` -> `AbstractStrategy`'s `build`, for a catalog strategy or `PATH.py:FUNCTION`
     (imported as it is)."""
     if not is_file_spec(name):
-        if catalog.plain_name(name) not in catalog.names():
+        if catalog.current_name(name) not in catalog.names():
             raise UnknownStrategy(f"unknown strategy {name!r}; strategies: {', '.join(catalog.names())}")
-        return partial(catalog.builder, catalog.plain_name(name))
+        return partial(catalog.builder, catalog.current_name(name))
     path, _, func = name.rpartition(":")
     if not Path(path).is_file():
         raise UnknownStrategy(f"{name}: no such file {path}")

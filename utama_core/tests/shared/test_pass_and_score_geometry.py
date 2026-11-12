@@ -744,7 +744,7 @@ def test_carry_exhausted_counts_the_distance_needed_to_stop():
     assert carry_exhausted(moving, origin, stops_after=True)
     assert not carry_exhausted(at_rest, origin, stops_after=True)
     # A carrier that kicks while moving (GiveAndGo) never brakes with the ball, so
-    # its carry isn't cut short by speed: counting it cost give_and_go_solo half
+    # its carry isn't cut short by speed: counting it cost ricochet half
     # its goals in an A/B.
     assert not carry_exhausted(moving, origin)
 

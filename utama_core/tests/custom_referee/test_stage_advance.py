@@ -180,7 +180,7 @@ def test_an_operator_profile_ends_no_half_itself():
 
 
 def test_late_in_half_means_the_last_minute_of_playing_time_not_of_sim_time():
-    """strategy.pickers.is_late_in_half (score_aware_counter_flow, score_aware_zone_flow): with the
+    """strategy.pickers.is_late_in_half (chameleon, score_aware_zone_flow): with the
     clock counting sim time and stopping at 0, a 600 s round-robin match was "late" from 240 s
     of sim time to the end."""
     from types import SimpleNamespace

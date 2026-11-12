@@ -11,7 +11,7 @@ What it does:
   - Passes the referee to StrategyRunner via referee=. StrategyRunner
     calls referee.step() on every tick and handles ball teleports on STOP
     automatically — no patching required.
-  - builder("tiki_taka_plus", ...) builds the give-and-go +
+  - builder("weaver", ...) builds the give-and-go +
     final-third decoy-overload kernel strategy (see
     docs/strategies.md) so you can watch real tactic assignments in the
     dashboard's Live tab instead of an aimless wandering tactic, and watch
@@ -20,7 +20,7 @@ What it does:
 
 Operator workflow:
   1. Open http://localhost:8080 in a browser.
-  2. Robots start playing under tiki_taka_plus; the Live tab's Tactics panel
+  2. Robots start playing under weaver; the Live tab's Tactics panel
      shows each robot's current slot ("attack"/"overload"/"press"/"defense").
   3. Click any command button (Halt, Stop, Kickoff Yellow…) — robots reposition.
   4. Click Normal Start to resume free play.
@@ -47,7 +47,7 @@ from utama_core.strategy.catalog import builder
 
 PROFILE = "human"  # "human" or "simulation"
 DASHBOARD_PORT = 8080
-N_ROBOTS = 6  # robots per side (5 outfield + 1 goalkeeper) — tiki_taka_plus's tournament size
+N_ROBOTS = 6  # robots per side (5 outfield + 1 goalkeeper) — weaver's tournament size
 MY_TEAM_IS_YELLOW = True
 MY_TEAM_IS_RIGHT = True
 
@@ -69,7 +69,7 @@ def main() -> None:
 
     outfield_robot_ids = tuple(range(1, N_ROBOTS))
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build=builder("tiki_taka_plus", outfield_robot_ids)),
+        strategy=AbstractStrategy(build=builder("weaver", outfield_robot_ids)),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",
@@ -78,7 +78,7 @@ def main() -> None:
         exp_enemy=N_ROBOTS,
         referee=referee,  # StrategyRunner drives referee.step() each tick
         show_live_status=True,
-        opp_strategy=AbstractStrategy(build=builder("tiki_taka_plus", outfield_robot_ids)),
+        opp_strategy=AbstractStrategy(build=builder("weaver", outfield_robot_ids)),
     )
 
     runner.run()

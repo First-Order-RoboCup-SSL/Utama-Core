@@ -55,7 +55,7 @@ _PRESS_RANGE = 1.5  # metres — nominal midpoint kept for backward compatibilit
 # then away, then back, several times a second, until the unstable contact
 # knocked the ball out of bounds — mirrors the same "sticky edge" fix
 # `friendly_closer_to_ball`-consuming pickers already needed, see
-# `counter_flow.py`'s `_counter_flow_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
+# `riptide.py`'s `_riptide_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
 # Require the *opposite* classification to hold for this many consecutive
 # ticks before actually switching mode.
 _LOOSE_BALL_HYSTERESIS_TICKS = 15  # 0.25s at 60Hz — enough to reject single-tick flicker, short enough to react promptly once a contest genuinely resolves

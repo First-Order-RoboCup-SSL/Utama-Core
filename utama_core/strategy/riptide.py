@@ -1,4 +1,4 @@
-"""The `counter_flow` kernel strategy: `counter_flow` and the pickers only it uses."""
+"""`riptide` (until 2026-11-12 `counter_flow`): soaks up pressure, then counters fast. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 
 
-def _counter_flow_picker(
+def _riptide_picker(
     game: Game,
     free_robots: frozenset[RobotId],
     prev_partition: Optional[dict[str, frozenset[RobotId]]],
@@ -30,7 +30,7 @@ def _counter_flow_picker(
     window with our own press instead of ceding it, and fall back to a
     space-denying screen (not man-shadow) when neither side has an edge.
 
-    Both `overload_press` and `high_line_zone` tried to out-number
+    Both `avalanche` and `high_line_zone` tried to out-number
     tiki_taka's 2-robot shadow defense and lost before that numbers edge
     ever got to matter — tiki_taka's 3-robot press (1 presser + 2 markers,
     `PressAndContainTactic` only becomes applicable within 1.5 m of the
@@ -108,9 +108,9 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
 
     Three concurrent slots — `GiveAndGoTactic` ("attack"),
     `PressAndContainTactic` ("press"), and `BlockShapeTactic` ("block") —
-    allocated by `_counter_flow_picker` on a 3/2 split matching tiki_taka's
+    allocated by `_riptide_picker` on a 3/2 split matching tiki_taka's
     own commitment in both postures, rather than the numbers-overload bet
-    `overload_press`/`high_line_zone` made and lost. The theory: neither
+    `avalanche`/`high_line_zone` made and lost. The theory: neither
     prior anti-tiki_taka attempt ever got far enough to test its numbers
     edge because tiki_taka's press won the transition window outright: this
     strategy contests that window symmetrically (our own 3-press) instead
@@ -129,7 +129,7 @@ def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionControll
             "press": PressAndContainTactic(),
             "block": BlockShapeTactic(),
         },
-        partitioner=_counter_flow_picker,
+        partitioner=_riptide_picker,
         outfield_robot_ids=outfield_robot_ids,
         ctx=ctx,
     )

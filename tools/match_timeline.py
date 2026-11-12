@@ -55,9 +55,9 @@ from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: 
 # the robot reverted before B could do anything. A robot with at least FLIP_BACKS_PER_MIN of them per minute
 # of live play gets a `tactic_thrash` finding. Raw switch rate is not the signal: most strategies switch
 # 10-25 times per live minute by design (attack/defence on possession). Measured on tournament_20261017_151052
-# (66 matches, friendly robots, median flip-backs under 1 s per live min): give_and_go_solo 0.0, decoy_and_overload
-# 0.1, high_press 0.3, overload_press 0.5; counter_flow, clear_danger, clear_press_plus, split_shape,
-# press_trigger_flow, score_aware_counter_flow 4.6-5.6; press_and_pass 13.4. 2 per min (one every 30 s of live
+# (66 matches, friendly robots, median flip-backs under 1 s per live min): ricochet 0.0, mirage
+# 0.1, wolfpack 0.3, avalanche 0.5; riptide, firebreak, breakwater, pendulum,
+# tripwire, chameleon 4.6-5.6; terrier 13.4. 2 per min (one every 30 s of live
 # play) sits between the steady and the flipping strategies.
 FLIP_S = 1.0
 FLIP_BACKS_PER_MIN = 2.0

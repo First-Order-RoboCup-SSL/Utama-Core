@@ -23,10 +23,10 @@ stalls, and with `--restarts` illegal restart targets), and draws the worst few 
 kind. Read its `index.md` first: each problem's numbers, then the picture path. About 20 s a match
 (a minute with `--restarts`); `evaluate.py --explain` runs it on the candidate's two worst matches.
 
-A stall it found in `split_shape` against `tiki_taka_plus`: from 783 to 786 s, four of our robots
+A stall it found in `pendulum` against `weaver`: from 783 to 786 s, four of our robots
 oscillate with the ball frozen. The picture is the match timeline around it, recorded data only:
 
-![a stall in the match timeline](img/match_timeline/stall_split_shape_773-796.png)
+![a stall in the match timeline](img/match_timeline/stall_pendulum_773-796.png)
 
 Robots 2-4 switch between `ShadowAndMarkTactic` and `LeadAndSupportTactic` together, three times within
 half a second at 780.5 s and again at 782.4, 783.2 and 785.2 s, while robots 0, 1, 2 and 5 stay within
@@ -51,27 +51,27 @@ What it shows:
   Which tactic draws them, from the intentions log (live play, robots on the line):
   - the line in our half is mostly `BlockShapeTactic`'s screen, held at a fixed depth by design
     (`_SCREEN_OFFSET` in front of our box, shifting only sideways with the ball): 73-83% of the
-    samples there in `clear_danger`, `counter_flow`, `press_trigger_flow`, `score_aware_counter_flow`
-    and `clear_press_plus`. Those robots stand still 57-63% of the time, with the ball a median
-    2-3 m ahead of them. `split_shape` and `decoy_and_overload` draw the same kind of line with
+    samples there in `firebreak`, `riptide`, `tripwire`, `chameleon`
+    and `breakwater`. Those robots stand still 57-63% of the time, with the ball a median
+    2-3 m ahead of them. `pendulum` and `mirage` draw the same kind of line with
     `ShadowAndMarkTactic` a little deeper (x ≈ −3.0 m).
-  - the lines from `GiveAndGoTactic` (x ≈ −2.4 and +3.0 m in `give_and_go_solo` and `high_press`)
+  - the lines from `GiveAndGoTactic` (x ≈ −2.4 and +3.0 m in `ricochet` and `wolfpack`)
     are not explained yet: the ball is at the same depth (median 0 m ahead), mostly near a
     touchline (median |y| 2.4-2.6 m).
-  A fixed line is not by itself why a strategy loses: `clear_danger` holds the screen and ranks
+  A fixed line is not by itself why a strategy loses: `firebreak` holds the screen and ranks
   fourth. Whether a ball-following depth beats it is a question for `evaluate.py`, not this
   picture.
-- `split_shape`, the top scorer, keeps most of its outfield robots in **its own defensive third even
-  with the ball**, and attacks with one or two. `overload_press` is the opposite: a block just past
+- `pendulum`, the top scorer, keeps most of its outfield robots in **its own defensive third even
+  with the ball**, and attacks with one or two. `avalanche` is the opposite: a block just past
   halfway, in and out of possession.
-- `decoy_and_overload` sits deep in a cluster in front of its own box.
+- `mirage` sits deep in a cluster in front of its own box.
 
 ### Where it shoots from, and concedes: the shot map
 
 ![shots for and against](img/signals/shots.png)
 
 Blue are the strategy's own shots at the spot they were struck from (filled: a goal), faded orange the
-shots it conceded. `split_shape` takes 241 shots in its 11 matches, from all over the attacking half,
+shots it conceded. `pendulum` takes 241 shots in its 11 matches, from all over the attacking half,
 two and a half times the next strategy; the others take 69-98.
 
 ### Where it fouls
@@ -90,8 +90,8 @@ The rest of the strategy report, as numbers: [signal_report.md](signal_report.md
 
 The same maps for just two strategies, a candidate and the champion, side by side on one colour scale;
 `evaluate.py --explain` draws them (with shots, fouls and a `summary.json`) before an evaluation removes
-its replays. This example is drawn from the round-robin: `split_shape` holds 37% of its possession in the
-attacking half against `clear_press_plus`'s 65%, yet takes 21.9 shots a match against 6.3, and commits
+its replays. This example is drawn from the round-robin: `pendulum` holds 37% of its possession in the
+attacking half against `breakwater`'s 65%, yet takes 21.9 shots a match against 6.3, and commits
 twice the fouls (10.0 against 4.7 a match, mostly ball held in the defense area and crashing).
 
 Draw: `tools/evaluation/evaluate.py CANDIDATE --explain`, or `tools/evaluation/explain.py RUN_DIR
@@ -99,9 +99,9 @@ CANDIDATE CHAMPION --out DIR` on any run dir.
 
 ## 3. One match over time
 
-![split_shape timeline](img/match_timeline/split_shape_100-160.png)
+![pendulum timeline](img/match_timeline/pendulum_100-160.png)
 
-Sixty seconds of `split_shape` against `tiki_taka_plus`. From the top: events (fouls, shots), the
+Sixty seconds of `pendulum` against `weaver`. From the top: events (fouls, shots), the
 referee command, one lane per robot coloured by the tactic it was in (a tick at each switch, a black strip
 while it had the ball), and each robot's distance to the ball. Hatched lanes are stoppages, where the
 referee override moves robots instead of their tactics.
@@ -109,8 +109,8 @@ referee override moves robots instead of their tactics.
 What it shows: robots 2-4 switch between `ShadowAndMarkTactic` and `LeadAndSupportTactic` together,
 several times within a few seconds (112-117 s, 139-146 s), while robots 1 and 5 hold one tactic. Over a
 whole round-robin, a tactic held under 1 s and then reverted (a flip-back) happens about 5 times a
-minute in most strategies that split attack and defence on possession, 13 in `press_and_pass`, and
-almost never in `give_and_go_solo`, `high_press` or `decoy_and_overload`. Not fixed yet.
+minute in most strategies that split attack and defence on possession, 13 in `terrier`, and
+almost never in `ricochet`, `wolfpack` or `mirage`. Not fixed yet.
 
 Draw: `pixi run python tools/match_timeline.py REPLAY.npz T0 T1`.
 
@@ -162,7 +162,7 @@ benchmark: [motion_planning_comparison.md](motion_planning_comparison.md).
 
 The planner's decision for one robot on one recorded tick: every robot with its clearance ring, the
 ball's keep-out circle (dashed), the robot's target and the carrot (the point the planner steers to this
-tick). Here `tiki_taka_plus`'s robot 4 (the replay's enemy side) sits on the keep-out circle at a kickoff, 0.799 m from the ball; its target
+tick). Here `weaver`'s robot 4 (the replay's enemy side) sits on the keep-out circle at a kickoff, 0.799 m from the ball; its target
 (−1.0, −0.3) is across the circle. The planner's answer is a carrot 5 cm away: push the robot out to
 0.85 m first.
 

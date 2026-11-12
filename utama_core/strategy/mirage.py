@@ -1,4 +1,4 @@
-"""The `decoy_and_overload` kernel strategy: `decoy_and_overload` and the pickers only it uses."""
+"""`mirage` (until 2026-11-12 `decoy_and_overload`): decoy runs pull defenders away from the real attack. The pickers only it uses are here."""
 
 from __future__ import annotations
 

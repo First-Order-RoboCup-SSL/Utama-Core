@@ -13,7 +13,7 @@ needed no porting itself. This tactic is that same dispatch, expressed as a
 Exception: a loose ball with no enemy contesting it (see `ball_is_loose`)
 never gets shadowed at all — shadowing only ever reacts to the ball's
 current position, so an abandoned ball just sits there forever with a
-defender parked a shot-shadow's distance away. Found live: a `clear_danger`
+defender parked a shot-shadow's distance away. Found live: a `firebreak`
 vs `low_block` match pinned 28 straight seconds this way, ball dead in a
 corner near `low_block`'s own goal line, three defenders standing
 1.1-1.5m away all still shadowing a shot no one was taking. The nearest

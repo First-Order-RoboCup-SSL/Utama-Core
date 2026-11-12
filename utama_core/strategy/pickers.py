@@ -65,7 +65,7 @@ def fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, 
 # ---------------------------------------------------------------------------
 # Arena strategies — plan-driven multi-tactic teams (2026-08-20 addition)
 #
-# The barebone factories (default/split_shape/low_block/...) exist to exercise
+# The barebone factories (default/pendulum/low_block/...) exist to exercise
 # the kernel machinery; these three are meant as *playable* teams: every
 # posture reads live game state (ball ownership, ball zone), every posture
 # has both an attack and a defense answer, and the allocation reacts to the

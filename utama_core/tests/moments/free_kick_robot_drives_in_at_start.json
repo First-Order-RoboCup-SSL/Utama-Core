@@ -6,7 +6,7 @@
     "t": 155.3
   },
   "strategy": "all",
-  "opponent": "overload_press",
+  "opponent": "avalanche",
   "seconds": 3.0,
   "checks": [
     "keep_out",

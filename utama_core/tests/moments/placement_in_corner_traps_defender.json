@@ -6,7 +6,7 @@
     "t": 163.0
   },
   "strategy": "all",
-  "opponent": "give_and_go_solo",
+  "opponent": "ricochet",
   "seconds": 3.0,
   "checks": [
     "keeps_clear",

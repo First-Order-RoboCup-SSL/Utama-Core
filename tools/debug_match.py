@@ -1,8 +1,8 @@
 """debug_match.py — one-off ad hoc match runner for tactic debugging.
 
 Run:
-    pixi run python tools/debug_match.py --strategy counter_flow \\
-        --opponent high_press --duration 90 --headless
+    pixi run python tools/debug_match.py --strategy riptide \\
+        --opponent wolfpack --duration 90 --headless
 
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
 bug (`trace_relay_stall.py`, `trace_finish_detail.py`, `check_keeper.py`,

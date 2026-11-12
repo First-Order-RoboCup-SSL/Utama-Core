@@ -1,4 +1,4 @@
-"""The `high_press` kernel strategy: `high_press` and the pickers only it uses."""
+"""`wolfpack` (until 2026-11-12 `high_press`): hunts the ball high up as a group, a fixed 80/20 attack-heavy split. The pickers only it uses are here."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from utama_core.tactics.press_and_contain import PressAndContainTactic
 def build(outfield_robot_ids: tuple[int, ...], motion_controller: MotionController) -> KernelSchedulerStrategy:
     """5-robot (or fewer) `Strategy` factory: an aggressive, *non-reactive*
     posture — most of the pool commits forward regardless of who has the
-    ball, unlike `press_and_pass`'s possession-edge
+    ball, unlike `terrier`'s possession-edge
     split. Wires the same `GiveAndGoTactic`/`PressAndContainTactic` pair as
     that config, but the two are not interchangeable: the point here is to
     demonstrate that the same Tactic set can be driven by a mechanically
