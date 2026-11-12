@@ -1,18 +1,17 @@
-"""How often evaluate.py's stopping rule gets it right: the rule played on simulated match results.
+"""How often evaluate.py's rule gets it right: the rule played on simulated match results.
 
-    pixi run python tools/evaluation/verdict_sim.py [--trials 4000] [--opponents 4 5]
+    pixi run python tools/evaluation/verdict_sim.py [--trials 4000] [--opponents 4 5] [--sd 1.6]
 
 No matches are played. A candidate and the reference meet each opponent once per round (same seed and
 colour, so their results are correlated `rho`: ~0.9 for a small edit of one strategy, ~0 for
-unrelated strategies) and each other once; every match's goal difference has SD `ratings.NOISE_SD`.
-The rule is evaluate.py's: `ratings.paired_difference`, better at P >= PROMOTE, dropped at P <= DROP,
-undecided after MAX_ROUNDS. Prints, per true effect (goals per match) and correlation, the share of
-candidates called better and dropped, and the mean number of rounds.
+unrelated strategies); every match's goal difference has SD `sd`. The rule is `ratings.decide`, the
+one evaluate.py runs: a screen of ROUNDS rounds that only drops, then ROUNDS fresh rounds that accept
+at p <= ALPHA. Prints, per true effect (goals per match) and correlation, the share of candidates
+called better, dropped and undecided, and the mean number of rounds played.
 
-What it leaves out: the noise SD is given, not fitted (evaluate.py fits it from the store), and a
-candidate's effect is the same against every opponent (no matchups). The test
-(`tests/tools/test_verdict_sim.py`) pins the claim the docs make: two equal strategies are called
-better rarely.
+What it leaves out: a candidate's effect is the same against every opponent (no matchups), and diffs
+are normal (real ones are whole goals, maybe heavy-tailed). The test (`tests/tools/test_verdict_sim.py`)
+pins the claim the docs make: an equal strategy is called better at most ALPHA of the time.
 """
 
 from __future__ import annotations
@@ -29,35 +28,28 @@ if str(REPO_ROOT) not in sys.path:
 
 from utama_core.analysis import ratings  # noqa: E402
 
-# evaluate.py's rule; kept here so this needs no simulator (tests check they agree)
-PROMOTE = 0.99
-DROP = 0.2
-MAX_ROUNDS = 6
-
 
 def simulate(
     effect: float, rho: float, n_opponents: int, trials: int, seed: int = 0, sd: float = ratings.NOISE_SD
 ) -> dict:
     """Share of `trials` candidates called better / dropped / undecided, and their mean rounds."""
     rng = np.random.default_rng(seed)
-    cov = sd**2 * np.array([[1.0, rho], [rho, 1.0]])
+    sd_diff = sd * np.sqrt(2 * (1 - rho))  # SD of one diff: candidate's margin minus the reference's
     out = {"better": 0, "dropped": 0, "undecided": 0, "rounds": 0}
     for _ in range(trials):
-        diffs: list[float] = []
-        h2h: list[float] = []
-        for k in range(1, MAX_ROUNDS + 1):
-            pair = rng.multivariate_normal([effect, 0.0], cov, size=n_opponents)
-            diffs += list(pair[:, 0] - pair[:, 1])
-            h2h.append(effect + rng.normal(0.0, sd))
-            margin, msd = ratings.paired_difference(diffs, h2h, sd)
-            p = ratings.p_positive(margin, msd)
-            verdict = "better" if p >= PROMOTE else "dropped" if p <= DROP else None
-            if verdict is None and k == MAX_ROUNDS:
-                verdict = "undecided"
-            if verdict is not None:
-                out[verdict] += 1
-                out["rounds"] += k
+        verdict, k = None, 0
+        for confirming in (False, True):
+            diffs: list[float] = []  # each stage decides on its own seeds' diffs only
+            for j in range(1, ratings.ROUNDS + 1):
+                k += 1
+                diffs += list(rng.normal(effect, sd_diff, size=n_opponents))
+                verdict = ratings.decide(ratings.paired_test(diffs), j, confirming)
+                if verdict is not None:
+                    break
+            if verdict != "confirm":
                 break
+        out[verdict] += 1
+        out["rounds"] += k
     return {key: value / trials for key, value in out.items()}
 
 
@@ -65,12 +57,14 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--trials", type=int, default=4000)
     parser.add_argument("--opponents", type=int, nargs="+", default=[4, 5])
+    parser.add_argument("--sd", type=float, default=ratings.NOISE_SD)
     args = parser.parse_args(argv)
+    print(f"ROUNDS {ratings.ROUNDS}, ALPHA {ratings.ALPHA}, match SD {args.sd}")
     print(f"{'opponents':>9} {'rho':>4} {'effect':>6} {'better':>7} {'dropped':>8} {'undecided':>9} {'rounds':>6}")
     for n in args.opponents:
         for rho in (0.0, 0.5, 0.9):
-            for effect in (-1.0, -0.5, 0.0, 0.5, 1.0):
-                r = simulate(effect, rho, n, args.trials)
+            for effect in (-0.5, 0.0, 0.3, 0.5, 1.0):
+                r = simulate(effect, rho, n, args.trials, sd=args.sd)
                 print(
                     f"{n:>9} {rho:>4.1f} {effect:>+6.1f} {r['better']:>7.1%} {r['dropped']:>8.1%} "
                     f"{r['undecided']:>9.1%} {r['rounds']:>6.1f}"

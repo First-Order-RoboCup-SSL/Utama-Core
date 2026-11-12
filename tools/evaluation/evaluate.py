@@ -11,8 +11,6 @@ it plays rounds until each candidate is decided.
                         release tag), played from a `.strategy` file built once into replays/eval/frozen/
     --all               every strategy in the catalog plays, not only the core (occasionally, for a
                         wider field)
-    --confirm           play seeds 101-106 instead of 1-6: a second opinion on a "better" before
-                        promoting it, on seeds no candidate was tuned or chosen on
 
 Matches play in parallel, one fewer than the CPUs (at most 12). To explain a result: find_bugs.py,
 goal_sources, pitch_maps.py and explain.py on the run's round folders.
@@ -37,21 +35,25 @@ noise. Matches are 1200 s of sim time at most (two 300 s halves of playing time,
 
 How it decides
 --------------
-After each round each candidate is compared with the reference on paired matches
-(`ratings.paired_difference`): its goal difference minus the reference's against the same opponent with
-the same seed and colour, plus their head-to-head matches. P(candidate stronger than reference):
+One number per opponent and seed: the candidate's goal difference minus the reference's, against the
+same opponent with the same seed and colour (a "diff", `paired`). The same opponent cancels its
+strength and the same noise cancels part of the luck. Head-to-head matches are reported, not counted:
+they answer "does it beat the champion?", the one matchup a search is most tempted to exploit.
 
-- **better** once P >= PROMOTE (0.99),
-- **dropped** once P <= DROP (0.2): not promising. An equal strategy gets here about a third of the
-  time, so this is a search filter, not "worse",
-- **undecided** after `MAX_ROUNDS` (6) rounds: not clearly better, which for a search means drop it.
+- **Screen**, seeds 1..ROUNDS: from round 2 on, a candidate whose mean diff is <= 0 is **dropped**.
+  One that survives ROUNDS rounds goes on to confirm; the screen never accepts.
+- **Confirm**, fresh seeds 101..100+ROUNDS: the same drop rule, then **better** if the one-sided
+  paired t-test on these seeds' diffs gives p <= ALPHA, else **undecided** (`ratings.decide`).
 
-How often the rule is right, on simulated results: `tools/evaluation/verdict_sim.py` (no matches); its
-test pins that two equal strategies are rarely called "better".
+Only fresh seeds can accept, so a candidate picked because it looked good on seeds 1..ROUNDS, or tuned
+to them, is not accepted on that luck; dropping early can never make a false "better". "Dropped" means
+not promising, not worse: an equal strategy is dropped at the first look about half the time.
+`tools/evaluation/verdict_sim.py` plays this rule on simulated results (no matches); its test pins
+that an equal strategy is called better at most ALPHA of the time.
 
-Seeds 1-6 are the same for every candidate, and the store keeps the reference's results on them: a
-search that tries many candidates will find a false "better" now and then, and can fit to those seeds.
-Confirm a "better" with `--confirm` before promoting it.
+ROUNDS and ALPHA (in `analysis/ratings.py`) are the rule's only settings; both are provisional. The reference's results on each
+seed are stored and reused for every candidate, so a confirm stage that many candidates reach shares
+the reference's luck on seeds 101..; few do, since most are dropped in the screen.
 
 The reference is frozen with the shared code (tactics, skills, planner, engine) of the release, so a
 "better" can come from shared code changed since. Today's champion plays the same opponents with the
@@ -118,10 +120,7 @@ from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E402
 from utama_core.strategy import catalog  # noqa: E402
 
-PROMOTE = 0.99
-DROP = 0.2
-MAX_ROUNDS = 6
-CONFIRM_SEED = 101  # --confirm's first seed: far from the 1..MAX_ROUNDS every run plays
+CONFIRM_SEED = 101  # the confirm stage's first seed: never one the screen plays
 WORKERS = min(12, max(1, (os.cpu_count() or 1) - 1))  # 1 plays in this process (tests)
 FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
 # A full match: two halves of 300 s of playing time, the clock stopped whenever no team may play the
@@ -147,13 +146,16 @@ def round_fixtures(
     return [(x, y, seed) if k % 2 else (y, x, seed) for x, y in pairs]
 
 
-def verdict(p_better: float, rounds: int, max_rounds: int) -> Optional[str]:
-    """The candidate's verdict after `rounds` rounds, or None to play another."""
-    if p_better >= PROMOTE:
-        return "better"
-    if p_better <= DROP:
-        return "dropped"
-    return "undecided" if rounds >= max_rounds else None
+def seed_of(k: int) -> int:
+    """Round k's noise seed: k in the screen (rounds 1..ROUNDS), CONFIRM_SEED on in the confirm stage."""
+    n = ratings.ROUNDS
+    return k if k <= n else CONFIRM_SEED + k - n - 1
+
+
+def stage_seeds(k: int) -> set[int]:
+    """The seeds of round k's stage played so far: the stage's diffs, and only those, decide."""
+    first = 1 if k <= ratings.ROUNDS else ratings.ROUNDS + 1
+    return {seed_of(j) for j in range(first, k + 1)}
 
 
 def resolve_names(requested: list[str]) -> list[str]:
@@ -291,7 +293,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("candidates", nargs="*")
     parser.add_argument("--at", metavar="REF")
     parser.add_argument("--all", action="store_true")
-    parser.add_argument("--confirm", action="store_true")
     parser.add_argument("--players", type=Path, help=argparse.SUPPRESS)  # tests: another players.json
     return parser
 
@@ -304,7 +305,6 @@ def main(argv: Optional[list[str]] = None) -> None:
     ref = args.at or latest_release()
     reference = at_ref(resolve_names([champion_at(ref, setup["champion"])])[0], ref)
     today = resolve_names([setup["champion"]])[0]  # today's champion, on today's shared code
-    first_seed = CONFIRM_SEED if args.confirm else 1
     candidates = [c for c in resolve_names(args.candidates) if c != reference]
 
     noise = SimNoise.from_dict(reference_noise()).to_dict()
@@ -349,14 +349,14 @@ def main(argv: Optional[list[str]] = None) -> None:
     failed: list[dict] = []
     executor = ProcessPoolExecutor(max_workers=WORKERS) if WORKERS > 1 else None
     try:
-        for k in range(1, MAX_ROUNDS + 1):
+        for k in range(1, 2 * ratings.ROUNDS + 1):
             if k > 1 and not open_:
                 break
             opponents = [p for p in [*core, *reserve] if p not in candidates and p != reference]
             # today's champion first: it then meets every other opponent in the candidates' colour
             opponents.sort(key=lambda p: p != today)
             opponents_so_far |= set(opponents)
-            seed = first_seed + k - 1
+            seed = seed_of(k)
             fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, seed)
             round_dir = run_dir / f"round_{k}"
             round_dir.mkdir(parents=True, exist_ok=True)
@@ -430,17 +430,19 @@ def main(argv: Optional[list[str]] = None) -> None:
             rounds.append(summary)
 
             if candidates:
-                ledger = _up_to_round(store.load(env, fps=fps), k, first_seed)
-                fit = _fit(ledger, fps, {*open_, reference, *opponents_so_far})
+                confirming = k > ratings.ROUNDS
+                ledger = _with_seeds(store.load(env, fps=fps), stage_seeds(k))
                 for c in list(open_):
-                    diffs, h2h = paired(ledger, fps, c, reference, sorted(opponents_so_far))
-                    margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
-                    p = ratings.p_positive(margin, sd)
-                    print(f"after round {k}: {_short_name(c):<28} P(better) {p:.2f}  margin {margin:+.2f} ± {sd:.2f}")
-                    if (v := verdict(p, k, MAX_ROUNDS)) is not None:
+                    test = ratings.paired_test(paired(ledger, fps, c, reference, sorted(opponents_so_far))[0])
+                    stage = "confirm" if confirming else "screen"
+                    print(f"after round {k} ({stage}): {_short_name(c):<28} {_test_line(test)}")
+                    v = ratings.decide(test, k - ratings.ROUNDS if confirming else k, confirming)
+                    if v is None:
+                        continue
+                    report.setdefault(c, {})[stage] = _test_dict(test)
+                    if v != "confirm":
                         open_.remove(c)
-                        report[c] = {"verdict": v, "rounds": k, "p_better": round(p, 3), "margin": round(margin, 2)}
-                        report[c]["margin_sd"] = round(sd, 2)
+                        report[c].update(verdict=v, rounds=k, decided_in=stage)
     finally:
         if executor is not None:
             executor.shutdown(cancel_futures=True)
@@ -452,25 +454,17 @@ def main(argv: Optional[list[str]] = None) -> None:
         print(f"\nVerdicts against {_short_name(reference)} ({played} matches played, {reused} from the store):")
     for c in candidates:
         r = report[c]
+        decided = r[r["decided_in"]]
         print(
-            f"  {_short_name(c):<28} {r['verdict'].upper():<10} P(better) {r['p_better']:.2f}  "
-            f"margin {r['margin']:+.2f} ± {r['margin_sd']:.2f} goals/match  after {r['rounds']} round(s)"
+            f"  {_short_name(c):<28} {r['verdict'].upper():<10} in the {r['decided_in']} after {r['rounds']} "
+            f"round(s): {_test_line(ratings.PairedTest(**decided))}"
         )
-        upto = _up_to_round(ledger, r["rounds"], first_seed)
+        upto = _with_seeds(ledger, {seed_of(j) for j in range(1, r["rounds"] + 1)})
         r["per_opponent"] = _per_opponent(upto, fps, c, reference, sorted(opponents_so_far))
         if today in fps and today not in (c, reference):  # not the same code as the reference
-            others = sorted(opponents_so_far - {today})
-            diffs, h2h = paired(upto, fps, c, today, others)
-            fit = _fit(upto, fps, {c, today, *others})
-            margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
-            r["vs_todays_champion"] = {
-                "name": today, "p_better": round(ratings.p_positive(margin, sd), 3), "margin": round(margin, 2),
-                "margin_sd": round(sd, 2), "pairs": len(diffs), "head_to_head": len(h2h),
-            }  # fmt: skip
-            print(
-                f"    against today's {_short_name(today)} (same shared code): P(better) "
-                f"{r['vs_todays_champion']['p_better']:.2f}  margin {margin:+.2f} ± {sd:.2f}"
-            )
+            test = ratings.paired_test(paired(upto, fps, c, today, sorted(opponents_so_far - {today}))[0])
+            r["vs_todays_champion"] = {"name": today, **_test_dict(test)}
+            print(f"    against today's {_short_name(today)} (same shared code): {_test_line(test)}")
         r["stalls"] = stall_coverage(upto, fps, c)
         print(f"    {'opponent':<26} {'candidate GD':>12} {'reference GD':>12} {'matches':>8} (same seed and colour)")
         for o, row in r["per_opponent"].items():
@@ -490,11 +484,10 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "reference": reference,
                 "core": core,
                 "environment": env,
-                "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": MAX_ROUNDS},
-                "seeds": [first_seed, first_seed + len(rounds) - 1],
+                "rule": {"rounds": ratings.ROUNDS, "alpha": ratings.ALPHA, "confirm_seed": CONFIRM_SEED},
                 "candidates": report,
                 "failed": failed,
-                "rounds": [{"round": s["round"], "matches": len(s["results"])} for s in rounds],
+                "rounds": [{"round": s["round"], "seed": s["seed"], "matches": len(s["results"])} for s in rounds],
                 "signals": {k: v for k, v in health.items() if k not in ("results",)},
             },
             indent=2,
@@ -506,22 +499,18 @@ def main(argv: Optional[list[str]] = None) -> None:
 # --- the verdict's arithmetic -----------------------------------------------------------------
 
 
-def _fit(ledger: dict, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
-    """Ratings over the matches in `ledger` between `players` at their current code. Given the
-    matches of rounds 1..k only (`_up_to_round`), so the noise estimate, like the pairs, doesn't
-    depend on what earlier runs left in the store."""
-    matches = [
-        (e["a"], e["b"], e["score_a"] - e["score_b"])
-        for e in ledger.values()
-        if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
-    ]
-    return ratings.fit(matches, names=sorted(players))
+def _with_seeds(ledger: dict, seeds: set[int]) -> dict:
+    """The stored matches with one of `seeds`: a decision uses its own stage's rounds only, whatever
+    other seeds the store already holds, so it doesn't depend on earlier runs."""
+    return {f: e for f, e in ledger.items() if e["seed"] in seeds}
 
 
-def _up_to_round(ledger: dict, k: int, first_seed: int = 1) -> dict:
-    """The stored matches of rounds 1..k (seeds first_seed..first_seed+k-1): a verdict after round k
-    uses those only, whatever other seeds the store already holds, so it doesn't depend on earlier runs."""
-    return {f: e for f, e in ledger.items() if e["seed"] is not None and first_seed <= e["seed"] < first_seed + k}
+def _test_dict(test: ratings.PairedTest) -> dict:
+    return {"n": test.n, "mean": round(test.mean, 3), "se": round(test.se, 3), "p": round(test.p, 4)}
+
+
+def _test_line(test: ratings.PairedTest) -> str:
+    return f"mean diff {test.mean:+.2f} ± {test.se:.2f} goals/match over {test.n} diffs, p {test.p:.3f}"
 
 
 def _margins(ledger: dict, fps: dict, side: str, o: str) -> dict[tuple, int]:
@@ -539,8 +528,8 @@ def _margins(ledger: dict, fps: dict, side: str, o: str) -> dict[tuple, int]:
 
 def paired(ledger: dict, fps: dict, candidate: str, reference: str, opponents: list[str]) -> tuple[list, list]:
     """The candidate's goal difference minus the reference's against each opponent, over the matches
-    both played with the same seed and colour, and the candidate's margins against the reference:
-    `ratings.paired_difference`'s inputs."""
+    both played with the same seed and colour (the verdict's diffs), and the candidate's margins
+    against the reference (head-to-head, reported only)."""
     diffs = []
     for o in opponents:
         c, ref = _margins(ledger, fps, candidate, o), _margins(ledger, fps, reference, o)

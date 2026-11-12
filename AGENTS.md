@@ -52,10 +52,11 @@ One term per thing; reuse these instead of coining new ones.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 - **Evaluation / reference / match results** — `tools/evaluation/evaluate.py`: is a candidate
-  stronger than the reference, the champion at the last release (`--confirm` re-checks a "better" on fresh seeds; `--at REF` for another
-  release)? Round k plays under sim-noise seed k in the simulated world and robots
+  stronger than the reference, the champion at the last release (`--at REF` for another
+  release)? A screen on seeds 1-6 only drops; a candidate that survives it is accepted or not on fresh
+  seeds 101-106 (paired t-test). Each round plays under one sim-noise seed in the simulated world and robots
   (`tools/evaluation/reference/world.json`, `robots.json`): every round the same round robin, repeated
-  while a candidate is undecided, decided on paired results (candidate and reference against the same
+  while a candidate is open, decided on paired results (candidate and reference against the same
   opponent under the same noise, `analysis/ratings.py`) and stopping once the answer is clear. Every
   match goes to the match results store (`replays/match_results/`, `replay/match_results.py`); a match
   the store holds is never played again. Promoting is a one-line change to `players.json` in a PR; it takes effect as the reference at the next release.

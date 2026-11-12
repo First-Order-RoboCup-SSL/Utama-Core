@@ -1,6 +1,7 @@
 import pytest
 
 from tools.evaluation import evaluate
+from utama_core.analysis import ratings
 
 
 def test_every_round_is_every_pair_once_under_its_seed():
@@ -20,11 +21,11 @@ def test_candidate_and_reference_meet_each_opponent_with_the_same_colour():
         assert (("ref", "o", k) in fixtures) == c_is_a
 
 
-def test_verdict_thresholds_are_inclusive_and_cap_rounds():
-    assert evaluate.verdict(evaluate.PROMOTE, 1, 6) == "better"
-    assert evaluate.verdict(evaluate.DROP, 1, 6) == "dropped"
-    assert evaluate.verdict(0.5, 5, 6) is None
-    assert evaluate.verdict(0.5, 6, 6) == "undecided"
+def test_the_confirm_stage_plays_fresh_seeds_and_decides_on_them_alone(monkeypatch):
+    monkeypatch.setattr(ratings, "ROUNDS", 3)
+    assert [evaluate.seed_of(k) for k in range(1, 7)] == [1, 2, 3, 101, 102, 103]
+    assert evaluate.stage_seeds(2) == {1, 2}
+    assert evaluate.stage_seeds(5) == {101, 102}
 
 
 def test_per_opponent_compares_only_matches_with_the_same_seed_and_colour():
@@ -60,14 +61,10 @@ def test_paired_differences_use_same_seed_and_colour_and_orient_head_to_head():
     assert h2h == [-3]
 
 
-def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
-    ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "3": {"seed": None}}
-    assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
-
-
-def test_a_confirmation_run_uses_its_own_seeds_only():
-    ledger = {"1": {"seed": 1}, "101": {"seed": 101}, "102": {"seed": 102}, "107": {"seed": 107}}
-    assert list(evaluate._up_to_round(ledger, 2, first_seed=101)) == ["101", "102"]
+def test_a_decision_uses_its_stages_seeds_only():
+    ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "101": {"seed": 101}, "x": {"seed": None}}
+    assert list(evaluate._with_seeds(ledger, {1, 2})) == ["1", "2"]
+    assert list(evaluate._with_seeds(ledger, {101})) == ["101"]
 
 
 def test_a_rounds_seed_can_differ_from_its_number_but_colours_follow_the_round():

@@ -17,7 +17,8 @@ they suggest changing, never a new ranking.
 ## Steps, cheapest first
 
 1. **Read the run's own report** (no tool to run).
-   `replays/eval_<id>/report.json`: per candidate the verdict, P(better), margin ± SD, and
+   `replays/eval_<id>/report.json`: per candidate the verdict, the stage that decided it
+   with its mean diff ± SE and p (`screen`, `confirm`), and
    `per_opponent` (candidate's and reference's goal difference against each opponent, same seed
    and colour). Which opponents moved the margin? `round_1/summary.json` has every signal and
    the stall coverage. Look up any signal in `docs/signals.md`: where it lives, its reference

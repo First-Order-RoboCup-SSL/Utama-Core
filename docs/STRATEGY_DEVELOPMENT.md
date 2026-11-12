@@ -267,20 +267,24 @@ goals, under the realistic sim noise?
 ```mermaid
 flowchart TD
     p["Players: core (reference/players.json); --all: every strategy<br/>+ the reference: the champion at the last release, a .strategy file"]
-    r1["Round k, noise seed k: every pair once<br/>(only the undecided candidates stay after round 1)"]
+    r1["One round, one noise seed: every pair once<br/>(only open candidates stay after round 1)"]
     st0{"in the match results?"}
     st["Every match stored in the match results<br/>replays/match_results/"]
-    d{"P(candidate stronger), paired<br/>with the reference's results"}
-    b["better: P >= 0.99<br/>promote by hand in players.json"]
-    w["dropped: P <= 0.2<br/>not promising"]
-    u["undecided after 6 rounds<br/>drop it"]
+    d{"mean paired diff against the reference,<br/>this stage's seeds only"}
+    w["dropped: mean diff <= 0 from a stage's round 2<br/>not promising"]
+    c["screen passed (seeds 1-6)<br/>go on to seeds 101-106"]
+    t{"confirm stage done:<br/>paired t-test p <= 0.05?"}
+    b["better<br/>promote by hand in players.json"]
+    u["undecided<br/>drop it"]
     p --> r1 --> st0
     st0 -- "yes: reuse" --> d
     st0 -- "no: play, then store" --> st --> d
-    d -- "P >= 0.99" --> b
-    d -- "P <= 0.2" --> w
-    d -- "neither, rounds left: k + 1" --> r1
-    d -- "neither, no rounds left" --> u
+    d -- "<= 0" --> w
+    d -- "> 0, stage not done" --> r1
+    d -- "> 0, screen done" --> c --> r1
+    d -- "> 0, confirm done" --> t
+    t -- yes --> b
+    t -- no --> u
 ```
 
 - **Players** (`tools/evaluation/reference/players.json`): the champion and the core strategies,
@@ -294,20 +298,27 @@ flowchart TD
   referee and simulator are today's for both sides. An older commit may know the champion by its old
   name (`catalog.RENAMED`); that is found.
 - **Rounds.** Every round is the same round robin, every pair of players once, under noise seed k;
-  after round 1 only the undecided candidates stay. The match results store makes it cheap: a match
+  after round 1 only the candidates not yet decided stay. The match results store makes it cheap: a match
   whose code is unchanged is never played again, so a run plays only the matches of edited strategies
   (and of a seed never played before). The candidate (then the reference) is config_a in odd rounds
   and config_b in even ones, so both meet each opponent in the same colour under the same noise (the
   noise is drawn per colour and robot, so one seed can favour a colour by half a goal).
-- **The decision** (`ratings.paired_difference`): the candidate's goal difference against each
-  opponent minus the reference's, same opponent, seed and colour, from rounds 1..k, plus their
-  head-to-head matches. Paired results face the same noise, so much of it cancels: all of it
-  for identical code, little for unrelated strategies. P(candidate stronger) >= 0.99 is **better**,
-  <= 0.2 **dropped**, and after 6 rounds it is **undecided**: not clearly better, so drop it.
-  "Dropped" means not promising, not worse: an equal strategy gets there about a third of the time.
-  How often the rule is right, for each effect size and correlation: `tools/evaluation/verdict_sim.py`
-  (simulated results, no matches; its test pins that equal strategies are rarely called better).
-  Check the per-opponent table: a candidate
+- **The decision** (`analysis/ratings.py`) is on diffs: the candidate's goal difference against an
+  opponent minus the reference's, same opponent, seed and colour. Paired results face the same noise,
+  so much of it cancels: all of it for identical code, little for unrelated strategies. Head-to-head
+  matches are reported, not counted. Two stages of ROUNDS (6) rounds each:
+  - **screen**, seeds 1-6: from round 2, a mean diff <= 0 is **dropped**. It never accepts; a
+    candidate that survives goes straight on to
+  - **confirm**, fresh seeds 101-106, on their diffs alone: the same drop rule, then **better** if a
+    one-sided paired t-test gives p <= ALPHA (0.05), else **undecided** (not clearly better: drop it).
+
+  Only fresh seeds accept, so a candidate chosen because it looked good on seeds 1-6, or fitted to
+  them, is not accepted on that luck. "Dropped" means not promising, not worse: an equal strategy is
+  dropped at the first look about half the time. ROUNDS and ALPHA are provisional: ROUNDS is to be set
+  from the measured spread of real diffs (enough rounds to find a 0.3-goal improvement 80% of the
+  time), ALPHA from how often edits turn out better. How often the rule is right, per effect size and
+  correlation: `tools/evaluation/verdict_sim.py` (simulated results, no matches; its test pins that an
+  equal strategy is called better at most ALPHA of the time). Check the per-opponent table: a candidate
   far better against one opponent and worse against the rest is a matchup, not a better strategy.
 - **Stalls** are reported, never judged on. The watchdog watches config_a only
   (`run/strategy_runner.py` records stats for config_a), so the report says in how many matches each
@@ -317,10 +328,10 @@ flowchart TD
   `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
   read. A match taken from the store is linked in (symlinks) from the run that played it, so a
   round folder holds all of its matches; one played before 2026-11-12, or whose run was deleted, has none.
-- **Two traps in a "better".** Seeds 1-6 are the same for every candidate, and the store keeps the
-  reference's results on them: across many candidates a false "better" turns up now and then, and a
-  search can fit to those seeds. Confirm with `evaluate.py NAME --confirm` (seeds 101-106) before
-  promoting. And the reference carries the release's shared code (tactics, skills, planner, engine), so
+- **Two traps in a "better".** The reference's results on every seed are stored and reused, so
+  candidates that reach the confirm stage share its luck on seeds 101-106: in a long search, count how
+  many candidates were confirmed for each "better" (few are; most are dropped in the screen). And the
+  reference carries the release's shared code (tactics, skills, planner, engine), so
   a "better" can come from shared code changed since: the report adds the candidate against today's
   champion, same opponents, seeds and colours, no extra matches, where the shared code is the same on
   both sides. `evaluate.py <champion>` measures shared-code changes alone.
@@ -403,7 +414,7 @@ whoever runs it.
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
-- **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`, `--confirm`); see
+- **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`); see
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
   `tools/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and

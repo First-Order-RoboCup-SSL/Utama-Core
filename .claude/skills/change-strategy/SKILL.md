@@ -51,12 +51,12 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
   filled (then the whole round robin plays); say so before waiting on it.
 - Round 1 is a round robin: a stall reported there is a bug. Fix it (the `debug-incident`
   skill) before reading the verdict.
-- The verdict is goals only: better (P ≥ 0.99), dropped (P ≤ 0.2: not promising, not "worse")
-  or undecided after 6 rounds. Every other signal explains it (the `explain-result` skill), never
-  overrules it.
+- The verdict is goals only, in two stages of 6 rounds. The screen (seeds 1-6) only drops: a mean
+  paired diff ≤ 0 is "dropped" (not promising, not "worse"). A survivor plays on fresh seeds 101-106
+  in the same run: "better" if p ≤ 0.05 there, else "undecided". Every other signal explains the
+  verdict (the `explain-result` skill), never overrules it.
 - On a "better", read the line "against today's <champion>": the reference carries the release's
-  shared code, so if shared code changed since, that line is the strategy change alone. Then
-  confirm on fresh seeds before promoting (ask first): `evaluate.py NAME --confirm`.
+  shared code, so if shared code changed since, that line is the strategy change alone.
 
 ## 5. Record and promote
 
@@ -70,9 +70,10 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
 
 ## Searching (many candidates)
 
-- Every candidate meets the same reference results on seeds 1-6: try 20 and one may come out
-  "better" by luck, or by fitting those seeds. Only a "better" that holds under `--confirm` counts.
-- Keep a list of every variant tried, with its verdict and margin, in the PR, so a reviewer sees
+- Every candidate meets the same reference results on seeds 1-6, so a search can fit them; that is
+  why only seeds 101-106 accept. Those are shared too: the more candidates reach them, the likelier
+  one "better" is luck.
+- Keep a list of every variant tried, with its verdict, stage and mean diff, in the PR, so a reviewer sees
   how many tries one winner came from.
 - Change one idea per candidate; several candidates go in one `evaluate.py` call.
 

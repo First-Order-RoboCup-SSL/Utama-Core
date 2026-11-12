@@ -14,10 +14,16 @@ import pytest
 
 from tools.evaluation import evaluate
 from tools.evaluation.match import MatchResult
+from utama_core.analysis import ratings
 from utama_core.replay import match_results
 
 CORE = ["a", "b", "d"]
 RESERVE = ["r1", "r2", "r3"]
+
+
+def candidate_wins(a, b, seed):
+    """The candidate "c" wins 2-0 whatever its colour; every other match is 1-0 to config_a."""
+    return (2, 0) if a == "c" else (0, 2) if b == "c" else (1, 0)
 
 
 class _Graph:
@@ -107,18 +113,20 @@ def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matche
 
 
 def test_a_later_round_is_the_same_round_robin_under_the_next_seed_with_colours_swapped(rig, monkeypatch):
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    monkeypatch.setattr(ratings, "ROUNDS", 2)
     run_dir = rig.run("c")
 
-    round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]  # equal results: undecided after round 1
+    round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]  # the screen never decides after one round
     assert sorted(round_2) == [("a", "c"), ("b", "a"), ("b", "c"), ("d", "a"), ("d", "b"), ("d", "c")]
 
     rig.version["c"] += 1  # edit the candidate: only its matches play again, in both rounds
     rig.run("c")
     assert all("c" in (x, y) for x, y, _ in rig.played) and len(rig.played) == 6
     report = json.loads((run_dir / "report.json").read_text())
-    assert report["candidates"]["c"]["verdict"] == "undecided"
+    # equal results: every diff 0, so the mean diff is <= 0 and the screen drops it at its second round
+    assert report["candidates"]["c"]["verdict"] == "dropped"
     assert report["candidates"]["c"]["rounds"] == 2
+    assert {s["seed"] for s in report["rounds"]} == {1, 2}  # a dropped candidate never reaches seed 101
 
 
 def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
@@ -206,23 +214,20 @@ def test_no_release_tag_stops_instead_of_using_todays_code(monkeypatch):
         evaluate.latest_release()
 
 
-def test_the_verdict_does_not_depend_on_later_rounds_already_in_the_store(rig, monkeypatch):
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 1)
+def test_the_verdict_does_not_depend_on_other_seeds_already_in_the_store(rig, monkeypatch):
+    monkeypatch.setattr(ratings, "ROUNDS", 2)
+    rig.score = candidate_wins
     first = json.loads((rig.run("c") / "report.json").read_text())["candidates"]["c"]
 
-    # a later run leaves round 2 in the store, with very different scores
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
-    rig.score = lambda a, b, seed: (1, 0) if seed == 1 else (9, 0)
+    # a longer run leaves seeds 3 and 103 in the store, with very different scores
+    monkeypatch.setattr(ratings, "ROUNDS", 3)
+    rig.score = lambda a, b, seed: (0, 9) if seed in (3, 103) else candidate_wins(a, b, seed)
     rig.run("c")
 
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 1)
+    monkeypatch.setattr(ratings, "ROUNDS", 2)
     again = json.loads((rig.run("c") / "report.json").read_text())["candidates"]["c"]
     assert rig.played == []
-    assert (again["p_better"], again["margin"], again["margin_sd"]) == (
-        first["p_better"],
-        first["margin"],
-        first["margin_sd"],
-    )
+    assert (again["screen"], again["confirm"]) == (first["screen"], first["confirm"])
 
 
 def test_a_crashed_match_is_reported_not_stored_and_the_run_finishes(rig):
@@ -243,15 +248,17 @@ def test_same_code_keeps_the_first_name_of_each_fingerprint():
     assert evaluate.same_code(["ref", "cand", "a", "b", "c"], fps) == {"a": "ref", "c": "cand"}
 
 
-def test_confirm_plays_fresh_seeds_and_ignores_the_usual_ones(rig, monkeypatch):
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
-    rig.run("c")
-    run_dir = rig.run("c", "--confirm")
+def test_a_candidate_that_survives_the_screen_is_accepted_only_on_fresh_seeds(rig, monkeypatch):
+    monkeypatch.setattr(ratings, "ROUNDS", 2)
+    rig.score = candidate_wins
+    run_dir = rig.run("c")
 
-    assert rig.played and {seed for *_, seed in rig.played} <= {101, 102}  # nothing reused from seeds 1-2
+    assert {seed for *_, seed in rig.played} == {1, 2, 101, 102}
     report = json.loads((run_dir / "report.json").read_text())
-    assert report["seeds"][0] == 101
-    assert json.loads((run_dir / "round_1" / "summary.json").read_text())["seed"] == 101
+    c = report["candidates"]["c"]
+    assert (c["verdict"], c["decided_in"], c["rounds"]) == ("better", "confirm", 4)
+    assert c["confirm"]["n"] == 2 * 2  # the confirm stage's own diffs: 2 opponents x 2 rounds, not the screen's
+    assert json.loads((run_dir / "round_3" / "summary.json").read_text())["seed"] == 101
 
 
 def test_the_candidate_is_also_measured_against_todays_champion_when_shared_code_moved(rig, tmp_path, monkeypatch):
@@ -260,13 +267,13 @@ def test_the_candidate_is_also_measured_against_todays_champion_when_shared_code
     players.write_text(json.dumps({"champion": "d", "core": CORE}))
     monkeypatch.setattr(evaluate, "at_ref", lambda name, ref: f"replays/eval/frozen/{name}@v0.strategy")
     rig.version["d"] = 1  # differs from its frozen copy (version 0)
-    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    monkeypatch.setattr(ratings, "ROUNDS", 2)
     run_dir = rig.run("c", "--players", str(players))
 
     r = json.loads((run_dir / "report.json").read_text())["candidates"]["c"]
     vs = r["vs_todays_champion"]
     # paired against "a" and "b" in every round: "d" meets them in the candidate's colour
-    assert vs["name"] == "d" and vs["pairs"] == 2 * r["rounds"] and vs["head_to_head"] == r["rounds"]
+    assert vs["name"] == "d" and vs["n"] == 2 * r["rounds"]
 
 
 def test_no_second_estimate_when_todays_champion_is_the_reference(rig):
