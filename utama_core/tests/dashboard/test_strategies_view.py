@@ -70,6 +70,7 @@ def test_frozen_files_and_old_names_show_as_the_catalog_name():
     assert view.display_name("replays/eval/frozen/pendulum@ab12cd34.strategy") == "pendulum"
     assert view.display_name("build_split_shape_kernel_strategy") == "pendulum"
     assert view.display_name("high_press") == "wolfpack"
+    assert view.display_name("split_shape@cffe3a28") == "pendulum"  # how evaluate.py records the reference
 
 
 def test_the_summary_drops_the_name_and_the_boilerplate():
@@ -86,6 +87,11 @@ def test_signals_come_from_a_real_round_not_a_newer_exhibition_match(replays, mo
     )
     sig = _strategy(view.load_strategies(replays), "mirage")["signals"]
     assert sig["run_id"] == "eval_20261112_100000/round_1"
+
+
+def test_runs_are_newest_first_by_date_whatever_their_prefix(replays):
+    _write(replays / "tournament_20261110_000000" / "summary.json", {"run_id": "tournament_20261110_000000"})
+    assert [r["run_id"] for r in view.load_runs(replays)] == ["eval_20261112_100000", "tournament_20261110_000000"]
 
 
 def test_every_catalog_strategy_is_listed_once_with_its_role(replays):
@@ -112,17 +118,20 @@ def test_a_candidates_verdict_is_shown_against_the_champion_by_name(replays):
 
 def test_matches_are_from_the_strategys_side_with_their_replays_and_reused_ones_once(replays):
     matches = _strategy(view.load_strategies(replays), "mirage")["matches"]
-    assert sorted((m["opponent"], tuple(m["score"])) for m in matches) == [("pendulum", (0, 2)), ("wolfpack", (3, 1))]
+    assert sorted((m["opponent"], tuple(m["score"])) for m in matches) == [
+        ("pendulum (last release)", (0, 2)),
+        ("wolfpack", (3, 1)),
+    ]
     by_opponent = {m["opponent"]: m["replay"] for m in matches}
     assert by_opponent["wolfpack"] == "eval_20261112_100000/round_1/mirage_vs_wolfpack.npz"
-    assert by_opponent["pendulum"] is None
+    assert by_opponent["pendulum (last release)"] is None
 
 
 def test_signals_are_per_match_beside_the_other_strategies_average(replays):
     sig = _strategy(view.load_strategies(replays), "mirage")["signals"]
     rows = {r["key"]: r for r in sig["rows"]}
     assert rows["shots"]["value"] == 5.0  # 10 shots in 2 matches
-    assert rows["shots"]["field"] == 6.0  # wolfpack 4, pendulum 8
+    assert rows["shots"]["field"] == 4.0  # wolfpack; the frozen pendulum file is not in the field
     assert rows["stalled"]["value"] == 0.5
     assert rows["fouls"]["value"] is None  # not in this round's table
 

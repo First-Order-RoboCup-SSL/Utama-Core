@@ -54,12 +54,23 @@ def attach(server: DashboardServer) -> None:
 # --- names ------------------------------------------------------------------------------------
 
 
+def is_frozen(config: str) -> bool:
+    """A player from a `.strategy` file: recorded as its path or as `name@commit`."""
+    return config.endswith(".strategy") or "@" in config
+
+
 def display_name(config: str) -> str:
-    """`config` as the catalog calls it today: `replays/eval/frozen/pendulum@ab12.strategy` and
-    `build_split_shape_kernel_strategy` both become a plain catalog name."""
-    if config.endswith(".strategy"):
-        config = Path(config).stem.split("@")[0]
+    """`config` as the catalog calls it today: `replays/eval/frozen/pendulum@ab12.strategy`,
+    `split_shape@ab12` and `build_split_shape_kernel_strategy` all become a plain catalog name."""
+    if is_frozen(config):
+        config = Path(config).name.removesuffix(".strategy").split("@")[0]
     return catalog.current_name(config)
+
+
+def _newest_first(run_id: str) -> tuple:
+    """A sort key: by the run's date and time (`eval_` and `tournament_` alike), then its id."""
+    m = re.search(r"\d{8}_\d{6}", run_id)
+    return (m[0] if m else "", run_id)
 
 
 def run_date(run_id: str) -> Optional[str]:
@@ -90,7 +101,7 @@ def _summaries(base: Path) -> list[tuple[Path, dict]]:
             for result in summary.get("results", []):
                 result["replay"] = _replay_path(base, path.parent, result)
             out.append((path, summary))
-    out.sort(key=lambda ps: ps[1].get("run_id", ""), reverse=True)
+    out.sort(key=lambda ps: _newest_first(ps[1].get("run_id", "")), reverse=True)
     return out
 
 
@@ -177,6 +188,8 @@ def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]
             if name not in (a, b) or a == b or r.get("reused"):
                 continue
             mine, theirs, opponent = (r["score_a"], r["score_b"], b) if a == name else (r["score_b"], r["score_a"], a)
+            if is_frozen(r["config_b"] if a == name else r["config_a"]):
+                opponent += " (last release)"
             out.append(
                 {
                     "opponent": opponent,
@@ -211,8 +224,9 @@ def signals_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> Optional[di
     """Per-match signals in the newest round with a strategy table that `name` played at least
     `MIN_SIGNAL_MATCHES` in (else the newest it played in at all), beside the mean of the other
     strategies there. A comparison with the field, not a ranking."""
+    # a frozen file is not one of today's strategies: left out of both sides of the comparison
     tables = [
-        (summary, {display_name(k): v for k, v in (summary.get("strategies") or {}).items()})
+        (summary, {display_name(k): v for k, v in (summary.get("strategies") or {}).items() if not is_frozen(k)})
         for _, summary in summaries
     ]
     tables = [(summary, t) for summary, t in tables if name in t]
@@ -330,4 +344,4 @@ def load_runs(base: Optional[Path] = None) -> list[dict]:
         }
     for run in runs.values():
         run["rounds"].sort(key=lambda s: s.get("round", 0))
-    return sorted(runs.values(), key=lambda r: r["run_id"], reverse=True)
+    return sorted(runs.values(), key=lambda r: _newest_first(r["run_id"]), reverse=True)
