@@ -52,7 +52,11 @@ def test_the_field_example_holds_while_its_tactic_does_not_apply():
     assert example._play_or_hold(None, frozenset(), None, frozenset({"play", "hold"})) == {}
 
 
-@pytest.mark.parametrize("path", sorted(EXAMPLES.glob("*.py")), ids=lambda p: p.name)
+# the field scripts moved out of examples/ on 2026-11-12 keep the same check
+FIELD_SCRIPTS = [REPO / "tools" / "field" / n for n in ("ball_trials.py", "calibrate_robot.py", "shooting_drill.py")]
+
+
+@pytest.mark.parametrize("path", sorted(EXAMPLES.glob("*.py")) + FIELD_SCRIPTS, ids=lambda p: p.name)
 def test_every_example_imports(path, tmp_path):
     """Every example's imports resolve. Until 2026-11-11 two demos still imported the removed
     `utama_core.strategy.kernel_strategy` (gone when strategies became `strategy/<name>.py`) and one
