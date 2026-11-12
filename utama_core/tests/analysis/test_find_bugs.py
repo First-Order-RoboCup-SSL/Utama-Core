@@ -1,4 +1,4 @@
-"""tools/triage.py without replays: which matches are chosen (each strategy's worst N as config_a, by goal
+"""tools/find_bugs.py without replays: which matches are chosen (each strategy's worst N as config_a, by goal
 difference), the picture ranking and cap, and the index's text. Match files are empty stubs and their scores
 come from a fake `final_score`, so nothing is simulated or drawn from a real replay."""
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import triage
+from tools import find_bugs
 from utama_core.analysis import matches as match_files
 from utama_core.analysis.findings import Finding
 
@@ -48,41 +48,41 @@ def run_dir(tmp_path, monkeypatch):
 
 
 def test_worst_n_by_goal_difference_as_config_a(run_dir):
-    chosen = triage.select_matches(run_dir, None, 2)
+    chosen = find_bugs.select_matches(run_dir, None, 2)
     alpha = [m.npz.name for m in chosen if m.a == "alpha"]
     assert alpha == ["alpha_vs_beta.npz", "alpha_vs_gamma_s1.npz"]  # GD -3 then 0; the +1 match is the best and cut
 
 
 def test_strategy_filter_takes_full_or_short_names(run_dir):
-    chosen = triage.select_matches(run_dir, {A}, 5)
+    chosen = find_bugs.select_matches(run_dir, {A}, 5)
     assert {m.a for m in chosen} == {"alpha"}
     assert len(chosen) == 3
-    chosen = triage.select_matches(run_dir, {"beta"}, 5)
+    chosen = find_bugs.select_matches(run_dir, {"beta"}, 5)
     assert [m.npz.name for m in chosen] == ["beta_vs_gamma.npz", "beta_vs_alpha.npz"]  # GD 0 then +4
 
 
 def test_every_strategy_gets_its_own_worst_matches(run_dir):
-    chosen = triage.select_matches(run_dir, None, 1)
+    chosen = find_bugs.select_matches(run_dir, None, 1)
     assert sorted((m.a, m.npz.name) for m in chosen) == [
         ("alpha", "alpha_vs_beta.npz"),
         ("beta", "beta_vs_gamma.npz"),
     ]
 
 
-def _timeline(t0: float = 0.0) -> triage.TimelinePicture:
-    return triage.TimelinePicture(Path("m.npz"), t0, t0 + 40.0)
+def _timeline(t0: float = 0.0) -> find_bugs.TimelinePicture:
+    return find_bugs.TimelinePicture(Path("m.npz"), t0, t0 + 40.0)
 
 
 def test_rank_puts_kind_priority_first_then_value():
     items = [
-        triage.Item(_finding("tactic_thrash", 50.0), request=_timeline(1.0)),
-        triage.Item(_finding("stall", 3.0), request=_timeline(2.0)),
-        triage.Item(_finding("tactic_thrash", 9.0), request=_timeline(3.0)),
-        triage.Item(_finding("keep_out_short", 1.0), request=triage.RestartPicture(Path("r.npz"), 2.0, None)),
-        triage.Item(_finding("target_in_keep_out", 0.1), request=triage.RestartPicture(Path("r.npz"), 1.0, None)),
-        triage.Item(_finding("stall", 9.0)),  # no picture source: never ranked
+        find_bugs.Item(_finding("tactic_thrash", 50.0), request=_timeline(1.0)),
+        find_bugs.Item(_finding("stall", 3.0), request=_timeline(2.0)),
+        find_bugs.Item(_finding("tactic_thrash", 9.0), request=_timeline(3.0)),
+        find_bugs.Item(_finding("keep_out_short", 1.0), request=find_bugs.RestartPicture(Path("r.npz"), 2.0, None)),
+        find_bugs.Item(_finding("target_in_keep_out", 0.1), request=find_bugs.RestartPicture(Path("r.npz"), 1.0, None)),
+        find_bugs.Item(_finding("stall", 9.0)),  # no picture source: never ranked
     ]
-    ranked = triage.rank(items)
+    ranked = find_bugs.rank(items)
     assert [it.finding.kind for it in ranked] == [
         "stall",
         "target_in_keep_out",
@@ -100,13 +100,13 @@ def test_draw_pictures_caps_at_k_and_shares_one_file(tmp_path, monkeypatch):
         drawn.append((t0, t1))
         Path(out).write_bytes(b"\x89PNG stub")
 
-    monkeypatch.setattr(triage.match_timeline, "build", fake_build)
-    items = [triage.Item(_finding("stall", 3.0), request=_timeline())]
-    items += [triage.Item(_finding("tactic_thrash", 2.0 + i), request=_timeline()) for i in range(3)]
-    items += [triage.Item(_finding("tactic_thrash", 1.0), request=_timeline(100.0))]
+    monkeypatch.setattr(find_bugs.match_timeline, "build", fake_build)
+    items = [find_bugs.Item(_finding("stall", 3.0), request=_timeline())]
+    items += [find_bugs.Item(_finding("tactic_thrash", 2.0 + i), request=_timeline()) for i in range(3)]
+    items += [find_bugs.Item(_finding("tactic_thrash", 1.0), request=_timeline(100.0))]
     pictures = tmp_path / "pictures"
     pictures.mkdir()
-    shown = triage.draw_pictures(items, pictures, max_pictures=2)
+    shown = find_bugs.draw_pictures(items, pictures, max_pictures=2)
     assert len(shown) == 2
     pictured = [it for it in items if it.image is not None]
     assert [it.finding.kind for it in pictured] == ["stall", "tactic_thrash"]
@@ -118,18 +118,18 @@ def test_index_has_each_pictured_finding_message_and_path(run_dir, tmp_path):
     out.mkdir()
     picture = out / "01_stall.png"
     picture.write_bytes(b"x")
-    stall = triage.Item(
+    stall = find_bugs.Item(
         _finding("stall", 3.0, message="R1 oscillates with the ball frozen for 3.0 s."),
         request=_timeline(773.0),
         window=(773.0, 796.0),
         image=picture,
     )
-    quiet = triage.Item(
+    quiet = find_bugs.Item(
         _finding("tactic_thrash", 4.0, message="R2 thrashes, no picture.")
     )  # not pictured: counted only
-    m = triage.select_matches(run_dir, {A}, 1)[0]
-    report = triage.MatchReport(m, [stall, quiet], notes=[])
-    index = triage.write_index(out, run_dir, [report], max_pictures=8, restarts=False).read_text()
+    m = find_bugs.select_matches(run_dir, {A}, 1)[0]
+    report = find_bugs.MatchReport(m, [stall, quiet], notes=[])
+    index = find_bugs.write_index(out, run_dir, [report], max_pictures=8, restarts=False).read_text()
     assert "R1 oscillates with the ball frozen for 3.0 s." in index
     assert str(picture.resolve()) in index
     assert "Picture of 773.0-796.0 s" in index
@@ -141,5 +141,5 @@ def test_index_has_each_pictured_finding_message_and_path(run_dir, tmp_path):
 def test_index_says_so_when_a_strategy_has_no_matches(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
-    index = triage.write_index(out, tmp_path, [], max_pictures=8, restarts=False).read_text()
+    index = find_bugs.write_index(out, tmp_path, [], max_pictures=8, restarts=False).read_text()
     assert "No matches with this strategy" in index

@@ -24,7 +24,7 @@ NAMES = [
     "utama_core/engine/match_stats.py",
     "utama_core/replay/match_results.py",
     "utama_core/replay/fingerprint.py",
-    "utama_core/analysis/goal_ledger.py",
+    "utama_core/analysis/goal_sources.py",
     "utama_core/analysis/ratings.py",
     "utama_core/analysis/chances.py",
     "utama_core/analysis/turnover_breakdown.py",
@@ -89,7 +89,7 @@ d.box(118, 60, 36, 12, "summary.json", "+ ball_losses.md, one per run", kind="st
 d.arrow((40, 73), (100, 62), "round_robin.py", lx=0.0, ly=2.0)
 
 # --- readers --------------------------------------------------------------------------------------
-d.box(165, 92, 34, 12, "goal_ledger.py", "goal_ledger.json", kind="output")
+d.box(165, 92, 34, 12, "goal_sources.py", "goal_sources.json", kind="output")
 d.box(
     165,
     70,

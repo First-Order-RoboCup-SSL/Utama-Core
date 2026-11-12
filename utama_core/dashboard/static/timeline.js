@@ -3,7 +3,7 @@
 // Live tab up to now. Top to bottom, on one time axis:
 //   - the referee command band (live play, STOP, kickoff, free kick, penalty, placement, HALT);
 //   - possession: whose ball it is, in the team's colour. In a replay, one span per situation
-//     (a restart going live or a side winning the ball, as goal_ledger counts them); live,
+//     (a restart going live or a side winning the ball, as goal_sources counts them); live,
 //     the side with a robot on the ball;
 //   - one lane per friendly robot: a span per tactic it was in (the Tactic class from the
 //     intention log), a dark tick where it switched, and a light strip where it had the ball;
@@ -372,7 +372,7 @@
       const group = refGroup(state.command);
       extend(d.referee, group, (state.command || "").replace(/_/g, " ").toLowerCase());
 
-      // possession as goal_ledger reads it: the side with a robot on the ball while the other
+      // possession as goal_sources reads it: the side with a robot on the ball while the other
       // has none keeps it until the other side touches it; nobody holds it outside live play
       const last = d.possession[d.possession.length - 1];
       const ours = friendly.some((r) => r.has_ball);

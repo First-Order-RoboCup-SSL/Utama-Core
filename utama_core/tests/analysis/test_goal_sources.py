@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from utama_core.analysis.goal_ledger import (
+from utama_core.analysis.goal_sources import (
     SUSTAINED,
     attribute,
     find_goals,

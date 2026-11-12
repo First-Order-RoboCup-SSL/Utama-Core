@@ -15,9 +15,9 @@ is context), the pitch is in metres with the centre at (0, 0), and the strategy 
 so the studied strategy attacks right. Zone names (defensive third, the box, ...) are the ones in
 [pitch_zones.md](pitch_zones.md).
 
-## Start here: triage
+## Start here: find bugs
 
-`pixi run python tools/triage.py RUN_DIR --strategy NAME` picks the strategy's worst matches (by goal
+`pixi run python tools/find_bugs.py RUN_DIR --strategy NAME` picks the strategy's worst matches (by goal
 difference, among those it played as config_a), collects every problem the tools flag (tactic flip-backs,
 stalls, and with `--restarts` illegal restart targets), and draws the worst few with the picture for that
 kind. Read its `index.md` first: each problem's numbers, then the picture path. About 20 s a match

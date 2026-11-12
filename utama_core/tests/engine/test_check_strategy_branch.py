@@ -41,7 +41,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
     "path",
     [
         "utama_core/engine/strategy.py",
-        "utama_core/analysis/goal_ledger.py",
+        "utama_core/analysis/goal_sources.py",
         "tools/evaluation/match.py",
         "tools/check_strategy_branch.py",
         ".github/workflows/ci.yml",

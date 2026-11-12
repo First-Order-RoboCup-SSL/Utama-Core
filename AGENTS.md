@@ -71,13 +71,13 @@ One term per thing; reuse these instead of coining new ones.
   dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
   in the control layer. The test: would better robots change it? `tools/evaluation/reference/
   world.json`, `robots.json`; field sessions in `tools/field_sessions.json`.
-- **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
-  ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
+- **Situation / goal sources** — a situation starts when a restart goes live or a side wins the
+  ball in open play; the goal sources (`utama_core/analysis/goal_sources.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
   P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
   kickoff or penalty, force start. See `docs/signals.md`.
 - **Situation rates** — how often each situation type happens per team per live minute, from
-  real Division B matches or our round-robin (`goal_ledger --rates PATH`).
+  real Division B matches or our round-robin (`goal_sources --rates PATH`).
 
 ## Repo map
 

@@ -2,7 +2,7 @@
 
 A match file's stem is `<config_a>_vs_<config_b>` (round-robin) or `<config_a>_vs_<config_b>_s<seed>` (an
 evaluate.py run). config_a is the friendly side (yellow) in every run. Shared by `tools/evaluation/explain.py`
-and `tools/triage.py`.
+and `tools/find_bugs.py`.
 """
 
 from __future__ import annotations

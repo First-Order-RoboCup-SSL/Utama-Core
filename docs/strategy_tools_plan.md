@@ -27,7 +27,7 @@ links back here.
 | Does it break? | `pixi run test`, which includes the regression moments in `utama_core/tests/moments/`. Stalls: recorded in the match results for every match and reported by `evaluate.py` with coverage; the round-robin's STALLS section and `--strict` | Today |
 | Is it better? | `tools/evaluation/evaluate.py`: paired against the champion, through the reference opponents. `--held-out` before promoting. The only verdict | Today |
 | Does everything still run, after a shared-code change? | `round_robin.py --vs-champion`: each strategy plays the champion once (12 matches), under reference noise seed 2, so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2 and is not wasted. A full round-robin (66 matches) only occasionally, for example before a release. A round-robin is not an evaluation: it gives one unpaired match per pair | Today |
-| What went wrong in these matches (bugs: thrashing, stalls, restart geometry, fouls)? | `tools/triage.py` (`--fouls` for our side's fouls), then the picture tools. Triage finds bugs, not why a strategy loses in football terms. For that, see `ball_losses.md` in the run folder, `docs/signals.md`, and the goal ledger (`utama_core/analysis/goal_ledger.py`) | Today |
+| What went wrong in these matches (bugs: thrashing, stalls, restart geometry, fouls)? | `tools/find_bugs.py` (`--fouls` for our side's fouls), then the picture tools. find_bugs finds bugs, not why a strategy loses in football terms. For that, see `ball_losses.md` in the run folder, `docs/signals.md`, and the goal sources (`utama_core/analysis/goal_sources.py`) | Today |
 | Keep a fixed bug fixed? | A unit test at the cause. For restart and placement geometry, a regression moment, which is already part of `pixi run test`. `tools/moments.py` writes new ones | Today |
 | Look closely at one thing? | `tools/repro_from_replay.py`, the picture tools, `tools/debug_match.py` | Today |
 | Is the simulator realistic? | Simulator tools: `realism_scorecard.py`, `physics_ranges.py`, `field_physics.py`, `robot_calibration.py`, `convert_ssl_log.py`. Not part of strategy development | Today |
@@ -47,7 +47,7 @@ The screen was built and dropped on 2026-11-12: any code change made the paired 
 Regression moments are fixed-state checks of shared-code bugs (restart and placement geometry),
 played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
 
-- **`moments.py fouls` moved into `tools/triage.py --fouls`** (the code in
+- **`moments.py fouls` moved into `tools/find_bugs.py --fouls`** (the code in
   `utama_core/analysis/fouls.py`), so there is one place to find what went wrong in a run.
 - **`new` (hand-made templates) removed.** Moments come from `capture`, from a replay.
 - **`--seeds` kept.** `play --seeds 0-4` is how a moment is checked (it must fail on 4 of 5
@@ -77,7 +77,7 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    this (its set-up is now in `sim_setup.py`), so every stored match replays once. The match results store
    (`replay/match_results.py`) changed the same fingerprints, so one replay covers both.
 6. **The screen.** The screen was built and dropped on 2026-11-12: any code change made the paired starts diverge within 0.1 s, and goals in 20 s starts were too rare to say "skip", so it could not save evaluations. `evaluate.py` stays the only gate.
-7. **Triage takes the foul listing.** Done: `triage.py --fouls`; `moments.py` lost `fouls` and `new`,
+7. **Triage takes the foul listing.** Done: `find_bugs.py --fouls`; `moments.py` lost `fouls` and `new`,
    and `--against` no longer uses a dated folder.
 
 Every step that changes shared code follows the rule in `docs/STRATEGY_DEVELOPMENT.md`: batch
@@ -85,7 +85,7 @@ such changes, and run one round-robin at the end.
 
 ## Names considered (undecided)
 
-- **Triage**: `scan_replays.py` or `find_bugs.py`. Undecided. `triage.py` stays until then.
+- **Scan replays**: `scan_replays.py` or `find_bugs.py`. Undecided. `find_bugs.py` stays until then.
 - **Evaluate**: `challenge` or `compare` for the `evaluate.py` family. Undecided.
 
 Nothing above is decided by a name. Pick the name when the tool is merged, not before.

@@ -31,7 +31,7 @@ and the recorded team's real ball losses. Ball losses and `shots` come from
 replay frame by frame, several seconds; its result is kept beside the replay in
 `<match>.timeline.json`, redone when the replay or `ANALYSIS_VERSION` changes.
 
-`play` is the match told as its situations (`goal_ledger`: a restart going live
+`play` is the match told as its situations (`goal_sources`: a restart going live
 or a side winning the ball), one row each with how it ended: a goal, a stoppage
 and its reason, or the other side winning the ball (with how we lost it).
 
@@ -51,7 +51,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from utama_core.analysis import goal_ledger
+from utama_core.analysis import goal_sources
 from utama_core.analysis.turnover_breakdown import analyse_match, is_real
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.settings import REPLAY_BASE_PATH
@@ -293,10 +293,10 @@ def _play(replay_path: Path, referee_events: list, losses: list[dict], end_t: fl
     if replay_path.suffix != ".npz":
         return []
     try:
-        match = goal_ledger.match_ledger(replay_path)
+        match = goal_sources.match_ledger(replay_path)
     except Exception:  # noqa: BLE001 - optional, like the markers
         return []
-    return play_rows(goal_ledger.situations(match), referee_events, losses, end_t)
+    return play_rows(goal_sources.situations(match), referee_events, losses, end_t)
 
 
 def play_rows(starts: list[dict], referee_events: list, losses: list[dict], end_t: float) -> list[dict]:

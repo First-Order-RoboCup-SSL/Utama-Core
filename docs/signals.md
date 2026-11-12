@@ -69,7 +69,7 @@ round-robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on
 
 **Offline only** (not in a round-robin's output): `tools/metric_correlation.py <run_dir> ...`
 replays a run at 10 Hz for the signals marked *offline* below, and
-`python -m utama_core.analysis.goal_ledger <run_dir>` writes the goal ledger
+`python -m utama_core.analysis.goal_sources <run_dir>` writes the goal sources
 ([Where do goals come from?](#where-do-goals-come-from)).
 
 **Sides.** Per-match stats are config_a's view ("friendly"); a strategy's row reads its own
@@ -141,7 +141,7 @@ Check these first: a broken strategy's other signals mean nothing.
 
 ## Where do goals come from?
 
-The goal ledger (`analysis/goal_ledger.py`, *offline*) gives every goal to the situation that
+The goal sources (`analysis/goal_sources.py`, *offline*) gives every goal to the situation that
 started the play it ended, if that was less than 10 s before: a restart going live (kickoff,
 free kick, penalty, force start) or a side winning the ball in open play, each named from the
 strategy's side ("own" / "opponent") with the third in the owner's attack frame. Goals with no
@@ -153,7 +153,7 @@ logs too. The rules are in the module's docstring. `--rates PATH` writes how oft
 situation happens per team per live minute, whoever owns it (the scenario bench, retired
 2026-10-17, used these as its weights).
 
-How a goal is credited (`analysis/goal_ledger.py`; `WINDOW_S` = 10 s):
+How a goal is credited (`analysis/goal_sources.py`; `WINDOW_S` = 10 s):
 
 ```mermaid
 flowchart TD
@@ -185,7 +185,7 @@ conceded per match).
 
 | Signal | Where | Meaning | Reference | If it's off |
 |---|---|---|---|---|
-| Situations per match | `goal_ledger.json` `strategies[*].types[*].situations_per_match` | how often each situation happens in a strategy's matches | own free kicks in the attacking third 6.7, the opponent's 6.2; balls won in the attacking third: own 3.4, opponent's 3.6; in the defensive third ~19 each | Many "opponent ball won, attacking third": losing the ball near our own goal (build-up). Many opponent free kicks in the attacking third: fouls and clearances out near our goal |
+| Situations per match | `goal_sources.json` `strategies[*].types[*].situations_per_match` | how often each situation happens in a strategy's matches | own free kicks in the attacking third 6.7, the opponent's 6.2; balls won in the attacking third: own 3.4, opponent's 3.6; in the defensive third ~19 each | Many "opponent ball won, attacking third": losing the ball near our own goal (build-up). Many opponent free kicks in the attacking third: fouls and clearances out near our goal |
 | P(goal) per situation | `p_scored`, `p_conceded` | share of a situation's occurrences followed by a goal before the next situation starts, within 10 s | scored: own penalty 88%, own ball won in the attacking third 47%, own free kick in the attacking third 28%; conceded: opponent penalty 100%, opponent free kick in the attacking third 20%, opponent ball won in the attacking third 20% | High P(conceded) from opponent free kicks: set-piece defence (wall, marking). High from balls the opponent wins high: nobody covers behind the press |
 | Goals per match by situation | `scored_per_match`, `conceded_per_match` | situations per match × P(goal); the column sums to goals per match | conceded 4.41 = opponent balls won 1.41 + free kicks 1.35 + penalties 0.76 + sustained possession 0.71 + kickoffs 0.18 | The largest row is where a fix pays most |
 

@@ -1,6 +1,6 @@
 """Where goals come from: every goal attributed to the situation that started the play it ended.
 
-    pixi run python -m utama_core.analysis.goal_ledger replays/tournament_<id> --out ledger.json
+    pixi run python -m utama_core.analysis.goal_sources replays/tournament_<id> --out ledger.json
 
 A strategy's goals per match is exactly a sum over situation types of how often the situation
 happens per match times how often it ends in a goal (P). That splits a result into what a
@@ -400,7 +400,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("paths", nargs="+", type=Path, help="run directories and/or replay .npz files")
     parser.add_argument("--labels", type=Path, help='JSON {"<stem>": ["<friendly>", "<enemy>"]}: who played')
-    parser.add_argument("--out", type=Path, help="JSON output (default: goal_ledger.json beside the first input)")
+    parser.add_argument("--out", type=Path, help="JSON output (default: goal_sources.json beside the first input)")
     parser.add_argument("--rates", type=Path, help="also write the corpus's situation rates here (situation_rates)")
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
@@ -410,13 +410,13 @@ def main() -> None:
     strategies = tables(matches)
     print(report(strategies))
     first = args.paths[0]
-    out = args.out or (first if first.is_dir() else first.parent) / "goal_ledger.json"
+    out = args.out or (first if first.is_dir() else first.parent) / "goal_sources.json"
     out.write_text(json.dumps({"strategies": strategies, "matches": matches}, indent=1))
     print(f"wrote {out}: {len(matches)} matches, {sum(len(m['goals']) for m in matches)} goals")
     if args.rates:
         rates = situation_rates(matches)
         rates["inputs"] = [p.name for p in args.paths]
-        rates["command"] = " ".join(["python -m utama_core.analysis.goal_ledger", *sys.argv[1:]])
+        rates["command"] = " ".join(["python -m utama_core.analysis.goal_sources", *sys.argv[1:]])
         args.rates.write_text(json.dumps(rates, indent=1) + "\n")
         print(f"wrote {args.rates}: {rates['live_min_per_match']:.2f} live minutes per match")
 

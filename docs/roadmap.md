@@ -91,7 +91,7 @@ entry by its title, not its number.
     to the ball, events) under the Replay tab's controls, following the cursor, click or drag to
     seek; and in the Live tab, the last minutes up to now. Switch ticks, shots and a possession
     band (each situation's side) as in the tool. The Replay side panel's Play list replaces the raw
-    event and intention logs: one row per situation (`goal_ledger.situations`: a restart going live
+    event and intention logs: one row per situation (`goal_sources.situations`: a restart going live
     or a side winning the ball), with its third, length, shots and how it ended (the stoppage's
     reason, or who won the ball and how); the raw intention log stays, folded. The slow analysis is
     kept beside the replay (`<stem>.timeline.json`) and ticks are sent as columns of whole numbers

@@ -29,7 +29,7 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | Task | Start here |
 |---|---|
 | Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
-| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/triage.py RUN_DIR` for a run's worst problems |
+| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/find_bugs.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
 | The referee | [docs/custom_referee.md](docs/custom_referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |

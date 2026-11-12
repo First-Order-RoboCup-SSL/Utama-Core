@@ -1,5 +1,5 @@
 """Our side's fouls in a round-robin run, with the referee command active at each: the starting points for
-new regression moments. `tools/triage.py --fouls` prints them; `tools/moments.py` uses `restart_side` in
+new regression moments. `tools/find_bugs.py --fouls` prints them; `tools/moments.py` uses `restart_side` in
 its checks. (Until 2026-11-11 this was `moments.py fouls`.)
 
 `out_of_bounds`, the ball leaving the field, is a stoppage rather than a rules foul (`STOPPAGE_RULES`).

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402
-"""Triage a run dir: which problems happened in which matches, with the numbers, and a picture for the worst.
+"""Find the bugs in a run dir: which problems happened in which matches, with the numbers, and a picture for the worst.
 
-    pixi run python tools/triage.py REPLAYS_OR_RUN_DIR [--strategy NAME ...] [--matches 3] [--out DIR]
+    pixi run python tools/find_bugs.py REPLAYS_OR_RUN_DIR [--strategy NAME ...] [--matches 3] [--out DIR]
                                     [--max-pictures 8] [--workers 2] [--restarts]
 
 Start here when a strategy plays badly. For each strategy the friendly side (config_a, the only side the
@@ -23,7 +23,7 @@ first flip-back, a stall `match_timeline` from 10 s before to 10 s after it, a r
 restart_stall) `restart_picture` at its restart. `OUT/index.md` is the report to read first: per strategy, its matches with
 their scores, the finding counts by kind, then each pictured finding with its message and picture path.
 
-`OUT` defaults to `RUN_DIR/triage/`. Read-only: nothing is played or changed.
+`OUT` defaults to `RUN_DIR/find_bugs/`. Read-only: nothing is played or changed.
 
 `--fouls` instead lists our side's (config_a's) fouls in a round-robin run, each with the referee command
 active then and whether that restart was ours or theirs: the starting points for a regression moment
@@ -32,7 +32,7 @@ own restarts, `--by strategy,rule` counts per combination instead (columns: stra
 restart), `--json` writes JSON. `out_of_bounds`, the ball leaving the field, is a stoppage and is left out
 unless `--include-stoppages` (`utama_core/analysis/fouls.py`; until 2026-11-11 `moments.py fouls`).
 
-    pixi run python tools/triage.py replays/tournament_<id> --fouls [--rule keep_out] [--by strategy,rule]
+    pixi run python tools/find_bugs.py replays/tournament_<id> --fouls [--rule keep_out] [--by strategy,rule]
 """
 
 from __future__ import annotations
@@ -312,7 +312,7 @@ def write_index(
     restarts: bool,
 ) -> Path:
     lines = [
-        f"# Triage: {run_dir.name}",
+        f"# Find bugs: {run_dir.name}",
         "",
         f"Friendly side (config_a) of each strategy's worst matches by goal difference. "
         f"Pictures: the top {max_pictures} findings with a picture source. Restart findings: "
@@ -357,7 +357,7 @@ def write_index(
     return path
 
 
-def triage(
+def find_bugs(
     run_dir: Union[str, Path],
     *,
     strategies: Optional[set[str]] = None,
@@ -370,7 +370,7 @@ def triage(
     """Analyse the selected matches, draw the top pictures and write `out/index.md` and `out/findings.jsonl`.
     Returns the index path."""
     run_dir = Path(run_dir)
-    out = Path(out) if out is not None else run_dir / "triage"
+    out = Path(out) if out is not None else run_dir / "find_bugs"
     pictures = out / "pictures"
     pictures.mkdir(parents=True, exist_ok=True)
     selected = select_matches(run_dir, strategies, matches)
@@ -431,7 +431,7 @@ def main() -> None:
     parser.add_argument(
         "--matches", type=int, default=3, help="each strategy's N worst matches by goal difference (default 3)"
     )
-    parser.add_argument("--out", type=Path, default=None, help="output dir (default RUN_DIR/triage/)")
+    parser.add_argument("--out", type=Path, default=None, help="output dir (default RUN_DIR/find_bugs/)")
     parser.add_argument("--max-pictures", type=int, default=8, help="pictures to draw (default 8)")
     parser.add_argument("--workers", type=int, default=2, help="worker processes, one match each (default 2)")
     parser.add_argument(
@@ -456,7 +456,7 @@ def main() -> None:
         except ValueError as e:
             parser.error(str(e))
         return
-    index = triage(
+    index = find_bugs(
         args.run_dir,
         strategies=set(args.strategy) if args.strategy else None,
         matches=args.matches,

@@ -462,9 +462,9 @@ A foul or failure seen in a match is a symptom: the cause may be the robot, the 
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot.
 
-Start with `tools/triage.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
+Start with `tools/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
 and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it
-means, and confirm with the numbers in its message (or `replay_trace.py --events`) before concluding anything. Triage reads only the friendly side of
+means, and confirm with the numbers in its message (or `replay_trace.py --events`) before concluding anything. `find_bugs.py` reads only the friendly side of
 each match (the intentions log is written for it): a strategy's matches where it is config_a. In a round-robin each pair plays once,
 so a strategy gets only the pairs where it comes first in the config order.
 
@@ -472,7 +472,7 @@ The same steps as a flowchart; the moment branch is the optional step 5.
 
 ```mermaid
 flowchart TD
-    find["1. Find it<br/>triage.py RUN_DIR --strategy NAME<br/>(index.md, then findings.jsonl)"]
+    find["1. Find it<br/>find_bugs.py RUN_DIR --strategy NAME<br/>(index.md, then findings.jsonl)"]
     look["2. Look at it<br/>replay_trace.py REPLAY T0 T1 --events<br/>repro_from_replay.py REPLAY --t S --summary IDS"]
     q{"Restart or placement geometry?<br/>a field state alone decides it"}
     moment["Capture a moment<br/>moments.py capture REPLAY --t S<br/>play --seeds 0-4 must fail on 4 of 5"]
@@ -488,9 +488,9 @@ flowchart TD
 
 The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `pitch_maps.py`) write their flags as JSON with `--findings`: filter on that, open the picture to understand a flag, and never conclude from a picture alone.
 
-1. **Find it.** `tools/triage.py` is the one starting point for "what went wrong in a run" (see the
+1. **Find it.** `tools/find_bugs.py` is the one starting point for "what went wrong in a run" (see the
    start of this section). It flags thrashing and stalls, and restart geometry with `--restarts`.
-   For our side's fouls by rule, `pixi run python tools/triage.py replays/tournament_<id> --fouls --by
+   For our side's fouls by rule, `pixi run python tools/find_bugs.py replays/tournament_<id> --fouls --by
    strategy,rule` counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
@@ -642,4 +642,4 @@ What a converted match holds, and where it differs from a sim replay (the detail
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
-The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_ledger.py` lists a replay's situations and goals.
+The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_sources.py` lists a replay's situations and goals.
