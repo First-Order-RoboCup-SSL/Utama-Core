@@ -82,7 +82,6 @@ Each foul at the ball's spot, coloured by rule (one fixed colour per rule, the s
 which rules a strategy breaks, and where on the pitch.
 
 Draw: `pixi run python tools/pitch_maps.py replays/tournament_<id>` (a full round-robin, about 3 min).
-The rest of the strategy report, as numbers: [signal_report.md](signal_report.md).
 
 ## 2. A candidate against the champion
 

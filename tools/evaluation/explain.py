@@ -40,9 +40,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tools import figure_style as sr  # noqa: E402
 from tools import find_bugs  # noqa: E402
 from tools import pitch_maps as pm  # noqa: E402
-from tools import signal_report as sr  # noqa: E402
 from tools.evaluation.match import _short_name  # noqa: E402
 from utama_core.analysis.matches import Match, find_matches  # noqa: E402
 

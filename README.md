@@ -14,15 +14,9 @@ strategy layer that decides what every robot does.
 2. `pixi install` in the repository root, then `pixi run precommit-install` so every commit is
    linted.
 3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
-4. Play one headless match between two strategies:
+4. `pixi run main` to watch a match in the simulator (Ctrl+C to stop).
 
-       pixi run python tools/debug_match.py --strategy pendulum --opponent riptide
-
-   `pixi run python tools/evaluation/evaluate.py` plays a full round robin and keeps its replays
-   under `replays/eval_<id>/`.
-
-5. `pixi run python dashboard_server.py` and open http://localhost:8080 to watch replays and
-   browse tournament results.
+**New here? Write your first strategy: [docs/first_strategy.md](docs/first_strategy.md).**
 
 Everything runs in rsim with the in-process referee; grSim, the official GameController and
 real robots are optional ([external setup](docs/setup_external.md)).
@@ -31,9 +25,10 @@ real robots are optional ([external setup](docs/setup_external.md)).
 
 | Task | Start here |
 |---|---|
+| Your first strategy | [docs/first_strategy.md](docs/first_strategy.md) |
 | Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
 | Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/find_bugs.py RUN_DIR` for a run's worst problems |
-| Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
+| Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md) |
 | The referee | [docs/custom_referee.md](docs/custom_referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |

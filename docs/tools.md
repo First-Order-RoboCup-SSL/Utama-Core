@@ -3,11 +3,22 @@
 Every script in the repository, by what it is for. Run them from the repository root with
 `pixi run python <path>`; each script's docstring has its full usage and flags.
 
+## Start with these four
+
+New to the repo? You need only these ([first_strategy.md](first_strategy.md) walks through them):
+
+| Command | What it does |
+|---|---|
+| `pixi run main A B` | Watch strategy A (yellow) play strategy B in the simulator |
+| `pixi run test`, `pixi run lint` | Check nothing broke, before every pull request |
+| `pixi run python tools/evaluation/evaluate.py NAME` | Is strategy NAME better than the champion? Read the verdict and the mean diff |
+| `pixi run python dashboard_server.py` | Browse recorded replays at http://localhost:8080 |
+
+Everything below is for specialists.
+
 ## Which tool?
 
-Pick the tool by the question you have. Only tools that exist are named in this table. Items marked
-*planned* are designed but not built: see [strategy_tools_plan.md](strategy_tools_plan.md), which also
-says why the tools are split this way.
+Pick the tool by the question you have.
 
 For the four jobs that chain several of them, follow a skill in `.claude/skills/`: `change-strategy`, `explain-result`,
 `debug-incident`, `field-session`.
@@ -59,7 +70,7 @@ For the four jobs that chain several of them, follow a skill in `.claude/skills/
 | `tools/evaluation/explain.py` | `explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`: positions (with and without the ball), shots for and against, and fouls by rule, for two strategies from the matches in a run dir (an `evaluate.py` round's, or an older round-robin's), plus `summary.json` with the numbers behind them; goals stay the verdict. |
 | `tools/evaluation/match.py` | Plays one match (`run_match`: the step loop to full time, the score and the stats) for `evaluate.py`, with the set-up from `tools/sim_setup.py` (not run directly) |
 | `tools/evaluation/sim_settings.py` | Not a script: loads the players and the simulated world and robots (`tools/evaluation/reference/players.json`, `world.json`, `robots.json`) for `evaluate.py`. Kept in `reference/` so a new champion does not rerun every stored match |
-| `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |
+| `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: recorded replays and run results |
 
 ## Evaluating strategies
 
@@ -68,18 +79,9 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 
 | Script | Purpose |
 |---|---|
-| `tools/signal_report.py` | Figures of a run's strategy signals (an `evaluate.py` round dir) for [signal_report.md](signal_report.md) |
-| `tools/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for [signal_report.md](signal_report.md#on-the-pitch). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold) |
+| `tools/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for the pictures in [visual_guide.md](visual_guide.md). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold) |
 | `utama_core/analysis/goal_sources.py` | `python -m utama_core.analysis.goal_sources <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
 | `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
-
-### Validation studies
-
-These check how far cheap metrics agree with match results. They do not judge a strategy: use `evaluate.py`.
-
-| Script | Purpose |
-|---|---|
-| `tools/metric_correlation.py` | Which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
 
 ## Real matches
 

@@ -67,12 +67,9 @@ Every `tools/evaluation/evaluate.py` run prints round 1's sections and writes ea
 | — | `results[*].stats` | per-match `MatchStats`, everything above per match |
 | — | `run` | git commit, dirty flag, argv: compare runs only at clean commits |
 
-**Figures:** [`signal_report.md`](signal_report.md) draws the main signals for the latest full
-round robin (`tools/signal_report.py <run_dir>` regenerates them), with notes on what stands out.
 
-**Offline only** (not in `evaluate.py`'s output): `tools/metric_correlation.py <run_dir> ...`
-replays a run at 10 Hz for the signals marked *offline* below, and
-`python -m utama_core.analysis.goal_sources <run_dir>` writes the goal sources
+**Offline only** (not in `evaluate.py`'s output): `python -m utama_core.analysis.goal_sources <run_dir>`
+writes the goal sources
 ([Where do goals come from?](#where-do-goals-come-from)).
 
 **Sides.** Per-match stats are config_a's view ("friendly"); a strategy's row reads its own
@@ -94,10 +91,6 @@ Check these first: a broken strategy's other signals mean nothing.
 | Restarts not taken | RESTARTS; `restarts.by_kind[*].outcomes` | a kickoff, free kick or penalty `voided`, `timeout`, `stopped_before_kick` instead of `taken` | free kicks: 3414 taken of 3467 | The taker can't reach or kick the ball: restart positioning, a planner clamp, a keep-out circle |
 | Fouls by rule | FOULS; `fouls` | every foul by rule, then strategy/tactic of the offending robot | per strategy 6.3 (`chameleon`) · 7.9 · 23.3 (`three_slot`); run: out_of_bounds 2938, excessive_dribbling 448, defense_area 310, crashing 307 | One tactic dominating a rule is its bug: dribbling too far, entering the box, driving into robots |
 | `no_progress` restarts | `results[*].stats.rule_event_counts` | the referee stopped play: nobody moved the ball for 10 s | 296 in the run | Two robots wedged on the ball, or a carrier holding without a pass |
-| Near stalls *(offline)* | `near_stall_events` | a side's nearest robot stuck within 0.5 m of the ball for 2 s without gaining it: an early warning before the watchdog | not checked on current code | Wedges, a robot that can't take the ball |
-| Kicker thrash *(offline)* | `kicker_identity_thrash` | during a restart, how often a side's nearest-to-ball robot changes | not checked on current code | Restart takers swapping on position noise (a sticky pick missing) |
-| Retreat-reapproach *(offline)* | `retreat_reapproach_oscillations` | a side's nearest robot closes on the ball, backs off, closes again (> 0.3 m each way) | not checked on current code | Planner local minimum, congestion, a target that flips |
-| Longest carry *(offline)* | `ball_carrier_hold_max_s` | the longest one robot held the ball in a match | not checked on current code | A carrier dragging the ball or holding for a pass that never comes |
 
 ## Does it create chances?
 
@@ -111,7 +104,6 @@ Check these first: a broken strategy's other signals mean nothing.
 | Open goal mouth | CHANCES `open`; `chances.shot_open_goal` | share of the goal mouth no opponent blocked at the shot. Tops out near 75%, the keeper always covers some | 43% · 50% · 68% | Low: shooting into bodies; the attack never opens a lane |
 | Conversion | CHANCES `conv`; `chances.conversion` | goals per shot. High for everyone, since a shot is already on target | 21% · 35% · 60% | Read with distance and open goal, not alone |
 | Goals without a shot | `chances.unshot_goals` | goals no detected shot preceded: deflections, slow rolls, scrambles | 73 of 1068 goals | Many: goals by accident, not by design |
-| Rebound support *(offline)* | `shot_backed_up_rate` | share of shots with a teammate within 1 m of the ball | not checked on current code | Low: nobody follows up a save |
 
 ## Does it keep and move the ball?
 

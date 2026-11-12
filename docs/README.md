@@ -1,9 +1,10 @@
 # Docs
 
-Every doc in this folder, by kind. New to the repo: the [README](../README.md) first.
+Every doc in this folder, by kind. Docs that code comments cite but that were deleted are in git history. New to the repo: the [README](../README.md) first.
 
 ## How to
 
+- [first_strategy.md](first_strategy.md): start here. Write, watch and evaluate a toy strategy, then let an agent write one.
 - [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, observability tools. Read before any strategy-layer change.
 - [custom_referee.md](custom_referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
 - [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
@@ -30,15 +31,11 @@ Every doc in this folder, by kind. New to the repo: the [README](../README.md) f
 - [strategies.md](strategies.md): the strategy catalog: every strategy, its status, and its latest round-robin results.
 - [pitch_zones.md](pitch_zones.md): names for the parts of the pitch (thirds, wings, centre, the box, danger), with a diagram.
 - [signals.md](signals.md): every signal recorded about how a strategy plays, grouped by question, with reference ranges and what an off value means.
-- [signal_report.md](signal_report.md): figures of the main signals for every strategy in the latest full round-robin.
 
 ## Open work
 
 - [roadmap.md](roadmap.md): larger open workstreams, and one-line pointers to finished ones.
-- [strategy_tools_plan.md](strategy_tools_plan.md): design note, "one question, one tool": which strategy tool answers which question, what is planned and in what order, and the open names.
 - [sim_realism.md](sim_realism.md): how far rsim is from real matches, the realism scorecard, and the plan to close the gap with measured, randomized physics.
 - [in_house_vision.md](in_house_vision.md): our own vision stack for lab days (per-session tag calibration, tags on robots), the experiments that decide it, and the 2026-10-22 test day's vision findings.
 - [field_log_replay.md](field_log_replay.md): design for finding a moment in a field log and rerunning the decision code on its recorded inputs, and the physical setup's own errors (tag yaw and offset, kicker offset, cameras) as per-robot profiles.
 - [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
-- [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
-- [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.

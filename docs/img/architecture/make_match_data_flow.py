@@ -29,7 +29,6 @@ NAMES = [
     "utama_core/analysis/turnover_breakdown.py",
     "utama_core/analysis/restart_outcomes.py",
     "utama_core/analysis/stuck_detector.py",
-    "tools/signal_report.py",
     "tools/moments.py",
     "tools/replay_trace.py",
     "tools/repro_from_replay.py",
@@ -98,8 +97,8 @@ d.box(
     "chances, turnover_breakdown,\nrestart_outcomes, stuck_detector",
     kind="output",
 )
-d.box(165, 48, 34, 18, "tools/", "signal_report.py, moments.py,\nreplay_trace.py,\nrepro_from_replay.py", kind="output")
-d.box(165, 26, 34, 12, "ratings.py", "strengths and verdicts", kind="output")
+d.box(165, 48, 34, 18, "tools/", "moments.py,\nreplay_trace.py,\nrepro_from_replay.py", kind="output")
+d.box(165, 26, 34, 12, "ratings.py", "the verdict's test", kind="output")
 d.arrow((142, 98), (148, 92))
 d.arrow((142, 94), (148, 72))
 d.arrow((142, 80), (148, 70))

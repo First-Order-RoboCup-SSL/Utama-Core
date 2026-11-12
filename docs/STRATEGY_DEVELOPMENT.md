@@ -1,5 +1,7 @@
 # Strategy development
 
+New to the repo? Start with [first_strategy.md](first_strategy.md); this page is the reference.
+
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
 `utama_core/strategy/`, or `tools/evaluation/`/`docs/strategies.md`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`

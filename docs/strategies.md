@@ -62,7 +62,6 @@ Against the 2026-10-10 run: rsim is our fork with the v3 sim noise (latency, mot
 friction, kick direction), and restarts, ball placement and the carry limit were fixed, so goals
 fell from 7.1 a match to 4.0 and the results are not comparable with earlier runs.
 `pendulum` is still first, unbeaten; `riptide`, second before, is eleventh.
-What each strategy does well and badly in this run, in figures: [`signal_report.md`](signal_report.md).
 
 | Strategy | W-D-L | GF-GA | Points per match |
 |---|---|---|---|
@@ -85,7 +84,7 @@ Writeups of bugs since fixed were removed from this file; code comments that cit
 bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still open:
 
 - **`default` commands only 2 of 5 robots** (robots 3-5 idle) and draws 0-0 with
-  `low_block`; see `docs/investigation_default_vs_lowblock_stalemate.md`. `default` is the
+  `low_block` (an opponent-aware approach in `go_to_ball` reduced it; still 0-0). `default` is the
   kernel's smoke-test scaffold and `low_block` is retired, so not worth fixing for its own sake.
 
 ## Updating this file

@@ -168,6 +168,8 @@ need most:
   cause with a test), `field-session` (a test day on real robots and its logs). The docs keep the
   reasons; the skills keep the steps.
 
+- `docs/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
+  simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.
 - `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.

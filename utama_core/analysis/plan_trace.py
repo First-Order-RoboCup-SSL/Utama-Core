@@ -60,7 +60,7 @@ GameAt = Callable[[float], Game]
 
 # Single-hue ramp (light to dark FOR blue) for time; the carrot dots keep the carrot colour.
 TIME_CMAP = mcolors.LinearSegmentedColormap.from_list("time", ["#d6e6fa", FOR, "#0f3d7a"])
-# Referee bands: categorical slots from tools/signal_report.py, STOP grey, BALL_PLACEMENT ink.
+# Referee bands: categorical slots from tools/figure_style.py, STOP grey, BALL_PLACEMENT ink.
 REFEREE_COLOURS = {
     "HALT": "#e4e3df",
     "STOP": "#e4e3df",

@@ -1,80 +1,20 @@
 """evaluate.py — how the strategies play, and whether a candidate beats the champion at the last release.
 
 Run:
-    pixi run python tools/evaluation/evaluate.py [CANDIDATE ...] [flags]
+    pixi run python tools/evaluation/evaluate.py [CANDIDATE ...] [--at REF] [--all]
 
-With no candidate it plays one round: a round robin of the players, the health check (stalls, fouls,
-every signal). With candidates (strategy names, played from the working tree, or `.strategy` files)
-it plays rounds until each candidate is decided.
+No candidate: one round robin of the core strategies (the health check: stalls, fouls, signals).
+With candidates (strategy names or `.strategy` files): rounds until each is better, dropped or undecided.
 
-    --at REF            the reference is the champion as it was at git commit REF (default: the latest
-                        release tag), played from a `.strategy` file built once into replays/eval/frozen/
-    --all               every strategy in the catalog plays, not only the core (occasionally, for a
-                        wider field)
+    --at REF   the reference is the champion as it was at git commit REF (default: the latest release tag)
+    --all      every strategy in the catalog plays, not only the core
 
-Matches play in parallel, one fewer than the CPUs (at most 12). To explain a result: find_bugs.py,
-goal_sources, pitch_maps.py and explain.py on the run's round folders.
+How it works (players, rounds, the verdict, the match results store, the output folder):
+docs/STRATEGY_DEVELOPMENT.md, "Evaluating a strategy". For a beginner: docs/first_strategy.md, step 8.
 
-Players
--------
-`reference/players.json` names the champion and the core strategies, which play every round. Every
-other strategy in the catalog is reserve: it plays only with `--all`, an occasional run for a wider
-field (the verdict needs only fixed opponents, the same for candidate and reference). The reference (the champion
-at the last release) plays every round too. It is a frozen file, so a change to shared code moves the
-candidates and the working-tree strategies, never the reference.
-
-Rounds
-------
-Round k plays under sim-noise seed k (the reference world and robots, reference/world.json and
-robots.json). Every round is the same round robin: every pair of players once, under seed k. Only the
-candidates still undecided stay in later rounds. Nothing is played twice: the match results store holds
-every match whose code is unchanged, so a run plays only the matches of edited strategies, and of a
-seed not played before. In every match the candidate (then the reference) is config_a in odd rounds and
-config_b in even ones, so a candidate and the reference meet each opponent with the same colour and
-noise. Matches are 1200 s of sim time at most (two 300 s halves of playing time, `MAX_MATCH_SECONDS`).
-
-How it decides
---------------
-One number per opponent and seed: the candidate's goal difference minus the reference's, against the
-same opponent with the same seed and colour (a "diff", `paired`). The same opponent cancels its
-strength and the same noise cancels part of the luck. Head-to-head matches are reported, not counted:
-they answer "does it beat the champion?", the one matchup a search is most tempted to exploit.
-
-- **Screen**, seeds 1..ROUNDS: from round 2 on, a candidate whose mean diff is <= 0 is **dropped**.
-  One that survives ROUNDS rounds goes on to confirm; the screen never accepts.
-- **Confirm**, fresh seeds 101..100+ROUNDS: the same drop rule, then **better** if the one-sided
-  paired t-test on these seeds' diffs gives p <= ALPHA, else **undecided** (`ratings.decide`).
-
-Only fresh seeds can accept, so a candidate picked because it looked good on seeds 1..ROUNDS, or tuned
-to them, is not accepted on that luck; dropping early can never make a false "better". "Dropped" means
-not promising, not worse: an equal strategy is dropped at the first look about half the time.
-`tools/evaluation/verdict_sim.py` plays this rule on simulated results (no matches); its test pins
-that an equal strategy is called better at most ALPHA of the time.
-
-ROUNDS and ALPHA (in `analysis/ratings.py`) are the rule's only settings; both are provisional. The reference's results on each
-seed are stored and reused for every candidate, so a confirm stage that many candidates reach shares
-the reference's luck on seeds 101..; few do, since most are dropped in the screen.
-
-The reference is frozen with the shared code (tactics, skills, planner, engine) of the release, so a
-"better" can come from shared code changed since. Today's champion plays the same opponents with the
-same seeds and colours, so the report adds the candidate against it too, at no extra matches: there
-the shared code is the same on both sides. `evaluate.py <champion>` measures the shared code alone.
-
-Signals and stalls are reported, never judged on: they explain a result (docs/signals.md). The stall
-watchdog watches config_a only, so the report says how many matches each strategy was checked in.
-
-Matches the match results store holds (replays/match_results/, `replay/match_results.py`) are taken from
-it, not played: after a change to one strategy only its matches play. Delete that folder to replay all.
-
-A match that crashes is reported (`failed` in summary.json and report.json), not stored, and missing
-from the verdict's pairs; the run goes on, and the next run plays it again.
-
-Writes replays/eval_<UTC time>/: `report.json` (verdicts, round 1's signals), and per round `round_<k>/`
-with each played match's replay, intention log and stats (`<a>_vs_<b>.*`), `summary.json` and
-`ball_losses.md` — the layout tools/find_bugs.py, tools/pitch_maps.py and goal_sources read.
-
-Promoting is a decision, not a side effect: set the champion by hand in reference/players.json. It is
-the reference from the next release on: the reference is read from players.json as it was at the release.
+Matches play in parallel (CPUs minus one, at most 12). A match the store (replays/match_results/) holds
+is never played again. A match that crashes is reported (`failed` in summary.json and report.json) and
+left out of the verdict; the next run plays it again. Writes replays/eval_<UTC time>/.
 """
 
 from __future__ import annotations

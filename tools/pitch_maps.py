@@ -2,7 +2,7 @@
 
     pixi run python tools/pitch_maps.py replays/eval_<id>/round_1 [--out docs/img/signals]
 
-Every strategy gets one panel per figure, in `signal_report`'s order (points per match). All
+Every strategy gets one panel per figure, in name order (never a ranking). All
 panels use one frame: the strategy attacks toward +x, its own goal is on the left (-x), and
 the pitch is rotated 180 degrees for a team that attacks toward -x, so its left wing is +y in
 every panel. Writes:
@@ -45,7 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import signal_report as sr  # noqa: E402
+from tools import figure_style as sr  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
 from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.config.field_params import STANDARD_FIELD_DIMS as F  # noqa: E402
@@ -58,6 +58,7 @@ from utama_core.replay.columnar_reader import (  # noqa: E402
     ColumnarReplay,
     load_columnar_replay,
 )
+from utama_core.strategy.catalog import plain_name  # noqa: E402
 
 L, W = F.full_field_half_length, F.full_field_half_width
 BOX_D, BOX_W = 2 * F.half_defense_area_depth, F.half_defense_area_width  # the 2 m x 1 m box, from the goal line
@@ -416,7 +417,7 @@ def zone_findings(views: list[MatchView], order: list[str], images: Optional[dic
                         threshold=None,
                         unit="share of samples",
                         message=(
-                            f"{sr.short(name)} had {share:.0%} of its {label} samples in the {zone} "
+                            f"{plain_name(name)} had {share:.0%} of its {label} samples in the {zone} "
                             f"({xs.size} samples)."
                         ),
                         image=(images or {}).get(label),
@@ -438,7 +439,7 @@ def summary_rows(views: list[MatchView], order: list[str]) -> list[dict]:
         fouls = [f for v in views if v.strategy == name for f in v.fouls]
         rows.append(
             {
-                "strategy": sr.short(name),
+                "strategy": plain_name(name),
                 "in_possession_attacking_half": float(np.mean(x[inp] > 0)) if inp.any() else None,
                 "in_possession_mean_abs_y": float(np.mean(np.abs(y[inp]))) if inp.any() else None,
                 "out_possession_own_half": float(np.mean(x[~inp] < 0)) if (~inp).any() else None,
@@ -470,7 +471,7 @@ def run_views(run_dir: Path, workers: int) -> list[MatchView]:
     summary = json.loads((run_dir / "summary.json").read_text())
     jobs = []
     for r in summary["results"]:
-        stem = f"{sr.short(r['config_a'])}_vs_{sr.short(r['config_b'])}"
+        stem = f"{plain_name(r['config_a'])}_vs_{plain_name(r['config_b'])}"
         npz = run_dir / f"{stem}.npz"
         if npz.exists():
             jobs.append((str(npz), r["config_a"], r["config_b"], (r.get("stats") or {}).get("fouls") or []))
@@ -487,8 +488,8 @@ def main() -> None:
     )
     args = parser.parse_args()
     summary = json.loads((args.run_dir / "summary.json").read_text())
-    order = sr._order(summary["strategies"])
-    labels = {n: f"{sr.short(n)}  {sr.points(summary['strategies'][n]):.2f}" for n in order}
+    order = sorted(summary["strategies"], key=plain_name)
+    labels = {n: plain_name(n) for n in order}
     views = run_views(args.run_dir, args.workers)
     args.out.mkdir(parents=True, exist_ok=True)
     attack_png = args.out / "positions_attack.png"

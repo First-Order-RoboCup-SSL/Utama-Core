@@ -64,7 +64,7 @@ FLIP_BACKS_PER_MIN = 2.0
 # Under this much live play a rate is noise (one switch in 10 s reads as 6 per minute): no thrash finding.
 MIN_LIVE_S = 30.0
 
-# Styling copied from tools/signal_report.py so the figures read as one set.
+# Styling shared with tools/figure_style.py so the figures read as one set.
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 FOR, AGAINST = "#2a78d6", "#eb6834"  # categorical slots 1 and 2
 SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]
