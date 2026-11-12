@@ -86,7 +86,7 @@ _SUGGEST_HANDOFF_TICKS = round(_SUGGEST_HANDOFF_TIME * CONTROL_FREQUENCY)
 # field corner locked a receiver_id and then held the ball motionless for
 # the rest of a 600s match — `is_committed()` returns True whenever
 # receiver_id is not None, so nothing ever reassigns these robots either,
-# and no custom_referee rule catches a legally-dribbling, barely-moving
+# and no referee rule catches a legally-dribbling, barely-moving
 # ball outside a defense area (keeper_held_ball only watches the defense
 # area; excessive_dribbling only watches distance carried, not hold time).
 # Abandoning a hop that's taken too long and forcing the fallback shoot/

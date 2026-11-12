@@ -12,7 +12,7 @@ robots' poses, nothing of the tactics, so it holds whichever tactic or skill mad
 
 Only edges inside the field are fenced (the half-way line on a half-field run): a robot must
 cross the touch and goal lines to fetch a ball out of play, or a restart never completes
-(`custom_referee/actions.py`, `_clamp_to_field_or_ball`), and the cameras see past them.
+(`referee/actions.py`, `_clamp_to_field_or_ball`), and the cameras see past them.
 
 Keep-out zones (`StrategyRunner(keep_out=...)`) are rectangles no robot may enter, in every mode:
 the speed into each is capped the same way, on the sides a robot could reach before it stops. A

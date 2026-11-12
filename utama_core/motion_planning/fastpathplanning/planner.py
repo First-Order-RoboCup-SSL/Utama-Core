@@ -77,7 +77,7 @@ def _perp_rotation(subgoal_direction: int) -> Tuple[float, float]:
     return rot
 
 
-# Same set `DefenseAreaRule` (custom_referee/rules/defense_area_rule.py) uses to
+# Same set `DefenseAreaRule` (referee/rules/defense_area_rule.py) uses to
 # decide when defense-area encroachment is actually a foul — entry is legal
 # outside these commands (e.g. during a DIRECT_FREE_*/BALL_PLACEMENT_* restart
 # where the ball itself has come to rest in the opponent's box and a robot must
@@ -375,7 +375,7 @@ class FastPathPlanner:
         genuine ball-in-the-box retrieval or carry-to-place is exempted.
 
         Without this, `DIRECT_FREE_OURS`/`BALL_PLACEMENT_OURS`
-        (`custom_referee/actions.py`) can correctly choose to approach the
+        (`referee/actions.py`) can correctly choose to approach the
         ball (or, once carrying it, drive toward `designated_position`), but
         the planner refuses to route anywhere inside the rectangle at all —
         the kicker/placer converges to just outside

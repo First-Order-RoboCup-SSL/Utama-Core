@@ -4,8 +4,8 @@ How referee commands reach robots, and what each command requires. The original 
 integration is gone (BT removed in `087ee4b`, `960662c`, `48affd6`); the current mechanism is
 `RefereeOverride` (`utama_core/engine/referee_override.py`, design: §13 of
 `tactic_model_design_decisions.md`) driving the `*Step` classes in
-`utama_core/custom_referee/actions.py`. For the in-process referee itself see
-`custom_referee.md`.
+`utama_core/referee/actions.py`. For the in-process referee itself see
+`referee.md`.
 
 ## Data path
 

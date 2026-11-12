@@ -34,11 +34,11 @@ from tools.field.shooting_drill import (
     _referee_profile,
     on_field,
 )
-from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import teleop as teleop_view
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee import CustomReferee
 from utama_core.run import StrategyRunner
 from utama_core.tactics.teleop import TeleopDrive, TeleopTactic
 

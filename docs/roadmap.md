@@ -12,7 +12,7 @@ entry by its title, not its number.
 - **BT/py_trees removal** — `AbstractStrategy` rewritten kernel-native — `087ee4b`, `960662c`, `48affd6`.
 - **Tournament scoreless-draw debugging** — rSim kick direction, `FastPathPlanner`, `SwitchOfPlayTactic`, `DefenseTactic` foul loop, `TwoDPID` braking — `27fd36f`, `e11094a`, `78fce73`.
 - **Motion-controller discontinuity handling** — PID auto-reset on orientation target jump — `91100ff`, `87cf250`, `036077c`.
-- **CustomReferee gaps** — double touch, ball speed, full-episode `reset()`, `set_debug_status` rename (see `docs/custom_referee.md`).
+- **CustomReferee gaps** — double touch, ball speed, full-episode `reset()`, `set_debug_status` rename (see `docs/referee.md`).
 - **Strategy-computation perf pass** — ~3x end-to-end — `3086337`, `0cf1e17`, `679e8cd`, `b79b863`, `b98cd29`, `4493002`.
 - **Goalkeeper overshoot** — `a4df59e`, `ba59c9e`.
 - **Stuck-match root causes** — `PressAndContainTactic` loose ball, `GiveAndGoTactic` hop timeout — `d6b3ff1`.

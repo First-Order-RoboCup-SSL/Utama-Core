@@ -1,7 +1,7 @@
 # External setup: grSim, GameController, AutoReferee, SSL Vision
 
 None of this is needed for everyday work: rsim and the in-process
-[`CustomReferee`](custom_referee.md) run everything headless with no external process, and
+[`CustomReferee`](referee.md) run everything headless with no external process, and
 behave the same across rsim, grSim and real mode. Set these up only to run against grSim, the
 official competition software, or real robots.
 

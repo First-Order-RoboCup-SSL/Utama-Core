@@ -135,7 +135,7 @@ Set the "Test-day configuration" block of `tools/field/shooting_drill.py`: `FIEL
 `CAMERA_HALF` (`"full"` when the cameras cover the whole field), each robot's vision and radio
 ID and working hardware. Then `pixi run python tools/field/shooting_drill.py`, open
 http://localhost:8080 and go through the Live tab's field check
-([custom_referee_gui.md](custom_referee_gui.md#field-check-camera-runs)): every row green or
+([referee_gui.md](referee_gui.md#field-check-camera-runs)): every row green or
 amber, each robot under its own ID and colour, a ball in each corner inside the area in play,
 and a robot pushed by hand across the cameras' overlap moving smoothly (a jump there means the
 two calibrations disagree). Only then Force Start.

@@ -14,11 +14,11 @@ from utama_core.analysis.restart_picture import (
     render_restart,
 )
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
-from utama_core.custom_referee import actions
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.referee import actions
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 

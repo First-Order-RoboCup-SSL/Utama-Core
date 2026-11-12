@@ -51,7 +51,7 @@ A third and a strip together name one of nine cells: "attacking left wing", "def
 
 - **The box**: the defense area, 1 m deep and 2 m wide in front of each goal. At most one
   defender (the goalkeeper) may be inside its own box, and attackers may not enter the
-  opponent's (`custom_referee/rules/defense_area_rule.py`). "Our box" and "their box" are from
+  opponent's (`referee/rules/defense_area_rule.py`). "Our box" and "their box" are from
   the team's point of view. Code calls it the defense area (`FieldDimensions.right_defense_area`).
 - **The goal**: 1 m wide.
 - **The centre circle**: 0.5 m radius; it matters at kickoffs.

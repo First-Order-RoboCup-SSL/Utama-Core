@@ -383,7 +383,7 @@ def test_the_tactics_are_outside_the_base(graph):
 def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
     base = graph.base_modules([MATCH_ENTRY])
     assert set(fp.SUBPROCESS_SCRIPTS) <= base
-    assert any("custom_referee/profiles/simulation.yaml" in row for row in graph.data_files(base))
+    assert any("referee/profiles/simulation.yaml" in row for row in graph.data_files(base))
 
 
 # Every place the code a match runs reaches outside the import graph, and how each is
@@ -425,7 +425,7 @@ AUDIT = {
     "opens files": [
         "utama_core.bundle.archive",
         "utama_core.bundle.strategy_file",
-        "utama_core.custom_referee.profiles.profile_loader",
+        "utama_core.referee.profiles.profile_loader",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
         "utama_core.replay.columnar_reader",

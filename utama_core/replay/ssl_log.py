@@ -613,7 +613,7 @@ def free_kick_taken(command: np.ndarray, counter: np.ndarray, ball_xy: np.ndarra
 
     The game controller keeps `DIRECT_FREE_*` through the play that follows, until the next
     stoppage. Our referee switches to `NORMAL_START` before the kick instead (its advance 3, see
-    `docs/custom_referee.md`), and the analyses count live play as `NORMAL_START`/`FORCE_START`,
+    `docs/referee.md`), and the analyses count live play as `NORMAL_START`/`FORCE_START`,
     so a converted replay says `NORMAL_START` from the kick on."""
     taken = np.zeros(len(command), dtype=bool)
     in_kick = np.isin(command, list(FREE_KICKS))

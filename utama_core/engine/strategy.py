@@ -24,7 +24,7 @@ otherwise have to write a trivial one-group `Partitioner` themselves.
 
 Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
 before any tactic ticks at all, not by a tactic: `engine.referee_override`
-reuses the `custom_referee/actions.py` Step classes (keep-out-distance
+reuses the `referee/actions.py` Step classes (keep-out-distance
 geometry, formation positions) to take over every outfield robot's command
 for the duration of the restart. See `_OVERRIDE_COMMANDS` there and
 `referee_reset.py` for how this fits with the barrier-reset/pause tiers.

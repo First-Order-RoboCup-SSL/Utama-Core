@@ -3,7 +3,7 @@
 `RefereeOverride.overrides` (set via `AbstractStrategy(..., referee_overrides=...)`
 or `Strategy.referee_overrides = ...`) lets a strategy replace the built-in
 `*Step` formation for one specific `RefereeCommand` with its own callable,
-without touching `custom_referee/actions.py` itself. This file covers:
+without touching `referee/actions.py` itself. This file covers:
 
 - a registered override actually runs instead of the built-in Step
   (`test_registered_override_replaces_built_in_step`)

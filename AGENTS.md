@@ -18,7 +18,7 @@ exists yet: say so in your change rather than guessing.
 |---|---|---|---|
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
 | Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
-| Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
+| Referee | `utama_core/referee/` | `docs/referee.md` | |
 | Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
 | Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
 | Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
@@ -96,7 +96,7 @@ One term per thing; reuse these instead of coining new ones.
   `PressAndContainTactic`, ...) that strategies compose.
 - `utama_core/skills/` — lower-level per-robot primitives (`go_to_ball`, `block_attacker`,
   ...) tactics call directly.
-- `utama_core/custom_referee/` — the in-process referee (rules, restart positioning).
+- `utama_core/referee/` — the in-process referee (rules, restart positioning).
 - `utama_core/replay/` — the replay file format (writer, player, columnar reader/writer), scenario
   rebuilding from a replay, and the match-result cache/fingerprint.
 - `utama_core/analysis/` — offline analyses of tournament runs and replays (`turnover_breakdown`,
@@ -173,10 +173,10 @@ need most:
 - `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
-- `docs/custom_referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
+- `docs/referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
   tracks genuinely open items (don't assume something is missing without checking there
   first — it may already be resolved and the surrounding doc just stale).
-- `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
+- `docs/referee_design_decisions.md` — referee rule-by-rule design decisions.
 - `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
   assuming a doc's claim about "not yet built" is still accurate — these drift.
 - `docs/signals.md` — every signal we record about how a strategy plays (stalls, fouls, chances

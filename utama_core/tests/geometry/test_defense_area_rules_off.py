@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.custom_referee import actions
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.field import Field
@@ -24,6 +23,7 @@ from utama_core.geometry.pass_and_score_geometry import (
 )
 from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
+from utama_core.referee import actions
 
 # We are on the right: our box spans x >= 3.5, the opponent's x <= -3.5 (standard field).
 _ENEMY_BOX = Vector2D(-4.0, 0.0)
@@ -77,7 +77,7 @@ def test_the_planners_route_through_the_opponents_box_in_open_play_without_the_r
 @pytest.mark.parametrize("profile, rules", [("simulation", True), ("human", False)])
 def test_the_runner_takes_the_box_rules_from_the_referee_profile(profile, rules):
     """`human` (and the real examples, built on it) has no defense-area rule, so robots ignore the boxes."""
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
     from utama_core.run.strategy_runner import StrategyRunner
 
     runner = SimpleNamespace(referee=CustomReferee.from_profile_name(profile))

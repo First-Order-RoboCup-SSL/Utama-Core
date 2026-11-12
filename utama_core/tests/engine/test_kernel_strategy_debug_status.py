@@ -99,7 +99,7 @@ def test_debug_status_leaves_out_a_goalkeeper_whose_robot_is_not_on_the_field():
 
 def _refereed_runner(command, notifier=None):
     """`pendulum` under our own referee, seeded with `command`; `notifier` stands in for a dashboard."""
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
     from utama_core.run.strategy_runner import StrategyRunner
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=3)
@@ -147,11 +147,8 @@ def test_in_live_play_no_robot_shows_the_referee():
 
 
 def test_the_placer_and_the_free_kick_taker_are_named():
-    from utama_core.custom_referee.actions import (
-        BallPlacementOursStep,
-        DirectFreeOursStep,
-    )
     from utama_core.engine.referee_override import _job
+    from utama_core.referee.actions import BallPlacementOursStep, DirectFreeOursStep
 
     placement = BallPlacementOursStep()
     placement._placer_id = 2

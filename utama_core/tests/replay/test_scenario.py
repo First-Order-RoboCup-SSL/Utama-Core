@@ -370,7 +370,7 @@ def _replay_runner(frame):
     """What `apply_scenario` touches of a runner, with the referee `_build_runner` gives it."""
     from types import SimpleNamespace
 
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6)
     referee.seed_clock(frame.ts, RefereeCommand.PREPARE_KICKOFF_YELLOW)

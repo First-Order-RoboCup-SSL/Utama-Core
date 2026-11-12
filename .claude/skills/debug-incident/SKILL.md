@@ -40,7 +40,7 @@ All run as `pixi run python tools/<tool>.py ...`. Never conclude from a picture 
 ## 3. Find the cause in the code
 
 From the trace: which tactic or override sent the robot there, with which target, waypoint
-and obstacles. Then ask whether the rule was really broken (`docs/custom_referee_design_decisions.md`)
+and obstacles. Then ask whether the rule was really broken (`docs/referee_design_decisions.md`)
 and whether the check reads it right. Frame trap: rsim stores y negated; anything written into
 the sim negates y and heading.
 

@@ -1,5 +1,5 @@
 // Live view: field canvas + referee command buttons + profile config readout.
-// Successor to custom_referee/gui.py's single-page HTML/JS — same behavior,
+// Successor to referee/gui.py's single-page HTML/JS — same behavior,
 // registered as one tab against the shared dashboard server. Named "Live"
 // (not "Referee") because it's the one view for watching+controlling a
 // running match — a tactic-assignment panel lives here too, not in a

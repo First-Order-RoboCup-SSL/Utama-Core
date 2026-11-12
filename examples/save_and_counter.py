@@ -52,7 +52,6 @@ from tools.field.shooting_drill import (
     on_field,
 )
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
@@ -67,6 +66,7 @@ from utama_core.geometry.pass_and_score_geometry import (
     has_ball,
     oriented_towards,
 )
+from utama_core.referee import CustomReferee
 from utama_core.run import StrategyRunner
 from utama_core.skills.go_to_ball import go_to_ball
 from utama_core.skills.utils.move_utils import empty_command, move, turn_on_spot

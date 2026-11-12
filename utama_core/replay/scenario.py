@@ -466,7 +466,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     robot teleported near the goal line, confirmed against a real replay,
     2026-09-03).
     """
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
 
     sim_controller = runner.sim_controller
     if sim_controller is None:

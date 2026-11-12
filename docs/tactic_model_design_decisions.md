@@ -92,7 +92,7 @@ controller but not `game`.
 
 **§13. Referee restarts are handled before any Tactic ticks** (`engine/referee_override.py`).
 For `STOP`, `TIMEOUT_*` and every restart command, `RefereeOverride` computes every outfield
-robot's command from the long-lived `*Step` classes in `custom_referee/actions.py` (reused,
+robot's command from the long-lived `*Step` classes in `referee/actions.py` (reused,
 not reimplemented — keep-out geometry has one home). Steps are driven through a three-attribute
 shim (`game`, `motion_controller`, `cmd_map`). The goalkeeper's pinned tactic ticks only if the
 override produced no command for it (kickoff steps exempt the keeper). A restart arriving

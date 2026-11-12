@@ -9,8 +9,8 @@ from utama_core.config.field_params import (
     GREAT_EXHIBITION_FIELD_DIMS,
     STANDARD_FIELD_DIMS,
 )
-from utama_core.custom_referee import CustomReferee
 from utama_core.entities.game.field import FieldBounds
+from utama_core.referee import CustomReferee
 from utama_core.run.referee_source import OfficialReferee
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.tests.run.strat_runner_test_utils import DummyStrategy

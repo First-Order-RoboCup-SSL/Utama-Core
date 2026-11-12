@@ -26,7 +26,6 @@ from utama_core.config.settings import (
     ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
-from utama_core.custom_referee import CustomReferee
 from utama_core.data_processing.receivers import RefereeMessageReceiver, VisionReceiver
 from utama_core.data_processing.refiners import (
     PositionRefiner,
@@ -51,6 +50,7 @@ from utama_core.geometry.math_utils import assert_valid_bounding_box
 from utama_core.geometry.pass_and_score_geometry import reset_possession_state
 from utama_core.motion_planning.common.control_schemes import get_control_scheme
 from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.referee import CustomReferee
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
@@ -406,7 +406,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._vision_stream_renderer: Optional[GameFrameRenderer] = None
 
         if isinstance(self.referee, CustomReferee):
-            from utama_core.custom_referee.geometry import RefereeGeometry
+            from utama_core.referee.geometry import RefereeGeometry
 
             self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims))
 

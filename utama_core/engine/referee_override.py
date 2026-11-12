@@ -10,7 +10,7 @@ which is an SSL rule violation, not just a scheduling wrinkle.
 This module matches the current `RefereeCommand` and, when it is a restart,
 takes over every friendly robot's command for that tick, bypassing tactics
 entirely. It reuses the `*Step` classes in
-`utama_core/custom_referee/actions.py` rather than reimplementing
+`utama_core/referee/actions.py` rather than reimplementing
 keep-out-distance geometry — those
 classes only ever touch `blackboard.game`, `blackboard.motion_controller`,
 and `blackboard.cmd_map` (verified: no other blackboard key is read), so a
@@ -26,7 +26,7 @@ requires ("robots must stop immediately", see `HaltStep`).
 together under "just freeze", which was wrong for the other two:
 
 - STOP's actual rule is stricter than a freeze: "stop in place, AND stay
-  >= 0.5m from the ball" (`docs/custom_referee_gui.md`). A robot already
+  >= 0.5m from the ball" (`docs/referee_gui.md`). A robot already
   inside that keep-out radius at the exact instant STOP is entered (e.g. a
   carrier mid-dribble, or `goalkeep.py`'s own retrieval branch driving the
   keeper up to a loose ball) has no way to comply by freezing — it is
@@ -55,7 +55,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from utama_core.custom_referee.actions import (
+from utama_core.engine.tactic import RobotId
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.game import Game
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.referee.actions import (
     BallPlacementOursStep,
     BallPlacementTheirsStep,
     DirectFreeOursStep,
@@ -66,11 +71,6 @@ from utama_core.custom_referee.actions import (
     PreparePenaltyTheirsStep,
     StopStep,
 )
-from utama_core.engine.tactic import RobotId
-from utama_core.entities.data.command import RobotCommand
-from utama_core.entities.game import Game
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.common.motion_controller import MotionController
 
 # Commands requiring a legal-position override: every stoppage/restart except
 # HALT, which `Strategy.tick()`'s `is_paused` check already handles by issuing

@@ -7,12 +7,6 @@ import numpy as np
 import pytest
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.custom_referee.actions import (
-    _WALL_FROM_BALL_M,
-    _is_in_own_defense_area,
-    _next_is_their_free_kick,
-    their_free_kick_targets,
-)
 from utama_core.engine.ball_roles import COVER_M, ON_BALL_SWITCH_MARGIN_M, BallRoles
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
@@ -26,6 +20,12 @@ from utama_core.geometry.pass_and_score_geometry import (
     no_shot_reposition_target,
     receiver_of_rolling_ball,
     segment_blocked,
+)
+from utama_core.referee.actions import (
+    _WALL_FROM_BALL_M,
+    _is_in_own_defense_area,
+    _next_is_their_free_kick,
+    their_free_kick_targets,
 )
 from utama_core.skills.man_mark import MARK_STANDOFF, mark_target
 from utama_core.tactics.give_and_go import _relocate_target

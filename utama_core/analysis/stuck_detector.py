@@ -2,7 +2,7 @@
 robot oscillates instead of making progress, or a restart command stuck in
 effect far longer than any legal restart ceremony takes.
 
-This is a prototype analysis tool, not a live `custom_referee` rule (see
+This is a prototype analysis tool, not a live `referee` rule (see
 `docs/testing_gaps.md` gap #11) — it runs after a match, over a recorded
 `.pkl`/`.npz` replay, and reports candidate windows for a human/agent to
 look at with `render_window()`. It intentionally does not (and should not,

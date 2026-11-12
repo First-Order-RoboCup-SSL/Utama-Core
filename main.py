@@ -13,10 +13,10 @@ results, use `tools/evaluation/evaluate.py`.
 
 import argparse
 
-from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.referee.profiles.profile_loader import load_profile
 from utama_core.run.sim_setup import UnknownStrategy, load_side, sim_referee, sim_runner
 
 

@@ -7,7 +7,7 @@ subscribers, and dispatches POSTed commands to whichever view registered a
 handler for the path. Each `views/*.py` module owns its own state shape and
 registers itself against a running server — this module just moves bytes.
 
-Extracted from `custom_referee/gui.py`'s `_RefereeGUIServer`, which used to
+Extracted from `referee/gui.py`'s `_RefereeGUIServer`, which used to
 run one server per referee instance with a single hardcoded SSE channel and
 a single hardcoded `/command` handler. Multiple views sharing one server
 means one browser tab, one port, one process — not a GUI per concern.

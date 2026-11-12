@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import dataclasses
 
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.field import FieldBounds
@@ -16,6 +14,8 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.geometry.math_utils import in_field_bounds
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import load_profile
 from utama_core.run import StrategyRunner
 from utama_core.run.strategy_runner import _turned
 from utama_core.strategy.catalog import builder

@@ -23,11 +23,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import time
 
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import load_profile
 from utama_core.run import StrategyRunner
 from utama_core.strategy.catalog import builder
 

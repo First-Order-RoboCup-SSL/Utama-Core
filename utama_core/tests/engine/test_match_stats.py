@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -16,6 +15,7 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.referee.rules.base_rule import RuleViolation
 
 
 def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:

@@ -13,7 +13,7 @@ state into robot commands. Everything below runs inside `StrategyRunner`
 
 The referee is one of three sources (`run/referee_source.py`): none, the official
 GameController over the network, or `CustomReferee`, which runs in the same process and is what
-rsim matches and tournaments use (`docs/custom_referee.md`).
+rsim matches and tournaments use (`docs/referee.md`).
 
 **Problem.** Combining new data with prior knowledge (e.g. a Kalman filter) kept bloating
 `GameFrame` with new functions, and access to past and current state wasn't uniform.

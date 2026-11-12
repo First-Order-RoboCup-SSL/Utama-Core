@@ -41,9 +41,6 @@ from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
 )
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.geometry import RefereeGeometry
-from utama_core.custom_referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.engine import ball_release
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
@@ -53,6 +50,9 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.referee import CustomReferee
+from utama_core.referee.geometry import RefereeGeometry
+from utama_core.referee.rules.out_of_bounds_rule import OutOfBoundsRule
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.skills.go_to_ball import go_to_ball
 from utama_core.skills.utils.move_utils import empty_command
@@ -556,7 +556,7 @@ class _HaltDuringQueuedKickoffManager(AbstractTestManager):
         self.after_halt: list[RefereeCommand] = []
 
     def reset_field(self, sim_controller: AbstractSimController, game: Game):
-        from utama_core.custom_referee.rules.base_rule import RuleViolation
+        from utama_core.referee.rules.base_rule import RuleViolation
 
         sim_controller.teleport_ball(0.5, 0.5)
         self._referee.set_command(

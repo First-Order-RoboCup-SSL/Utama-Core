@@ -35,8 +35,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import (
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import (
     AutoAdvanceConfig,
     DefenseAreaConfig,
     GameConfig,
@@ -46,10 +48,8 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     RulesConfig,
 )
-from utama_core.dashboard import attach_dashboard
-from utama_core.dashboard.views import referee as referee_view
 from utama_core.run import StrategyRunner
-from utama_core.tests.custom_referee.wandering_strategy import wandering_strategy
+from utama_core.tests.referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration

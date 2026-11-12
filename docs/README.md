@@ -6,8 +6,8 @@ Every doc in this folder, by kind. Docs that code comments cite but that were de
 
 - [first_strategy.md](first_strategy.md): start here. Write, watch and evaluate a toy strategy, then let an agent write one.
 - [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, observability tools. Read before any strategy-layer change.
-- [custom_referee.md](custom_referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
-- [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
+- [referee.md](referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
+- [referee_gui.md](referee_gui.md): the referee operator panel in the dashboard.
 - [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.
 - [motion_planning_comparison.md](motion_planning_comparison.md): the motion-planning benchmark and how to read it.
 - [motion_planning_results.md](motion_planning_results.md): its latest full run.
@@ -22,7 +22,7 @@ Every doc in this folder, by kind. Docs that code comments cite but that were de
 
 - [tactic_model_design_decisions.md](tactic_model_design_decisions.md): why the strategy layer (engine, tactics, strategies) is shaped the way it is, and what was deliberately not built.
 - [scheduling_math_model.md](scheduling_math_model.md): a mathematical model of tactic scheduling and role allocation, a companion to the above.
-- [custom_referee_design_decisions.md](custom_referee_design_decisions.md): rule-by-rule decisions from auditing `CustomReferee` against the SSL rulebook.
+- [referee_design_decisions.md](referee_design_decisions.md): rule-by-rule decisions from auditing `CustomReferee` against the SSL rulebook.
 - [pipeline_method.md](pipeline_method.md): how vision, robot and referee data are refined into one `Game` state, and one tick from state to robot commands.
 - [architecture.md](architecture.md): the one-tick diagram, and the generated package dependency graph with its import-rule check.
 

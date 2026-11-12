@@ -10,9 +10,9 @@ import pytest
 
 from utama_core.config.enums import Mode
 from utama_core.config.field_params import FieldBounds, FieldDimensions
-from utama_core.custom_referee import CustomReferee
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee import CustomReferee
 from utama_core.run.field_check import (
     CAMERA_SILENT_S,
     OUT_OF_BOUNDS_MARGIN_M,

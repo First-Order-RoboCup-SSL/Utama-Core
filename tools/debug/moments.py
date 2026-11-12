@@ -10,7 +10,7 @@ A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays 
      "strategy": "all" or one strategy, "opponent": the other side (default pendulum),
      "seconds": how long to play (default 3),
      "checks": names from `CHECKS` below, or referee rule names our side must not break
-               (`custom_referee/rules/`, "*" for any),
+               (`referee/rules/`, "*" for any),
      "requires": names from `REQUIRES` below: conditions that must hold during the play, so a
                moment whose situation never arose fails ("did not arise: ...") instead of passing,
      "known_failure": null, or why it still fails (the test is then a strict xfail),
@@ -90,7 +90,7 @@ MOMENTS_DIR = REPO_ROOT / "utama_core" / "tests" / "moments"
 DEFAULT_OPPONENT = "pendulum"
 DEFAULT_SECONDS = 3.0
 
-# Rulebook distances (`custom_referee/rules/keep_out_rule.py`, `robot_stop_speed_rule.py`).
+# Rulebook distances (`referee/rules/keep_out_rule.py`, `robot_stop_speed_rule.py`).
 KEEP_OUT_M = 0.5
 STOP_SPEED_MPS = 1.5
 # A robot inside the keep-out circle may drift with noise, never drive in: closer by more than
@@ -253,11 +253,11 @@ class MomentError(ValueError):
 
 
 def referee_rule_names() -> set[str]:
-    """The `rule_name=` literals of the referee's rules, read from `custom_referee/` (rules and state machine)."""
+    """The `rule_name=` literals of the referee's rules, read from `referee/` (rules and state machine)."""
     import ast
 
     names = set()
-    for path in (REPO_ROOT / "utama_core" / "custom_referee").rglob("*.py"):
+    for path in (REPO_ROOT / "utama_core" / "referee").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call):
                 for kw in node.keywords:

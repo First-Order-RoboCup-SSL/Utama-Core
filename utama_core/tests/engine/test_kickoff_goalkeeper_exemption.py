@@ -279,7 +279,7 @@ def test_our_kickoff_with_only_keeper_present_does_not_raise(nonzero_keeper_runn
     keeper). Exercised directly against the Step class with a minimal object,
     since reproducing "rsim spawned only one robot" isn't practical through
     the fixture — this only needs to prove the early-return guard fires."""
-    from utama_core.custom_referee.actions import PrepareKickoffOursStep
+    from utama_core.referee.actions import PrepareKickoffOursStep
 
     class _FakeRef:
         designated_position = None
@@ -318,8 +318,8 @@ def test_their_kickoff_from_the_wrong_half_goes_round_the_centre_circle(pendulum
     on the circle in the wrong half (the old push-out left a robot a hair inside the edge,
     "encroaching", its target its own position)."""
     from utama_core.config.field_params import STANDARD_FIELD_DIMS
-    from utama_core.custom_referee.geometry import RefereeGeometry
-    from utama_core.custom_referee.rules.keep_out_rule import KeepOutRule
+    from utama_core.referee.geometry import RefereeGeometry
+    from utama_core.referee.rules.keep_out_rule import KeepOutRule
 
     runner = pendulum_runner
     game = runner.my.game

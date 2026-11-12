@@ -119,12 +119,12 @@ def test_a_command_from_the_page_is_stamped_on_the_referees_clock_not_the_wall_c
     """In rsim the referee runs on sim time; a wall-clock stamp put its match clock 1.8e9 s out."""
     from types import SimpleNamespace
 
-    from utama_core.custom_referee import CustomReferee
     from utama_core.dashboard.views import referee as referee_view
     from utama_core.entities.data.vector import Vector3D
     from utama_core.entities.game.ball import Ball
     from utama_core.entities.game.game_frame import GameFrame
     from utama_core.entities.referee.referee_command import RefereeCommand
+    from utama_core.referee import CustomReferee
 
     handlers = {}
     server = SimpleNamespace(

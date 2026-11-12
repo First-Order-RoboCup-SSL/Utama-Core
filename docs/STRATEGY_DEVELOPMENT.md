@@ -91,11 +91,11 @@ sequenceDiagram
 
 ## Referee handling
 
-`CustomReferee` (`utama_core/custom_referee/`) runs in-process and identically across
+`CustomReferee` (`utama_core/referee/`) runs in-process and identically across
 rsim/grsim/real. During a restart, `RefereeOverride` (`engine/referee_override.py`) takes over
 every outfield robot *before* any `Tactic` ticks, reusing the `*Step` classes in
-`custom_referee/actions.py`. Strategies can override a restart formation via
-`Strategy(referee_overrides=...)`. See `docs/custom_referee.md`.
+`referee/actions.py`. Strategies can override a restart formation via
+`Strategy(referee_overrides=...)`. See `docs/referee.md`.
 
 To see where the override sends every robot for a restart, run `tools/debug/restart_picture.py`
 (`REPLAY.npz --t S`, or `--all-restarts` for one small panel per restart command in the replay). It
@@ -504,7 +504,7 @@ The picture tools (`tools/debug/match_timeline.py`, `tools/debug/restart_picture
    ball, while the current planner's carrot from those states is the push-out point 0.85 m from the ball.
 3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
    robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
-   broken (real rules, `docs/custom_referee_design_decisions.md`) and whether the check reads it
+   broken (real rules, `docs/referee_design_decisions.md`) and whether the check reads it
    right.
 4. **Fix the cause, with a unit test at the boundary** (CLAUDE.md, Testing), e.g. "a computed
    target is off the field". That test is the protection, and it does not need the foul to
@@ -532,7 +532,7 @@ way whatever the strategy. Moments are captured from replays (`capture`); hand-m
 
 | Symptom | Looked like | Cause | Fix | Test |
 |---|---|---|---|---|
-| Defender pushed off the pitch during their corner placement | robot leaving the field | override push-out target off the pitch in a corner | `14038121` | `tests/custom_referee/test_referee_unit.py` |
+| Defender pushed off the pitch during their corner placement | robot leaving the field | override push-out target off the pitch in a corner | `14038121` | `tests/referee/test_referee_unit.py` |
 | Defender stuck against their placer | robot ignoring the restart | planner found no path out for a robot inside another's clearance | `c64fc6f9` | `test_fpp_pressed_against_robot.py` |
 | Defender boxed in a corner closes on the ball | robot driving in | planner detour led back toward the ball; the keep-out guard skipped robots already inside | `935da778` | `test_fpp_inside_ball_keep_out.py` |
 | Same moment still failing after the fix | robot driving in | `keeps_clear` counted the ball placed onto a robot standing still | `20ca1974` | `test_moments.py` |
@@ -542,7 +542,7 @@ way whatever the strategy. Moments are captured from replays (`capture`); hand-m
 | STOP with the ball just out over the goal line: our robot drives into their keeper (field day 2026-10-27) | robot ignoring a robot | the clear-of-the-ball target, clamped back onto the pitch, was 0.23 m from the keeper standing on its line | field-day-20261027 branch: clearing targets keep `_ROBOT_SPACING_M` (2 robot radii + 10 cm) from every robot, moving on round the ball | `test_referee_unit.py` (TestClearingTargetsKeepOffRobots) |
 
 The last row matters on real robots only: in sim matches `StrategyRunner` teleports a placed ball
-to its target (`docs/custom_referee_design_decisions.md`, Ball placement), so our placer never
+to its target (`docs/referee_design_decisions.md`, Ball placement), so our placer never
 runs in a round-robin. Its moment was dropped for that reason: check that a moment's behaviour
 happens in sim matches at all before keeping it. The placer is still slow (about 5 s round the
 ball, and the carry curves off line), a real-robot item.

@@ -1,7 +1,7 @@
 """Assembles the dashboard's single-page shell by inlining `static/*` files.
 
 Kept dependency-free and build-step-free on purpose (same constraint
-`custom_referee/gui.py` operated under): one HTML string, served by the
+`referee/gui.py` operated under): one HTML string, served by the
 stdlib HTTP server, no bundler, no separate static file route.
 """
 

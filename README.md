@@ -29,7 +29,7 @@ real robots are optional ([external setup](docs/setup_external.md)).
 | Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
 | Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md) |
-| The referee | [docs/custom_referee.md](docs/custom_referee.md) |
+| The referee | [docs/referee.md](docs/referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
 | Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/setup_external.md](docs/setup_external.md) |
@@ -45,7 +45,7 @@ Everything lives under `utama_core/`:
 - `strategy/`: the strategies (one module each, named after the strategy)
 - `tactics/`, `skills/`, `geometry/`: reusable tactics, per-robot skills, and the geometry they share
 - `engine/`: the tactic-kernel infrastructure (`Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee overrides)
-- `custom_referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
+- `referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
 - `motion_planning/`: path planning and motion control
 - `run/`: the main loop (`StrategyRunner`)
 - `replay/`: replay files, the match-result cache and code fingerprints

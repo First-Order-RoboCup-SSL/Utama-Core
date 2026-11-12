@@ -3,7 +3,7 @@
 For a replay state whose referee command is a restart (STOP, timeouts, kick-offs, penalties, free kicks,
 ball placement), this runs `RefereeOverride.tick` exactly as the strategy does and records the target
 each robot is commanded to. The `*Step` classes only produce velocity commands through `move` and
-`turn_on_spot`, so `_recording_steps` swaps those two names in `custom_referee.actions` for recorders for
+`turn_on_spot`, so `_recording_steps` swaps those two names in `referee.actions` for recorders for
 the duration of the call (and restores them): the commanded target is what is captured, and no engine
 or planner code changes. A detour waypoint is captured as the target, as commanded.
 
@@ -54,7 +54,6 @@ from utama_core.config.referee_constants import (
     BALL_KEEP_OUT_DISTANCE,
     OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
 )
-from utama_core.custom_referee import actions as _actions
 from utama_core.engine.referee_override import RefereeOverride, is_override_command
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D
@@ -62,6 +61,7 @@ from utama_core.entities.game import Game
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.referee import actions as _actions
 from utama_core.replay.columnar_reader import load_columnar_replay
 from utama_core.replay.scenario import Scenario, scenario_from_replay
 
@@ -112,7 +112,7 @@ class RestartPlan:
 
 @contextmanager
 def _recording_steps() -> Iterator[dict[int, CommandedTarget]]:
-    """Swap `move` and `turn_on_spot` in `custom_referee.actions` for recorders, then restore them."""
+    """Swap `move` and `turn_on_spot` in `referee.actions` for recorders, then restore them."""
     recorded: dict[int, CommandedTarget] = {}
     real_move, real_turn = _actions.move, _actions.turn_on_spot
 

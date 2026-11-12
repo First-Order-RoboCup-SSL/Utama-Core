@@ -65,11 +65,11 @@ from typing import Dict, List, Optional, Union
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee.rules.base_rule import RuleViolation
 
 # Pitch is bucketed into thirds along x, from the recording side's own goal
 # (defensive) to the opponent's goal (attacking), independent of which

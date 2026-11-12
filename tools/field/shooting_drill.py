@@ -24,7 +24,7 @@ What it does:
 
 On the dashboard's Live tab, the field check must be all green or amber before Force Start:
 a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
-robots at once. See docs/custom_referee_gui.md, "Field check".
+robots at once. See docs/referee_gui.md, "Field check".
 
 Measuring a robot (`--calibrate attacker|defender`): that robot plays fixed moves instead
 (`tactics/scripted_moves.py`, about 70 s: 10 s still, steps forward and back at 0.3, 0.6 and
@@ -66,14 +66,6 @@ import time
 from typing import NamedTuple, Optional
 
 from utama_core.config.field_params import FieldBounds, FieldDimensions
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import (
-    AutoAdvanceConfig,
-    GameConfig,
-    RefereeProfile,
-    RulesConfig,
-    load_profile,
-)
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
@@ -83,6 +75,14 @@ from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.geometry.pass_and_score_geometry import has_ball, oriented_towards
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import (
+    AutoAdvanceConfig,
+    GameConfig,
+    RefereeProfile,
+    RulesConfig,
+    load_profile,
+)
 from utama_core.run import StrategyRunner
 from utama_core.skills.utils.move_utils import kick, turn_on_spot
 from utama_core.tactics.defense import DefenseTactic
