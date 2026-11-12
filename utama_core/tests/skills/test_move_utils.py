@@ -7,8 +7,8 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.skills.src.utils.move_utils import _sprint_velocity, move, turn_on_spot
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
+from utama_core.skills.utils.move_utils import _sprint_velocity, move, turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
 
@@ -221,10 +221,10 @@ def test_a_robot_that_loses_the_ball_ramps_from_the_carry_speed_it_was_sent(cont
     0.3 m/s sent: ramping from the 1 m/s never sent lurched the real robot 0.9 m/s sideways
     (dribble_and_shoot, 2026-10-28)."""
     from utama_core.config.enums import Mode
-    from utama_core.motion_planning.src.controllers.fastpathplanning import (
+    from utama_core.motion_planning.controllers.fastpathplanning import (
         FastPathPlanningController,
     )
-    from utama_core.motion_planning.src.controllers.pid_controller import PIDController
+    from utama_core.motion_planning.controllers.pid_controller import PIDController
 
     mc = {"fpp": FastPathPlanningController, "pid": PIDController}[controller](Mode.REAL)
     mc.pose_ahead = PoseAhead(0.0)

@@ -1,0 +1,1799 @@
+import math
+from typing import List, Optional, Tuple
+
+import numpy as np  # type: ignore
+
+from utama_core.config.referee_constants import (
+    BALL_KEEP_OUT_DISTANCE,
+    OPPONENT_DEFENSE_AREA_KEEP_DISTANCE,
+)
+from utama_core.config.settings import CONTROL_FREQUENCY, EXACT_MATH
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.entities.game.field import FieldBounds
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.global_utils.math_utils import (
+    closest_point_on_segment,
+    detour_around_circle,
+    distance,
+    distance_between_line_segments,
+    distance_point_to_segment,
+    find_intersection,
+)
+from utama_core.motion_planning.fastpathplanning.config import (
+    fastpathplanningconfig as config,
+)
+from utama_core.motion_planning.fastpathplanning.numba_kernels import (
+    clamp_to_obstacle_clearance_nb,
+    collides_nb,
+    find_segment_nb,
+    find_subgoal_nb,
+    flatten_obstacles,
+    sanitize_target_nb,
+    scan_collides_nb,
+    scan_find_subgoal_nb,
+)
+from utama_core.rsoccer_simulator.ssl.envs.standard_ssl import SSLStandardEnv
+
+try:
+    from utama_core.motion_planning.fastpathplanning import _fastpathplanner
+
+    HAS_CPP = True
+except ImportError:
+    _fastpathplanner = None
+    HAS_CPP = False
+
+
+def _same_segment(a, b) -> bool:
+    """`np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])` for the
+    2-D point pairs obstacles are made of, without its per-call dispatch
+    overhead (about a million calls a match). Plain `==` per coordinate, so
+    NaN never matches and -0.0 matches 0.0, exactly as `array_equal` does."""
+    return a[0][0] == b[0][0] and a[0][1] == b[0][1] and a[1][0] == b[1][0] and a[1][1] == b[1][1]
+
+
+def _segment_key(segment) -> tuple:
+    """Hashable identity of a segment by value: `(x0, y0, x1, y1)`. Compares
+    exactly like the `(tuple(a), tuple(b))` pair it replaced (the same
+    elements, compared with ==), at a fraction of the cost of iterating two
+    numpy arrays into tuples, which this does ~a million times a match."""
+    a, b = segment
+    return (a[0], a[1], b[0], b[1])
+
+
+_PERP_ROTATIONS: dict = {}
+
+
+def _perp_rotation(subgoal_direction: int) -> Tuple[float, float]:
+    """`(np.cos(theta), np.sin(theta))` for `_find_subgoal`'s perpendicular,
+    theta = pi * (subgoal_direction + 0.5). Only two directions are ever
+    used, so this computes them once instead of four numpy trig calls per
+    `_find_subgoal` call -- the same numpy functions on the same theta, so
+    the same values `rotate_vector` would get."""
+    rot = _PERP_ROTATIONS.get(subgoal_direction)
+    if rot is None:
+        theta = math.pi * (subgoal_direction + 0.5)
+        rot = _PERP_ROTATIONS[subgoal_direction] = (np.cos(theta), np.sin(theta))
+    return rot
+
+
+# Same set `DefenseAreaRule` (custom_referee/rules/defense_area_rule.py) uses to
+# decide when defense-area encroachment is actually a foul — entry is legal
+# outside these commands (e.g. during a DIRECT_FREE_*/BALL_PLACEMENT_* restart
+# where the ball itself has come to rest in the opponent's box and a robot must
+# be able to retrieve it). Duplicated rather than imported: every one of
+# CustomReferee's own rule modules (defense_area_rule.py, out_of_bounds_rule.py,
+# ball_speed_rule.py, goal_rule.py) already independently defines this same
+# constant rather than sharing one, and importing a referee-rule module from
+# the motion planner would be an odd new direction of coupling for one small
+# set.
+_ACTIVE_PLAY_COMMANDS = {
+    RefereeCommand.NORMAL_START,
+    RefereeCommand.FORCE_START,
+}
+
+# Restarts the named team takes; the other team keeps its distance from the ball.
+_TEAM_RESTART_COMMANDS = {
+    RefereeCommand.DIRECT_FREE_YELLOW,
+    RefereeCommand.DIRECT_FREE_BLUE,
+    RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    RefereeCommand.PREPARE_KICKOFF_BLUE,
+    RefereeCommand.PREPARE_PENALTY_YELLOW,
+    RefereeCommand.PREPARE_PENALTY_BLUE,
+    RefereeCommand.BALL_PLACEMENT_YELLOW,
+    RefereeCommand.BALL_PLACEMENT_BLUE,
+}
+
+
+# How far past the ball's keep-out edge a robot inside it is pushed out.
+_PUSH_OUT_MARGIN = 0.05
+
+
+# How far inside the field lines a pushed-out robot's target stays: its body on the field (the
+# referee step's `_clamp_to_field` margin).
+_FIELD_INSET = 0.1
+
+
+def _inside_field(point: np.ndarray, field_bounds: FieldBounds) -> np.ndarray:
+    """`point` clamped to `_FIELD_INSET` inside `field_bounds`."""
+    (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+    lo = np.array([min(x0, x1), min(y0, y1)]) + _FIELD_INSET
+    hi = np.array([max(x0, x1), max(y0, y1)]) - _FIELD_INSET
+    return np.clip(point, lo, hi)
+
+
+def _keeps_off_ball(game: Game) -> bool:
+    """True during STOP and the other team's restarts, when every robot of ours must
+    stay out of the ball's keep-out circle."""
+    command = getattr(game.referee, "referee_command", None) if game.referee is not None else None
+    if command == RefereeCommand.STOP:
+        return True
+    if command not in _TEAM_RESTART_COMMANDS:
+        return False
+    return command.name.endswith("_YELLOW") != game.my_team_is_yellow
+
+
+def _leaving(our_pos: np.ndarray, target: np.ndarray, obstacle, clearance: float) -> bool:
+    """True if the robot at `our_pos` is inside `obstacle`'s clearance and the straight run
+    to `target` never takes it closer to the obstacle than it is now."""
+    here = distance_point_to_segment(our_pos, obstacle[0], obstacle[1])
+    if here >= clearance:
+        return False
+    return distance_between_line_segments(our_pos, target, obstacle[0], obstacle[1]) >= here - 1e-9
+
+
+def _approaches(our_pos: np.ndarray, target: np.ndarray, point: np.ndarray) -> bool:
+    """True if the straight run from `our_pos` to `target` gets closer to `point` than the robot is now."""
+    return distance_point_to_segment(point, our_pos, target) < np.linalg.norm(point - our_pos) - 1e-9
+
+
+class FastPathPlanner:
+    def __init__(self, env: SSLStandardEnv | None):
+        self._env = env
+        self.config = config
+        self.OBSTACLE_CLEARANCE = self.config.OBSTACLE_CLEARANCE
+        self.LOOK_AHEAD_RANGE = self.config.LOOK_AHEAD_RANGE
+        self.SUBGOAL_DISTANCE = self.config.SUBGOAL_DISTANCE
+        self.MAXRECURSIONLENGTH = self.config.MAXRECURSION_LENGTH
+        self.PROJECTEDFRAMES = self.config.PROJECTEDFRAMES
+        self.PROJECTION_DISTANCE = self.config.PROJECTION_DISTANCE
+        self.DETOUR_SWITCH_MARGIN = self.config.DETOUR_SWITCH_MARGIN_RATIO * self.config.SUBGOAL_DISTANCE
+        self.CROWDING_COUNT_MIN = self.config.CROWDING_COUNT_MIN
+        self.CROWDING_COUNT_MAX = self.config.CROWDING_COUNT_MAX
+        self.CROWDING_CLEARANCE_FLOOR_RATIO = self.config.CROWDING_CLEARANCE_FLOOR_RATIO
+
+        # Initialize collision cache dictionary
+        self._collision_cache = {}
+
+        # `collides()`/`_find_subgoal()` scan the same `obstacles` list many
+        # times per `_path_to()` call (once per recursive `check_segment`
+        # node, once per subgoal-search step) — flattening it into the
+        # float64 arrays the njit scan kernels need is itself real,
+        # non-trivial work (see `numba_kernels.flatten_obstacles`), so it's
+        # cached per obstacle-list object rather than redone on every scan.
+        #
+        # Deliberately a small list of `(list_object, arrays)` pairs checked
+        # by `is` identity, NOT a `dict` keyed by `id(obstacles)`: an earlier
+        # version used `id()` as a dict key and was caught live by
+        # `fpp_correctness_check.py` returning a WRONG (stale) obstacle for
+        # an unrelated list — `id()` is a memory address, and CPython freely
+        # reassigns it to a new object the moment the old one is garbage
+        # collected (confirmed directly: a short-lived intermediate list from
+        # one `_path_to` step, e.g. the `[o for o in obstacles if ...]`
+        # filters in steps 1a/1b, was collected and a *different* obstacle
+        # list built moments later landed on the exact same `id()`, silently
+        # returning the first list's flattened arrays for the second list's
+        # obstacles). Holding a strong reference to the list itself alongside
+        # its arrays prevents that object from ever being collected while
+        # the cache entry exists, closing the hazard entirely — at the cost
+        # of an `is`-comparison linear scan instead of a dict lookup, cheap
+        # since only a handful of distinct obstacle-list objects exist per
+        # `_path_to()` call. Cleared at the start of every `_path_to()` call
+        # (alongside `_collision_cache`) so it never grows unboundedly.
+        self._obstacle_arrays_cache: List[Tuple[List, tuple]] = []
+
+        # Per-robot memory of the last chosen detour side (`subgoal_direction`,
+        # 0=right/1=left) in `check_segment` — see that method's docstring for
+        # why this exists and why the key also includes recursion depth and
+        # the (rounded) obstacle point being detoured around, not just
+        # `robot_id`. Never cleared per-tick (unlike `_collision_cache`) — the
+        # whole point is to survive across ticks; entries for an obstacle
+        # point the robot stops encountering simply go stale and are never
+        # read again, which is harmless (a future detour recreates a fresh
+        # key with no prior bias).
+        self._last_detour_side: dict[tuple[int, int, tuple[float, float]], int] = {}
+        self._DETOUR_MEMORY_PRECISION = 2  # decimal places — collapses float jitter, keeps distinct corners distinct
+        self._MOVING_GHOST_MIN_M = (
+            0.05  # a ghost segment shorter than this is a robot standing still; also the min side difference
+        )
+
+        # Per-(robot_id, recursion_length) memory of the actual obstacle
+        # segment `collides()` picked last tick — see that method's
+        # docstring's `sticky_obstacle` parameter for why this exists
+        # (stabilizes *which* obstacle is being avoided, upstream of
+        # `_last_detour_side`'s "which side of it").
+        self._last_obstacle: dict[tuple[int, int], Tuple[np.ndarray, np.ndarray]] = {}
+
+        # Per-tick obstacle cache: `_get_obstacles` was rebuilding the same
+        # per-robot position/velocity segments and the same 8 static
+        # (field-bound + enemy-defense-area) segments from scratch on every
+        # `_path_to()` call — once per robot needing a path, ~5-6x per tick
+        # for a full roster, all identical bar the `robot_id` self-exclusion
+        # and each robot's own `LOOK_AHEAD_RANGE` filter. `game.ts` changes
+        # exactly once per tick (`Game.add_game_frame`), so it's a cheap,
+        # correct cache key for the parts that don't vary per-robot within
+        # a tick — confirmed via cProfile that _get_obstacles' own array
+        # allocations were a real, repeated cost, not just the collision
+        # checks that consume its output.
+        self._obstacle_cache_ts: float | None = None
+        self._obstacle_cache_moving: List[Tuple] = []
+        self._obstacle_cache_static: List[Tuple[np.ndarray, np.ndarray]] = []
+        self._obstacle_cache_static_keys: set = set()
+        self._static_cache_key: tuple | None = None
+        self._obstacle_cache_static_arrays: tuple | None = None
+        self._field_bounds_exempt_cache: dict[tuple, np.ndarray] = {}
+
+        # Per-robot memory of the last full replan's sanitized target and the
+        # resulting detour trajectory (the geometric waypoint list
+        # `check_segment` produces), keyed by robot_id. `_path_to` reuses
+        # this trajectory instead of re-running `check_segment` (the
+        # recursive detour search — the single largest cost in a call per
+        # cProfile on a full 6v6 match) whenever it's still provably safe,
+        # but always re-derives the actual carrot from
+        # `smooth_path` against the robot's *current* position every tick —
+        # `smooth_path`'s output is a lookahead point relative to the robot's
+        # live position by construction (`robot_position + unit_vec *
+        # safe_distance`), so caching *that* instead of the trajectory was
+        # tried first and reverted: it froze the carrot at a fixed absolute
+        # point instead of one that advances as the robot moves along the
+        # trajectory, and two robots crossing perpendicular lanes
+        # (`test_grid_intersection`) hung in a real live-lock orbiting a
+        # stale carrot that fell behind them once they'd moved past it.
+        self._last_trajectory: dict[int, Tuple[np.ndarray, np.ndarray, List[Tuple[np.ndarray, np.ndarray]]]] = {}
+        # Requested target must match the cached one to within this radius —
+        # a tactic nudging its target by float noise between ticks (e.g.
+        # tracking a slowly-drifting ball) shouldn't force a full replan, but
+        # a genuinely new destination must. Small relative to
+        # OBSTACLE_CLEARANCE/SUBGOAL_DISTANCE so it can never mask a real
+        # target change large enough to matter for routing.
+        self._REPLAN_TARGET_TOLERANCE = 0.02  # metres
+        self._REPLAN_TARGET_TOLERANCE_SQ = self._REPLAN_TARGET_TOLERANCE * self._REPLAN_TARGET_TOLERANCE
+        # The robot's own position must also still be close to where the
+        # cached trajectory was planned from — see the skip check's comment
+        # in `_path_to` for why. A fraction of `SUBGOAL_DISTANCE` (itself
+        # derived from robot diameter/clearance), not a bare constant, so it
+        # scales sensibly if those config values ever change.
+        self._REPLAN_POSITION_TOLERANCE = 0.25 * self.SUBGOAL_DISTANCE
+        self._REPLAN_POSITION_TOLERANCE_SQ = self._REPLAN_POSITION_TOLERANCE * self._REPLAN_POSITION_TOLERANCE
+        self.LOOK_AHEAD_RANGE_SQ = self.LOOK_AHEAD_RANGE * self.LOOK_AHEAD_RANGE
+
+        # `_enemy_defense_rect` result cache, keyed by `margin` (the only
+        # thing that varies across its call sites — two fixed constants, 0.0
+        # and OPPONENT_DEFENSE_AREA_KEEP_DISTANCE). `game.field.enemy_defense_area`
+        # depends only on `my_team_is_right` and static field dimensions, both
+        # fixed for this planner instance's entire lifetime (one instance
+        # serves a whole team for the whole match — see `_obstacle_cache_*`
+        # above), so the rectangle can never actually change and needs no
+        # invalidation. Found via cProfile on a real 6v6 match: 15,778 calls
+        # recomputing four min/max scans over the same four corners, ~0.16s
+        # cumulative (~7% of `_path_to`'s own cumulative cost) for a value
+        # that's provably constant.
+        self._defense_rect_cache: dict[float, Tuple[float, float, float, float]] = {}
+
+        # A fixed-interval skip of collides()'s per-tick revalidation
+        # (reusing cached_trajectory's shape without re-checking it for
+        # several ticks in a row) was tried and reverted: at a 3-tick
+        # interval it let a support robot drift ~5cm inside the kickoff
+        # centre keep-out zone before the next forced check caught it
+        # (`test_our_kickoff_nonzero_keeper_is_never_kicker_or_in_formation`,
+        # a real regression); tightened to a 2-tick interval still made
+        # `test_mirror_swap`'s head-on 6v6 crossing scenario ~14x slower to
+        # converge (3.3s baseline vs 45s+, confirmed via direct git-stash
+        # comparison) even though it technically still passed. A fixed
+        # tick-count skip isn't safe here regardless of interval — a
+        # movement-aware trigger (only skip revalidation while nothing
+        # relevant has actually moved) would need to replace it, not just a
+        # smaller N.
+
+    @property
+    def _should_draw(self) -> bool:
+        """`self._env` is set whenever an `SSLStandardEnv` exists at all —
+        including in headless runs, where nothing ever reads `env.overlay`
+        (only the `"human"` render path drains and clears it; see
+        `SSLStandardEnv.render`). Without this check, every `draw_line` call
+        below still builds an `OverlayObject` and appends it to a list that
+        grows unboundedly for the rest of the match, for zero benefit — a
+        real, measured cost in headless tournament/eval runs (cProfile
+        showed ~170k calls / ~1.7s in a 30s headless match).
+        """
+        return self._env is not None and self._env.render_mode == "human"
+
+    def is_point_in_field(self, point, field_bounds: FieldBounds) -> bool:
+        tl_x, tl_y = field_bounds.top_left
+        br_x, br_y = field_bounds.bottom_right
+        min_x, max_x = (tl_x, br_x) if tl_x <= br_x else (br_x, tl_x)
+        min_y, max_y = (br_y, tl_y) if br_y <= tl_y else (tl_y, br_y)
+        return min_x <= point[0] <= max_x and min_y <= point[1] <= max_y
+
+    def _enemy_defense_rect(self, game: Game, margin: float) -> Tuple[float, float, float, float]:
+        """(min_x, max_x, min_y, max_y) of the opponent's defense area, inflated
+        outward by `margin`.
+
+        Every call site currently passes `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE`
+        (the same standoff `actions.py` uses during restarts) — a smaller or
+        zero margin was tried for the target-legality checks specifically
+        (letting a target sit right at the bare rule boundary) but measured to
+        still let a fast, head-on approach cross several centimetres into the
+        real defense area under PID tracking overshoot; preventing the actual
+        SSL violation took priority. KNOWN TRADE-OFF: this also redirects a
+        target placed deliberately at/near the exact boundary line even when
+        that target isn't itself a violation — e.g. `test_mirror_swap`'s
+        formation spots used to sit at (3.5, ±0.75), precisely on a
+        standard-field defense area's edge, and stopped ~0.5 m short (its
+        targets are now at 2.9). `margin` is kept as a parameter rather than
+        hardcoded so a future, better-tuned fix (e.g. a velocity-aware margin)
+        can revisit this per call site without re-deriving the rectangle logic.
+
+        Kept as an explicit rectangle rather than only as obstacle line
+        segments: `sanitize_target` pushes a target away from a *nearby*
+        segment, but a target deep in the *interior* of an enclosed rectangle
+        can be farther than `OBSTACLE_CLEARANCE` from every one of its four
+        edges, so the segment-only check never triggers for it at all (found
+        via a target set at the defense area's exact center — it passed
+        through sanitize_target completely untouched). The rectangle form
+        lets `_path_to` check "is this point inside?" directly and project it
+        to the nearest edge before anything else runs.
+        """
+        cached = self._defense_rect_cache.get(margin)
+        if cached is not None:
+            return cached
+
+        corners = game.field.enemy_defense_area
+        min_x = min(c[0] for c in corners) - margin
+        max_x = max(c[0] for c in corners) + margin
+        min_y = min(c[1] for c in corners) - margin
+        max_y = max(c[1] for c in corners) + margin
+        result = (min_x, max_x, min_y, max_y)
+        self._defense_rect_cache[margin] = result
+        return result
+
+    def _enemy_defense_area_retrieval_exempt(self, game: Game, robot_id: Optional[int] = None) -> bool:
+        """True when a robot must be allowed to actually enter the opponent's
+        defense area to retrieve the ball, rather than have every target/
+        waypoint there clamped to the boundary.
+
+        Mirrors `DefenseAreaRule`'s own notion of when entry is a foul at all
+        (`_ACTIVE_PLAY_COMMANDS` — NORMAL_START/FORCE_START; every other
+        command, e.g. DIRECT_FREE_*/BALL_PLACEMENT_*, is a stoppage where
+        attacker encroachment into the opponent's box is not penalized). Also
+        requires either the ball to actually be resting inside the enemy
+        defense area right now, OR (for `BALL_PLACEMENT_OURS`) this robot to
+        already have the ball AND the referee's `designated_position` to sit
+        inside the rectangle — this is deliberately narrower than "any
+        stoppage", so a formation/support target that happens to be computed
+        near the box during a restart is still clamped as before; only a
+        genuine ball-in-the-box retrieval or carry-to-place is exempted.
+
+        Without this, `DIRECT_FREE_OURS`/`BALL_PLACEMENT_OURS`
+        (`custom_referee/actions.py`) can correctly choose to approach the
+        ball (or, once carrying it, drive toward `designated_position`), but
+        the planner refuses to route anywhere inside the rectangle at all —
+        the kicker/placer converges to just outside
+        `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` from the box and can never close
+        the last stretch, stalling the restart indefinitely (the referee
+        never sees the ball reach the target, so no auto-advance condition is
+        ever satisfied either). Confirmed live: a `BallPlacementOursStep`
+        carrier whose `designated_position` landed inside the opponent's box
+        held ~0.3m short of it for the rest of a match, since the ball-inside
+        check alone only covers the *retrieval* half of placement, not the
+        *delivery* half.
+        """
+        if not game.field.defense_area_rules:
+            return True  # the box is no obstacle at all
+        referee = game.referee
+        command = getattr(referee, "referee_command", None) if referee is not None else None
+        if command in _ACTIVE_PLAY_COMMANDS:
+            return False
+        ball = game.ball
+        if ball is None:
+            return False
+        min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=0.0)
+        if min_x <= ball.p.x <= max_x and min_y <= ball.p.y <= max_y:
+            return True
+        # Our placement of a ball just outside the box: the placer's approach point, behind the
+        # ball, is inside the box or its keep-out (2026-10-27 field test: ball 1 cm outside, the
+        # placer parked behind the keep-out, 0.25 m short, for the whole placement).
+        ours = RefereeCommand.BALL_PLACEMENT_YELLOW if game.my_team_is_yellow else RefereeCommand.BALL_PLACEMENT_BLUE
+        if command is ours:
+            k_min_x, k_max_x, k_min_y, k_max_y = self._enemy_defense_rect(
+                game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
+            )
+            if k_min_x <= ball.p.x <= k_max_x and k_min_y <= ball.p.y <= k_max_y:
+                return True
+        if robot_id is not None:
+            robot = game.friendly_robots.get(robot_id)
+            designated = getattr(referee, "designated_position", None) if referee is not None else None
+            if robot is not None and robot.has_ball and designated is not None:
+                dx, dy = designated
+                if min_x <= dx <= max_x and min_y <= dy <= max_y:
+                    return True
+        return False
+
+    def _project_outside_rect(self, point: np.ndarray, rect: Tuple[float, float, float, float]) -> np.ndarray:
+        """Push `point` to the nearest edge of `rect` if it lies inside; otherwise return it unchanged."""
+        min_x, max_x, min_y, max_y = rect
+        x, y = point[0], point[1]
+        if not (min_x <= x <= max_x and min_y <= y <= max_y):
+            return point
+
+        # Distance to each of the 4 edges; move along whichever is nearest.
+        dist_to_edge = {
+            "left": x - min_x,
+            "right": max_x - x,
+            "bottom": y - min_y,
+            "top": max_y - y,
+        }
+        nearest = min(dist_to_edge, key=dist_to_edge.get)
+        if nearest == "left":
+            return np.array([min_x, y])
+        if nearest == "right":
+            return np.array([max_x, y])
+        if nearest == "bottom":
+            return np.array([x, min_y])
+        return np.array([x, max_y])
+
+    def _refresh_obstacle_cache(self, game: Game, field_bounds: FieldBounds) -> None:
+        """Rebuild the tick-invariant obstacle data (every robot's projected
+        "ghost wall" segment, plus the 8 static field-bound/enemy-defense-area
+        segments) once per tick, keyed on `game.ts`. `_get_obstacles` then
+        just filters/excludes per robot instead of reallocating from scratch.
+        """
+        # Static field bounds and defense-area segments only depend on field
+        # bounds and team orientation, which are constant for a match.
+        static_key = (
+            field_bounds.top_left[0],
+            field_bounds.top_left[1],
+            field_bounds.bottom_right[0],
+            field_bounds.bottom_right[1],
+            game.field.my_team_is_right,
+        )
+        if self._static_cache_key != static_key:
+            tl = np.array(field_bounds.top_left, dtype=np.float64)
+            br = np.array(field_bounds.bottom_right, dtype=np.float64)
+            tr = np.array([field_bounds.bottom_right[0], field_bounds.top_left[1]], dtype=np.float64)
+            bl = np.array([field_bounds.top_left[0], field_bounds.bottom_right[1]], dtype=np.float64)
+
+            static = [(tl, tr), (tr, br), (br, bl), (bl, tl)]
+
+            min_x, max_x, min_y, max_y = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            c0 = np.array([min_x, max_y], dtype=np.float64)
+            c1 = np.array([max_x, max_y], dtype=np.float64)
+            c2 = np.array([max_x, min_y], dtype=np.float64)
+            c3 = np.array([min_x, min_y], dtype=np.float64)
+            static.extend([(c0, c1), (c1, c2), (c2, c3), (c3, c0)])
+
+            self._obstacle_cache_static = static
+            self._obstacle_cache_static_keys = {_segment_key(o) for o in static}
+            self._obstacle_cache_static_arrays = flatten_obstacles(static)
+            self._static_cache_key = static_key
+
+        if self._obstacle_cache_ts == game.ts:
+            return
+
+        moving: List[Tuple] = []
+        proj_factor = self.PROJECTEDFRAMES / CONTROL_FREQUENCY
+        for is_friendly, robots in ((True, game.friendly_robots), (False, game.enemy_robots)):
+            for r in robots.values():
+                rx, ry = float(r.p.x), float(r.p.y)
+                px = rx + float(r.v.x) * proj_factor
+                py = ry + float(r.v.y) * proj_factor
+                robot_pos = np.array([rx, ry], dtype=np.float64)
+                point = np.array([px, py], dtype=np.float64)
+                moving.append((is_friendly, r.id, rx, ry, px, py, robot_pos, point))
+
+        self._obstacle_cache_moving = moving
+        self._obstacle_cache_ts = game.ts
+
+    def _get_obstacles(
+        self, game: Game, robot_id: int, our_pos: np.ndarray, field_bounds: FieldBounds
+    ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float, float]:
+        """
+        Compiles obstacles and draws projected velocity lines in Red.
+
+        Returns `(obstacles, clearance, subgoal_distance)` — the latter two
+        are this robot's effective (possibly crowding-shrunk) values for the
+        current tick, computed once here and threaded through the rest of
+        `_path_to`'s call chain so a single planning call is internally
+        consistent. See `_effective_clearance`.
+        """
+        self._refresh_obstacle_cache(game, field_bounds)
+
+        our_x, our_y = float(our_pos[0]), float(our_pos[1])
+        look_ahead_sq = self.LOOK_AHEAD_RANGE_SQ
+
+        obstacle_list = []
+        moving_coords = []
+        for is_friendly, r_id, rx, ry, px, py, robot_pos, point in self._obstacle_cache_moving:
+            if is_friendly and r_id == robot_id:
+                continue
+            dx = our_x - rx
+            dy = our_y - ry
+            if dx * dx + dy * dy < look_ahead_sq:
+                obstacle_segment = (robot_pos, point)
+                obstacle_list.append(obstacle_segment)
+                moving_coords.append((rx, ry, px, py))
+
+                # DRAWING: Show the projected velocity line in Red when an RSim renderer is available.
+                if self._should_draw:
+                    self._env.draw_line(obstacle_segment, color="Red")
+
+        # Crowding is judged on *moving* (robot) obstacles actually within
+        # `LOOK_AHEAD_RANGE` of this robot, not the count including the 8
+        # static field-bound/enemy-defense-area segments appended below —
+        # those are always present regardless of how many robots are nearby,
+        # so counting them would put every robot permanently at or near the
+        # crowded floor and defeat the point of scaling with actual density.
+        clearance, subgoal_distance = self._effective_clearance(len(obstacle_list))
+
+        obstacle_list.extend(self._obstacle_cache_static)
+
+        # Seed _obstacle_arrays_cache with pre-built arrays for obstacle_list
+        if self._obstacle_cache_static_arrays is not None:
+            m = len(moving_coords)
+            s_ox0, s_oy0, s_ox1, s_oy1 = self._obstacle_cache_static_arrays
+            s = len(s_ox0)
+            n = m + s
+            ox0 = np.empty(n, dtype=np.float64)
+            oy0 = np.empty(n, dtype=np.float64)
+            ox1 = np.empty(n, dtype=np.float64)
+            oy1 = np.empty(n, dtype=np.float64)
+            for i in range(m):
+                c = moving_coords[i]
+                ox0[i] = c[0]
+                oy0[i] = c[1]
+                ox1[i] = c[2]
+                oy1[i] = c[3]
+            ox0[m:] = s_ox0
+            oy0[m:] = s_oy0
+            ox1[m:] = s_ox1
+            oy1[m:] = s_oy1
+            self._obstacle_arrays_cache.append((obstacle_list, (ox0, oy0, ox1, oy1)))
+
+        return obstacle_list, clearance, subgoal_distance
+
+    def _effective_clearance(self, nearby_obstacle_count: int) -> Tuple[float, float]:
+        """`(clearance, subgoal_distance)` for a robot with `nearby_obstacle_count`
+        moving obstacles within `LOOK_AHEAD_RANGE` — full config values below
+        `CROWDING_COUNT_MIN`, linearly interpolated down to
+        `CROWDING_CLEARANCE_FLOOR_RATIO` of them at/above `CROWDING_COUNT_MAX`.
+        `SUBGOAL_DISTANCE` scales by the same ratio as clearance so a shrunk
+        detour still steps a proportionally sane distance past the (now
+        closer) clearance boundary, rather than overshooting it relative to
+        the smaller margin. See `fastpathplanningconfig`'s docstring for why
+        this exists and why the floor is bounded well above `ROBOT_DIAMETER`.
+        """
+        if nearby_obstacle_count <= self.CROWDING_COUNT_MIN:
+            ratio = 1.0
+        elif nearby_obstacle_count >= self.CROWDING_COUNT_MAX:
+            ratio = self.CROWDING_CLEARANCE_FLOOR_RATIO
+        else:
+            span = self.CROWDING_COUNT_MAX - self.CROWDING_COUNT_MIN
+            t = (nearby_obstacle_count - self.CROWDING_COUNT_MIN) / span
+            ratio = 1.0 - t * (1.0 - self.CROWDING_CLEARANCE_FLOOR_RATIO)
+        return self.OBSTACLE_CLEARANCE * ratio, self.SUBGOAL_DISTANCE * ratio
+
+    def _obstacle_arrays(self, obstacles: List) -> tuple:
+        """Flattened `(ox0, oy0, ox1, oy1)` float64 arrays for `obstacles`,
+        for the njit scan kernels in `numba_kernels.py` — see
+        `_obstacle_arrays_cache`'s docstring in `__init__` for why this is a
+        small `is`-identity-checked list, not a dict keyed by `id()`.
+        """
+        for cached_obstacles, arrays in self._obstacle_arrays_cache:
+            if cached_obstacles is obstacles:
+                return arrays
+        arrays = flatten_obstacles(obstacles)
+        self._obstacle_arrays_cache.append((obstacles, arrays))
+        return arrays
+
+    def _find_subgoal_exact(
+        self,
+        robot_pos: np.ndarray,
+        target: np.ndarray,
+        obstacle_pos: np.ndarray,
+        obstacles: List,
+        subgoal_direction: int,
+        multiple: int,
+        clearance: float,
+        subgoal_distance: float,
+        origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        blocked_by_origin: bool = False,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
+    ) -> Optional[np.ndarray]:
+        """`origin_obstacle`: the actual obstacle segment `check_segment` is
+        trying to route around (as opposed to `obstacle_pos`, just the
+        intersection point) — used only to classify a failsafe timeout below,
+        never to change the stepping itself. `blocked_by_origin` carries
+        forward whether the *previous* recursion step's collision was with
+        this same segment, so the failsafe can tell "still blocked by the
+        thing I'm trying to get around" (a real dead end) apart from "blocked
+        by something else, just haven't found a clear spot yet" (this search
+        wandering through a crowded obstacle field, not fundamentally stuck).
+
+        `forbidden_rect`: `(min_x, max_x, min_y, max_y)` a subgoal may not
+        land inside (the inflated enemy defense area, or None when
+        `_path_to` exempts it). The clearance scan below only tests distance
+        to its edge *segments*, so a point deep in its interior -- farther
+        than `clearance` from all four edges -- otherwise passes as free. A
+        robot just outside the box with its route around the corner blocked
+        by another robot got exactly that: a subgoal inside the box, whose
+        carrot step 7 of `_path_to` then projects back onto the edge beside
+        the robot, pinning it there (DIRECT_FREE_BLUE kicker in
+        high_line_zone_vs_split_shape, tournament_20260924_082230: 12s
+        jittering at the box face until the RESTART_STALL). Treated as still
+        blocked by the obstacle being routed around, so a side that never
+        clears the box is a dead end (None), not an on-edge fallback.
+        """
+
+        # Failsafe (`multiple > 10` below) to prevent infinite loops if completely trapped. Handing
+        # back `obstacle_pos` (the exact point ON the obstacle) unconditionally
+        # used to be safe-ish in a crowded field -- if some *other* obstacle
+        # was still in the way at every step, the search was genuinely
+        # struggling and a rough, on-obstacle point was still better than
+        # nothing (confirmed: `test_our_kickoff_nonzero_keeper_...` needs
+        # exactly this, resolving in 100+ steps in a busy 6-robot scrum).
+        # But when it's the *same* obstacle this call started out avoiding
+        # that's still blocking at the cutoff, stepping further in that
+        # direction is not going to help -- it means the perpendicular
+        # direction chosen happens to run roughly *along* a long obstacle
+        # (e.g. the field boundary wall, when the robot is standing right at
+        # it and detouring "sideways" walks down the wall instead of away
+        # from it) rather than across it, and no amount of extra steps
+        # within a sane budget clears it (confirmed: the wall case needs
+        # 130+ steps in one direction and never fully clears in the other).
+        # Returning that on-the-obstacle point here as if it were a valid
+        # subgoal is what let `check_segment` steer straight at the wall it
+        # was supposed to route around. Found live: a `SwitchOfPlayTactic`
+        # pivot standing right at the field's edge (x=4.5) with its target
+        # inside the field to one side got this exact failsafe result on
+        # alternating ticks, sending its carrot flip-flopping between the
+        # true route and this bogus one every tick for the rest of a match
+        # (full_match_tournament.py replay counter_press_vs_tiki_taka_RK.pkl,
+        # 2026-09-01: 540s of continuous back-and-forth motion). `None` is
+        # handled by `check_segment` the same as an out-of-field point --
+        # "no valid subgoal on this side."
+        # The recursion this replaced re-derived everything below from the
+        # same `robot_pos`/`target`/`subgoal_direction` at every step; only
+        # `multiple` (and which obstacle blocked last) changes, so this loops
+        # instead, computing the direction once. Same arithmetic, same order,
+        # so the same subgoal bit-for-bit (pinned against the recursive
+        # version in fastpathplanner_equivalence_test.py).
+        direction = target - robot_pos
+        direction_norm = math.hypot(direction[0], direction[1])
+        unitvec = None
+        if direction_norm != 0.0:
+            cos_t, sin_t = _perp_rotation(subgoal_direction)
+            # `rotate_vector(direction[0], direction[1], theta)`'s exact expression.
+            perp_dir = (
+                direction[0] * cos_t + direction[1] * sin_t,
+                -direction[0] * sin_t + direction[1] * cos_t,
+            )
+            unitvec = np.array([perp_dir[0] / direction_norm, perp_dir[1] / direction_norm])
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        # Index of the obstacle that blocked the last step, or -1 when
+        # `blocked_by_origin` already holds the answer: whether it is the
+        # origin obstacle only matters if the step budget runs out, so it is
+        # decided then rather than on every blocked step.
+        last_hit_idx = -1
+
+        while True:
+            if multiple > 10:
+                if last_hit_idx >= 0:
+                    blocked_by_origin = origin_obstacle is not None and _same_segment(
+                        obstacles[last_hit_idx], origin_obstacle
+                    )
+                return None if blocked_by_origin else obstacle_pos
+
+            if unitvec is None:
+                # `robot_pos` and `target` have collapsed to the same point (this
+                # recursive call's segment endpoints, not the original plan's) —
+                # a previous recursion step's subgoal landed exactly on one of
+                # them. There is no well-defined perpendicular to rotate here;
+                # `rotate_vector` would preserve the zero magnitude and the
+                # normalize below would divide 0/0 into NaN, silently poisoning
+                # every subgoal computed from it for the rest of this recursion.
+                # Confirmed via direct reproduction: an idle robot sitting
+                # directly on a tactic's planned path degenerated a detour
+                # segment into exactly this case, and the resulting NaN subgoal
+                # left the robot with no valid route around the obstacle for the
+                # rest of the match. Same fallback as the recursion-depth
+                # failsafe above: give up and return the obstacle position
+                # itself rather than propagate NaN.
+                return obstacle_pos
+            subgoal = obstacle_pos + subgoal_distance * unitvec * multiple
+
+            # Broad-phase bounding-box prune (same idea as collides()): a point can
+            # only be within `clearance` of a segment if it's within that
+            # distance of the segment's bounding box, so obstacles whose box misses
+            # this margin around subgoal can never trigger the clearance check below
+            # and are skipped without calling distance_point_to_segment at all. This
+            # loop is the largest single caller of distance_point_to_segment in a
+            # full match (cProfile), since it's retried on every recursive subgoal
+            # attempt against every obstacle.
+            sub_x, sub_y = subgoal[0], subgoal[1]
+
+            # Batched replacement for the bounding-box-pruned obstacle scan --
+            # see `numba_kernels.scan_find_subgoal_nb`'s docstring. Returns the
+            # same FIRST-hit-in-scan-order index the original Python loop would
+            # have returned (not the closest), since `_find_subgoal` steps on
+            # from the first collision found, not the nearest one.
+            if forbidden_rect is not None:
+                min_x, max_x, min_y, max_y = forbidden_rect
+                if min_x < sub_x < max_x and min_y < sub_y < max_y:
+                    multiple += 1
+                    blocked_by_origin = True
+                    last_hit_idx = -1
+                    continue
+
+            hit_idx = scan_find_subgoal_nb(sub_x, sub_y, clearance, ox0, oy0, ox1, oy1)
+            if hit_idx >= 0:
+                multiple += 1
+                last_hit_idx = hit_idx
+                continue
+            return subgoal
+
+    def _find_subgoal_fast(
+        self,
+        robot_pos: np.ndarray,
+        target: np.ndarray,
+        obstacle_pos: np.ndarray,
+        obstacles: List,
+        subgoal_direction: int,
+        multiple: int,
+        clearance: float,
+        subgoal_distance: float,
+        origin_obstacle: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        blocked_by_origin: bool = False,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
+    ) -> Optional[np.ndarray]:
+        """`_find_subgoal_exact` with its step loop in one native call
+        (`numba_kernels.find_subgoal_nb`); see that method for the behaviour."""
+        if multiple > 10:
+            return None if blocked_by_origin else obstacle_pos
+        dx = float(target[0]) - float(robot_pos[0])
+        dy = float(target[1]) - float(robot_pos[1])
+        direction_norm = math.hypot(dx, dy)
+        if direction_norm == 0.0:
+            return obstacle_pos
+        cos_t, sin_t = _perp_rotation(subgoal_direction)
+        ux = (dx * cos_t + dy * sin_t) / direction_norm
+        uy = (-dx * sin_t + dy * cos_t) / direction_norm
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        has_rect = forbidden_rect is not None
+        rmin_x, rmax_x, rmin_y, rmax_y = forbidden_rect if has_rect else (0.0, 0.0, 0.0, 0.0)
+        subgoal_fn = _fastpathplanner.find_subgoal_nb if HAS_CPP else find_subgoal_nb
+        found, sub_x, sub_y, last_hit_idx, rect_last = subgoal_fn(
+            float(obstacle_pos[0]),
+            float(obstacle_pos[1]),
+            ux,
+            uy,
+            subgoal_distance,
+            multiple,
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            has_rect,
+            rmin_x,
+            rmax_x,
+            rmin_y,
+            rmax_y,
+        )
+        if found:
+            return np.array([sub_x, sub_y])
+        if rect_last:
+            blocked_by_origin = True
+        elif last_hit_idx >= 0:
+            blocked_by_origin = origin_obstacle is not None and _same_segment(obstacles[last_hit_idx], origin_obstacle)
+        return None if blocked_by_origin else obstacle_pos
+
+    def _collides_fast(
+        self,
+        segment: Tuple,
+        obstacles: List,
+        sticky_obstacle: Optional[Tuple] = None,
+        clearance: Optional[float] = None,
+    ):
+        """`_collides_exact` with everything after the cache lookup in one native
+        call (`numba_kernels.collides_nb` or C++); see that method for the behaviour."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        seg_a, seg_b = segment
+        sax, say = float(seg_a[0]), float(seg_a[1])
+        sbx, sby = float(seg_b[0]), float(seg_b[1])
+        if sticky_obstacle is not None:
+            stk_a, stk_b = sticky_obstacle
+            stk_ax, stk_ay = float(stk_a[0]), float(stk_a[1])
+            stk_bx, stk_by = float(stk_b[0]), float(stk_b[1])
+            sticky_key = (stk_ax, stk_ay, stk_bx, stk_by)
+        else:
+            sticky_key = None
+        seg_key = ((sax, say, sbx, sby), sticky_key, clearance)
+        cached = self._collision_cache.get(seg_key)
+        if cached is not None:
+            return cached
+
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        sticky_idx = -1
+        if sticky_obstacle is not None:
+            sticky_idx = find_segment_nb(
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+                stk_ax,
+                stk_ay,
+                stk_bx,
+                stk_by,
+            )
+        collides_fn = _fastpathplanner.collides_nb if HAS_CPP else collides_nb
+        idx, from_sticky, px, py = collides_fn(
+            sax,
+            say,
+            sbx,
+            sby,
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            sticky_idx,
+            self.DETOUR_SWITCH_MARGIN,
+        )
+        if idx < 0:
+            result = (None, None)
+        else:
+            result = (np.array([px, py]), sticky_obstacle if from_sticky else obstacles[idx])
+        self._collision_cache[seg_key] = result
+        return result
+
+    def _collides_exact(
+        self,
+        segment: Tuple,
+        obstacles: List,
+        sticky_obstacle: Optional[Tuple] = None,
+        clearance: Optional[float] = None,
+    ):
+        """Find the obstacle segment nearest the path segment's start (the robot).
+
+        `clearance`: defaults to `self.OBSTACLE_CLEARANCE` when omitted (the
+        pre-adaptive-clearance behaviour) — callers that plan with a
+        crowding-adjusted clearance (see `_effective_clearance`) pass it
+        explicitly so this method's notion of "too close" matches the rest
+        of that call's pipeline.
+
+        `sticky_obstacle`: the obstacle segment this same robot/recursion-depth
+        picked last tick (from `check_segment`'s `_last_obstacle` memory), if
+        any. When two real, static obstacles both sit close to the robot on
+        roughly opposite sides of its direct line — squeezing through a gap
+        between two defenders, not just one — "closest to the robot" can
+        legitimately swap between them from one tick to the next on a tiny
+        robot-position change, even though neither obstacle moved at all.
+        Since `check_segment` detours around whichever single obstacle this
+        method returns, that swap alone (independent of the left/right
+        hysteresis already applied downstream) was enough to send the robot
+        on a completely different detour every time the pick flipped — found
+        live via a free-kick kicker squeezed between two stationary defenders
+        standing on opposite sides of its approach line, orbiting the ball
+        forever despite both obstacles being motionless the whole time.
+        Fixed by requiring a real margin (`DETOUR_SWITCH_MARGIN`) before a
+        different obstacle can displace the one already being avoided —
+        same "don't flip without a real reason" pattern as the left/right
+        choice.
+        """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+
+        # OPTIMIZATION: Cache collision results (convert numpy arrays to tuples for hashability).
+        # `sticky_obstacle` is part of the key, not just the segment: it can
+        # change the result for an otherwise-identical segment (see
+        # docstring), so conflating the two would let a cache hit from a
+        # differently-stickied call silently return the wrong obstacle.
+        # `clearance` is part of the key for the same reason since adaptive
+        # clearance was added: the same segment can legitimately collide
+        # under a normal clearance but not under a crowding-shrunk one, so a
+        # cache keyed on segment+sticky alone could return a stale answer
+        # from a different clearance computed earlier in the same tick (a
+        # different robot's call, or this robot's obstacle count changing
+        # between calls within one recursion).
+        sticky_key = _segment_key(sticky_obstacle) if sticky_obstacle is not None else None
+        seg_key = (_segment_key(segment), sticky_key, clearance)
+        if seg_key in self._collision_cache:
+            return self._collision_cache[seg_key]
+
+        # Batched replacement for the bounding-box-pruned obstacle scan --
+        # see `numba_kernels.scan_collides_nb`'s docstring. `sticky_idx` is
+        # resolved once per call (cheap linear identity/value scan, not
+        # inside the hot per-obstacle loop) so the njit kernel can track
+        # `sticky_dist_to_robot` internally without needing to compare numpy
+        # arrays from native code.
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        sticky_idx = -1
+        if sticky_obstacle is not None:
+            sticky_idx = find_segment_nb(
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+                float(sticky_obstacle[0][0]),
+                float(sticky_obstacle[0][1]),
+                float(sticky_obstacle[1][0]),
+                float(sticky_obstacle[1][1]),
+            )
+        seg_x0, seg_y0 = float(segment[0][0]), float(segment[0][1])
+        seg_x1, seg_y1 = float(segment[1][0]), float(segment[1][1])
+        closest_idx, min_dist_to_robot, sticky_dist_to_robot_raw = scan_collides_nb(
+            seg_x0, seg_y0, seg_x1, seg_y1, clearance, ox0, oy0, ox1, oy1, sticky_idx
+        )
+        closest_obstacle = obstacles[closest_idx] if closest_idx >= 0 else None
+        sticky_dist_to_robot: Optional[float] = sticky_dist_to_robot_raw if sticky_dist_to_robot_raw >= 0.0 else None
+
+        # Require a real margin before a different obstacle displaces the one
+        # this robot was already avoiding at this recursion depth last tick —
+        # see this method's docstring. `sticky_dist_to_robot` is None when the
+        # sticky obstacle isn't even in range this tick (it fell outside
+        # `clearance` entirely, e.g. the robot moved past it), in
+        # which case there is nothing to stick to and the true closest wins
+        # unconditionally, same as before this fix.
+        if (
+            sticky_obstacle is not None
+            and sticky_dist_to_robot is not None
+            and closest_obstacle is not None
+            and not _same_segment(closest_obstacle, sticky_obstacle)
+            and sticky_dist_to_robot <= min_dist_to_robot + self.DETOUR_SWITCH_MARGIN
+        ):
+            closest_obstacle = sticky_obstacle
+
+        obstacle_pos = None
+        if closest_obstacle is not None:
+            obstacle_pos = find_intersection(segment, closest_obstacle)
+            if obstacle_pos is None:
+                # Fallback to closest physical point if lines don't strictly intersect
+                dists = [
+                    distance_point_to_segment(closest_obstacle[0], segment[0], segment[1]),
+                    distance_point_to_segment(closest_obstacle[1], segment[0], segment[1]),
+                ]
+                point_c = closest_point_on_segment(segment[0], closest_obstacle[0], closest_obstacle[1])
+                point_d = closest_point_on_segment(segment[1], closest_obstacle[0], closest_obstacle[1])
+
+                dists.extend([distance(segment[0], point_c), distance(segment[1], point_d)])
+                points = [closest_obstacle[0], closest_obstacle[1], point_c, point_d]
+                obstacle_pos = points[dists.index(min(dists))]
+
+        # Save to cache. Cached (and returned) as `(obstacle_pos,
+        # closest_obstacle)`, not just the position: `check_segment` needs
+        # the actual obstacle *segment* to remember for next tick's
+        # `sticky_obstacle` (see this method's docstring) — the position
+        # alone can't be compared against a candidate segment's identity.
+        result = (obstacle_pos, closest_obstacle)
+        self._collision_cache[seg_key] = result
+        return result
+
+    def _trajectory_length(self, trajectory):
+        return sum(distance(seg[0], seg[1]) for seg in trajectory)
+
+    def check_segment(
+        self,
+        segment: Tuple[np.ndarray, np.ndarray],
+        obstacles: List[Tuple[np.ndarray, np.ndarray]],
+        recursion_length: int,
+        target: np.ndarray,
+        field_bounds: FieldBounds,
+        robot_id: Optional[int] = None,
+        clearance: Optional[float] = None,
+        subgoal_distance: Optional[float] = None,
+        forbidden_rect: Optional[Tuple[float, float, float, float]] = None,
+    ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], float]:
+        """
+        Recursively checks a segment for collisions and generates subgoals with
+        a hysteresis bias to prevent path-switching jitter (indecisiveness).
+
+        `clearance`/`subgoal_distance`: this robot's effective (possibly
+        crowding-shrunk) values, computed once by `_get_obstacles` and passed
+        down through every recursive call so a single planning call is
+        internally consistent. Default to `self.OBSTACLE_CLEARANCE`/
+        `self.SUBGOAL_DISTANCE` for the same internal/test call sites that
+        default `robot_id`. `forbidden_rect`: passed through to
+        `_find_subgoal` (see its docstring).
+
+        `robot_id`: keys `self._last_detour_side`'s per-tick memory of which
+        side (`subgoal_direction`) this robot detoured around a given
+        obstacle point last time. Optional (defaults to no hysteresis,
+        matching the previous behaviour) since a few internal/test call
+        sites plan a one-off segment with no stable robot identity to key
+        memory against.
+
+        The memory key includes the (rounded) obstacle intersection point,
+        not just recursion depth: keying on depth alone was tried first and
+        found to actively cause the exact wall-clipping bug it was meant to
+        prevent — sliding around a rectangular obstacle's corner (e.g. the
+        enemy defense area) means avoiding a genuinely different edge/point
+        of that same rectangle before and after the corner, at the *same*
+        recursion depth, and forcing the pre-corner side to stick past that
+        transition cut straight across the corner into the rectangle.
+        Rounding the obstacle point to `_DETOUR_MEMORY_PRECISION` collapses
+        ordinary per-tick float jitter (same obstacle) into one key while
+        still treating a materially different point (a different edge, or
+        the far side of a corner) as a fresh decision with no prior bias.
+        """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        subgoal_distance = self.SUBGOAL_DISTANCE if subgoal_distance is None else subgoal_distance
+
+        if HAS_CPP and not EXACT_MATH:
+            ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+            tl_x, tl_y = field_bounds.top_left
+            br_x, br_y = field_bounds.bottom_right
+            min_x, max_x = (tl_x, br_x) if tl_x <= br_x else (br_x, tl_x)
+            min_y, max_y = (br_y, tl_y) if br_y <= tl_y else (tl_y, br_y)
+            bounds_seq = (min_x, max_x, min_y, max_y)
+            static_keys = self._obstacle_cache_static_keys
+            if static_keys:
+                is_static = np.fromiter(
+                    (_segment_key(o) in static_keys for o in obstacles), dtype=bool, count=len(obstacles)
+                )
+            else:
+                is_static = None
+            return _fastpathplanner.check_segment_cpp(
+                segment,
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+                is_static,
+                recursion_length,
+                self.MAXRECURSIONLENGTH,
+                target,
+                bounds_seq,
+                robot_id,
+                clearance,
+                subgoal_distance,
+                forbidden_rect,
+                self.DETOUR_SWITCH_MARGIN,
+                self._MOVING_GHOST_MIN_M,
+                self._DETOUR_MEMORY_PRECISION,
+                self._last_detour_side,
+                self._last_obstacle,
+            )
+
+        obstacle_memory_key = (robot_id, recursion_length) if robot_id is not None else None
+        sticky_obstacle_segment = (
+            self._last_obstacle.get(obstacle_memory_key) if obstacle_memory_key is not None else None
+        )
+        closest_obstacle, obstacle_segment = self.collides(
+            segment, obstacles, sticky_obstacle=sticky_obstacle_segment, clearance=clearance
+        )
+        segment_length = distance(segment[0], segment[1])
+
+        # Base case: Path is clear or maximum detour complexity reached
+        if closest_obstacle is None or recursion_length >= self.MAXRECURSIONLENGTH:
+            if obstacle_memory_key is not None:
+                self._last_obstacle.pop(obstacle_memory_key, None)
+            return [segment], segment_length
+
+        if obstacle_memory_key is not None:
+            self._last_obstacle[obstacle_memory_key] = obstacle_segment
+
+        # Generate left and right detours. `origin_obstacle=obstacle_segment`
+        # lets `_find_subgoal` tell a genuine dead-end (still blocked by this
+        # same obstacle after exhausting its step budget -- e.g. stepping
+        # along a long obstacle like the field boundary wall instead of away
+        # from it) apart from merely struggling in a crowded field (blocked
+        # by something else at the cutoff, where the old "take the point
+        # anyway" fallback is still the more useful answer) -- see
+        # `_find_subgoal`'s docstring/failsafe comment.
+        subgoal_left = self._find_subgoal(
+            segment[0],
+            segment[1],
+            closest_obstacle,
+            obstacles,
+            1,
+            1,
+            clearance,
+            subgoal_distance,
+            origin_obstacle=obstacle_segment,
+            forbidden_rect=forbidden_rect,
+        )
+        subgoal_right = self._find_subgoal(
+            segment[0],
+            segment[1],
+            closest_obstacle,
+            obstacles,
+            0,
+            1,
+            clearance,
+            subgoal_distance,
+            origin_obstacle=obstacle_segment,
+            forbidden_rect=forbidden_rect,
+        )
+
+        # `_find_subgoal` returns None for a genuine dead-end (see above) --
+        # treated the same as an out-of-field point, not passed to
+        # `is_point_in_field` (which assumes a real point).
+        left_valid = subgoal_left is not None and self.is_point_in_field(subgoal_left, field_bounds)
+        right_valid = subgoal_right is not None and self.is_point_in_field(subgoal_right, field_bounds)
+
+        best_subgoal = None
+        chosen_side: Optional[int] = None
+
+        # Heuristic: pick the valid subgoal closest to the ultimate
+        # destination, but biased toward whichever side this robot detoured
+        # around this same obstacle point last tick (see docstring) — the
+        # alternative side must beat it by more than DETOUR_SWITCH_MARGIN,
+        # not just any nonzero amount, or the previous side wins the tie.
+        # This is the same "don't flip on a rounding error" pattern as
+        # `_find_best_shot`'s switch_margin/`ClearBallTactic`'s
+        # _SWITCH_MARGIN elsewhere in this codebase.
+        if _segment_key(obstacle_segment) in self._obstacle_cache_static_keys:
+            obstacle_key = _segment_key(obstacle_segment)
+        else:
+            obstacle_key = (
+                round(float(closest_obstacle[0]), self._DETOUR_MEMORY_PRECISION),
+                round(float(closest_obstacle[1]), self._DETOUR_MEMORY_PRECISION),
+            )
+        memory_key = (robot_id, recursion_length, obstacle_key) if robot_id is not None else None
+        prev_side = self._last_detour_side.get(memory_key) if memory_key is not None else None
+
+        if left_valid and right_valid:
+            dist_left = distance(subgoal_left, target)
+            dist_right = distance(subgoal_right, target)
+            # A moving robot's obstacle is its ghost segment, from where it is to
+            # where it will be in PROJECTEDFRAMES. Against a crossing robot the
+            # side nearer the target is usually the one ahead of the ghost's head,
+            # and two robots crossing paths each cut in front of the other and
+            # met at ~1 m/s each (motion_planning_benchmark `crossing`, clearance
+            # -0.001 m). Pass behind it instead: prefer the subgoal further back
+            # along its direction of travel. Static obstacles keep the nearer side.
+            ghost = obstacle_segment[1] - obstacle_segment[0]
+            ghost_len = math.hypot(ghost[0], ghost[1])
+            if (
+                ghost_len > self._MOVING_GHOST_MIN_M
+                and _segment_key(obstacle_segment) not in self._obstacle_cache_static_keys
+            ):
+                along_left = (
+                    (subgoal_left[0] - obstacle_segment[0][0]) * ghost[0]
+                    + (subgoal_left[1] - obstacle_segment[0][1]) * ghost[1]
+                ) / ghost_len
+                along_right = (
+                    (subgoal_right[0] - obstacle_segment[0][0]) * ghost[0]
+                    + (subgoal_right[1] - obstacle_segment[0][1]) * ghost[1]
+                ) / ghost_len
+                if abs(along_left - along_right) > self._MOVING_GHOST_MIN_M:
+                    dist_left, dist_right = (0.0, 1.0) if along_left < along_right else (1.0, 0.0)
+            if prev_side == 1 and dist_left <= dist_right + self.DETOUR_SWITCH_MARGIN:
+                best_subgoal, chosen_side = subgoal_left, 1
+            elif prev_side == 0 and dist_right <= dist_left + self.DETOUR_SWITCH_MARGIN:
+                best_subgoal, chosen_side = subgoal_right, 0
+            elif dist_left < dist_right:
+                best_subgoal, chosen_side = subgoal_left, 1
+            else:
+                best_subgoal, chosen_side = subgoal_right, 0
+        elif left_valid:
+            best_subgoal, chosen_side = subgoal_left, 1
+        elif right_valid:
+            best_subgoal, chosen_side = subgoal_right, 0
+        else:
+            return [segment], segment_length
+
+        if memory_key is not None:
+            self._last_detour_side[memory_key] = chosen_side
+
+        # Recursively check the two halves of the selected detour
+        seg1, len1 = self.check_segment(
+            (segment[0], best_subgoal),
+            obstacles,
+            recursion_length + 1,
+            target,
+            field_bounds,
+            robot_id,
+            clearance,
+            subgoal_distance,
+            forbidden_rect,
+        )
+        seg2, len2 = self.check_segment(
+            (best_subgoal, segment[1]),
+            obstacles,
+            recursion_length + 1,
+            target,
+            field_bounds,
+            robot_id,
+            clearance,
+            subgoal_distance,
+            forbidden_rect,
+        )
+
+        return seg1 + seg2, len1 + len2
+
+    def _clamp_to_obstacle_clearance_fast(
+        self,
+        origin: np.ndarray,
+        unit_vec: np.ndarray,
+        max_distance: float,
+        obstacles: List,
+        clearance: Optional[float] = None,
+    ) -> float:
+        """`_clamp_to_obstacle_clearance_exact` in one native call
+        (`numba_kernels.clamp_to_obstacle_clearance_nb`)."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        clamp_fn = _fastpathplanner.clamp_to_obstacle_clearance_nb if HAS_CPP else clamp_to_obstacle_clearance_nb
+        return clamp_fn(
+            float(origin[0]),
+            float(origin[1]),
+            float(unit_vec[0]),
+            float(unit_vec[1]),
+            float(max_distance),
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+        )
+
+    def _clamp_to_obstacle_clearance_exact(
+        self,
+        origin: np.ndarray,
+        unit_vec: np.ndarray,
+        max_distance: float,
+        obstacles: List,
+        clearance: Optional[float] = None,
+    ) -> float:
+        """Shrink `max_distance` so the point `origin + unit_vec * distance` never lands
+        inside `OBSTACLE_CLEARANCE` of any obstacle segment.
+
+        `smooth_path`'s projected carrot is otherwise unchecked — it is derived fresh from
+        `robot_position` and `PROJECTION_DISTANCE` alone, not from `check_segment`'s already
+        obstacle-aware trajectory, so nothing stops it from overshooting past a nearby
+        obstacle when the robot is already close to one (found via the opponent-defense-area
+        obstacle: a robot approaching it head-on crossed the boundary by several centimetres
+        even though the underlying trajectory correctly routed around it).
+        """
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        clamped = max_distance
+        # Points along the ray as plain-float pairs: `origin + unit_vec * d`
+        # per axis, the same operations numpy would do, without allocating.
+        ox, oy = float(origin[0]), float(origin[1])
+        ux, uy = float(unit_vec[0]), float(unit_vec[1])
+        for o in obstacles:
+            end_point = (ox + ux * clamped, oy + uy * clamped)
+            if distance_point_to_segment(end_point, o[0], o[1]) >= clearance:
+                continue
+            # Binary search along the ray for the furthest distance that still
+            # keeps clearance — cheap, bounded, and avoids deriving a closed-form
+            # ray/segment-clearance solution for what is a rare correction path.
+            lo, hi = 0.0, clamped
+            for _ in range(12):
+                mid = (lo + hi) / 2.0
+                point = (ox + ux * mid, oy + uy * mid)
+                if distance_point_to_segment(point, o[0], o[1]) >= clearance:
+                    lo = mid
+                else:
+                    hi = mid
+            clamped = min(clamped, lo)
+        return clamped
+
+    def smooth_path(
+        self, trajectory, target, robot_position, obstacles: List, clearance: Optional[float] = None
+    ) -> np.ndarray:
+        if len(trajectory) == 1:
+            return target
+        if not EXACT_MATH and HAS_CPP:
+            ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+            clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+            return _fastpathplanner.smooth_path_cpp(
+                trajectory,
+                target,
+                robot_position,
+                self.PROJECTION_DISTANCE,
+                clearance,
+                ox0,
+                oy0,
+                ox1,
+                oy1,
+            )
+        # A first subgoal sitting exactly on the robot (the detour recursion can
+        # produce one) has no direction to normalise: dividing by its zero length
+        # returned a NaN carrot. Skip such segments. Found by
+        # fastpathplanner_corner_test.py (a robot beside two blockers at the
+        # enemy box corner).
+        while len(trajectory) > 1 and math.hypot(*(trajectory[0][1] - robot_position)) == 0.0:
+            trajectory = trajectory[1:]
+        if len(trajectory) == 1:
+            return target
+
+        direction = trajectory[0][1] - robot_position
+        unit_vec = direction / math.hypot(direction[0], direction[1])
+        safe_distance = self._clamp_to_obstacle_clearance(
+            robot_position, unit_vec, self.PROJECTION_DISTANCE, obstacles, clearance=clearance
+        )
+        new_target = robot_position + unit_vec * safe_distance
+
+        # Removed redundant math ops by caching distance calls here too
+        dist_new_target = distance(new_target, robot_position)
+        dist_trajectory = distance(robot_position, trajectory[0][1])
+
+        if dist_new_target < dist_trajectory:
+            return trajectory[0][1]
+        else:
+            point = closest_point_on_segment(new_target, trajectory[1][0], trajectory[1][1])
+            return (point + new_target) / 2.0
+
+    def _sanitize_target_fast(
+        self,
+        target: np.ndarray,
+        obstacles: List,
+        robot_pos: np.ndarray,
+        field_bounds: FieldBounds | None = None,
+        exempt_obstacles: Optional[set] = None,
+        clearance: Optional[float] = None,
+    ) -> np.ndarray:
+        """`_sanitize_target_exact` with its push-out passes in one native call
+        (`numba_kernels.sanitize_target_nb`); see that method for the behaviour."""
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        if not exempt_obstacles:
+            if field_bounds is not None:
+                bounds_key = (
+                    field_bounds.top_left[0],
+                    field_bounds.top_left[1],
+                    field_bounds.bottom_right[0],
+                    field_bounds.bottom_right[1],
+                )
+                exempt_arr = self._field_bounds_exempt_cache.get(bounds_key)
+                if exempt_arr is None:
+                    (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+                    exempt_arr = np.array(
+                        [(x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)],
+                        dtype=np.float64,
+                    )
+                    self._field_bounds_exempt_cache[bounds_key] = exempt_arr
+            else:
+                exempt_arr = np.empty((0, 4), dtype=np.float64)
+        else:
+            exempt = list(exempt_obstacles)
+            if field_bounds is not None:
+                (x0, y0), (x1, y1) = field_bounds.top_left, field_bounds.bottom_right
+                exempt += [(x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)]
+            exempt_arr = np.array(exempt, dtype=np.float64).reshape(-1, 4)
+
+        ox0, oy0, ox1, oy1 = self._obstacle_arrays(obstacles)
+        sanitize_fn = _fastpathplanner.sanitize_target_nb if HAS_CPP else sanitize_target_nb
+        tx, ty = sanitize_fn(
+            float(target[0]),
+            float(target[1]),
+            float(robot_pos[0]),
+            float(robot_pos[1]),
+            clearance,
+            ox0,
+            oy0,
+            ox1,
+            oy1,
+            exempt_arr,
+        )
+        return np.array([tx, ty])
+
+    def _sanitize_target_exact(
+        self,
+        target: np.ndarray,
+        obstacles: List,
+        robot_pos: np.ndarray,
+        field_bounds: FieldBounds | None = None,
+        exempt_obstacles: Optional[set] = None,
+        clearance: Optional[float] = None,
+    ) -> np.ndarray:
+        """
+        Ensures the target isn't inside a velocity-line obstacle.
+
+        Field boundary walls are intentionally excluded here: the ball can
+        legally be near the touchline and the robot must be able to reach it.
+        Boundary walls are still used in path collision detection so the planner
+        never routes *through* the wall — they just don't repel the target.
+
+        `exempt_obstacles` (identified by `_segment_key(o)`, same
+        keying as `boundary_segments` below) gets the same treatment, for the
+        same reason: a `go_to_ball` target sitting at/near the ball is
+        legitimately close to a contesting opponent robot — that robot is a
+        real obstacle for the *path* (still routed around via `check_segment`
+        below), but pushing the *target itself* away from it by a full
+        `OBSTACLE_CLEARANCE` makes any contested ball permanently
+        uncollectable: the target keeps retreating from the very obstacle the
+        robot needs to get close to, so the "carrot" `smooth_path` derives
+        from it never advances and the robot converges just outside contact
+        range and stalls there indefinitely. Confirmed via direct
+        reproduction: a passer approaching a ball parked ~0.31m from an idle
+        enemy robot got its target sanitized from ~0.01m off the ball to
+        ~0.13m off it, converged to ~0.15m from the ball, and never closed
+        the remaining gap for the rest of a 60s match.
+        """
+        if exempt_obstacles is None:
+            exempt_obstacles = set()
+        clearance = self.OBSTACLE_CLEARANCE if clearance is None else clearance
+        if field_bounds is not None:
+            # Build the set of field-boundary segments so we can skip them below.
+            tl = np.array(field_bounds.top_left)
+            br = np.array(field_bounds.bottom_right)
+            tr = np.array([br[0], tl[1]])
+            bl = np.array([tl[0], br[1]])
+            boundary_segments = {
+                _segment_key((tl, tr)),
+                _segment_key((tr, br)),
+                _segment_key((br, bl)),
+                _segment_key((bl, tl)),
+            }
+        else:
+            boundary_segments = set()
+
+        # Which obstacles may repel the target doesn't depend on where the
+        # target has been pushed to, so filter once rather than on each pass.
+        repelling = []
+        for o in obstacles:
+            o_key = _segment_key(o)
+            if o_key not in boundary_segments and o_key not in exempt_obstacles:
+                repelling.append(o)
+
+        safe_target = np.copy(target)
+        for _ in range(5):
+            collision_found = False
+            for o in repelling:
+                if distance_point_to_segment(safe_target, o[0], o[1]) < clearance:
+                    closest_pt = closest_point_on_segment(safe_target, o[0], o[1])
+                    push_dir = safe_target - closest_pt
+                    if math.hypot(push_dir[0], push_dir[1]) == 0:
+                        push_dir = robot_pos - closest_pt
+                    unit_push = push_dir / math.hypot(push_dir[0], push_dir[1])
+                    safe_target = closest_pt + unit_push * (clearance * 1.05)
+                    collision_found = True
+            if not collision_found:
+                break
+        return safe_target
+
+    def _path_to(
+        self,
+        game: Game,
+        robot_id: int,
+        target: Tuple[float, float],
+        field_bounds: FieldBounds,
+    ):
+        """
+        Main entry point. Clears cache, sanitizes target, and plans path.
+        """
+        self._collision_cache.clear()
+        self._obstacle_arrays_cache.clear()
+
+        robot = game.friendly_robots[robot_id]
+        our_pos = np.array([robot.p.x, robot.p.y])
+        raw_target = np.array(target)
+
+        # 1. Get obstacles and draw Red velocity lines
+        obstacles, clearance, subgoal_distance = self._get_obstacles(game, robot_id, our_pos, field_bounds)
+
+        defense_area_retrieval_exempt = self._enemy_defense_area_retrieval_exempt(game, robot_id)
+
+        # 1a. Same idea as 1b below, one obstacle-class earlier: when the ball
+        # itself is legitimately resting in the opponent's defense area during
+        # a stoppage (DIRECT_FREE_*/BALL_PLACEMENT_* — never during actual
+        # NORMAL_START/FORCE_START play, when entry really is a foul), the
+        # retrieving robot must be able to route into and target inside that
+        # rectangle, not just detour around it. Exclude the enemy-defense-area
+        # segments (added by `_refresh_obstacle_cache`) from routing the same
+        # way `boundary_segments` gets excluded below, and remember the
+        # exemption so steps 2/7 skip clamping the target/waypoint back out of
+        # the rectangle. See `_enemy_defense_area_retrieval_exempt`'s docstring
+        # for the stall this prevents. (Computed above, before 1a-skip, since
+        # the recompute-skip's own defense-area re-check needs it too.)
+        if defense_area_retrieval_exempt:
+            defense_rect = self._enemy_defense_rect(game, margin=OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            rmin_x, rmax_x, rmin_y, rmax_y = defense_rect
+            rc0 = (rmin_x, rmax_y)
+            rc1 = (rmax_x, rmax_y)
+            rc2 = (rmax_x, rmin_y)
+            rc3 = (rmin_x, rmin_y)
+            defense_rect_segments = {
+                _segment_key((rc0, rc1)),
+                _segment_key((rc1, rc2)),
+                _segment_key((rc2, rc3)),
+                _segment_key((rc3, rc0)),
+            }
+            obstacles = [o for o in obstacles if _segment_key(o) not in defense_rect_segments]
+
+        # 1b. A target that's genuinely outside the field (e.g. a free-kick
+        # kicker's approach point for a ball that went out of bounds — the
+        # ball's real resting spot, which the restart requires actually
+        # reaching, not a synthetic in-bounds substitute) can never be routed
+        # to if the boundary wall is still treated as an obstacle to detour
+        # around: `check_segment` sees the wall "blocking" every straight
+        # line to an out-of-field target and keeps generating a subgoal
+        # alongside it, which the robot approaches, re-triggering the same
+        # detour choice next tick — an oscillating orbit along the boundary
+        # that never resolves (found live: a `DIRECT_FREE` kicker approaching
+        # a ball resting ~0.28m past the line circled it forever, 60+ seconds
+        # into an otherwise-clean full-length match). `sanitize_target`
+        # already exempts boundary walls from *target* repulsion for exactly
+        # this reason (see its docstring) — this extends the same exemption
+        # to path *routing* once the target has actually crossed the line, so
+        # the two don't disagree about whether crossing it is allowed.
+        # Excluded by the same `field_bounds`-derived identity `sanitize_target`
+        # uses, not a blanket "ignore all boundaries" — a target that's still
+        # in-bounds keeps every wall as a real obstacle.
+        tl = np.array(field_bounds.top_left)
+        br = np.array(field_bounds.bottom_right)
+        tr = np.array([br[0], tl[1]])
+        bl = np.array([tl[0], br[1]])
+        boundary_list = [(tl, tr), (tr, br), (br, bl), (bl, tl)]
+        boundary_segments = {_segment_key(b) for b in boundary_list}
+        if not self.is_point_in_field(raw_target, field_bounds):
+            obstacles = [o for o in obstacles if _segment_key(o) not in boundary_segments]
+        else:
+            # A wall the robot already stands within clearance of, too: a straight run to an
+            # in-field target never gets nearer the wall than its nearer end, and the wall
+            # otherwise sent the robot on a 0.7 m detour away from a ball 0.3 m from the
+            # touchline (2.25 m-wide lab field, 2026-10-28: it backed off the ball forever).
+            near_boundary = {
+                _segment_key(b)
+                for b in boundary_list
+                if min(
+                    distance_point_to_segment(raw_target, b[0], b[1]),
+                    distance_point_to_segment(our_pos, b[0], b[1]),
+                )
+                < clearance
+            }
+            if near_boundary:
+                obstacles = [o for o in obstacles if _segment_key(o) not in near_boundary]
+
+        # 2. A target inside the (enclosed) opponent defense area needs its own
+        # check: `sanitize_target` below only reacts to a target close to an
+        # obstacle *line*, so a point deep in a rectangle's interior — farther
+        # than OBSTACLE_CLEARANCE from all four edges — passes through it
+        # completely untouched (confirmed with a target at the rectangle's
+        # exact center). Project it to the nearest edge first so the rest of
+        # the pipeline only ever has to reason about a target near a boundary.
+        # Uses the inflated margin, not the bare boundary: KNOWN TRADE-OFF —
+        # this also redirects a target placed deliberately at/near the exact
+        # boundary line (e.g. `test_mirror_swap`'s formation spots at
+        # (3.5, ±0.75), which sit precisely on a standard-field defense area's
+        # edge) even though that target isn't itself a rule violation. Chosen
+        # anyway because the smaller, boundary-exact margin was tried and
+        # measured to still let a fast, head-on approach cross several
+        # centimetres into the real defense area (see git history / design
+        # doc) — preventing the actual SSL violation took priority over this
+        # synthetic test's exact-boundary formation targets.
+        #
+        # Skipped when `defense_area_retrieval_exempt` (see step 1a): a target
+        # at/near the ball's real position inside the box must not be clamped
+        # back out of it, or the retrieving robot converges just outside
+        # `OPPONENT_DEFENSE_AREA_KEEP_DISTANCE` from the ball and can never
+        # close the gap — the exact stall this whole exemption exists to fix.
+        if not defense_area_retrieval_exempt:
+            raw_target = self._project_outside_rect(
+                raw_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            )
+
+        # 3. Sanitize target — skip boundary walls so robots can reach the ball
+        # near touchlines, and skip obstacles that are themselves right next
+        # to the ball when the target is a ball-approach target (see
+        # `sanitize_target`'s docstring): a contested ball is a normal,
+        # legal situation, and pushing the target away from an opponent
+        # standing near it makes the ball permanently uncollectable rather
+        # than just harder to reach. Identified structurally (target is
+        # within contact range of the live ball position), not via a new
+        # parameter threaded through every `MotionController` implementation
+        # — `go_to_ball`'s target already sits within a few centimetres of
+        # the ball by construction (see `_target_past_ball`'s small
+        # overshoot), so this only ever fires for genuine ball-approach
+        # targets, not general movement commands that merely happen to end
+        # up near the ball.
+        ball_adjacent_obstacles = set()
+        if game.ball is not None:
+            ball_x, ball_y = float(game.ball.p.x), float(game.ball.p.y)
+            dx = float(raw_target[0]) - ball_x
+            dy = float(raw_target[1]) - ball_y
+            if dx * dx + dy * dy < clearance * clearance:
+                ball_pos = np.array([ball_x, ball_y])
+                for o in obstacles:
+                    if distance_point_to_segment(ball_pos, o[0], o[1]) < clearance:
+                        ball_adjacent_obstacles.add(_segment_key(o))
+        safe_target = self.sanitize_target(
+            raw_target,
+            obstacles,
+            our_pos,
+            field_bounds,
+            exempt_obstacles=ball_adjacent_obstacles,
+            clearance=clearance,
+        )
+
+        # 3a. Extend the same exemption to path *routing*, but only for the
+        # static (field-boundary / enemy-defense-area) obstacles within
+        # `ball_adjacent_obstacles` — never for another robot's segment, even
+        # if that robot happens to be next to the ball. A static line/rect
+        # can't contest the ball back, so briefly routing through its
+        # clearance ring to close the last few centimetres is always safe;
+        # a robot can, and doing the same for a robot segment was tried and
+        # reverted (see git history) — it does let the approach close, but
+        # then exposes an unarbitrated simultaneous-dribbler-contact grind
+        # with no possession logic to resolve it, a worse failure than the
+        # orbiting stall it fixes. Restricting to static obstacles here gets
+        # the touchline/defense-area cases (a wall or keep-out rect the robot
+        # is legally allowed to enter to retrieve a resting/placed ball)
+        # without reopening that regression.
+        routing_exempt = ball_adjacent_obstacles & self._obstacle_cache_static_keys
+        routing_obstacles = (
+            obstacles if not routing_exempt else [o for o in obstacles if _segment_key(o) not in routing_exempt]
+        )
+
+        # 3b. A robot already inside another robot's clearance (pressed against it) can plan
+        # no segment out: each starts in collision, the straight one away too, and the detour
+        # round it can run back through it. Leave out of routing each robot obstacle the robot
+        # is inside whose distance only grows along the straight run to the target; it counts
+        # again once the robot is clear. Not static obstacles (box edges, field lines): there
+        # the clearance itself is the margin a robot must keep, and hugging it fails the
+        # defense-area and corner-route tests. Moments placement_in_corner_traps_defender and
+        # free_kick_defender_dodges_into_ball: defenders pressed against another robot were
+        # routed back through it and toward the ball.
+        routing_obstacles = [
+            o
+            for o in routing_obstacles
+            if _segment_key(o) in self._obstacle_cache_static_keys or not _leaving(our_pos, safe_target, o, clearance)
+        ]
+
+        # 4. Plan geometric path. Recompute-skip: if this robot was asked for
+        # essentially the same target last call and every segment of the
+        # detour trajectory that call computed is still clear of every
+        # current obstacle (including this tick's freshly-projected moving
+        # ones), that trajectory's *shape* is still valid — reuse it instead
+        # of re-running `check_segment`'s recursive detour search, which is
+        # the single largest cost in this method (cProfile on a full 6v6
+        # match: ~40% of `_path_to`'s own time). Every segment is still
+        # revalidated against `collides()` fresh every tick, even when
+        # reusing the cached shape — skipping that revalidation itself for a
+        # few ticks at a time was tried (both a 3-tick and a 2-tick fixed
+        # interval) and reverted after each caused a real regression (a
+        # kickoff support robot briefly inside the centre keep-out zone at
+        # the 3-tick interval; `test_mirror_swap` converging ~14x slower at
+        # the 2-tick interval — see git history). `smooth_path` below is still
+        # called fresh from the robot's *current* position every tick
+        # regardless — the carrot it derives is a live lookahead point
+        # relative to wherever the robot actually is now
+        # (`robot_position + unit_vec * safe_distance`), not something that
+        # can be cached itself. (An earlier version of this skip cached
+        # `smooth_path`'s output directly instead of the trajectory feeding
+        # it — reverted after it froze the carrot at a fixed absolute point
+        # that fell behind the robot as it advanced, live-locking two robots
+        # crossing perpendicular lanes in `test_grid_intersection`.)
+        #
+        # `sanitize_target`'s bounded loop above still runs fresh every call
+        # rather than being skipped too — it's a small fraction of this
+        # method's cost next to `check_segment` (per the same profile) and
+        # its output (`safe_target`) is exactly what the cache key and the
+        # trajectory's own validity are compared against, so skipping it as
+        # well would mean re-deriving what to compare against anyway.
+        # The robot's own position must also still be close to where it was
+        # when the cached trajectory was planned: `check_segment`'s first
+        # segment starts at *that* old position, not the current one, so
+        # `smooth_path`'s direction/clamping below (derived from
+        # `trajectory[0][1]`) would otherwise be reasoning about a subgoal
+        # placed relative to a position the robot has since moved well away
+        # from, even though the segment itself still tests as collision-free
+        # in isolation. Bounded to a fraction of `SUBGOAL_DISTANCE` — small
+        # enough that the cached subgoal is still a reasonable waypoint from
+        # the robot's current position, generous enough to actually skip
+        # work across most of a tick-to-tick position change at 60Hz.
+        cached = self._last_trajectory.get(robot_id)
+        final_trajectory = None
+        if cached is not None:
+            cached_origin, cached_target, cached_trajectory = cached
+            d_target_x = float(safe_target[0]) - float(cached_target[0])
+            d_target_y = float(safe_target[1]) - float(cached_target[1])
+            d_pos_x = float(our_pos[0]) - float(cached_origin[0])
+            d_pos_y = float(our_pos[1]) - float(cached_origin[1])
+            if (
+                (d_target_x * d_target_x + d_target_y * d_target_y) <= self._REPLAN_TARGET_TOLERANCE_SQ
+                and (d_pos_x * d_pos_x + d_pos_y * d_pos_y) <= self._REPLAN_POSITION_TOLERANCE_SQ
+                and all(
+                    self.collides(seg, routing_obstacles, clearance=clearance)[0] is None for seg in cached_trajectory
+                )
+            ):
+                final_trajectory = cached_trajectory
+
+        if final_trajectory is None:
+            final_trajectory, _ = self.check_segment(
+                (our_pos, safe_target),
+                routing_obstacles,
+                0,
+                safe_target,
+                field_bounds,
+                robot_id,
+                clearance,
+                subgoal_distance,
+                (
+                    None
+                    if defense_area_retrieval_exempt
+                    else self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+                ),
+            )
+            self._last_trajectory[robot_id] = (our_pos.copy(), safe_target.copy(), final_trajectory)
+
+        # 5. Draw the resulting safe path segments when an RSim renderer is available.
+        if self._should_draw:
+            for i in final_trajectory:
+                self._env.draw_line(i)
+
+        # 6. Smooth the path and draw the final "Carrot" target in Blue
+        new_target = self.smooth_path(final_trajectory, safe_target, our_pos, routing_obstacles, clearance=clearance)
+
+        # 7. Last-line safety net, specific to the defense-area rectangle: the
+        # smoothing/blending steps above (subgoal search, carrot projection,
+        # final subgoal/carrot averaging) each place intermediate points right
+        # at OBSTACLE_CLEARANCE from a line obstacle by design, and none of
+        # them are individually checked against being *inside* an enclosed
+        # rectangle afterward — found by tracing a real crossing where the
+        # final blended waypoint landed a few centimetres inside the rule
+        # boundary despite every upstream step "correctly" respecting
+        # clearance from the lines it was reasoning about individually.
+        # Projecting the final result away from the rectangle is cheap and
+        # certain, versus continuing to chase which specific blend step needs
+        # its own clearance check. Same inflated-margin trade-off as the
+        # interior-target check above (see its comment) — this is a waypoint
+        # the robot is actively driving toward, not a stationary destination,
+        # so a smaller margin was measured to still let the robot cross the
+        # real boundary under momentum.
+        #
+        # Same exemption as step 2 — skipped so a smoothed waypoint that's
+        # legitimately inside the box (chasing a ball resting there) isn't
+        # projected back out right before being returned as the final target.
+        if not defense_area_retrieval_exempt:
+            new_target = self._project_outside_rect(
+                new_target, self._enemy_defense_rect(game, OPPONENT_DEFENSE_AREA_KEEP_DISTANCE)
+            )
+
+        # 8. Same kind of safety net for the ball's keep-out circle while the
+        # other team restarts (or during STOP): the ball is not an obstacle
+        # above, so a straight run to the target -- or a sidestep round a
+        # teammate -- could cut through it. RR#6 low_block_vs_three_slot: the
+        # referee step's detour waypoints were all outside the circle, but a
+        # defender sidestepping teammates queued at them reached 0.38 m from
+        # the ball and KeepOutRule voided the penalty. A robot already inside is
+        # left to the referee step's own straight push-out: a detour waypoint
+        # swings it round the ball and can clip it. It is not left free to
+        # close in, though: a carrot whose first run gets closer to the ball
+        # (round a robot it is pressed against) is replaced by the ray out from
+        # the ball through the robot, which only gets farther (moment
+        # placement_corner_robot_drives_onto_ball; test_fpp_inside_ball_keep_out).
+        # The ray runs past the edge: a point on the edge itself parked a robot
+        # 5 mm inside, never encroaching-free, the kick-off step's chord round the
+        # circle replaced by it every tick (a 15 s kick-off stall, tournament_20261017_151052).
+        ball = Vector2D(game.ball.p.x, game.ball.p.y) if game.ball is not None else None
+        if ball is not None and _keeps_off_ball(game):
+            ball_np = np.array([ball.x, ball.y])
+            if (Vector2D(*our_pos) - ball).mag() >= BALL_KEEP_OUT_DISTANCE:
+                waypoint = detour_around_circle(Vector2D(*our_pos), Vector2D(*new_target), ball, BALL_KEEP_OUT_DISTANCE)
+                new_target = np.array([waypoint.x, waypoint.y])
+            elif _approaches(our_pos, new_target, ball_np) and np.linalg.norm(our_pos - ball_np) > 1e-9:
+                away = (our_pos - ball_np) / np.linalg.norm(our_pos - ball_np)
+                ray = _inside_field(ball_np + away * (BALL_KEEP_OUT_DISTANCE + _PUSH_OUT_MARGIN), field_bounds)
+                # The ray kept on the field. Where that brings the robot closer to the ball (a ball
+                # near the line, the robot between them), it follows the referee step's target, a
+                # point of the circle on the field: the ray alone drove a keeper 0.2 m out over
+                # its goal line at STOP (3 m lab field, 0.8 m keep-out, 2026-10-28).
+                if not _approaches(our_pos, ray, ball_np):
+                    new_target = ray
+
+        if self._should_draw:
+            self._env.draw_line((our_pos, new_target), color="Blue")
+
+        return new_target
+
+    # Numerics: see `EXACT_MATH` in settings.py. The `_exact` versions are the
+    # original arithmetic, bit for bit; the `_fast` ones compute the same thing
+    # in compiled code and can differ from them in the last bits.
+    collides = _collides_exact if EXACT_MATH else _collides_fast
+    _find_subgoal = _find_subgoal_exact if EXACT_MATH else _find_subgoal_fast
+    _clamp_to_obstacle_clearance = (
+        _clamp_to_obstacle_clearance_exact if EXACT_MATH else _clamp_to_obstacle_clearance_fast
+    )
+    sanitize_target = _sanitize_target_exact if EXACT_MATH else _sanitize_target_fast

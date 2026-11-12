@@ -12,7 +12,7 @@ import pytest
 
 from utama_core.engine.context import TickContext
 from utama_core.entities.data.vector import Vector2D
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 

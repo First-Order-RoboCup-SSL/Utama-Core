@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     RobotProfile,
     load_profile,
     save_profile,

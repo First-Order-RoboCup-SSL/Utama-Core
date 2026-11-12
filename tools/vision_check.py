@@ -33,7 +33,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from utama_core.config.settings import MULTICAST_GROUP, VISION_PORT
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 

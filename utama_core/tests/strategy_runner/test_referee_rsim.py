@@ -52,12 +52,12 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import empty_command
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command
 from utama_core.strategy.catalog import builder
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,

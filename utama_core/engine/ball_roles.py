@@ -27,7 +27,7 @@ from utama_core.shared.pass_and_score_geometry import (
     receiver_of_rolling_ball,
     still_receiving,
 )
-from utama_core.skills.src.utils.move_utils import move, turn_on_spot
+from utama_core.skills.utils.move_utils import move, turn_on_spot
 
 if TYPE_CHECKING:
     from utama_core.engine.context import TickContext

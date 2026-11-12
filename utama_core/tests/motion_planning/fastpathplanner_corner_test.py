@@ -29,7 +29,7 @@ import random
 import numpy as np
 import pytest
 
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 _STEP_M = 3.0 / 60

@@ -51,7 +51,7 @@ from utama_core.analysis.plan_snapshot import (
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _keeps_off_ball,
 )

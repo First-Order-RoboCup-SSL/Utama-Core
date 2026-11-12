@@ -15,11 +15,11 @@ from utama_core.entities.game import Robot as GameRobot
 from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
 from utama_core.global_utils.math_utils import rad_to_deg
 from utama_core.replay.entities import ReplayMetadata
-from utama_core.rsoccer_simulator.src.Entities import Ball as RSoccerBall
-from utama_core.rsoccer_simulator.src.Entities import Frame as RSoccerFrame
-from utama_core.rsoccer_simulator.src.Entities import FrameSSL
-from utama_core.rsoccer_simulator.src.Entities import Robot as RSoccerRobot
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.Entities import Ball as RSoccerBall
+from utama_core.rsoccer_simulator.Entities import Frame as RSoccerFrame
+from utama_core.rsoccer_simulator.Entities import FrameSSL
+from utama_core.rsoccer_simulator.Entities import Robot as RSoccerRobot
+from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 

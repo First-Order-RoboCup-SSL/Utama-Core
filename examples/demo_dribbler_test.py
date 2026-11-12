@@ -21,7 +21,7 @@ from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.run import StrategyRunner
 from utama_core.tactics.dribble import DribbleTactic
 

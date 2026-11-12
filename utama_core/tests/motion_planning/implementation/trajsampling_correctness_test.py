@@ -9,18 +9,15 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.src.trajsampling import collision_numba as collision
-from utama_core.motion_planning.src.trajsampling.bang_bang import (
-    BangBang1D,
-    Trajectory2D,
-)
-from utama_core.motion_planning.src.trajsampling.obstacles import (
+from utama_core.motion_planning.trajsampling import collision_numba as collision
+from utama_core.motion_planning.trajsampling.bang_bang import BangBang1D, Trajectory2D
+from utama_core.motion_planning.trajsampling.obstacles import (
     ConstantVelocityObstacle,
     EnemyRobotObstacle,
     OwnRobotObstacle,
     StaticSegmentObstacle,
 )
-from utama_core.motion_planning.src.trajsampling.planner import (
+from utama_core.motion_planning.trajsampling.planner import (
     PlanResult,
     TrajectorySamplingPlanner,
     _bangbang_to_row,
@@ -341,7 +338,7 @@ def test_first_collision_numba_grants_escape_grace_when_starting_inside_obstacle
     the robot's own starting position was "the collision" -- so a trajectory
     heading directly AWAY from the obstacle was still rejected at t=0.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -475,7 +472,7 @@ def test_try_reuse_notices_a_priority_obstacle_only_encroaching_later_in_the_tra
     i.e. collision-free by the harder threshold, but priority-blocked by the
     softer one.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -528,7 +525,7 @@ def test_try_reuse_does_not_invalidate_on_a_priority_conflict_beyond_the_recheck
     `MAX_LOOKAHEAD_TIME`-capped scan remains the backstop for anything
     genuinely dangerous further out.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -593,7 +590,7 @@ def test_try_reuse_ignores_priority_conflict_when_priority_blocking_disabled():
     would still reject the reuse) -- but passes `priority_enabled=False` and
     asserts the reuse now survives instead.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -774,7 +771,7 @@ def test_intermediate_targets_drops_a_stale_backward_pointing_last_target():
 
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -823,7 +820,7 @@ def test_intermediate_targets_keeps_a_last_target_that_is_still_a_reasonable_det
 
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -857,10 +854,10 @@ def test_intermediate_targets_inserts_same_side_jitter_around_a_kept_last_target
 
     candidates = planner._intermediate_targets(robot_id=0, p0=p0, final_target=final_target)
 
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
-    from utama_core.motion_planning.src.trajsampling.planner import (
+    from utama_core.motion_planning.trajsampling.planner import (
         _N_NEAR_LAST_JITTER,
         _NEAR_LAST_JITTER_STEP_RAD,
     )
@@ -896,7 +893,7 @@ def test_collision_leniency_accepts_a_far_collision_when_priority_blocking_disab
     unchanged -- a fast collision with real braking distance left is still
     rejected even with priority disabled.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -1041,7 +1038,7 @@ def test_with_current_clearance_excludes_an_obstacle_the_robot_is_still_escaping
     penetrated obstacle must NOT be reported as nearest -- the clear one
     must win instead.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -1069,7 +1066,7 @@ def test_with_current_clearance_still_reports_a_genuinely_approaching_obstacle()
     only ever exclude an obstacle the robot is already inside, never a
     genuinely approaching one that the emergency brake still needs to see.
     """
-    from utama_core.motion_planning.src.trajsampling.config import (
+    from utama_core.motion_planning.trajsampling.config import (
         trajsamplingconfig as config,
     )
 
@@ -1132,7 +1129,7 @@ def test_enemy_obstacle_lateral_clearance_is_tube_not_inflated_sphere():
     robot radius, not an inflated circle of radius (radius + r_dyn). A query point
     located laterally at y=0.35m from an opponent traveling along y=0 must have
     clearance equal to 0.35 - radius, without being encroached upon by r_dyn."""
-    from utama_core.motion_planning.src.trajsampling.obstacles import EnemyRobotObstacle
+    from utama_core.motion_planning.trajsampling.obstacles import EnemyRobotObstacle
 
     obs = EnemyRobotObstacle(
         p0=(0.0, 0.0),
@@ -1156,7 +1153,7 @@ def test_has_priority_role_aware_ball_carrier_and_fallback():
     When neither has the ball, or game is None, falls back to ID-based tie breaking."""
     from dataclasses import replace
 
-    from utama_core.motion_planning.src.trajsampling.planner import _has_priority
+    from utama_core.motion_planning.trajsampling.planner import _has_priority
 
     # Standalone (no game): higher ID wins
     assert _has_priority(2, 1, game=None) is True

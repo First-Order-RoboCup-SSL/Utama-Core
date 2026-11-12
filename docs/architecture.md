@@ -30,15 +30,15 @@ flowchart TD
         ovr["RefereeOverride.tick<br/>engine/referee_override.py<br/>custom_referee/actions.py"]
         part["Partitioner (robots per tactic)<br/>engine/strategy.py, strategy/*.py"]
         tac["Tactic.tick<br/>tactics/*.py"]
-        skill["Skills<br/>skills/src/*.py"]
+        skill["Skills<br/>skills/*.py"]
     end
 
     subgraph motion["Motion (motion_planning/)"]
-        mc["MotionController.calculate<br/>motion_planning/src/controllers/<br/>fpp, dwa, trajsample"]
+        mc["MotionController.calculate<br/>motion_planning/controllers/<br/>fpp, dwa, trajsample"]
     end
 
     subgraph output["Output (team_controller/)"]
-        ctrl["RobotController.send_robot_commands<br/>team_controller/src/controllers/"]
+        ctrl["RobotController.send_robot_commands<br/>team_controller/controllers/"]
         rsim["rsim<br/>rsoccer_simulator/ (sim/rsim_robot_controller.py)"]
         grsim["grSim over UDP<br/>sim/grsim_robot_controller.py"]
         real["Real robots over radio<br/>real/real_robot_controller.py"]

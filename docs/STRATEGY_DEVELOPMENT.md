@@ -58,7 +58,7 @@ sequenceDiagram
     participant RO as RefereeOverride<br/>engine/referee_override.py
     participant P as Partitioner<br/>e.g. strategy/pendulum.py
     participant T as Tactic<br/>tactics/*.py
-    participant SK as Skills<br/>skills/src/
+    participant SK as Skills<br/>skills/
     participant RC as robot controller
 
     SR->>AS: step() (side.strategy, after the frame is refined)
@@ -388,7 +388,7 @@ whoever runs it.
 - **`MatchLog`** (`engine/match_log.py`) — one JSONL per match. `Strategy` records an
   intention row per slot-assignment *change*; call `ctx.match_log.trace(tick, sim_time, key,
   value)` yourself from a `Tactic` or skill (guard with `if ctx.match_log is not None:`; it's
-  `None` on tournament/CI runs, so traces can stay in). Examples: `skills/src/go_to_ball.py`,
+  `None` on tournament/CI runs, so traces can stay in). Examples: `skills/go_to_ball.py`,
   `tactics/give_and_go.py`. Enable with `match_log_path=` or `match.run_match(...,
   run_dir=...)`; read back with `load_jsonl(path)`. A run with a dashboard or a game log keeps one
   in memory too: a plain value traced under a key naming a robot (`ctx.trace(game, f"shoot[{rid}]",
@@ -428,7 +428,7 @@ whoever runs it.
   `diagnosis` (ball in goal / past a line, taker not closing on the ball, taker at the ball but
   not kicking). The tournament prints a STALLS section, and writes it to `summary.json`; a
   possession-pinned backstop flags what the watchdog misses.
-- **Sim noise** (`rsoccer_simulator/src/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
+- **Sim noise** (`rsoccer_simulator/Utils/sim_noise.py`, `--sim-noise JSON`) — seeded
   command latency per robot, kick speed and direction noise (a per-robot offset plus
   kick-to-kick spread), two-phase ball friction (slide after a kick, then roll), per-robot
   speed and braking limits applied to the commands the sim acts on (hardware caps, the 4 m/s^2 command cap, no per-match acceleration draw,

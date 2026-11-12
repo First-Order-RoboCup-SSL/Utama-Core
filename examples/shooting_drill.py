@@ -84,18 +84,18 @@ from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
 from utama_core.shared.pass_and_score_geometry import has_ball, oriented_towards
-from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
+from utama_core.skills.utils.move_utils import kick, turn_on_spot
 from utama_core.tactics.defense import DefenseTactic
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
-from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.controllers.common.robot_profile import (
     load_profile as robot_profile,
 )
-from utama_core.team_controller.src.controllers.real.find_robots import (
+from utama_core.team_controller.controllers.real.find_robots import (
     confirm as confirm_lids,
 )
 

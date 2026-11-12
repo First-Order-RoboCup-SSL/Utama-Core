@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 
 REFERENCE_DIR = Path(__file__).with_name("reference")
 DEFAULT_PLAYERS = REFERENCE_DIR / "players.json"

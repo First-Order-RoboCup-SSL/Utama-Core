@@ -16,10 +16,10 @@ so the module is skipped when it is missing; the planner then uses the numba ker
 import numpy as np
 import pytest
 
-_fastpathplanner = pytest.importorskip("utama_core.motion_planning.src.fastpathplanning._fastpathplanner")
+_fastpathplanner = pytest.importorskip("utama_core.motion_planning.fastpathplanning._fastpathplanner")
 
-from utama_core.motion_planning.src.fastpathplanning import numba_kernels  # noqa: E402
-from utama_core.motion_planning.src.fastpathplanning.planner import (  # noqa: E402
+from utama_core.motion_planning.fastpathplanning import numba_kernels  # noqa: E402
+from utama_core.motion_planning.fastpathplanning.planner import (  # noqa: E402
     HAS_CPP,
     FastPathPlanner,
 )
@@ -135,7 +135,7 @@ def test_cpp_check_segment_and_smooth_path():
     )
 
     # Reference Python (with HAS_CPP=False)
-    import utama_core.motion_planning.src.fastpathplanning.planner as planner_mod
+    import utama_core.motion_planning.fastpathplanning.planner as planner_mod
 
     planner_mod.HAS_CPP = False
     try:

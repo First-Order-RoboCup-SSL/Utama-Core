@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import (
+from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.Utils.sim_noise import (
     CommandDelay,
     KickSpeedNoise,
     SimNoise,

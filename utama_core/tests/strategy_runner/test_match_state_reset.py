@@ -4,7 +4,7 @@ must not inherit the last match's per-robot hysteresis."""
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.run.strategy_runner import StrategyRunner
 from utama_core.shared import pass_and_score_geometry
-from utama_core.skills.src import shielding
+from utama_core.skills import shielding
 from utama_core.strategy.catalog import builder
 from utama_core.tests.shared.test_pass_and_score_geometry import _visual_game
 from utama_core.tests.skills.test_shielding import _shielding

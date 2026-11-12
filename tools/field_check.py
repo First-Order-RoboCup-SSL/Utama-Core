@@ -29,7 +29,7 @@ for p in (REPO_ROOT, REPO_ROOT / "tools"):
 from vision_check import _socket, listen
 
 from utama_core.config.settings import MULTICAST_GROUP, PORT, VISION_PORT
-from utama_core.team_controller.src.controllers.real import find_robots
+from utama_core.team_controller.controllers.real import find_robots
 
 VISION_S = 2.0
 MIN_CAMERA_HZ = 30  # a camera sending fewer packets per second than this is struggling

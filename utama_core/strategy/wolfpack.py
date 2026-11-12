@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy as KernelSchedulerStrategy
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.strategy.pickers import fixed_ratio_picker
 from utama_core.tactics.give_and_go import GiveAndGoTactic
 from utama_core.tactics.press_and_contain import PressAndContainTactic

@@ -33,7 +33,7 @@ from utama_core.entities.game.field import Field
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _keeps_off_ball,
 )

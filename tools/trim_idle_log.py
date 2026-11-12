@@ -36,7 +36,7 @@ from utama_core.replay.game_log_writer import (  # noqa: E402
     VISION_2014,
 )
 from utama_core.replay.ssl_log import read_records  # noqa: E402
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (  # noqa: E402
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import (  # noqa: E402
     Referee,
 )
 

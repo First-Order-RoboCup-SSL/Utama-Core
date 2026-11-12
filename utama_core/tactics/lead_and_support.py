@@ -47,9 +47,9 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import move_for_a_shot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader

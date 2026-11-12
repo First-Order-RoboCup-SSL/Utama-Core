@@ -3,8 +3,8 @@
 import pytest
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.motion_planning.src.pid.configs import TranslationPIDConfigs
-from utama_core.motion_planning.src.pid.pid import TwoDPID
+from utama_core.motion_planning.pid.configs import TranslationPIDConfigs
+from utama_core.motion_planning.pid.pid import TwoDPID
 
 _ORIGIN = Vector2D(0.0, 0.0)
 _KP = 1.8

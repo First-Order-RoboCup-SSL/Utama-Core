@@ -9,11 +9,11 @@ import math
 import pytest
 
 from utama_core.entities.data.command import RobotResponse
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     RobotProfile,
     save_profile,
 )
-from utama_core.team_controller.src.controllers.real import find_robots as fr
+from utama_core.team_controller.controllers.real import find_robots as fr
 
 
 class _Field:

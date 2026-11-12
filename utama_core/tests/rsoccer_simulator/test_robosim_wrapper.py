@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
+from utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper import (
     RSimSubprocessWrapper,
 )
 
@@ -131,9 +131,7 @@ def test_reused_sim_plays_exactly_as_a_fresh_one(monkeypatch):
     """With reuse on, closing a sim parks its subprocess and the next `acquire` hands it back with a
     new native world: a play after a different, messy play (ball kicked away, robots fast and
     turned, dribblers spinning) must be bit-identical to the same play in a fresh subprocess."""
-    from utama_core.rsoccer_simulator.src.Simulators.robosim import (
-        robosim_wrapper as rw,
-    )
+    from utama_core.rsoccer_simulator.Simulators.robosim import robosim_wrapper as rw
 
     monkeypatch.setattr(rw, "_reuse_sims", True)
     monkeypatch.setattr(rw, "_idle_sims", {})
@@ -162,9 +160,7 @@ def test_reused_sim_plays_exactly_as_a_fresh_one(monkeypatch):
 
 def test_sim_whose_request_failed_is_not_parked_for_reuse(monkeypatch):
     """A request that failed part-way may have left the pipe out of step, so that sim is terminated."""
-    from utama_core.rsoccer_simulator.src.Simulators.robosim import (
-        robosim_wrapper as rw,
-    )
+    from utama_core.rsoccer_simulator.Simulators.robosim import robosim_wrapper as rw
 
     monkeypatch.setattr(rw, "_reuse_sims", True)
     monkeypatch.setattr(rw, "_idle_sims", {})

@@ -37,11 +37,11 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
 )
 from utama_core.shared.tolerance import Sticky
-from utama_core.skills.src.block import block_attacker
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.kick_upfield import kick_upfield
-from utama_core.skills.src.man_mark import man_mark
+from utama_core.skills.block import block_attacker
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.kick_upfield import kick_upfield
+from utama_core.skills.man_mark import man_mark
 
 _PRESS_ENTER_RANGE = 1.4  # metres — ball must be within this of an enemy to start pressing
 _PRESS_EXIT_RANGE = 1.7  # metres — enemy must clear past this to release pressing

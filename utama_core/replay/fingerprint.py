@@ -66,11 +66,11 @@ RUNNER_SIDE = (
     "utama_core.engine.tactic",
 )
 # Part of every player though no strategy imports it: where a side's motion controller comes from.
-PLAYER_ROOTS = ("utama_core.motion_planning.src.common.control_schemes",)
+PLAYER_ROOTS = ("utama_core.motion_planning.common.control_schemes",)
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.
-SUBPROCESS_SCRIPTS = ("utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_subprocess",)
+SUBPROCESS_SCRIPTS = ("utama_core.rsoccer_simulator.Simulators.robosim.robosim_subprocess",)
 
 # Environment variables that change play: UTAMA_EXACT_MATH (`config/settings.py`) and the
 # thread/JIT knobs of numba and the BLAS numpy links against.
@@ -169,7 +169,7 @@ class CodeGraph:
             mod = _Module(name, base.with_suffix(".py"), is_package=False)
         elif (base / "__init__.py").is_file():
             mod = _Module(name, base / "__init__.py", is_package=True)
-        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/skills/src
+        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/skills
             return _Module(name, None, is_package=True)
         else:
             return None

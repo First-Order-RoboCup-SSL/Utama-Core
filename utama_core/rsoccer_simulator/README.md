@@ -87,7 +87,7 @@ def teleport_robot(
 
 Functions used to draw points/lines/polygons of interest. Used for visualisation and debugging. Note that these are also sent together with robot commands ONLY at the end of the frame.
 
-For the list of available colours, see `rsoccer_simulator/src/Render/utils.py`.
+For the list of available colours, see `rsoccer_simulator/Render/utils.py`.
 
 #### Draw Point
 

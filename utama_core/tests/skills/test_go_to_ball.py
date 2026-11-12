@@ -8,9 +8,9 @@ from utama_core.config.enums import Mode
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
 from utama_core.shared.pass_and_score_geometry import enemy_defense_area_hold_point
-from utama_core.skills.src.go_to_ball import (
+from utama_core.skills.go_to_ball import (
     _APPROACH_OVERSHOOT_M,
     _DRIBBLE_OVERSHOOT_M,
     _RACE_ENEMY_RANGE_M,
@@ -127,7 +127,7 @@ def test_chases_ball_directly_when_ball_is_not_in_enemy_defense_area():
 @pytest.mark.parametrize("robot_xy", [(0.0, 0.0), (2.0, 1.0), (1.0, -1.5)])
 def test_approaches_facing_the_ball(monkeypatch, robot_xy):
     """The kicker and dribbler are on the front: the robot faces the ball on its way in."""
-    from utama_core.skills.src import go_to_ball as module
+    from utama_core.skills import go_to_ball as module
 
     captured = {}
     monkeypatch.setattr(module, "move", lambda **kwargs: captured.update(kwargs))
@@ -139,7 +139,7 @@ def test_approaches_facing_the_ball(monkeypatch, robot_xy):
 
 
 def _race_sprints(robot_x: float, enemy_x: float, monkeypatch, mode=Mode.RSIM, enemy_has_ball=False) -> bool:
-    from utama_core.skills.src import go_to_ball as module
+    from utama_core.skills import go_to_ball as module
 
     enemy = _robot(0, enemy_x, 0.0, False)
     enemy = dataclasses.replace(enemy, has_ball=enemy_has_ball)

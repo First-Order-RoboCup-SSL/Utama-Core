@@ -93,7 +93,7 @@ FILES = {
     "utama_core/skills/aim.py": "def aim():\n    return 0\n",
     "utama_core/tactics/defend.py": "class DefendTactic:\n    pass\n",
     "utama_core/tactics/unused.py": 'class UnusedTactic:\n    pass\n\n\nif __name__ == "__main__":\n    print(1)\n',
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py": "import json\n",
+    "utama_core/rsoccer_simulator/Simulators/robosim/robosim_subprocess.py": "import json\n",
 }
 CONFIGS = ["a", "b", "c"]
 
@@ -104,7 +104,7 @@ def repo(tmp_path: Path) -> Path:
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-    for pkg in ("utama_core/rsoccer_simulator", "utama_core/rsoccer_simulator/src"):
+    for pkg in ("utama_core/rsoccer_simulator", "utama_core/rsoccer_simulator"):
         (tmp_path / pkg / "__init__.py").write_text("")
     return tmp_path
 
@@ -238,7 +238,7 @@ def test_a_compiled_planner_counts_for_the_players_that_load_it_and_not_the_base
 
 
 def test_the_rsim_subprocess_script_and_data_files_are_in_the_base(repo):
-    rel = "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py"
+    rel = "utama_core/rsoccer_simulator/Simulators/robosim/robosim_subprocess.py"
     assert _changed_after(repo, rel, "import json", "import json, struct") == {"base"}
     assert _changed_after(repo, "utama_core/profiles/sim.yaml", "speed: 1", "speed: 2") == {"base"}
 
@@ -328,7 +328,7 @@ def test_every_tactic_a_strategy_builds_is_in_its_closure(graph):
 # them isn't affected by them, and the one that does has them in its own closure.
 _RUNNER_ONLY_RESETS = {
     "utama_core.shared.pass_and_score_geometry",
-    "utama_core.skills.src.shielding",
+    "utama_core.skills.shielding",
     "utama_core.strategy.pickers",
 }
 
@@ -356,7 +356,7 @@ _RUNNER_REACHES_INTO_PLAYER_SIDE = {
         "utama_core.skills",  # reset
         "utama_core.strategy",  # reset
     },
-    "utama_core.team_controller.src.controllers.real.real_robot_controller": {"utama_core.skills"},  # real only
+    "utama_core.team_controller.controllers.real.real_robot_controller": {"utama_core.skills"},  # real only
     "utama_core.tests.common.abstract_test_manager": {"utama_core.engine"},  # a type
 }
 
@@ -412,14 +412,14 @@ AUDIT = {
         "utama_core.bundle.archive",
         "utama_core.bundle.strategy_file",
         "utama_core.config.settings",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+        "utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper",
     ],
     "dynamic import": ["utama_core.strategy.catalog"],
     "module-level state": [
-        "utama_core.motion_planning.src.fastpathplanning.planner",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+        "utama_core.motion_planning.fastpathplanning.planner",
+        "utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper",
         "utama_core.shared.pass_and_score_geometry",
-        "utama_core.skills.src.shielding",
+        "utama_core.skills.shielding",
         "utama_core.strategy.pickers",
     ],
     "opens files": [
@@ -433,12 +433,12 @@ AUDIT = {
         "utama_core.replay.game_log_writer",
         "utama_core.replay.replay_writer",
         "utama_core.strategy.catalog",
-        "utama_core.team_controller.src.controllers.common.robot_profile",
+        "utama_core.team_controller.controllers.common.robot_profile",
     ],
     "subprocess": [
         "utama_core.bundle.strategy_file",
         "utama_core.replay.game_log_writer",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+        "utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper",
     ],
 }
 

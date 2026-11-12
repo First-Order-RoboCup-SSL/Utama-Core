@@ -83,7 +83,7 @@ def test_the_players_load_and_the_core_is_in_the_catalog():
 
 def test_the_reference_world_and_robots_make_one_valid_sim_noise():
     from tools.evaluation.sim_settings import reference_noise
-    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+    from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 
     noise = SimNoise.from_dict(reference_noise(seed=3))
     assert noise.seed == 3
@@ -103,7 +103,7 @@ def test_every_reference_setting_names_its_source():
 def test_the_reference_sim_does_not_draw_robot_motor_limits():
     """Acceleration is the command cap; a per-match draw would be a robot capability as noise."""
     from tools.evaluation.sim_settings import reference_noise
-    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+    from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 
     assert not SimNoise.from_dict(reference_noise()).motion_limits
 

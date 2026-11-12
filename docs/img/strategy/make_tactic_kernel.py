@@ -34,7 +34,7 @@ NAMES = [
     "utama_core/engine/match_log.py",
     "utama_core/strategy/pendulum.py",
     "utama_core/tactics",
-    "utama_core/skills/src",
+    "utama_core/skills",
 ]
 
 d = Diagram(
@@ -140,7 +140,7 @@ d.box(
     10,
     46,
     12,
-    "Skills (skills/src/)",
+    "Skills (skills/)",
     "go_to_ball, go_to_point, ... each\nreturns a RobotCommand",
     kind="motion",
 )

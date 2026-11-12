@@ -4,14 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utama_core.team_controller.src.controllers.real.real_robot_controller import (
+from utama_core.team_controller.controllers.real.real_robot_controller import (
     DRIBBLER_DRAIN_RATE,
     DRIBBLER_MAX_ON_SECONDS,
     DRIBBLER_RESUME_SECONDS,
     RealRobotController,
 )
 
-_MONOTONIC = "utama_core.team_controller.src.controllers.real.real_robot_controller.time.monotonic"
+_MONOTONIC = "utama_core.team_controller.controllers.real.real_robot_controller.time.monotonic"
 
 
 @pytest.fixture

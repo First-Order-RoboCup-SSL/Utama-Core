@@ -73,9 +73,9 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     segment_blocked,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import move
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 # Guidance point 3: a naive "count enemies on each half of the field" read
@@ -140,7 +140,7 @@ _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 
 # Widening `_ARRIVAL_SPEED_THRESHOLD` (above) was not sufficient on its own:
 # a robot converged on a static target still never truly settles under this
 # codebase's PID translation controller (`TwoDPID._calculate` in
-# `motion_planning/src/pid/pid.py` — proportional-only near the target, no
+# `motion_planning/pid/pid.py` — proportional-only near the target, no
 # terminal deadband above its 3mm snap-to-zero), so speed keeps oscillating
 # in a small band straddling the threshold indefinitely rather than
 # converging below it. Live-traced on `shadow_switch_vs_zone_fluid`

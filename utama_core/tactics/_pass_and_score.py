@@ -46,13 +46,8 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import (
-    empty_command,
-    kick,
-    move,
-    turn_on_spot,
-)
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 
 _MIN_SETUP_CLEARANCE = 0.35  # metres — must be > FPP's SAFE_OBSTACLES_RADIUS (0.26 m)
 _SETUP_SAMPLE_COUNT = 48

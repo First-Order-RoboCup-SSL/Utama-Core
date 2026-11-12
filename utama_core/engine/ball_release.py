@@ -23,7 +23,7 @@ from utama_core.shared.pass_and_score_geometry import (
     reaches_own_goal,
     release_heading,
 )
-from utama_core.skills.src.utils.move_utils import turn_on_spot
+from utama_core.skills.utils.move_utils import turn_on_spot
 
 if TYPE_CHECKING:
     from utama_core.engine.context import TickContext

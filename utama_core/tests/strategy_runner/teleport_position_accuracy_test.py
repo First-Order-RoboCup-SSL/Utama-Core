@@ -11,7 +11,7 @@ from utama_core.entities.game import Game
 from utama_core.entities.game.field import FieldBounds
 from utama_core.run import StrategyRunner
 from utama_core.strategy.catalog import builder
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,

@@ -33,8 +33,8 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.skills.src.utils.move_utils import empty_command
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
+from utama_core.skills.utils.move_utils import empty_command
 
 # ---------------------------------------------------------------------------
 # Helpers

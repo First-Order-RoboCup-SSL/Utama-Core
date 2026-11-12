@@ -35,7 +35,7 @@ caps are 0.3 m/s and 0.6 rad/s on real robots (balls are lost turning faster).
 ## Things not to chase on the day
 
 - Kick strength varies (battery, charge, many causes). The kicker is fixed power and holds its
-  charge ~30 s; `team_controller/src/controllers/real/kicker_charge.py` keeps it up in play.
+  charge ~30 s; `team_controller/controllers/real/kicker_charge.py` keeps it up in play.
 - Kick bend comes from the ball's offset on the dribbler (fitted per radio).
 - The sim does not model a robot's shortfalls: robot capability is assumed league-level in sim,
   and real robots' gaps are compensated in the control layer, not in sim settings.

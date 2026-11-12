@@ -102,13 +102,11 @@ from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_tracked_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_tracked_pb2 import (
     TrackerWrapperPacket,
 )
 

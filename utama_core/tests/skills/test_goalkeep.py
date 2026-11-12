@@ -4,11 +4,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import utama_core.skills.src.goalkeep as gk
-import utama_core.skills.src.kick_upfield as ku
+import utama_core.skills.goalkeep as gk
+import utama_core.skills.kick_upfield as ku
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
-from utama_core.skills.src.utils.defense_utils import (
+from utama_core.skills.utils.defense_utils import (
     intersection_with_x_line,
     single_defender_stop_y,
 )

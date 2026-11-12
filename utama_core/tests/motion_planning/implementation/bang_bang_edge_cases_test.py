@@ -1,5 +1,5 @@
 """Boundary-condition and randomized-invariant sweep over `BangBang1D`/
-`Trajectory2D` (`utama_core/motion_planning/src/trajsampling/bang_bang.py`).
+`Trajectory2D` (`utama_core/motion_planning/trajsampling/bang_bang.py`).
 
 `trajsampling_correctness_test.py` (read before writing this file) already
 covers: rejecting non-positive `v_max`/`a_max`; endpoint/kinematic invariants
@@ -57,10 +57,7 @@ import random
 
 import pytest
 
-from utama_core.motion_planning.src.trajsampling.bang_bang import (
-    BangBang1D,
-    Trajectory2D,
-)
+from utama_core.motion_planning.trajsampling.bang_bang import BangBang1D, Trajectory2D
 
 _N_SEEDS = 200
 _END_TOL = 1e-6

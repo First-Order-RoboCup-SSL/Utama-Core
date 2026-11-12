@@ -22,10 +22,8 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.fastpathplanning.config import (
-    fastpathplanningconfig,
-)
-from utama_core.skills.src.score_goal import (  # noqa: F401  (re-exported)
+from utama_core.motion_planning.fastpathplanning.config import fastpathplanningconfig
+from utama_core.skills.score_goal import (  # noqa: F401  (re-exported)
     _find_best_shot,
     is_goal_blocked,
 )
@@ -794,7 +792,7 @@ def find_best_shot(
     """Thin passthrough to Core's own shadow/ray-casting shot finder.
 
     `prev_best_shot_y`/`switch_margin`: optional hysteresis, forwarded
-    unchanged — see `_find_best_shot`'s docstring in `skills/src/score_goal.py`.
+    unchanged — see `_find_best_shot`'s docstring in `skills/score_goal.py`.
     Both default to no-hysteresis (today's exact behaviour); a caller opts in
     by passing its own previously-chosen shot y (typically from its `mem`).
     """

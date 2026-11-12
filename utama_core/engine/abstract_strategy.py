@@ -30,13 +30,13 @@ from utama_core.global_utils.math_utils import (
     assert_contains,
     assert_valid_bounding_box,
 )
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.rsoccer_simulator.src.ssl.ssl_gym_base import SSLBaseEnv
-from utama_core.skills.src.utils.move_utils import empty_command
-from utama_core.team_controller.src.controllers.common.robot_controller_abstract import (
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.rsoccer_simulator.ssl.ssl_gym_base import SSLBaseEnv
+from utama_core.skills.utils.move_utils import empty_command
+from utama_core.team_controller.controllers.common.robot_controller_abstract import (
     AbstractRobotController,
 )
-from utama_core.team_controller.src.controllers.real.kicker_charge import KickerCharge
+from utama_core.team_controller.controllers.real.kicker_charge import KickerCharge
 
 
 @dataclass(slots=True, frozen=True)

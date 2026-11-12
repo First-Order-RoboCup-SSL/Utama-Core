@@ -29,12 +29,12 @@ NAMES = [
     "vision_rng",
     "utama_core/run/strategy_runner.py",
     "utama_core/custom_referee/custom_referee.py",
-    "utama_core/team_controller/src/controllers/sim/rsim_controller.py",
-    "utama_core/rsoccer_simulator/src/ssl/envs/standard_ssl.py",
-    "utama_core/rsoccer_simulator/src/Utils/sim_noise.py",
-    "utama_core/rsoccer_simulator/src/Simulators/rsim.py",
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_wrapper.py",
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py",
+    "utama_core/team_controller/controllers/sim/rsim_controller.py",
+    "utama_core/rsoccer_simulator/ssl/envs/standard_ssl.py",
+    "utama_core/rsoccer_simulator/Utils/sim_noise.py",
+    "utama_core/rsoccer_simulator/Simulators/rsim.py",
+    "utama_core/rsoccer_simulator/Simulators/robosim/robosim_wrapper.py",
+    "utama_core/rsoccer_simulator/Simulators/robosim/robosim_subprocess.py",
     "vendor/rSim/src/robosim",
 ]
 

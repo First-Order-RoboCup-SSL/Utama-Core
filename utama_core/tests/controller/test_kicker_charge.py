@@ -8,7 +8,7 @@ import pytest
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.team_controller.src.controllers.real.kicker_charge import (
+from utama_core.team_controller.controllers.real.kicker_charge import (
     CLEAR_M,
     KEEP_S,
     KickerCharge,

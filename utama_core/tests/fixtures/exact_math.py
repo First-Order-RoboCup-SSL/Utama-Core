@@ -9,8 +9,8 @@ bit-exact behaviour select it in-process whatever the environment says.
 
 from utama_core.data_processing.refiners.filters import kalman
 from utama_core.global_utils import math_utils
-from utama_core.motion_planning.src.fastpathplanning import planner
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning import planner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 
 SWITCHES = [
     (math_utils, "distance", math_utils._distance_numpy, math_utils._distance_fast),

@@ -4,7 +4,7 @@ Ported from `utama_strategy.examples.defense_strategy.DefenceStrategy`. That
 BT strategy was almost entirely role-assignment plumbing (`SetRoles` pinning
 robot 4 as goalkeeper, `execute_default_action` dispatching by `Role`) around
 a single already-self-contained skill function,
-`utama_core.skills.src.defend_parameter.defend_parameter` — the actual
+`utama_core.skills.defend_parameter.defend_parameter` — the actual
 positioning logic (choosing which post to cover, shadowing the shot line,
 picking sides dynamically for a 2-defender team) already lives in Core and
 needed no porting itself. This tactic is that same dispatch, expressed as a
@@ -58,10 +58,10 @@ from utama_core.shared.pass_and_score_geometry import (
     own_defense_area_exit_point,
     upfield_heading,
 )
-from utama_core.skills.src.defend_parameter import defend_parameter
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
+from utama_core.skills.defend_parameter import defend_parameter
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, turn_on_spot
 
 _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
 

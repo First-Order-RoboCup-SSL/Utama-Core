@@ -6,15 +6,15 @@ import numpy as np
 from utama_core.entities.data.vector import Vector2D
 
 # Stub out heavy simulator dependency before importing the module under test
-module = types.ModuleType("rsoccer_simulator.src.ssl.envs.standard_ssl")
+module = types.ModuleType("rsoccer_simulator.ssl.envs.standard_ssl")
 module.SSLStandardEnv = object
 sys.modules.setdefault("rsoccer_simulator", types.ModuleType("rsoccer_simulator"))
-sys.modules.setdefault("rsoccer_simulator.src", types.ModuleType("rsoccer_simulator.src"))
-sys.modules.setdefault("rsoccer_simulator.src.ssl", types.ModuleType("rsoccer_simulator.src.ssl"))
-sys.modules.setdefault("rsoccer_simulator.src.ssl.envs", types.ModuleType("rsoccer_simulator.src.ssl.envs"))
-sys.modules["rsoccer_simulator.src.ssl.envs.standard_ssl"] = module
+sys.modules.setdefault("rsoccer_simulator", types.ModuleType("rsoccer_simulator"))
+sys.modules.setdefault("rsoccer_simulator.ssl", types.ModuleType("rsoccer_simulator.ssl"))
+sys.modules.setdefault("rsoccer_simulator.ssl.envs", types.ModuleType("rsoccer_simulator.ssl.envs"))
+sys.modules["rsoccer_simulator.ssl.envs.standard_ssl"] = module
 
-import utama_core.skills.src.score_goal as sg  # noqa: E402
+import utama_core.skills.score_goal as sg  # noqa: E402
 
 
 def test_candidate_stays_within_boundary_gap(monkeypatch):

@@ -69,8 +69,8 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     oriented_towards,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.tactics._pass_and_score import FACE_GOAL_RAD
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic

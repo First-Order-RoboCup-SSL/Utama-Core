@@ -27,12 +27,12 @@ NAMES = [
     "_path_to",
     "RobotCommand",
     "StrategyRunner",
-    "utama_core/skills/src/utils/move_utils.py",
-    "utama_core/motion_planning/src/common/control_schemes.py",
-    "utama_core/motion_planning/src/controllers/fastpathplanning.py",
-    "utama_core/motion_planning/src/controllers/dwa_controller.py",
-    "utama_core/motion_planning/src/controllers/trajsampling.py",
-    "utama_core/motion_planning/src/pid/pid.py",
+    "utama_core/skills/utils/move_utils.py",
+    "utama_core/motion_planning/common/control_schemes.py",
+    "utama_core/motion_planning/controllers/fastpathplanning.py",
+    "utama_core/motion_planning/controllers/dwa_controller.py",
+    "utama_core/motion_planning/controllers/trajsampling.py",
+    "utama_core/motion_planning/pid/pid.py",
 ]
 
 d = Diagram(
@@ -51,7 +51,7 @@ d.box(
     34,
     28,
     "move()",
-    "skills/src/utils/move_utils.py\ncalls calculate(game, robot_id,\ntarget, orientation) once,\nthen rotates the velocity\ninto the robot frame",
+    "skills/utils/move_utils.py\ncalls calculate(game, robot_id,\ntarget, orientation) once,\nthen rotates the velocity\ninto the robot frame",
     kind="decision",
 )
 d.box(

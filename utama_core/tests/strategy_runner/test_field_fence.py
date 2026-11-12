@@ -23,7 +23,7 @@ from utama_core.run.field_fence import (
     inner_edges,
 )
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.controllers.common.robot_profile import RobotProfile
 
 LEFT_HALF = FieldBounds(top_left=(-2.0, 1.5), bottom_right=(0.0, -1.5))
 

@@ -80,13 +80,13 @@ from utama_core.tactics.scripted_moves import (
     Move,
     ScriptedMovesTactic,
 )
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     RobotProfile,
     load_profile,
     profile_path,
     save_profile,
 )
-from utama_core.team_controller.src.controllers.real import find_robots
+from utama_core.team_controller.controllers.real import find_robots
 
 _START = (
     "Robot near the middle of the camera's view facing +x, 0.8 m clear ahead and 0.6 m to its left, "

@@ -31,8 +31,8 @@ else
 fi
 
 for rel in \
-    utama_core/motion_planning/src/fastpathplanning \
-    utama_core/rsoccer_simulator/src/Simulators/robosim; do
+    utama_core/motion_planning/fastpathplanning \
+    utama_core/rsoccer_simulator/Simulators/robosim; do
     for src in "$main_root/$rel"/_*.cpython-*.so; do
         [ -e "$src" ] || continue
         name="$(basename "$src")"

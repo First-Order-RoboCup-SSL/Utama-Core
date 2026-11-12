@@ -42,7 +42,7 @@ import numpy as np
 
 from utama_core.replay.game_log_writer import RADIO_IN, RADIO_OUT, RUN_INFO
 from utama_core.replay.ssl_log import VISION_2014, read_records
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 

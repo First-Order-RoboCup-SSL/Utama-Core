@@ -18,7 +18,7 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.global_utils.math_utils import distance_point_to_segment
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 _BALL = (-3.747805, -2.497416)

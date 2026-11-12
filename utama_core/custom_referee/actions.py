@@ -40,13 +40,8 @@ from utama_core.shared.pass_and_score_geometry import (
     restart_support,
 )
 from utama_core.shared.tolerance import Sticky
-from utama_core.skills.src.man_mark import mark_target
-from utama_core.skills.src.utils.move_utils import (
-    empty_command,
-    kick,
-    move,
-    turn_on_spot,
-)
+from utama_core.skills.man_mark import mark_target
+from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 
 _WALL_FROM_BALL_M = BALL_KEEP_OUT_DISTANCE + 0.15
 _STOP_FORMATION_SPEED_MPS = 1.2  # under RobotStopSpeedRule's limit

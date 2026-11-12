@@ -92,12 +92,7 @@ from utama_core.shared.pass_and_score_geometry import (
     kick_bend,
     oriented_towards,
 )
-from utama_core.skills.src.utils.move_utils import (
-    empty_command,
-    kick,
-    move,
-    turn_on_spot,
-)
+from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 from utama_core.tactics.scripted_moves import ScriptedMovesTactic
 
 # ---------------------------------------------------------------------------

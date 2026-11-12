@@ -6,7 +6,7 @@ import socket
 import time
 from pathlib import Path
 
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 

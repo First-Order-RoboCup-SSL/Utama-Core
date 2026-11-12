@@ -9,11 +9,11 @@ from types import SimpleNamespace
 import pytest
 
 from utama_core.config.enums import Mode
-from utama_core.motion_planning.src.controllers.fastpathplanning import (
+from utama_core.motion_planning.controllers.fastpathplanning import (
     FastPathPlanningController,
 )
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.team_controller.src.controllers.common.robot_profile import RobotProfile
+from utama_core.team_controller.controllers.common.robot_profile import RobotProfile
 
 _PROFILES = {1: RobotProfile(kick_bend_deg_per_cm=4.7), 2: RobotProfile(), 3: RobotProfile(kick_bias_deg=2.3)}
 

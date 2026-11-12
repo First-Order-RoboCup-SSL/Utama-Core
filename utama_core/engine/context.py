@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 
 if TYPE_CHECKING:
     from utama_core.engine.match_log import MatchLog

@@ -54,7 +54,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.skills.utils.move_utils import move
 
 # (robot A's spot, robot B's spot) per leg, in turn; the first is where they start.
 START = (Vector2D(-0.8, 0.0), Vector2D(0.8, 0.0))

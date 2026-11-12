@@ -32,9 +32,7 @@ import numpy as np
 from utama_core.analysis.robot_calibration import FieldLog, _main_camera, tag_offsets
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.replay.ssl_log import REFEREE, read_records
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 CLOSE_M = 0.25
 CONTACT_M = 2 * ROBOT_RADIUS

@@ -40,7 +40,7 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
 from utama_core.tactics.switch_of_play import (
     _SETTLE_DEBOUNCE_TICKS,

@@ -18,7 +18,7 @@ from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, 
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.common.control_schemes import get_control_scheme
 from utama_core.replay.fingerprint import CodeGraph
 from utama_core.strategy import catalog
 
@@ -169,8 +169,8 @@ def test_what_a_file_adds_around_the_code_is_not_part_of_the_player(tmp_path, mo
     "member",
     [
         "utama_core/strategy/pendulum.py",
-        "utama_core/skills/src/go_to_ball.py",
-        "utama_core/motion_planning/src/common/control_schemes.py",
+        "utama_core/skills/go_to_ball.py",
+        "utama_core/motion_planning/common/control_schemes.py",
     ],
 )
 def test_a_file_of_different_code_is_a_different_player(tmp_path, monkeypatch, member):

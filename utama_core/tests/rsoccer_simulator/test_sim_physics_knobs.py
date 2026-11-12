@@ -11,9 +11,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from utama_core.rsoccer_simulator.src.Entities import Robot
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import (
+from utama_core.rsoccer_simulator.Entities import Robot
+from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.Utils.sim_noise import (
     KickAngleNoise,
     MotionLimits,
     SimDraw,

@@ -20,8 +20,8 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.skills.src.man_mark import MARK_STANDOFF, mark_target
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.skills.man_mark import MARK_STANDOFF, mark_target
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
 

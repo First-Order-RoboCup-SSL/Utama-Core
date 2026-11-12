@@ -22,8 +22,8 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.shared.pass_and_score_geometry import at_target, has_ball
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import empty_command, move
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command, move
 
 # Rectangle corners as fractions of field half-dimensions, in traversal order.
 _RECT_X_FRAC = 0.55

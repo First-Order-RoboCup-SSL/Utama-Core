@@ -24,7 +24,7 @@ from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, 
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.common.control_schemes import CONTROL_SCHEME_MAP
+from utama_core.motion_planning.common.control_schemes import CONTROL_SCHEME_MAP
 
 
 class _CommandRecorder:

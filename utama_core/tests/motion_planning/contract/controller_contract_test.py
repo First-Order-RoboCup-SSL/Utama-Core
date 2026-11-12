@@ -5,11 +5,11 @@ import inspect
 import pytest
 
 from utama_core.config.enums import Mode
-from utama_core.motion_planning.src.common.control_schemes import (
+from utama_core.motion_planning.common.control_schemes import (
     CONTROL_SCHEME_MAP,
     get_control_scheme,
 )
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 
 EXPECTED_CALCULATE_PARAMETERS = (
     "self",

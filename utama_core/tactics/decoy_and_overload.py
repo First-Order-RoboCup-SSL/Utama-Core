@@ -71,8 +71,8 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     segment_blocked,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 _LURE_DRAG_THRESHOLD = 0.8  # metres — marker must be pulled at least this far off the central shot lane's y

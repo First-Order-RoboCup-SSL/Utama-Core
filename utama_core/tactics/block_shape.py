@@ -50,8 +50,8 @@ from utama_core.shared.pass_and_score_geometry import (
     ball_in_own_defense_area,
     ball_is_loose,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
 
 # Depth of our own defense area (standard SSL penalty box front edge).
 _DEFENSE_AREA_DEPTH = 1.3

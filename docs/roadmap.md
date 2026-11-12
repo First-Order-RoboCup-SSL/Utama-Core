@@ -32,7 +32,7 @@ entry by its title, not its number.
 - **Tournament gate tooling** — `--strict`, `--stop-at-first-stall`, `--fuzz-restarts SEED` (`405693c`).
 - **Repo root cleanup** — first decided not to move root scripts (~45 inbound citations; `1f542fd`), then overturned 2026-10-02 because the root had grown to a dozen scripts and `tools/` already held the other tooling: the tournament drivers and `match` are now `tools/evaluation/`, and `debug_match` and `repro_from_replay` are in `tools/` (`elo` and `plot_elo` were removed 2026-10-10). `main.py`, `conftest.py` and `dashboard_server.py` stay at the root (pinned by pixi tasks, pytest and the README); `start_test_env.sh` was removed 2026-10-09 (unused; its three commands are in `docs/setup_external.md`).
 - **Strategy evaluation** — `tools/evaluation/evaluate.py` judges a candidate against the champion at the last release (a frozen `.strategy` file) in rounds of the same round robin of the core (`tools/evaluation/reference/players.json`) under seeded sim noise (the simulated world and robots from `world.json` and `robots.json`). Candidate and reference meet the same opponents under the same noise seed, decided on paired **goals** — P(candidate stronger) >= 0.99 better, <= 0.2 worse, undecided after 6 rounds (`analysis/ratings.py`); the match results store (`replays/match_results/`) never replays a fixture it already has, and `tools/evaluation/explain.py` draws where the robots stand. Until 2026-11-12 it used `opponents.json` with held-out opponents and a ledger (`replays/eval/ledger.jsonl`). The situation bench and `ladder.py` were built, used and then retired — the bench because its estimate is biased per strategy, so it could not rank (Spearman -0.09, `docs/sim_realism.md` "Evaluation infrastructure"). How to use it: `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy". `f48d4bad`, `1849d123`, `49f29ebf`. The screen was built and dropped on 2026-11-12 (see `docs/strategy_tools_plan.md`); `evaluate.py` is the only gate.
-- **Directional-tube enemy obstacle** — trajsample's moving-obstacle obstacle is a capsule expanded along the obstacle's velocity instead of an inflated circle (`utama_core/motion_planning/src/trajsampling/obstacles.py:132-149`) — `a1b8bdd6`.
+- **Directional-tube enemy obstacle** — trajsample's moving-obstacle obstacle is a capsule expanded along the obstacle's velocity instead of an inflated circle (`utama_core/motion_planning/trajsampling/obstacles.py:132-149`) — `a1b8bdd6`.
 - **FastPathPlanner `mirror_swap` stall** — the 0.52 m shortfall was the defense-area keep-out clamp, not a planner local minimum: back-row targets moved to |x| = 2.9 and the xfail went (`5f97199b`, in #141); #147 separately cleared the detour-side-flip corner case (`fastpathplanner_corner_test.py`) — `0ce4e2a2`. trajsample passes all 29 scenarios of the current table; fpp passed all 19 of the one before it.
 - **Geometric intention overlays in the Replay tab** — `MatchLog.trace_if_changed` overlays drawn by `dashboard/static/field_canvas.js` with its `_drawArrow` primitive: `shadow_and_mark.marks`, `give_and_go.shot_lane`/`pass_target`, `defense.shadow_post`, `block_shape.screen_line`, `press_and_contain.press`, `clear_ball.clear_target`, `dribble.segment_target`, `decoy_and_overload.lure`, `committed_robot_ids` — `c47f7549`, `b6e69b44`.
 - **Shared hysteresis helper** — `Sticky` in `shared/tolerance.py` (`fd87c7f6`), now used by `PassAndShootTactic`'s passer choice, `ClearBallTactic`'s target choice and `PressAndContainTactic`'s presser choice instead of per-site margins — `0ce4e2a2`. (`pickers.friendly_closer_to_ball` keeps its own tick-count hysteresis.)
@@ -115,7 +115,7 @@ entry by its title, not its number.
       carry) vs a short kinematic rollout that proves release before the carry limit and the
       keeper hold time. Leaning single-tick first; rollout only if something slips past.
     - *What counts as a valid response per tactic:* pass vs clear vs carry, and who decides
-      (the tactic, or a shared default like `skills/src/kick_upfield.py`).
+      (the tactic, or a shared default like `skills/kick_upfield.py`).
     - *Where the guarantee lives:* per-tactic branches (current approach), or an engine-level
       safety net that takes over a robot holding the ball too long — the latter is a new
       kernel concept, so it needs a concrete case the per-tactic approach can't handle.
@@ -207,7 +207,7 @@ entry by its title, not its number.
          (their placer running to the ball, ours clearing away from it along the same line) and
          touched; each planner saw the other, but 79 ms late and braking sideways at ~1.8 m/s².
          *Delay prediction done 2026-10-28:* `move()` plans from our robots' pose
-         `RobotParams.CONTROL_LATENCY_S` (real: 0.079 s) ahead (`motion_planning/src/common/pose_ahead.py`).
+         `RobotParams.CONTROL_LATENCY_S` (real: 0.079 s) ahead (`motion_planning/common/pose_ahead.py`).
          Checked in rsim given the calibrated robot (delay, gains and per-axis acceleration
          applied in the sim by a scratch harness): driving while turning, off-line drift 30 → 7 cm;
          motion benchmark collisions with the delay alone 7 → 3 (24 → 26 of 29 pass). With the

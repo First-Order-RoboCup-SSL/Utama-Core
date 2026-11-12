@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import utama_core.skills.src.man_mark as mm
+import utama_core.skills.man_mark as mm
 from utama_core.entities.data.vector import Vector2D, Vector3D
 
 

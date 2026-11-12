@@ -28,11 +28,11 @@ from utama_core.global_utils.math_utils import (
     find_intersection,
     rotate_vector,
 )
-from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+from utama_core.motion_planning.fastpathplanning.numba_kernels import (
     scan_collides_nb,
     scan_find_subgoal_nb,
 )
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _same_segment,
     _segment_key,
@@ -428,7 +428,7 @@ def test_obstacle_cache_and_array_prebuild():
     assert len(planner._obstacle_arrays_cache) == 1
     cached_obs, cached_arrs = planner._obstacle_arrays_cache[0]
     assert cached_obs is obstacles
-    from utama_core.motion_planning.src.fastpathplanning.numba_kernels import (
+    from utama_core.motion_planning.fastpathplanning.numba_kernels import (
         flatten_obstacles,
     )
 

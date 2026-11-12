@@ -5,7 +5,7 @@ import collections
 import importlib.util
 from pathlib import Path
 
-from utama_core.team_controller.src.controllers.real import find_robots as fr
+from utama_core.team_controller.controllers.real import find_robots as fr
 
 spec = importlib.util.spec_from_file_location(
     "field_check", Path(__file__).resolve().parents[3] / "tools" / "field_check.py"

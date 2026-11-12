@@ -17,9 +17,7 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OPPONENT_DEFENSE_AREA_KEEP_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.fastpathplanning.config import (
-    fastpathplanningconfig,
-)
+from utama_core.motion_planning.fastpathplanning.config import fastpathplanningconfig
 from utama_core.shared.pass_and_score_geometry import (
     _ACQUIRE_LATERAL_MAX,
     _DEFENSE_AREA_CLAMP_MARGIN,

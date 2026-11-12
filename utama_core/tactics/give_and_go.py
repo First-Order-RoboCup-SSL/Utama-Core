@@ -70,9 +70,9 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import _pass_exec, move_for_a_shot
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever

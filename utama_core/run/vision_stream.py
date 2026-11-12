@@ -36,7 +36,7 @@ class GameFrameRenderer:
     def __init__(self, field_dims, scale: float = 100.0) -> None:
         import pygame
 
-        from utama_core.rsoccer_simulator.src.Render import SSLRenderField
+        from utama_core.rsoccer_simulator.Render import SSLRenderField
 
         self._pygame = pygame
         self._field_renderer = SSLRenderField(
@@ -61,7 +61,7 @@ class GameFrameRenderer:
 
     def render(self, game_frame, friendly_color=None, enemy_color=None) -> np.ndarray:
         """Render a `GameFrame` into an RGB numpy array."""
-        from utama_core.rsoccer_simulator.src.Render import (
+        from utama_core.rsoccer_simulator.Render import (
             COLORS,
             RenderBall,
             RenderSSLRobot,

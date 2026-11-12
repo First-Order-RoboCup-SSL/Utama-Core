@@ -56,9 +56,9 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_clearance,
 )
 from utama_core.shared.tolerance import Sticky
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, turn_on_spot
 
 # Ball deeper than this (distance from our own goal line) counts as "danger
 # zone" for applicability. Slightly tighter than the whole own third

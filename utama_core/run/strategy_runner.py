@@ -48,17 +48,17 @@ from utama_core.global_utils.mapping_utils import (
     map_left_right_to_colors,
 )
 from utama_core.global_utils.math_utils import assert_valid_bounding_box
-from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
 from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.Utils.gaussian_noise import RsimGaussianNoise
+from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.field_check import LOOP_STALL_S, FieldCheck
 from utama_core.run.field_fence import FencedRobotController, inner_edges
@@ -75,9 +75,9 @@ from utama_core.run.sim_recovery import (  # noqa: F401; noqa: F401 (re-exported
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
 from utama_core.run.vision_stream_status import VisionStreamStatusMixin
 from utama_core.shared.pass_and_score_geometry import reset_possession_state
-from utama_core.skills.src.shielding import reset_shield_state
+from utama_core.skills.shielding import reset_shield_state
 from utama_core.strategy.pickers import reset_closer_to_ball_state
-from utama_core.team_controller.src.controllers import (
+from utama_core.team_controller.controllers import (
     AbstractSimController,
     GRSimController,
     GRSimRobotController,
@@ -86,7 +86,7 @@ from utama_core.team_controller.src.controllers import (
     RSimPVPManager,
     RSimRobotController,
 )
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     ProfiledRobotController,
     RobotProfile,
 )
@@ -281,7 +281,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             Defaults to 0.
         sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick and ball physics, motion limits
             and vision noise
-            (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
+            (`utama_core/rsoccer_simulator/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
             Recorded in a columnar replay. Defaults to None (off).
         filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.
         referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``

@@ -5,7 +5,7 @@ Commit c4ad99c ("Fix two bugs blocking trajsample from playing a real
 match"): `go_to_point()`'s signature declares `target_coords: Vector2D`, and
 `move()` forwards that value straight through to
 `motion_controller.calculate(..., target_pos=target_coords, ...)`
-unconverted (`utama_core/skills/src/utils/move_utils.py`). FPP/DWA happened
+unconverted (`utama_core/skills/utils/move_utils.py`). FPP/DWA happened
 to tolerate a raw tuple silently; trajsampling's stricter `target_pos.x`/`.y`
 attribute access crashed outright — the actual reason a full trajsample
 tournament scored 0-0 everywhere. Both of `BlockShapeTactic.tick()`'s
@@ -30,7 +30,7 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tactics.block_shape import BlockShapeTactic
 
 

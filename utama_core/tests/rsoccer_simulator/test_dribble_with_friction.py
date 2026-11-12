@@ -14,8 +14,8 @@ import math
 import numpy as np
 import pytest
 
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+from utama_core.rsoccer_simulator.ssl.envs import SSLStandardEnv
+from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
 
 TICK = 1 / 60
 FRONT = 0.1  # the ball's centre, this far in front of the robot's centre, is in the kicker

@@ -57,7 +57,7 @@ from utama_core.bundle.strategy_file import SUFFIX, frozen  # noqa: E402
 from utama_core.config.settings import REPLAY_BASE_PATH  # noqa: E402
 from utama_core.replay import match_results  # noqa: E402
 from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E402
+from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise  # noqa: E402
 from utama_core.strategy import catalog  # noqa: E402
 
 CONFIRM_SEED = 101  # the confirm stage's first seed: never one the screen plays

@@ -32,7 +32,7 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.game import GameFrame
 from utama_core.replay.replay_player import load_frames_in_range
-from utama_core.rsoccer_simulator.src.Render.utils import COLORS
+from utama_core.rsoccer_simulator.Render.utils import COLORS
 
 _FRIENDLY_COLOR = tuple(c / 255 for c in COLORS["YELLOW"])
 _ENEMY_COLOR = tuple(c / 255 for c in COLORS["BLUE"])

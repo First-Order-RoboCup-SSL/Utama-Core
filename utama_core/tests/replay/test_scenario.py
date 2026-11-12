@@ -19,7 +19,7 @@ from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import RobotState, Scenario, apply_scenario
 from utama_core.strategy.catalog import builder
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,

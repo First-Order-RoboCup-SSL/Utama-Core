@@ -9,11 +9,11 @@ from utama_core.config.enums import Mode
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.controllers.trajsampling import (
+from utama_core.motion_planning.controllers.trajsampling import (
     TrajectorySamplingController,
 )
-from utama_core.motion_planning.src.trajsampling.bang_bang import Trajectory2D
-from utama_core.motion_planning.src.trajsampling.planner import PlanResult
+from utama_core.motion_planning.trajsampling.bang_bang import Trajectory2D
+from utama_core.motion_planning.trajsampling.planner import PlanResult
 
 
 def _game_with_robot(p_xy, v_xy) -> Game:

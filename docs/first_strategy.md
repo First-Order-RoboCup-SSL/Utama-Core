@@ -54,9 +54,9 @@ from utama_core.engine.context import TickContext
 from utama_core.engine.strategy import Strategy
 from utama_core.engine.tactic import BaseTactic, TacticTag
 from utama_core.entities.data.vector import Vector2D
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.kick_upfield import kick_upfield
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.kick_upfield import kick_upfield
 
 LANES = [-2.0, -0.7, 0.7, 2.0]  # where the helpers stand across the pitch (y, metres)
 
@@ -185,4 +185,4 @@ You decide what to keep.
 - [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): how strategies and tactics really work.
   Read it when you want to write a proper tactic.
 - `utama_core/tactics/`: real tactics to copy from.
-- `utama_core/skills/src/`: every skill a robot can use.
+- `utama_core/skills/`: every skill a robot can use.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.motion_planning.src.controllers import (
+from utama_core.motion_planning.controllers import (
     DWAController,
     FastPathPlanningController,
     PIDController,

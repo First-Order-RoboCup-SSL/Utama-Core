@@ -70,7 +70,7 @@ from utama_core.engine.tactic import RobotId
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 
 # Commands requiring a legal-position override: every stoppage/restart except
 # HALT, which `Strategy.tick()`'s `is_paused` check already handles by issuing

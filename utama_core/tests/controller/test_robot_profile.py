@@ -10,7 +10,7 @@ import pytest
 from utama_core.config.enums import Mode
 from utama_core.entities.data.command import RobotCommand
 from utama_core.run.strategy_runner import StrategyRunner
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     _PUSH_TICKS,
     CARRY_SPEED,
     CARRY_TURN,

@@ -27,7 +27,7 @@ from utama_core.shared.pass_and_score_geometry import (
     receiver_of_rolling_ball,
     segment_blocked,
 )
-from utama_core.skills.src.man_mark import MARK_STANDOFF, mark_target
+from utama_core.skills.man_mark import MARK_STANDOFF, mark_target
 from utama_core.tactics.give_and_go import _relocate_target
 
 _ORIGINAL = RobotCommand(local_forward_vel=1, local_left_vel=0, angular_vel=0, kick=0, chip=0, dribble=0)

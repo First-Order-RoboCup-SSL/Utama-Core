@@ -4,9 +4,7 @@ from unittest import mock
 
 from utama_core.data_processing.receivers import referee_receiver
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 
 def _packet() -> bytes:

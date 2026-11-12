@@ -4,7 +4,7 @@ import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldBounds
 from utama_core.config.settings import OFF_PITCH_OFFSET
-from utama_core.team_controller.src.controllers.common.sim_controller_abstract import (
+from utama_core.team_controller.controllers.common.sim_controller_abstract import (
     AbstractSimController,
 )
 

@@ -16,10 +16,8 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
-from utama_core.motion_planning.src.trajsampling.planner import (
-    TrajectorySamplingPlanner,
-)
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
 from utama_core.shared.pass_and_score_geometry import (
     ball_in_enemy_defense_area,
     ball_in_own_defense_area,

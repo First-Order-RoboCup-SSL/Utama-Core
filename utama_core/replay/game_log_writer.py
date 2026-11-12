@@ -37,9 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 from utama_core.entities.data.referee import RefereeData
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 # The league's format, as `ssl_log` reads it (not imported from there: the runner would pull
 # in the whole reader).

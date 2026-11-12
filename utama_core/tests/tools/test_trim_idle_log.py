@@ -6,9 +6,7 @@ from pathlib import Path
 
 from tools.trim_idle_log import find_active_intervals, trim_log
 from utama_core.replay.game_log_writer import LOG_HEADER, REFEREE, RUN_INFO
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 
 def _write_synthetic_records(path: Path, records: list[tuple[int, int, bytes]]) -> None:

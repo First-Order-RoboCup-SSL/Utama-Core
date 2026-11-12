@@ -25,7 +25,7 @@ still more useful than giving up entirely). See `_find_subgoal`'s docstring.
 import numpy as np
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 
 
 def _planner() -> FastPathPlanner:

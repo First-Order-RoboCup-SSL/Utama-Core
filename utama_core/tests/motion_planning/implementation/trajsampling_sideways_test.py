@@ -7,13 +7,11 @@ import pytest
 
 from utama_core.config.enums import Mode
 from utama_core.config.robot_params import REAL_PARAMS, RSIM_PARAMS
-from utama_core.motion_planning.src.controllers.trajsampling import (
+from utama_core.motion_planning.controllers.trajsampling import (
     TrajectorySamplingController,
 )
-from utama_core.motion_planning.src.trajsampling.bang_bang import Trajectory2D
-from utama_core.motion_planning.src.trajsampling.planner import (
-    TrajectorySamplingPlanner,
-)
+from utama_core.motion_planning.trajsampling.bang_bang import Trajectory2D
+from utama_core.motion_planning.trajsampling.planner import TrajectorySamplingPlanner
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 A_MAX, A_SIDEWAYS = 4.0, 1.8

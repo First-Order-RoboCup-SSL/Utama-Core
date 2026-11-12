@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from utama_core.rsoccer_simulator.src.Render.overlay import (
+from utama_core.rsoccer_simulator.Render.overlay import (
     OverlayObject,
     OverlayType,
     RenderOverlay,
