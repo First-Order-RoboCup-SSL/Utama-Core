@@ -227,11 +227,10 @@
   function renderRoundMatches(round) {
     const rows = (round.results || [])
       .map((r) => {
-        const stalled = ((r.stats || {}).stall_events || []).length || r.possession_backstop;
         return (
           `<tr><td>${esc(r.display_a)} <span class="muted">(yellow)</span> vs ${esc(r.display_b)}</td>` +
           `<td class="num">${r.score_a} – ${r.score_b}</td>` +
-          `<td>${stalled ? '<span class="marker-kind marker-stall">stalled</span>' : ""}${r.reused ? '<span class="muted" style="font-size:.68rem;">from store</span>' : ""}</td>` +
+          `<td>${r.stalled ? '<span class="marker-kind marker-stall">stalled</span>' : ""}${r.reused ? '<span class="muted" style="font-size:.68rem;">from store</span>' : ""}</td>` +
           `<td>${replayButton(r.replay)}</td></tr>`
         );
       })

@@ -149,6 +149,10 @@ def tactics_of(path: Path) -> list[dict]:
     return list(found.values())
 
 
+def _stalled(result: dict) -> bool:
+    return bool((result.get("stats") or {}).get("stall_events") or result.get("possession_backstop"))
+
+
 def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]:
     out = []
     for _, summary in summaries:
@@ -159,7 +163,6 @@ def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]
             if name not in (a, b) or a == b or r.get("reused"):
                 continue
             mine, theirs, opponent = (r["score_a"], r["score_b"], b) if a == name else (r["score_b"], r["score_a"], a)
-            stats = r.get("stats") or {}
             out.append(
                 {
                     "opponent": opponent,
@@ -167,7 +170,7 @@ def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]
                     "seed": r.get("seed"),
                     "run_id": run_id,
                     "date": run_date(run_id),
-                    "stalled": bool(stats.get("stall_events") or r.get("possession_backstop")),
+                    "stalled": _stalled(r),
                     "replay": r.get("replay"),
                 }
             )
@@ -273,8 +276,8 @@ def load_strategies(base: Optional[Path] = None) -> dict:
 
 def load_runs(base: Optional[Path] = None) -> list[dict]:
     """Every run, newest first: an `evaluate.py` run is its report (if it finished) and its rounds;
-    an older round robin is one round. Names in results stay as recorded; the page shows them through
-    the same mapping as `/strategies` does on the server (`display` on each result)."""
+    an older round robin is one round. Names in results stay as recorded, with `display_a`/`display_b`
+    the catalog names; each result's `stats` is replaced by `stalled`."""
     base = Path(base or REPLAY_BASE_PATH)
     if not base.exists():
         return []
@@ -282,6 +285,9 @@ def load_runs(base: Optional[Path] = None) -> list[dict]:
     for path, summary in _summaries(base):
         for r in summary.get("results", []):
             r["display_a"], r["display_b"] = display_name(r["config_a"]), display_name(r["config_b"])
+            # the page needs only whether it stalled; the full stats are ~95% of the payload
+            r["stalled"] = _stalled(r)
+            r.pop("stats", None)
         run_dir = path.parent.parent if path.parent.name.startswith("round_") else path.parent
         run = runs.setdefault(
             run_dir.name, {"run_id": run_dir.name, "date": run_date(run_dir.name), "report": None, "rounds": []}

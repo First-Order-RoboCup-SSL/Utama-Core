@@ -30,7 +30,7 @@ def replays(tmp_path):
             "round": 1,
             "seed": 1,
             "results": [
-                _row("mirage", "wolfpack", 3, 1),
+                _row("mirage", "wolfpack", 3, 1, stats={"stall_events": [{"t": 40.0}], "shots": 9}),
                 _row(frozen, "mirage", 2, 0),
                 _row("wolfpack", "mirage", 1, 1, reused=True),  # played by an earlier run
             ],
@@ -116,7 +116,11 @@ def test_a_run_groups_its_rounds_and_its_report_without_the_bulky_stalls(replays
     assert run["run_id"] == "eval_20261112_100000" and run["reference"] == "pendulum"
     assert run["report"]["candidates"]["mirage"]["verdict"] == "dropped"
     assert "stalls" not in run["report"]["candidates"]["mirage"]
-    assert [r["display_a"] for r in run["rounds"][0]["results"]] == ["mirage", "pendulum", "wolfpack"]
+    results = run["rounds"][0]["results"]
+    assert [r["display_a"] for r in results] == ["mirage", "pendulum", "wolfpack"]
+    # only the stall flag of each match's stats is sent: the full stats are megabytes over all runs
+    assert [r["stalled"] for r in results] == [True, False, False]
+    assert not any("stats" in r for r in results)
 
 
 def test_an_older_round_robin_is_one_round_and_finds_side_tagged_replays(tmp_path):
