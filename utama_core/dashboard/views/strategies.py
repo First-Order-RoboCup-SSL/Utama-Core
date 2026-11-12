@@ -127,6 +127,20 @@ def _first_line(text: str) -> str:
     return text.strip().split("\n\n")[0].replace("\n", " ") if text else ""
 
 
+# a strategy docstring opens "`name` (until <date> `old`): what it does. The pickers only it uses are
+# here."; the page already shows the name and old names
+_NAME_PREFIX = re.compile(r"^`[^`]+`(\s*\(until [^)]*\))?:\s*")
+_BOILERPLATE = re.compile(r"\s*[^.]*\bpickers only it uses\b[^.]*\.?")
+
+
+def summary_of(doc: str) -> str:
+    """What the strategy does, in one line, without its name or the docstring's boilerplate."""
+    line = _BOILERPLATE.sub("", _NAME_PREFIX.sub("", _first_line(doc))).strip()
+    if not line.startswith("`"):  # a strategy's name stays lower case
+        line = line[:1].upper() + line[1:]
+    return line.replace("`", "")
+
+
 def tactics_of(path: Path) -> list[dict]:
     """The tactics a strategy file imports from `utama_core.tactics`, each with its module's first
     docstring paragraph. Read from source: importing would run the module."""
@@ -190,13 +204,20 @@ def _rate(row: dict, key: str, per: Optional[str]) -> Optional[float]:
     return value / n if n else None
 
 
+MIN_SIGNAL_MATCHES = 3  # fewer is an exhibition match, not a round: its averages say little
+
+
 def signals_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> Optional[dict]:
-    """Per-match signals in the newest round with a strategy table that `name` played in, beside the
-    mean of the other strategies there. A comparison with the field, not a ranking."""
-    for _, summary in summaries:
-        table = {display_name(k): v for k, v in (summary.get("strategies") or {}).items()}
-        if name not in table:
-            continue
+    """Per-match signals in the newest round with a strategy table that `name` played at least
+    `MIN_SIGNAL_MATCHES` in (else the newest it played in at all), beside the mean of the other
+    strategies there. A comparison with the field, not a ranking."""
+    tables = [
+        (summary, {display_name(k): v for k, v in (summary.get("strategies") or {}).items()})
+        for _, summary in summaries
+    ]
+    tables = [(summary, t) for summary, t in tables if name in t]
+    full = [(summary, t) for summary, t in tables if (t[name].get("matches") or 0) >= MIN_SIGNAL_MATCHES]
+    for summary, table in (full or tables)[:1]:
         others = [row for n, row in table.items() if n != name]
         rows = []
         for key, label, per in SIGNALS:
@@ -258,7 +279,7 @@ def load_strategies(base: Optional[Path] = None) -> dict:
             {
                 "name": name,
                 "role": "champion" if name == champion else "core" if name in core else "reserve",
-                "summary": _first_line(doc),
+                "summary": summary_of(doc),
                 "description": doc,
                 "file": str(path.relative_to(REPO)),
                 "old_names": sorted(old for old, new in catalog.RENAMED.items() if new == name),

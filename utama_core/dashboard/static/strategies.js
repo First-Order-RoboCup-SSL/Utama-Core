@@ -30,7 +30,7 @@
     return `<span class="${colour}" style="font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;">${label}</span>`;
   }
   function replayButton(path, atTime, label) {
-    if (!path) return `<span class="muted" style="font-size:.72rem;">no replay</span>`;
+    if (!path) return "";
     const at = atTime != null ? ` data-at="${atTime}"` : "";
     return `<button class="btn-accent view-replay-btn" data-path="${esc(path)}"${at}>${esc(label || "▶ replay")}</button>`;
   }
@@ -59,21 +59,22 @@
   }
 
   function renderTactics(s) {
-    if (!s.tactics.length) return '<div class="muted">No tactics imported from utama_core/tactics (it defines its own).</div>';
+    if (!s.tactics.length) return '<span class="muted">its own</span>';
+    // one chip per tactic; what it does and its file on hover
     return s.tactics
-      .map((t) => `<div class="ref-row"><span><b>${esc(t.name)}</b> <code class="muted">${esc(t.file)}</code></span></div>` +
-        (t.description ? `<div class="muted" style="font-size:.72rem; margin:0 0 4px 8px;">${esc(t.description)}</div>` : ""))
-      .join("");
+      .map((t) => `<span class="tactic-chip" title="${esc(t.description)}\n${esc(t.file)}">${esc(t.name.replace(/Tactic$/, ""))}</span>`)
+      .join(" ");
   }
 
   function renderVerdicts(s) {
     if (!s.verdicts.length) {
-      return `<div class="muted">Never evaluated. Run <code>pixi run evaluate ${esc(s.name)}</code> to see if it beats the champion.</div>`;
+      return `<span class="muted" title="pixi run evaluate ${esc(s.name)}">not evaluated</span>`;
     }
     return s.verdicts
       .map((v) =>
-        `<div class="ref-row"><span>${verdictBadge(v.verdict)} in the ${esc(v.decided_in)} after ${v.rounds} round(s) &middot; ` +
-        `${testLine(v)} &middot; vs ${esc(v.reference)}</span><span class="muted">${esc(v.date || v.run_id)}</span></div>`)
+        `<div title="decided in the ${esc(v.decided_in)} after ${v.rounds} round(s), n ${v.n}, p ${num(v.p, 3)}">` +
+        `${verdictBadge(v.verdict)} ${signed(v.mean)} ± ${num(v.se)} goals/match vs ${esc(v.reference)} ` +
+        `<span class="muted">${esc(v.date || v.run_id)}</span></div>`)
       .join("");
   }
 
@@ -95,25 +96,26 @@
         );
       })
       .join("");
+    const title = `${sig.matches} matches in ${sig.run_id}. More is not better: these explain how it plays (docs/signals.md).`;
     return (
-      `<div class="muted" style="font-size:.72rem; margin-bottom:4px;">Per match, ${sig.matches} matches in ${esc(sig.run_id)} ` +
-      `(${esc(sig.date || "")}). The tick and the grey number: the other strategies' average in that round. ` +
-      `More is not better: these explain how it plays (docs/signals.md).</div>` +
-      `<div class="signal-row muted" style="font-size:.66rem;"><span class="signal-label"></span><span></span><span class="num">this</span><span class="num">others</span></div>` +
+      `<div class="signal-row muted" style="font-size:.66rem;" title="${esc(title)}"><span class="signal-label">per match, ${esc(sig.date || "")}</span>` +
+      `<span></span><span class="num">this</span><span class="num">others</span></div>` +
       rows
     );
   }
 
   function renderMatchList(s) {
-    if (!s.matches.length) return '<div class="muted">No recorded matches.</div>';
-    const shown = showAllMatches ? s.matches : s.matches.slice(0, 30);
+    if (!s.matches.length) return '<div class="muted">None yet.</div>';
+    // the newest run's matches; older ones (older code, maybe older names) on request
+    const newest = s.matches[0].run_id;
+    const shown = showAllMatches ? s.matches : s.matches.filter((m) => m.run_id === newest);
     const rows = shown
       .map((m) => {
         const [f, a] = m.score;
         const res = f > a ? "check-ok" : f < a ? "check-fail" : "muted";
         return (
           `<tr><td>vs ${esc(m.opponent)}</td><td class="num ${res}">${f} – ${a}</td>` +
-          `<td class="num muted">${m.seed ?? "—"}</td><td class="muted">${esc(m.date || "")}</td>` +
+          `<td class="muted">${esc(m.date || "")}</td>` +
           `<td>${m.stalled ? '<span class="marker-kind marker-stall">stalled</span>' : ""}</td>` +
           `<td>${replayButton(m.replay)}</td></tr>`
         );
@@ -121,29 +123,30 @@
       .join("");
     const more =
       s.matches.length > shown.length
-        ? `<button class="show-all-matches" style="margin-top:6px;">Show all ${s.matches.length}</button>`
+        ? `<button class="show-all-matches" style="margin-top:6px;">Older matches (${s.matches.length - shown.length})</button>`
         : "";
     return (
-      `<table><thead><tr><th>Opponent</th><th class="num">Score</th><th class="num">Seed</th><th>Date</th><th></th><th></th></tr></thead>` +
-      `<tbody>${rows}</tbody></table>${more}`
+      `<table><tbody>` +
+      `${rows}</tbody></table>${more}`
     );
   }
 
   function renderStrategy(s) {
     const old = s.old_names.length ? ` <span class="muted" style="font-size:.72rem;">(was ${s.old_names.map(esc).join(", ")})</span>` : "";
-    const rest = s.description.split("\n\n").slice(1).join("\n\n");
+    const facts = [
+      ["Tactics", renderTactics(s)],
+      ["Verdict", renderVerdicts(s)],
+      ["Code", `<code class="muted" title="watch it: pixi run main ${esc(s.name)} wolfpack">${esc(s.file)}</code>`],
+    ];
     return `
-      <div class="stack" style="padding:12px 16px; gap:14px;">
+      <div class="stack" style="padding:12px 16px; gap:16px;">
         <div>
           <div class="row" style="justify-content:space-between; align-items:baseline;"><h2 style="margin:0;">${esc(s.name)}${old}</h2>${roleBadge(s.role)}</div>
           <div style="margin-top:4px;">${esc(s.summary)}</div>
-          ${rest ? `<div class="muted strategy-doc">${esc(rest)}</div>` : ""}
-          <div class="muted" style="font-size:.72rem; margin-top:4px;"><code>${esc(s.file)}</code> &middot; watch it: <code>pixi run main ${esc(s.name)} wolfpack</code></div>
         </div>
-        <div><div class="ref-section-title">Tactics it uses</div>${renderTactics(s)}</div>
-        <div><div class="ref-section-title">Verdicts (against the champion)</div>${renderVerdicts(s)}</div>
+        <div class="strategy-facts">${facts.map(([k, v]) => `<span class="ref-section-title">${k}</span><div>${v}</div>`).join("")}</div>
         <div><div class="ref-section-title">How it plays</div>${renderSignals(s)}</div>
-        <div><div class="ref-section-title">Matches (${s.matches.length})</div>${renderMatchList(s)}</div>
+        <div><div class="ref-section-title">Matches</div>${renderMatchList(s)}</div>
       </div>`;
   }
 

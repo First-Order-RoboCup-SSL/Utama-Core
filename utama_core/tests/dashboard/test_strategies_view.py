@@ -72,6 +72,22 @@ def test_frozen_files_and_old_names_show_as_the_catalog_name():
     assert view.display_name("high_press") == "wolfpack"
 
 
+def test_the_summary_drops_the_name_and_the_boilerplate():
+    doc = "`wolfpack` (until 2026-11-12 `high_press`): hunts the ball high up. The pickers only it uses are here."
+    assert view.summary_of(doc) == "Hunts the ball high up."
+    assert view.summary_of("Helpers shared by more than one strategy.") == "Helpers shared by more than one strategy."
+
+
+def test_signals_come_from_a_real_round_not_a_newer_exhibition_match(replays, monkeypatch):
+    monkeypatch.setattr(view, "MIN_SIGNAL_MATCHES", 2)  # mirage plays 2 in the fixture's round
+    _write(
+        replays / "tournament_20261113_000000" / "summary.json",
+        {"run_id": "tournament_20261113_000000", "results": [], "strategies": {"mirage": {"matches": 1, "shots": 99}}},
+    )
+    sig = _strategy(view.load_strategies(replays), "mirage")["signals"]
+    assert sig["run_id"] == "eval_20261112_100000/round_1"
+
+
 def test_every_catalog_strategy_is_listed_once_with_its_role(replays):
     payload = view.load_strategies(replays)
     names = [s["name"] for s in payload["strategies"]]
