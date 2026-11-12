@@ -2,7 +2,7 @@
 
 Modes:
   1. Tournament Results (Tier 1): packages summary.json, *.stats.json, *.timeline.json,
-     ledger entries, and reports while stripping large columnar *.npz arrays (reducing
+     and reports while stripping large columnar *.npz arrays (reducing
      ~1 GB to ~3 MB).
   2. Real Field Logs (Tier 2): compresses raw .log files to .log.gz and bundles them
      with calibration files and hardware configurations for sharing.
@@ -40,7 +40,7 @@ def collect_tournament_files(run_dir: Path, with_intentions: bool = False) -> li
 
     files: list[Path] = []
     # Core summaries and stats
-    for pattern in ("summary.json", "*.stats.json", "*.timeline.json", "*.md", "ledger.jsonl"):
+    for pattern in ("summary.json", "*.stats.json", "*.timeline.json", "*.md"):
         files.extend(sorted(run_dir.glob(pattern)))
 
     if with_intentions:

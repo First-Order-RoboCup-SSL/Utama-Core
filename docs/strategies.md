@@ -6,7 +6,7 @@ round-robin plays it, and the latest results.
 Run:
 
 - `pixi run python tools/evaluation/round_robin.py [name ...]` — full-match round-robin (two halves of 300 s of playing time) over every config (or the
-  named ones). Common flags: `--reuse`, `--strict`, `--pair A B` (one match); `--help` lists all.
+  named ones). Common flags: `--strict`, `--pair A B` (one match); `--help` lists all.
 - `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
   of the reference opponents (`tools/evaluation/reference/opponents.json`). The way to judge a strategy.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one

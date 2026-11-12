@@ -10,7 +10,27 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from tools.evaluation import round_robin as tournament
+
+
+class _Graph:
+    """Stands in for CodeGraph: the store needs only the fingerprints' names."""
+
+    def base_fingerprint(self, entries):
+        return "base"
+
+    def strategy_fingerprint(self, name):
+        return f"fp-{name}"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_fingerprints(monkeypatch, tmp_path):
+    """Every test here runs with a fake CodeGraph and its own replay folder, so the match results
+    store is written under tmp_path."""
+    monkeypatch.setattr(tournament, "CodeGraph", _Graph)
+    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
 
 
 def _stub_result(config_a_name, config_b_name, **_kwargs):
@@ -20,21 +40,18 @@ def _stub_result(config_a_name, config_b_name, **_kwargs):
 def test_fuzz_restarts_and_interval_parsed_and_passed_to_run_match(tmp_path, monkeypatch):
     calls = []
 
-    def _fake_run_match(
-        config_a_name, config_b_name, run_dir=None, control_scheme="fpp", fuzz_seed=None, fuzz_interval_s=(25.0, 45.0)
-    ):
+    def _fake_run_match(config_a_name, config_b_name, **kwargs):
         calls.append(
             {
                 "config_a": config_a_name,
                 "config_b": config_b_name,
-                "fuzz_seed": fuzz_seed,
-                "fuzz_interval_s": fuzz_interval_s,
+                "fuzz_seed": kwargs.get("fuzz_seed"),
+                "fuzz_interval_s": kwargs.get("fuzz_interval_s"),
             }
         )
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -67,14 +84,11 @@ def test_fuzz_restarts_and_interval_parsed_and_passed_to_run_match(tmp_path, mon
 def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
     calls = []
 
-    def _fake_run_match(
-        config_a_name, config_b_name, run_dir=None, control_scheme="fpp", fuzz_seed=None, fuzz_interval_s=(25.0, 45.0)
-    ):
-        calls.append({"fuzz_seed": fuzz_seed, "fuzz_interval_s": fuzz_interval_s})
+    def _fake_run_match(config_a_name, config_b_name, **kwargs):
+        calls.append({"fuzz_seed": kwargs.get("fuzz_seed"), "fuzz_interval_s": kwargs.get("fuzz_interval_s")})
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -96,10 +110,10 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
     summary = json.loads((run_dirs[0] / "summary.json").read_text())
     assert summary["fuzz_seed"] is None
     assert summary["fuzz_interval_s"] is None
-    # The run's matches go to the evaluation ledger under REPLAY_BASE_PATH, so a test run never
+    # The run's matches go to the match results store under REPLAY_BASE_PATH, so a test run never
     # writes into the real one.
-    (line,) = (tmp_path / "eval" / "ledger.jsonl").read_text().splitlines()
-    assert json.loads(line)["source"] == run_dirs[0].name
+    (path,) = (tmp_path / "match_results").rglob("*.json")
+    assert json.loads(path.read_text())["source"] == run_dirs[0].name
 
 
 def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkeypatch):
@@ -107,12 +121,11 @@ def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkey
     not the sorted order a round-robin over those two configs would use."""
     calls = []
 
-    def _fake_run_match(config_a_name, config_b_name, *_args, **_kwargs):
+    def _fake_run_match(config_a_name, config_b_name, **_kwargs):
         calls.append((config_a_name, config_b_name))
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "tiki_taka", "low_block"])
 
     tournament.main()
@@ -130,7 +143,7 @@ def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
         monkeypatch.setattr("sys.argv", ["round_robin.py", flag])
         tournament.main()
         out = capsys.readouterr().out
-        assert "--pair A B" in out and "--reuse" in out
+        assert "--pair A B" in out and "replays/match_results/" in out
 
 
 def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_still_plays(tmp_path, monkeypatch):
@@ -142,7 +155,6 @@ def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_s
 
     names = ["a", "b", "c"]
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(tournament, "_CONFIG_NAMES", names)
     monkeypatch.setattr(tournament, "RETIRED", {"c"})
 
@@ -166,7 +178,6 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -186,43 +197,20 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
     assert json.loads(summary_path.read_text())["sim_noise"]["seed"] == 3
 
 
-def test_match_seconds_keys_the_match_cache_and_is_recorded_in_the_summary(tmp_path, monkeypatch):
-    # A shortened run's matches must not be cached under the full-length key, or a later
-    # full-length `--reuse` run would serve them as full matches.
-    durations = []
-
-    def _fake_match_key(_graph, _a, _b, *, duration_seconds, **_kwargs):
-        durations.append(duration_seconds)
-        return f"key-{duration_seconds}"
-
-    class _EmptyCache:
-        def get(self, _key):
-            return None
-
-        def put(self, _key, _record):
-            pass
-
+def test_match_seconds_is_part_of_the_environment_so_each_length_has_its_own_results(tmp_path, monkeypatch):
+    # A shortened run's matches must not be taken for full-length ones: each match length is its own
+    # environment in the store, and the length is recorded in the summary.
     monkeypatch.setattr(tournament, "run_match", _stub_result)
-    monkeypatch.setattr(tournament, "match_key", _fake_match_key)
-    monkeypatch.setattr(tournament, "CodeGraph", lambda: None)
-    monkeypatch.setattr(tournament, "_append_to_ledger", lambda *a: None)  # needs real fingerprints
-    monkeypatch.setattr(tournament.match_cache, "MatchCache", _EmptyCache)
-    monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(
-        "sys.argv",
-        [
-            "tournament.py",
-            "--sequential",
-            "--reuse",
-            "--match-seconds",
-            "300",
-            "low_block",
-            "tiki_taka",
-        ],
+        "sys.argv", ["tournament.py", "--sequential", "--match-seconds", "300", "low_block", "tiki_taka"]
     )
-
     tournament.main()
-
-    assert durations and set(durations) == {300.0}
     (summary_path,) = tmp_path.glob("tournament_*/summary.json")
     assert json.loads(summary_path.read_text())["max_match_seconds"] == 300.0
+
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "low_block", "tiki_taka"])
+    tournament.main()
+
+    envs = sorted((tmp_path / "match_results").iterdir())
+    assert len(envs) == 2
+    assert all(len(list(env.glob("*.json"))) == 1 for env in envs)

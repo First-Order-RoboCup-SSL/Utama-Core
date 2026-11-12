@@ -12,12 +12,8 @@ from pathlib import Path
 import pytest
 
 from utama_core.replay import fingerprint as fp
-from utama_core.replay.fingerprint import (
-    REPO_ROOT,
-    ROUND_ROBIN_ENTRY,
-    CodeGraph,
-    match_key,
-)
+from utama_core.replay import match_results
+from utama_core.replay.fingerprint import REPO_ROOT, ROUND_ROBIN_ENTRY, CodeGraph
 from utama_core.strategy import catalog
 
 PICKERS = """\
@@ -167,13 +163,46 @@ def test_a_tactic_no_strategy_imports_changes_nothing(repo):
     assert _changed_after(repo, "utama_core/tactics/orphan.py", "pass", "x = 1") == set()
 
 
-def test_editing_shared_infrastructure_changes_the_base_and_every_match_key(repo):
+def _fixture(
+    g,
+    a,
+    b,
+    *,
+    duration=65.0,
+    control_scheme="fpp",
+    fuzz_seed=None,
+    fuzz_interval_s=(25.0, 45.0),
+    sim_noise=None,
+    a_is_right=True,
+    a_kicks_off=True,
+):
+    """The fixture id `match_results` gives a match of `a` (config_a) against `b`."""
+    env = match_results.environment(
+        g,
+        duration_seconds=duration,
+        sim_noise=sim_noise,
+        control_scheme=control_scheme,
+        fuzz_seed=fuzz_seed,
+        fuzz_interval_s=fuzz_interval_s,
+    )
+    seed = sim_noise.get("seed") if sim_noise else None
+    return match_results.fixture_id(
+        env,
+        g.strategy_fingerprint(a)[:16],
+        g.strategy_fingerprint(b)[:16],
+        seed,
+        a_is_right=a_is_right,
+        a_kicks_off=a_kicks_off,
+    )
+
+
+def test_editing_shared_infrastructure_changes_the_base_and_every_fixture(repo):
     g = CodeGraph(repo)
-    keys = {(a, b): match_key(g, a, b, duration_seconds=65.0) for a in CONFIGS for b in CONFIGS if a < b}
+    fixtures = {(a, b): _fixture(g, a, b) for a in CONFIGS for b in CONFIGS if a < b}
     changed = _changed_after(repo, "utama_core/planning/planner.py", "return 1", "return 2")
     assert changed == {"base"}
     g = CodeGraph(repo)
-    assert all(match_key(g, a, b, duration_seconds=65.0) != k for (a, b), k in keys.items())
+    assert all(_fixture(g, a, b) != k for (a, b), k in fixtures.items())
 
 
 def _runner_also_imports(repo: Path, module: str) -> None:
@@ -244,27 +273,26 @@ def test_a_relative_import_resolves(repo):
     assert "utama_core.planning.planner" in g.closure(["utama_core.run.runner"])
 
 
-def test_match_key_covers_every_setting(repo):
+def test_the_fixture_covers_every_setting(repo):
     g = CodeGraph(repo)
     a, b = CONFIGS[:2]
-    ref = match_key(g, a, b, duration_seconds=65.0)
+    ref = _fixture(g, a, b)
     variants = [
-        match_key(g, b, a, duration_seconds=65.0),
-        match_key(g, a, b, duration_seconds=20.0),
-        match_key(g, a, b, duration_seconds=65.0, a_is_right=False),
-        match_key(g, a, b, duration_seconds=65.0, a_kicks_off=False),
-        match_key(g, a, b, duration_seconds=65.0, control_scheme="dwa"),
-        match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1),
-        match_key(g, a, b, duration_seconds=65.0, recorded=False),
-        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 1}),
-        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 2}),
+        _fixture(g, b, a),
+        _fixture(g, a, b, duration=20.0),
+        _fixture(g, a, b, a_is_right=False),
+        _fixture(g, a, b, a_kicks_off=False),
+        _fixture(g, a, b, control_scheme="dwa"),
+        _fixture(g, a, b, fuzz_seed=1),
+        _fixture(g, a, b, sim_noise={"seed": 1}),
+        _fixture(g, a, b, sim_noise={"seed": 2}),
     ]
     assert len({ref, *variants}) == 1 + len(variants)
     # the fuzz interval only matters when fuzzing is on
-    assert match_key(g, a, b, duration_seconds=65.0, fuzz_interval_s=(1.0, 2.0)) == ref
-    assert match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
-    # matches without sim noise keep the keys they had before the setting existed
-    assert match_key(g, a, b, duration_seconds=65.0, sim_noise=None) == ref
+    assert _fixture(g, a, b, fuzz_interval_s=(1.0, 2.0)) == ref
+    assert _fixture(g, a, b, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
+    # the noise seed is per match, the rest of the noise per environment
+    assert _fixture(g, a, b, sim_noise={"seed": 1, "kick_speed_sd": 0.2}) != variants[6]
 
 
 def test_numerics_env_vars_change_the_base(repo, monkeypatch):

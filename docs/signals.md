@@ -33,7 +33,7 @@ Tested and rejected as rankers (2026-10-17, two noisy round-robins of the same 1
 different seeds, `tournament_20261016_201213` and `tournament_20261017_002337`; scripts in
 `~/dev/ssl/eval-infra/` and `~/dev/ssl/xg-analysis/metrics_quick/`). Those scripts were one-off
 analysis scripts kept outside the repo; the data they used are the two round-robins above and the
-evaluation ledger (`replays/eval/ledger.jsonl`).
+match results store (`replays/match_results/`).
 
 - **Shots on target.** Within one run, strengths from shots predicted held-out matches about as
   well as goals; across runs, goal strengths from run 1 predicted run 2's goal strengths better
@@ -196,10 +196,10 @@ in game terms, and say what to do when it's off; correlation with results is not
 Put it where it's cheapest:
 
 - a count the match can keep as it plays: `MatchStats` (`engine/match_stats.py`). Changing it
-  changes every match's fingerprint, so the next `--reuse` round-robin plays everything again;
+  changes every match's fingerprint, so the next round-robin plays everything again;
 - anything else derived from replays, both sides: `ChanceTracker` (`analysis/chances.py`), fed
   from the replay pass the ball-loss breakdown already makes. Cached records keep the analysis
-  they were stored with: refresh them after changing it (`utama_core/replay/match_cache.py`);
+  they were stored with: delete the store to refresh them (`utama_core/replay/match_results.py`);
 - needing the intentions log (which tactic, which robot's role): `analysis/turnover_breakdown.py`,
   config_a only.
 

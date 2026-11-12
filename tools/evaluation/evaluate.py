@@ -30,8 +30,8 @@ and config_b in even ones.
 
 After each round the candidate is compared with the champion on paired matches
 (`ratings.paired_difference`): its goal difference minus the champion's against the same
-opponent with the same seed and colour, from every match in the ledger (`replay/eval_ledger.py`:
-this run's, earlier runs', round-robins'), plus their head-to-head matches. Paired results share
+opponent with the same seed and colour, from every match in the match results store
+(`replay/match_results.py`: this run's, earlier runs', round-robins'), plus their head-to-head matches. Paired results share
 the opponent and the noise, so their difference cancels much of it: all of it for identical
 code, little for unrelated strategies; the spread is estimated from the differences themselves.
 P(candidate stronger than champion) decides:
@@ -49,11 +49,11 @@ Strengths printed at the end come from the ratings over all matches (`analysis/r
 
 Stalls (the stall watchdog's `StallEvent`s, see `engine/match_stats.py`) are reported for
 post-analysis only: each candidate's and the champion's stalls, and how many of their matches
-were checked (the watchdog covers config_a only; ledger lines from before stalls were recorded
-count as unchecked). They never change a verdict or stop a run.
+were checked (the watchdog covers config_a only; a match whose stats were not collected counts as
+unchecked). They never change a verdict or stop a run.
 
-A fixture already in the ledger is never played again, so the champion's matches are played
-once per seed and reused by every candidate. Replays are not kept: a match is a pure function
+A fixture already in the match results store is never played again, so the champion's matches are
+played once per seed and reused by every candidate. Replays are not kept: a match is a pure function
 of its fixture, so `round_robin.py --pair A B --sim-noise reference:<seed>` plays it again.
 
 Promoting is a decision, not a side effect: a candidate called better should pass `--held-out`
@@ -76,11 +76,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.evaluation.match import _short_name, run_match  # noqa: E402
+from tools.evaluation.match import _short_name  # noqa: E402
 from tools.evaluation.round_robin import (  # noqa: E402
     MAX_MATCH_SECONDS,
     _resolve_config_names,
     _run_metadata,
+    play_and_record,
 )
 from tools.evaluation.sim_settings import (  # noqa: E402
     DEFAULT_OPPONENTS,
@@ -90,14 +91,14 @@ from tools.evaluation.sim_settings import (  # noqa: E402
 from utama_core.analysis import ratings  # noqa: E402
 from utama_core.bundle.strategy_file import frozen  # noqa: E402
 from utama_core.config.settings import REPLAY_BASE_PATH  # noqa: E402
-from utama_core.replay import eval_ledger  # noqa: E402
+from utama_core.replay import match_results  # noqa: E402
 from utama_core.replay.fingerprint import CodeGraph  # noqa: E402
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise  # noqa: E402
 
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
-FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the ledger
+FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
 
 
 def round_fixtures(candidates: list[str], champion: str, opponents: list[str], k: int) -> list[tuple[str, str, int]]:
@@ -121,39 +122,28 @@ def verdict(p_better: float, rounds: int, max_rounds: int) -> str | None:
     return "undecided" if rounds >= max_rounds else None
 
 
-def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool = False) -> dict:
-    """One fixture's `MatchResult` as a dict. The match is recorded like a round-robin's (same
-    play), then its files are deleted unless `keep` (`--explain` reads them): only the result is kept."""
-    tag = f"{_short_name(a)}_vs_{_short_name(b)}_s{seed}"
-    result = run_match(
+def play(a: str, b: str, seed: int, noise: dict, run_dir: Path, keep: bool, fps: dict, env: str, source: str) -> dict:
+    """One fixture's stored record, played as a round-robin's match is (`round_robin.play_and_record`).
+    Its replay files are deleted unless `keep` (`--explain` reads them)."""
+    return play_and_record(
         a,
         b,
-        duration_seconds=MAX_MATCH_SECONDS,
+        a_fp=fps[a],
+        b_fp=fps[b],
+        env=env,
+        seed=seed,
+        source=source,
         run_dir=run_dir,
+        keep_files=keep,
         match_tag_suffix=f"_s{seed}",
+        duration_seconds=MAX_MATCH_SECONDS,
         sim_noise=SimNoise.from_dict({**noise, "seed": seed}),
     )
-    if not keep:
-        for f in run_dir.glob(f"{tag}.*"):
-            f.unlink()
-    return {
-        "config_a": result.config_a,
-        "config_b": result.config_b,
-        "score_a": result.score_a,
-        "score_b": result.score_b,
-        "stats": {
-            "shots": (result.stats or {}).get("shots"),
-            # config_a's stall watchdog; None when the match's stats were not collected
-            "stall_events": eval_ledger.stall_summary(
-                (result.stats or {}).get("stall_events") if result.stats is not None else None
-            ),
-        },
-    }
 
 
 def stall_coverage(ledger: dict, fps: dict, side: str) -> dict:
-    """Stalls `side` was checked for over the ledger's matches at current code: the watchdog only
-    watches config_a, so a match counts as checked when `side` was config_a and its ledger line
+    """Stalls `side` was checked for over the stored matches at current code: the watchdog only
+    watches config_a, so a match counts as checked when `side` was config_a and its record
     has a stall record (None, an older line, is unknown). `total` counts every match of `side`."""
     checked, total, stalls = 0, 0, []
     for e in ledger.values():
@@ -216,7 +206,8 @@ def main() -> None:
     noise.pop("seed", None)
 
     graph = CodeGraph()
-    env = eval_ledger.environment(graph, duration_seconds=MAX_MATCH_SECONDS, sim_noise=noise)
+    env = match_results.environment(graph, duration_seconds=MAX_MATCH_SECONDS, sim_noise=noise)
+    store = match_results.open_store(REPLAY_BASE_PATH)
     fps = {n: graph.strategy_fingerprint(n)[:16] for n in {*candidates, champion, *opponents}}
     for c in list(candidates):
         twin = next((r for r in [champion, *opponents] if fps[r] == fps[c]), None)
@@ -226,7 +217,7 @@ def main() -> None:
 
     def fixture_id(f: tuple[str, str, int]) -> str:
         a, b, seed = f
-        return eval_ledger.fixture_id(env, fps[a], fps[b], seed)
+        return match_results.fixture_id(env, fps[a], fps[b], seed)
 
     run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
     run_dir = Path(REPLAY_BASE_PATH) / run_id  # replay files must sit directly under replays/
@@ -244,24 +235,24 @@ def main() -> None:
         for k in range(1, args.max_rounds + 1):
             if not open_:
                 break
-            ledger = eval_ledger.load(env, fps=fps)
+            ledger = store.load(env, fps=fps)
             todo = [f for f in round_fixtures(open_, champion, opponents, k) if fixture_id(f) not in ledger]
             reused += len(round_fixtures(open_, champion, opponents, k)) - len(todo)
-            futures = {executor.submit(play, *f, noise, run_dir, args.explain): f for f in todo}
+            futures = {executor.submit(play, *f, noise, run_dir, args.explain, fps, env, run_id): f for f in todo}
             while futures:
                 done, _ = wait(futures, return_when=FIRST_COMPLETED)
                 for future in done:
                     a, b, seed = futures.pop(future)
                     result = future.result()
-                    eval_ledger.append([eval_ledger.entry(env, graph, result, seed, source=run_id)])
+                    store.put(result)
                     played += 1
                     print(
                         f"  round {k}: {_short_name(a):<24} {result['score_a']} - {result['score_b']} {_short_name(b)}",
                         flush=True,
                     )
 
-            fit = _fit(env, fps, {*open_, champion, *opponents})
-            ledger = _up_to_round(eval_ledger.load(env, fps=fps), k)
+            fit = _fit(store, env, fps, {*open_, champion, *opponents})
+            ledger = _up_to_round(store.load(env, fps=fps), k)
             for c in list(open_):
                 margin, sd = ratings.paired_difference(*paired(ledger, fps, c, champion, opponents), fit.noise_sd)
                 p = ratings.p_positive(margin, sd)
@@ -274,11 +265,11 @@ def main() -> None:
             print()
     if args.explain:
         _explain(run_dir, run_id, candidates, champion)
-    shutil.rmtree(run_dir, ignore_errors=True)  # this run's own scratch dir; results are in the ledger
+    shutil.rmtree(run_dir, ignore_errors=True)  # this run's own scratch dir; results are in the match results store
 
-    final = _fit(env, fps, {*candidates, champion, *opponents})
-    ledger = eval_ledger.load(env, fps=fps)
-    print(f"Verdicts ({played} matches played, {reused} reused from the ledger):")
+    final = _fit(store, env, fps, {*candidates, champion, *opponents})
+    ledger = store.load(env, fps=fps)
+    print(f"Verdicts ({played} matches played, {reused} reused from the match results):")
     for c in candidates:
         r = report[c]
         print(
@@ -345,19 +336,19 @@ def _explain(run_dir: Path, run_id: str, candidates: list[str], champion: str) -
             print(f"explain: {_short_name(c)} failed ({type(exc).__name__}: {exc}); verdicts are unaffected")
 
 
-def _fit(env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
-    """Ratings over every ledger match in `env` between `players` at their current code."""
+def _fit(store: match_results.MatchResults, env: str, fps: dict[str, str], players: set[str]) -> ratings.Ratings:
+    """Ratings over every stored match in `env` between `players` at their current code."""
     matches = [
         (e["a"], e["b"], e["score_a"] - e["score_b"])
-        for e in eval_ledger.load(env, fps=fps).values()
+        for e in store.load(env, fps=fps).values()
         if e["a"] in players and e["b"] in players and fps.get(e["a"]) == e["a_fp"] and fps.get(e["b"]) == e["b_fp"]
     ]
     return ratings.fit(matches, names=sorted(players))
 
 
 def _up_to_round(ledger: dict, k: int) -> dict:
-    """The ledger's matches of rounds 1..k (seeds 1..k): a verdict after round k uses those only,
-    whatever later rounds the ledger already holds, so it doesn't depend on earlier runs."""
+    """The stored matches of rounds 1..k (seeds 1..k): a verdict after round k uses those only,
+    whatever later rounds the store already holds, so it doesn't depend on earlier runs."""
     return {f: e for f, e in ledger.items() if e["seed"] is not None and e["seed"] <= k}
 
 

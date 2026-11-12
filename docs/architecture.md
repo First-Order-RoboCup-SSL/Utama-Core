@@ -67,15 +67,15 @@ flowchart TD
 
 Every rsim match writes files under `replays/` (`REPLAY_BASE_PATH`), and the analyses, tools and
 evaluation read them back. A match's file stem is `A_vs_B` (`round_robin.py`'s `_tag`); the names
-below are from a real run directory. `--reuse` reads the match cache, and only matches whose
-fingerprint changed are played again.
+below are from a real run directory. The match results store (`replays/match_results/`) is read first:
+a match it holds is not played again, so only matches whose fingerprint changed are played.
 
 ![Match data flow: drivers, StrategyRunner, the per-match files, the stores and the readers](img/architecture/match_data_flow.png)
 
 Drawn by `docs/img/architecture/make_match_data_flow.py`; rerun it when a name in it changes.
 
 `evaluate.py` removes its own scratch run directory when it finishes, so its matches survive only
-in the ledger.
+in the match results store.
 
 ## Package dependencies
 

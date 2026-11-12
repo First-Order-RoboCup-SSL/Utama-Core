@@ -28,9 +28,9 @@ exists yet: say so in your change rather than guessing.
 One term per thing; reuse these instead of coining new ones.
 
 - **Round-robin / tournament run** — every strategy config plays every other once
-  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the evaluation ledger.
+  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the match results store (`replays/match_results/`).
   The check for stalls and the occasional health check of the whole catalog; a single
-  strategy is judged with `evaluate.py` (below). With `--reuse` only matches whose code changed rerun.
+  strategy is judged with `evaluate.py` (below). A match the store already holds is not played again, so only matches whose code changed rerun.
 - **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
   or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
   verdict on a strategy; see Evaluation.
@@ -51,14 +51,14 @@ One term per thing; reuse these instead of coining new ones.
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Evaluation / ratings / reference opponents / ledger** — `tools/evaluation/evaluate.py`: is a
+- **Evaluation / ratings / reference opponents / match results** — `tools/evaluation/evaluate.py`: is a
   candidate stronger than the champion of a fixed set of reference opponents
   (`tools/evaluation/reference/opponents.json`: the champion, six opponents, three held-out
   opponents)? Rounds of matches against those opponents in the simulated world and robots
   (`tools/evaluation/reference/world.json`, `robots.json`) under seeded sim noise, decided on
   paired results (candidate and champion against the same opponent under the same noise) and
   stopping once the answer is clear; ratings (strength ± SD in goals per match,
-  `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
+  `analysis/ratings.py`) over every match in the match results store (`replays/match_results/`, `replay/match_results.py`).
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
 - **Strategy file / frozen baseline** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a

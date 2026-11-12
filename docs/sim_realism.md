@@ -369,7 +369,7 @@ were tuned at 5. Physics was 46% of match time (2026-10-10), so 3 substeps saves
    at 3, 4, 5 and a 10-substep reference.
 3. Adopt fewer substeps only if the error against the reference sits well inside the Phase 1
    real ranges, and the scorecard and standings don't move beyond match noise. Adoption
-   reruns every cached match, so it goes in with the Phase 4 baseline.
+   reruns every stored match, so it goes in with the Phase 4 baseline.
 
 ### Phase 3: Calibrate and find what matters (1 week)
 
@@ -390,7 +390,7 @@ were tuned at 5. Physics was 46% of match time (2026-10-10), so 3 substeps saves
 
 - The round-robin uses randomized physics by default, with several seeds per pairing (number
   set by the per-match noise: goal difference varies by about 3 goals per match) and paired seeds for A/B comparisons.
-- Run a new baseline round-robin. Every cached match reruns: a cache invalidation, so batch it
+- Run a new baseline round-robin. Every stored match reruns: a store invalidation, so batch it
   with any pending renames.
 - Update `docs/STRATEGY_DEVELOPMENT.md` (evaluation), `docs/signals.md` (scorecard rows that
   become signals) and `docs/strategies.md` (new results).
@@ -519,8 +519,8 @@ Writing `ball_seen` into converted logs would let a later pass tell hidden from 
 Built instead of a cheaper outcome (V, shots, xG, stat combinations: all rejected, see
 `docs/signals.md`, "Ranking"): `tools/evaluation/evaluate.py` judges a candidate against the
 champion of a fixed set of reference opponents (`tools/evaluation/reference/opponents.json`) in rounds of seeded
-noisy matches, with ratings from goal margins (`analysis/ratings.py`) and a ledger of every
-match (`replays/eval/ledger.jsonl`); see `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy".
+noisy matches, with ratings from goal margins (`analysis/ratings.py`) and a store of every
+match (`replays/match_results/`); see `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy".
 This covers Phase 4's "several seeds per pairing, paired seeds for A/B".
 
 Measured on a second noisy round-robin (`tournament_20261017_002337`, seed 2, same 12
@@ -543,7 +543,7 @@ strategies and code as `tournament_20261016_201213`, seed 1):
 - Mirror matches of one strategy (yellow minus blue over seeds 1-6: +1, -4, +1, 0, -2, -9) show
   how much a colour's robot draws can matter in one match. Giving both teams the same draws
   narrowed it (+2, 0, -1, -5, +1, 0) but not to zero, the rest being the match's own chaos; not
-  adopted, since it would replay the whole ledger and the paired decision already cancels the
+  adopted, since it would replay the whole store and the paired decision already cancels the
   draws (candidate and champion get identical ones against each opponent).
 
 ## P2: Structured strategy search

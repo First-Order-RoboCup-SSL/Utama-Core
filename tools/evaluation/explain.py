@@ -193,7 +193,7 @@ def explain(run_dir, candidate: str, champion: str, out_dir, workers: int = 2) -
         "paired": paired_rows(matches, cand, champ),
         "fouls_rules_shown": pm.top_rules(views),
         "notes": (
-            "Matches are those in the run dir; fixtures reused from the ledger have no replay here. "
+            "Matches are those in the run dir; fixtures taken from the match results store have no replay here. "
             "Positions and fouls exclude the goalkeeper and out-of-bounds (as pitch_maps.py)."
         ),
     }

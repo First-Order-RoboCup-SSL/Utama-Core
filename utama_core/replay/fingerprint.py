@@ -15,7 +15,8 @@ settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that
   name, version and build), the installed robosim binary, the CPU model and the environment
   variables that change numerics. Not the code behind the process boundary (`PLAYER_SIDE`): a
   `.strategy` file brings its own, so editing a skill replays no match between two files.
-- `match_key(...)`: those fingerprints plus every run setting.
+- The run settings (duration, planner, sim noise, restart fuzzing, sides) and the two players'
+  fingerprints make up a match's fixture in `replay/match_results.py`.
 
 `audit()` lists every place the code reaches outside the import graph
 (environment, files, subprocesses, dynamic imports, module-level state);
@@ -479,43 +480,3 @@ def environment_pin(root: Path = REPO_ROOT) -> dict:
         "cpu": _cpu_model(),
         "env": {k: v for k, v in sorted(os.environ.items()) if k.startswith(ENV_PREFIXES)},
     }
-
-
-def match_key(
-    graph: CodeGraph,
-    config_a: str,
-    config_b: str,
-    *,
-    duration_seconds: float,
-    a_is_right: bool = True,
-    a_kicks_off: bool = True,
-    control_scheme: str = "fpp",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
-    recorded: bool = True,
-    sim_noise: Optional[dict] = None,
-) -> str:
-    """Key of one `match.run_match` call: same key, same result. `recorded` is
-    whether it ran with a `run_dir` (the match log and stats recorder are then live).
-    `sim_noise` (`SimNoise.to_dict()`) enters the key only when set, so matches without it
-    keep their keys."""
-    settings = {
-        "duration_seconds": duration_seconds,
-        "a_is_right": a_is_right,
-        "a_kicks_off": a_kicks_off,
-        "control_scheme": control_scheme,
-        "fuzz_seed": fuzz_seed,
-        "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
-        "recorded": recorded,
-    }
-    if sim_noise is not None:
-        settings["sim_noise"] = sim_noise
-    return _digest(
-        [
-            "round-robin match",
-            graph.base_fingerprint([ROUND_ROBIN_ENTRY]),
-            graph.strategy_fingerprint(config_a),
-            graph.strategy_fingerprint(config_b),
-            json.dumps(settings, sort_keys=True),
-        ]
-    )

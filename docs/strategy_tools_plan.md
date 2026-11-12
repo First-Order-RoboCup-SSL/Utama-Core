@@ -24,7 +24,7 @@ links back here.
 
 | Question | Tool | Status |
 |---|---|---|
-| Does it break? | `pixi run test`, which includes the regression moments in `utama_core/tests/moments/`. Stalls: recorded in the ledger for every match and reported by `evaluate.py` with coverage; the round-robin's STALLS section and `--strict` | Today |
+| Does it break? | `pixi run test`, which includes the regression moments in `utama_core/tests/moments/`. Stalls: recorded in the match results for every match and reported by `evaluate.py` with coverage; the round-robin's STALLS section and `--strict` | Today |
 | Is it better? | `tools/evaluation/evaluate.py`: paired against the champion, through the reference opponents. `--held-out` before promoting. The only verdict | Today |
 | Does everything still run, after a shared-code change? | `round_robin.py --vs-champion`: each strategy plays the champion once (12 matches), under reference noise seed 2, so each (strategy, champion) match is the fixture `evaluate.py` plays in round 2 and is not wasted. A full round-robin (66 matches) only occasionally, for example before a release. A round-robin is not an evaluation: it gives one unpaired match per pair | Today |
 | What went wrong in these matches (bugs: thrashing, stalls, restart geometry, fouls)? | `tools/triage.py` (`--fouls` for our side's fouls), then the picture tools. Triage finds bugs, not why a strategy loses in football terms. For that, see `ball_losses.md` in the run folder, `docs/signals.md`, and the goal ledger (`utama_core/analysis/goal_ledger.py`) | Today |
@@ -59,11 +59,11 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
 
 1. **Fix `main.py`'s import.** Done: it loads strategies through `strategy/catalog.py`. Its runner set-up is still one of the five hand-built ones above.
 2. **This note and the docs.** `docs/strategy_tools_plan.md`, the "Which tool?" table in
-   `tools.md`, the debugging entry point in `STRATEGY_DEVELOPMENT.md`, the `--reuse` counts.
-3. **Stalls in the ledger.** Done. Stalls are recorded in `replays/eval/ledger.jsonl`, and `evaluate.py`
+   `tools.md`, the debugging entry point in `STRATEGY_DEVELOPMENT.md`, the round-robin's "taken from" counts.
+3. **Stalls in the match results.** Done. Stalls are recorded in `replays/match_results/`, and `evaluate.py`
    reports them with coverage: how many of the matches it used were checked for stalls. The
-   stall watchdog covers config_a only, so coverage is partial. Old ledger entries count as
-   **unknown, not clean**.
+   stall watchdog covers config_a only, so coverage is partial. A match whose stats were not
+   collected counts as **unknown, not clean**.
 4. **`round_robin.py --vs-champion`.** Done. One match per strategy against the champion, plus
    the champion against the first reference opponent, under reference noise seed 2 by default.
    `evaluate.py` puts the side under test second in even rounds, so each (strategy, champion)
@@ -74,7 +74,7 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    strategies through it but keeps its own runner for the dashboard. So all four play `.strategy` files.
    `match.py` is unchanged, and moves onto `sim_setup` with the next change that replays every match
    anyway: editing `match.py`, or anything it imports, changes the
-   fingerprint of every cached match, so every match replays and the ledger is invalidated
+   fingerprint of every stored match, so every match replays and the store is invalidated
    (`utama_core/replay/fingerprint.py`). If it must change, batch it with other changes to shared
    code and say so in the commit.
 6. **The screen.** The screen was built and dropped on 2026-11-12: any code change made the paired starts diverge within 0.1 s, and goals in 20 s starts were too rare to say "skip", so it could not save evaluations. `evaluate.py` stays the only gate.

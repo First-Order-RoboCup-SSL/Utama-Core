@@ -1,9 +1,6 @@
-import json
-
 import pytest
 
 from tools.evaluation import evaluate
-from utama_core.replay import eval_ledger
 
 
 def test_round_fixtures_pair_candidate_and_champion_on_the_same_opponents_and_seed():
@@ -27,32 +24,6 @@ def test_verdict_thresholds_are_inclusive_and_cap_rounds():
     assert evaluate.verdict(evaluate.DROP, 1, 6) == "worse"
     assert evaluate.verdict(0.5, 5, 6) is None
     assert evaluate.verdict(0.5, 6, 6) == "undecided"
-
-
-def test_ledger_round_trip_keeps_the_last_entry_per_fixture_and_skips_torn_lines(tmp_path):
-    path = tmp_path / "ledger.jsonl"
-    base = {"env": "e", "a": "x", "b": "y", "a_fp": "1", "b_fp": "2", "seed": 1}
-    eval_ledger.append([{**base, "fixture": "f", "score_a": 1}, {**base, "env": "other", "fixture": "g"}], path)
-    eval_ledger.append([{**base, "fixture": "f", "score_a": 2}], path)
-    with open(path, "a") as f:
-        f.write('{"env": "e", "fixt')
-    loaded = eval_ledger.load("e", path)
-    assert list(loaded) == ["f"] and loaded["f"]["score_a"] == 2
-
-
-def test_fixture_id_depends_on_seed_and_code():
-    f = eval_ledger.fixture_id
-    assert f("e", "1", "2", 1) != f("e", "1", "2", 2)
-    assert f("e", "1", "2", 1) != f("e", "9", "2", 1)
-
-
-def test_a_ledger_player_goes_by_this_runs_name_for_the_same_code(tmp_path):
-    """A frozen file and the same code in the repo are one player, whichever played the match."""
-    path = tmp_path / "ledger.jsonl"
-    row = {"env": "e", "fixture": "f", "a": "split_shape", "a_fp": "1", "b": "other", "b_fp": "2"}
-    eval_ledger.append([row], path)
-    loaded = eval_ledger.load("e", path, fps={"frozen/split_shape@abc.strategy": "1"})
-    assert (loaded["f"]["a"], loaded["f"]["b"]) == ("frozen/split_shape@abc.strategy", "other")
 
 
 def test_per_opponent_compares_only_matches_with_the_same_seed_and_colour():
@@ -133,57 +104,6 @@ def test_sim_noise_spec_forms():
     assert sim_noise_from_spec("reference").seed == 0
     assert sim_noise_from_spec("reference:7").seed == 7
     assert sim_noise_from_spec('{"seed": 2, "kick_speed_sd": 0.3}').kick_speed_sd == 0.3
-
-
-class _Graph:
-    """Stands in for CodeGraph: entry() only asks for a strategy's fingerprint."""
-
-    def strategy_fingerprint(self, name):
-        return "fp-" + name
-
-
-_FROZEN_EVENT = {
-    "kind": "COMMITTED_FROZEN",
-    "sim_time": 12.5,
-    "tick": 1250,
-    "referee_command": "NORMAL_START",
-    "duration_s": 9.0,
-    "tactic_ids": ["t1"],
-    "robot_ids": [1, 2],
-    "diagnosis": "ball held by enemy 3",
-}
-
-
-def _result(a, b, stats):
-    return {"config_a": a, "config_b": b, "score_a": 1, "score_b": 0, "stats": stats}
-
-
-def test_entry_stores_the_stall_events_compactly():
-    row = eval_ledger.entry("e", _Graph(), _result("c", "o", {"shots": {}, "stall_events": [_FROZEN_EVENT]}), 1, "run")
-    assert row["stalls"] == [{"kind": "COMMITTED_FROZEN", "sim_time": 12.5, "diagnosis": "ball held by enemy 3"}]
-
-
-def test_entry_stores_an_empty_list_when_the_stats_show_no_stall():
-    row = eval_ledger.entry("e", _Graph(), _result("c", "o", {"stall_events": []}), 1, "run")
-    assert row["stalls"] == []
-
-
-def test_entry_stores_none_when_stall_events_are_unknown():
-    """No stats at all, or stats without the stall field: unknown, not 'no stalls'."""
-    assert eval_ledger.entry("e", _Graph(), _result("c", "o", None), 1, "run")["stalls"] is None
-    assert eval_ledger.entry("e", _Graph(), _result("c", "o", {"shots": {}}), 1, "run")["stalls"] is None
-
-
-def test_stall_summary_drops_the_detail_a_ledger_line_does_not_need():
-    rows = eval_ledger.stall_summary([{**_FROZEN_EVENT, "diagnosis": ""}])
-    assert rows == [{"kind": "COMMITTED_FROZEN", "sim_time": 12.5}]
-    assert json.loads(json.dumps(rows)) == rows
-
-
-def test_an_old_ledger_line_without_stalls_reads_as_unknown(tmp_path):
-    path = tmp_path / "ledger.jsonl"
-    path.write_text(json.dumps({"env": "e", "fixture": "f", "a": "c", "a_fp": "1", "b": "o", "b_fp": "2"}) + "\n")
-    assert eval_ledger.load("e", path)["f"]["stalls"] is None
 
 
 FPS = {"c": "fc", "o": "fo", "ch": "fch"}

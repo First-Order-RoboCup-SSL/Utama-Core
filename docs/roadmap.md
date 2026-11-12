@@ -203,7 +203,7 @@ entry by its title, not its number.
          the planner, turn gain in the controller, delay prediction (plan from where the robot
          will be 79 ms on), kick aim by the kicker offset, Kalman measurement noise from vision
          noise, `contact_grace_s` from the sensor share. Sim-side use (latency, kick offsets,
-         motion limits in `sim_noise`) replays the evaluation ledger: batch with a forced rerun.
+         motion limits in `sim_noise`) replays the match results store: batch with a forced rerun.
          Robot-robot avoidance needs it most: on 2026-10-27 two robots met head-on at 1 m/s each
          (their placer running to the ball, ours clearing away from it along the same line) and
          touched; each planner saw the other, but 79 ms late and braking sideways at ~1.8 m/s².

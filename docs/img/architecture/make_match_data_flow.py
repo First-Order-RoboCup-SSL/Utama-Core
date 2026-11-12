@@ -13,7 +13,6 @@ from diagram_style import Diagram  # noqa: E402
 # Every name a box shows; utama_core/tests/tools/test_diagram_names.py checks they still exist.
 NAMES = [
     "StrategyRunner",
-    "match_key",
     "tools/evaluation/round_robin.py",
     "tools/evaluation/evaluate.py",
     "tools/convert_ssl_log.py",
@@ -23,9 +22,8 @@ NAMES = [
     "utama_core/replay/columnar_reader.py",
     "utama_core/engine/match_log.py",
     "utama_core/engine/match_stats.py",
-    "utama_core/replay/match_cache.py",
+    "utama_core/replay/match_results.py",
     "utama_core/replay/fingerprint.py",
-    "utama_core/replay/eval_ledger.py",
     "utama_core/analysis/goal_ledger.py",
     "utama_core/analysis/ratings.py",
     "utama_core/analysis/chances.py",
@@ -54,7 +52,7 @@ d.box(
     36,
     20,
     "Drivers",
-    "tools/evaluation/round_robin.py\ntools/evaluation/evaluate.py\nmatch_key (replay/fingerprint.py)\npicks which matches to play",
+    "tools/evaluation/round_robin.py\ntools/evaluation/evaluate.py\nfixtures (replay/match_results.py)\npicks which matches to play",
     kind="decision",
 )
 d.box(22, 104, 38, 12, "Official SSL logs", "*.log.gz\nconvert_ssl_log.py, replay/ssl_log.py", kind="source")
@@ -85,11 +83,8 @@ d.arrow((88, 84), (98, 96))
 d.arrow((88, 78), (98, 80))
 
 # --- stores ---------------------------------------------------------------------------------------
-d.box(22, 44, 34, 12, "Match cache", "replays/match_cache/\nreplay/match_cache.py", kind="state")
-d.arrow((14, 70), (14, 50), "store", lx=1.0)
-d.arrow((30, 50), (30, 70), "reuse", lx=1.0)
-d.box(72, 26, 32, 12, "Evaluation ledger", "replays/eval/ledger.jsonl\nreplay/eval_ledger.py", kind="state")
-d.arrow((40, 71), (56, 30), "append", lx=-1.0, ha="right")
+d.box(72, 26, 32, 12, "Match results", "replays/match_results/\nreplay/match_results.py", kind="state")
+d.arrow((40, 71), (56, 30), "store; stored matches taken, not played", lx=-1.0, ha="right")
 d.box(118, 60, 36, 12, "summary.json", "+ ball_losses.md, one per run", kind="state")
 d.arrow((40, 73), (100, 62), "round_robin.py", lx=0.0, ly=2.0)
 
@@ -110,10 +105,12 @@ d.arrow((142, 98), (148, 92))
 d.arrow((142, 94), (148, 72))
 d.arrow((142, 80), (148, 70))
 d.arrow((142, 76), (148, 48))
-d.arrow((88, 26), (148, 26), "every ledger match", lx=0.0, ly=2.0)
+d.arrow((88, 26), (148, 26), "every stored match", lx=0.0, ly=2.0)
 
 d.note(
-    4, 10, "evaluate.py deletes its scratch run directory when it finishes;\nits matches survive only in the ledger."
+    4,
+    10,
+    "evaluate.py deletes its scratch run directory when it finishes;\nits matches survive only in the match results.",
 )
 
 d.key(

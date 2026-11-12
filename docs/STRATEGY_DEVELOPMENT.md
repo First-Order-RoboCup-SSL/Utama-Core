@@ -233,25 +233,27 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
    before anything else.
 3. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
    is it better than the champion in `tools/evaluation/reference/opponents.json`, worse, or not clearly either? Several candidates go in
-   one call. A strict round-robin (`round_robin.py --strict --reuse`) is the check for stalls
+   one call. A strict round-robin (`round_robin.py --strict`) is the check for stalls
    and the occasional health check of the whole catalog, no longer the way to judge one change.
 
 A change to `tactics/`, `skills/` or `pickers.py` is the other way round: reuse saves little,
 because most strategies import the changed code and their matches all rerun. Batch such
 changes and run one round-robin over the batch.
 
-**`--reuse`** takes a match's result from
-`replays/match_cache/` when nothing it runs has changed since it was stored, so after a change
-to one strategy only its matches play, one per other config. A default round-robin plays the 12 configs
-not in `RETIRED` (`tools/evaluation/round_robin.py`; the catalog has 22), so a change to one of them replays
-11 of its 66 matches. Naming all 22 configs gives 21 of 231. What counts as
-"runs" is `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that
-imports (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole
-files), and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing `pickers.py`
-reruns every config that imports it, which is most of them; changing shared code reruns
-everything, correctly. Each run replays 5% of what it would reuse (`--spot-check`) and compares; a
-difference evicts the records, says the fingerprint missed a dependency, and fails the run.
-Use `--reuse` on every run.
+**Reuse is automatic.** A match the match results store holds (`replays/match_results/`,
+`replay/match_results.py`) is taken from it, not played; there is no flag. A match's fixture is its
+environment (the shared code and machine, the match length, the planner, the sim noise without its
+seed, the restart fuzzing), both players' fingerprints, their sides and the noise seed. So after a
+change to one strategy only its matches play, one per other config. A default round-robin plays the
+12 configs not in `RETIRED` (`tools/evaluation/round_robin.py`; the catalog has 22), so a change to one
+of them replays 11 of its 66 matches. Naming all 22 configs gives 21 of 231. What counts as "runs" is
+`utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that imports
+(`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole files),
+and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing
+`pickers.py` reruns every config that imports it, which is most of them; changing shared code reruns
+everything, correctly. The store does not check itself (the spot-check of earlier versions is gone):
+if a fingerprint misses a dependency, delete the store, or one environment's folder inside it, to play
+everything again. A round-robin prints "N taken from replays/match_results ... M to play" first; read it.
 
 **What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against the champion of the reference opponents. A round-robin's W-D-L is a diagnostic.
 Everything in [Reading a tournament run](#reading-a-tournament-run) explains a result; none of
@@ -279,7 +281,7 @@ flowchart TD
     subgraph ev["evaluate.py: is this candidate stronger than the champion?"]
         e1["Reference opponents.json: champion, six opponents,<br/>three held-out opponents; world and robots, sim noise"]
         e2["Round k, noise seed k<br/>candidate and champion each play every opponent"]
-        e7["Every match appended to the ledger<br/>replays/eval/ledger.jsonl"]
+        e7["Every match stored in the match results<br/>replays/match_results/"]
         e3{"P(candidate stronger), paired<br/>with the champion's results"}
         e4["better: P >= 0.99<br/>then --held-out before promoting"]
         e5["worse: P <= 0.2<br/>drop it"]
@@ -314,17 +316,17 @@ flowchart TD
   (paired results correlated ~0.9): one goal better found every time in ~3 rounds, half a goal
   55%. Small gains of unrelated strategies are below what matches resolve at this cost.
 - **Ratings** (`analysis/ratings.py`): a strength per strategy in goals per match with its SD,
-  fitted on every match in the ledger; printed at the end, and the match noise for the decision.
-- **The ledger** (`replays/eval/ledger.jsonl`, `replay/eval_ledger.py`): one line per match from
-  evaluate.py and round-robins, keyed by the code that played it. A match is never played twice;
+  fitted on every match in the match results; printed at the end, and the match noise for the decision.
+- **Match results** (`replays/match_results/`, `replay/match_results.py`): one record per match from
+  evaluate.py and round-robins, keyed by its fixture (the code that played it). A match is never played twice;
   the champion's matches are played once per seed and reused by every candidate, and editing a
   strategy starts its record afresh. Replays are not kept, except during a `--explain` run (rerun one with `round_robin.py --pair
   A B --sim-noise reference:<seed>`).
 - **Stalls** are reported after each candidate's and the champion's verdict, for post-analysis only:
   they never change a verdict or stop a run. "stalls checked in N of M ... (watchdog covers config_a
   only)" counts the matches where the watchdog could see that side (`run/strategy_runner.py` records
-  stats for config_a only). A match where the side was config_b, or a ledger line from before stalls
-  were recorded, counts as unchecked; "unknown" means none was checked. The JSON report has them under
+  stats for config_a only). A match where the side was config_b, or whose stats were not collected,
+  counts as unchecked; "unknown" means none was checked. The JSON report has them under
   `candidates[...].stalls` and `champion_stalls`.
 - **Health check.** After a shared-code change, `round_robin.py --vs-champion` plays each strategy once
   against the champion (12 matches, not the 66 of a full round-robin), defaulting to `--sim-noise
@@ -339,14 +341,14 @@ flowchart TD
   the opponents from `.strategy` files of that commit (`replays/eval/frozen/`, built once) and the candidate from
   the working tree. A bundled match equals the same match run normally, frame for frame. The referee and the
   simulator are today's for both sides, so a frozen side meets rule changes it was not written for. A file and
-  the same code are one player in the ledger, and matches between two files are replayed only when the referee,
+  the same code are one player in the match results, and matches between two files are replayed only when the referee,
   the simulator or the match runner change: a skills or tactics edit reruns only the candidate's matches.
 - **Pictures** (`evaluate.py <name> --explain`, `tools/evaluation/explain.py`): for each candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
   their fouls by rule, and a `summary.json` of the numbers behind them, written to
   `replays/eval/explain/<name>_<run id>/`. The run's matches are kept until they are written. They
   explain a verdict and never make one: the verdict is still goals, and a picture is not a ranking.
-  Matches reused from the ledger have no replay in the run, so the pictures cover only what was
+  Matches taken from the match results have no replay in the run, so the pictures cover only what was
   played; the paired goal difference in `summary.json` is only as complete as that. Example, from a
   round-robin (`explain.py replays/tournament_<id> split_shape clear_press_plus --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
@@ -359,8 +361,8 @@ A new or changed strategy, whether a person or an agent writes it, goes on its o
 reaches `main` by pull request:
 
 1. Branch from `main` as `strategy/<idea>`. In a git worktree, symlink `.pixi` and `replays`
-   from the main checkout first: pixi needs the environment, and `--reuse` needs
-   `replays/match_cache/`, or every match plays again.
+   from the main checkout first: pixi needs the environment, and the match results store
+   (`replays/match_results/`) is what keeps a match from playing again.
 2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
    `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
    `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
@@ -376,14 +378,14 @@ reaches `main` by pull request:
    directly.
 4. Write, test and evaluate it as above, and record the round-robin in `docs/strategies.md`.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
-   a `--reuse` round-robin, read the "N reused ... M to play" line it prints: M much larger
-   than your own matches means the cache is stale (shared code changed since it was filled).
+   a round-robin, read the "N taken from ... M to play" line it prints: M much larger
+   than your own matches means the store is stale (shared code changed since it was filled).
    Let it run anyway (a full round-robin of 600 s matches has taken from about 1 h 50 min, on 15 workers plugged in, to 4.7 h for `tournament_20261005_170958`; matches are now two halves of 300 s of playing time: about 710 s of sim time on average by the final run's stoppages, 785 s in two measured matches, so expect roughly 20-30% longer): the other
-   strategies' matches run `main`'s code, so they refill the cache for everyone.
+   strategies' matches run `main`'s code, so they refill the store for everyone.
 4. Open a draft pull request into `main` with the round-robin result. An agent never merges: a person reviews and merges.
 
 Several branches can be worked on at once, each in its own worktree; they share
-`replays/match_cache/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
+`replays/match_results/`. A round-robin uses one worker per core (`--max-workers N` to cap it), so
 concurrent runs split the machine's cores and each takes longer; a machine with more cores runs
 more of them at once. How to organise a search (how many in parallel, which ideas) is up to
 whoever runs it.
