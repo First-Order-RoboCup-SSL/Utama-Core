@@ -67,9 +67,13 @@ def test_a_decision_uses_its_stages_seeds_only():
     assert list(evaluate._with_seeds(ledger, {101})) == ["101"]
 
 
-def test_a_rounds_seed_can_differ_from_its_number_but_colours_follow_the_round():
-    fixtures = evaluate.round_fixtures(1, ["c"], "ref", ["o"], seed=101)
-    assert ("c", "o", 101) in fixtures and ("ref", "o", 101) in fixtures
+def test_colours_follow_the_seed_not_the_round():
+    # a confirm seed is played in round ROUNDS+1 or later, so a run with another ROUNDS plays it in a
+    # round of the other parity: the store would then hold it in both colours, and the verdict would
+    # count both (test_the_verdict_does_not_depend_on_other_seeds_already_in_the_store)
+    for k in (1, 2, 7, 8):
+        assert ("c", "o", 101) in evaluate.round_fixtures(k, ["c"], "ref", ["o"], seed=101)
+        assert ("o", "c", 102) in evaluate.round_fixtures(k, ["c"], "ref", ["o"], seed=102)
 
 
 def test_the_players_load_and_the_core_is_in_the_catalog():

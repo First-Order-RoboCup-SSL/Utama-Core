@@ -38,7 +38,7 @@ from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 
-FOUND_PATH = Path(__file__).resolve().parents[5] / "replays" / "field" / "robots_found.json"
+FOUND_PATH = Path(__file__).resolve().parents[4] / "replays" / "field" / "robots_found.json"
 RADIOS = tuple(range(8))
 TICK_S = 1 / 60
 ANSWER_S = 0.3  # still, listening for the radio's answer and the lids' headings before the turn

@@ -78,12 +78,13 @@ def round_fixtures(
     under `seed` (k by default).
     The store holds every match whose code is unchanged, so only the matches of edited strategies, or
     of a seed not played before, are actually played. The earlier of the two in (candidates,
-    reference, opponents) order is config_a in odd rounds, so candidates and reference face each
-    opponent with the same colour."""
+    reference, opponents) order is config_a under an odd seed, so candidates and reference face each
+    opponent with the same colour, and a seed always has the same colours whichever round plays it
+    (a confirm seed's round depends on `ratings.ROUNDS`)."""
     seed = k if seed is None else seed
     order = list(dict.fromkeys([*candidates, reference, *opponents]))
     pairs = itertools.combinations(order, 2)
-    return [(x, y, seed) if k % 2 else (y, x, seed) for x, y in pairs]
+    return [(x, y, seed) if seed % 2 else (y, x, seed) for x, y in pairs]
 
 
 def seed_of(k: int) -> int:

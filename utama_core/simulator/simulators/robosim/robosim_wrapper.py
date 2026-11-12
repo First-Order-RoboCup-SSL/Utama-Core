@@ -188,7 +188,7 @@ class RSimSubprocessWrapper:
         # Ensure rc-robosim's scikit-build uses a compatible CMake policy level.
         env["CMAKE_ARGS"] = f"{env.get('CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
         env["SKBUILD_CMAKE_ARGS"] = f"{env.get('SKBUILD_CMAKE_ARGS', '')} {cmake_policy_flag}".strip()
-        project_root = Path(__file__).resolve().parents[5]
+        project_root = Path(__file__).resolve().parents[4]
         robosim_env = project_root / ".pixi" / "envs" / "robosim"
         robosim_python = robosim_env / "bin" / "python"
         include_dir = robosim_env / "include"

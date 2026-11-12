@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from tools.debug import pitch_maps as pm
 from tools.evaluation import explain
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -56,7 +55,7 @@ def _referee(score_yellow, score_blue):
 def _write_match(run_dir, a, b, score_a, score_b, seed=None):
     """A three-tick match, config_a (yellow, friendly) scoring `score_a`; the team with the ball is
     always the friendly one. Written the way `evaluate.py` names their files."""
-    stem = f"{pm.sr.short(a)}_vs_{pm.sr.short(b)}" + ("" if seed is None else f"_s{seed}")
+    stem = f"{explain._short_name(a)}_vs_{explain._short_name(b)}" + ("" if seed is None else f"_s{seed}")
     path = run_dir / f"{stem}.npz"
     cfg = ColumnarReplayWriterConfig(replay_name=stem, overwrite_existing=True, checkpoint_every_s=0)
     writer = ColumnarReplayWriter(cfg, my_team_is_yellow=True, exp_friendly=3, exp_enemy=3, path=path)

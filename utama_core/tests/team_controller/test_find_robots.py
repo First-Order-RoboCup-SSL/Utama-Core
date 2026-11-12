@@ -135,3 +135,12 @@ def test_confirm_finds_again_when_a_saved_lid_is_not_in_view_or_it_never_ran(tmp
 def test_confirm_stops_when_a_radio_is_not_found(tmp_path, field):
     with pytest.raises(SystemExit, match="Radio 2 not found"):
         fr.confirm([0, 2], tmp_path / "found.json", look=set, finder=_finder(field))
+
+
+def test_the_pairing_and_the_profiles_live_inside_the_repo():
+    # both paths count folders up from their module, and moving the module once pointed them
+    # outside the repo (profiles then loaded blank, with no error)
+    repo = fr.PROFILE_DIR.parents[2]
+    assert (repo / "pixi.toml").exists()
+    assert fr.PROFILE_DIR == repo / "utama_core" / "config" / "robots"
+    assert fr.FOUND_PATH == repo / "replays" / "field" / "robots_found.json"

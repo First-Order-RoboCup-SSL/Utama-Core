@@ -84,7 +84,7 @@ class RobotProfile:
 
 
 # One file per robot, by radio ID: `pixi run calibrate` writes it, every script reads it.
-PROFILE_DIR = Path(__file__).resolve().parents[4] / "config" / "robots"
+PROFILE_DIR = Path(__file__).resolve().parents[3] / "config" / "robots"
 
 
 def profile_path(radio_id: int, directory: Path = PROFILE_DIR) -> Path:

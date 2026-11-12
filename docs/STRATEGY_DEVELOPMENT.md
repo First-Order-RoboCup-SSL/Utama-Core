@@ -302,7 +302,7 @@ flowchart TD
 - **Rounds.** Every round is the same round robin, every pair of players once, under noise seed k;
   after round 1 only the candidates not yet decided stay. The match results store makes it cheap: a match
   whose code is unchanged is never played again, so a run plays only the matches of edited strategies
-  (and of a seed never played before). The candidate (then the reference) is config_a in odd rounds
+  (and of a seed never played before). The candidate (then the reference) is config_a under odd seeds
   and config_b in even ones, so both meet each opponent in the same colour under the same noise (the
   noise is drawn per colour and robot, so one seed can favour a colour by half a goal).
 - **The decision** (`analysis/ratings.py`) is on diffs: the candidate's goal difference against an
