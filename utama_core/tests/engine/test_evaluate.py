@@ -3,27 +3,21 @@ import pytest
 from tools.evaluation import evaluate
 
 
-def test_round_one_is_every_pair_once_and_later_rounds_only_the_candidates_matches():
-    full = evaluate.round_fixtures(1, ["c"], "ref", ["o1", "o2"], full=True)
-    assert len(full) == 6 and {f[2] for f in full} == {1}
-    assert ("o1", "o2", 1) in full
-    later = evaluate.round_fixtures(2, ["c"], "ref", ["o1", "o2"], full=False)
-    assert set(later) == {("ref", "c", 2), ("o1", "c", 2), ("o2", "c", 2), ("o1", "ref", 2), ("o2", "ref", 2)}
+def test_every_round_is_every_pair_once_under_its_seed():
+    for k in (1, 2):
+        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o1", "o2"])
+        assert len(fixtures) == 6 and {f[2] for f in fixtures} == {k}
+        assert {frozenset(f[:2]) for f in fixtures} == {
+            frozenset(p) for p in [("c", "ref"), ("c", "o1"), ("c", "o2"), ("ref", "o1"), ("ref", "o2"), ("o1", "o2")]
+        }
 
 
 def test_candidate_and_reference_meet_each_opponent_with_the_same_colour():
     for k in (1, 2, 3):
-        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o"], full=k == 1)
+        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o"])
         c_is_a = ("c", "o", k) in fixtures
         assert c_is_a == (k % 2 == 1)
         assert (("ref", "o", k) in fixtures) == c_is_a
-
-
-def test_two_candidates_share_the_references_fixtures_and_meet_only_in_round_one():
-    later = evaluate.round_fixtures(3, ["c1", "c2"], "ref", ["o1"], full=False)
-    assert later.count(("ref", "o1", 3)) == 1
-    assert not any({"c1", "c2"} == {a, b} for a, b, _ in later)
-    assert ("c1", "c2", 1) in evaluate.round_fixtures(1, ["c1", "c2"], "ref", ["o1"], full=True)
 
 
 def test_verdict_thresholds_are_inclusive_and_cap_rounds():

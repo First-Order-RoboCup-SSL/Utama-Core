@@ -34,9 +34,9 @@ links back here.
 
 Notes on the table:
 
-- One tool plays matches: `evaluate.py`. Its round 1 is a round robin, which answers "is the
-  catalog healthy?" (stalls, signals); its later rounds answer "is this candidate stronger than the
-  champion at the last release?". The verdict is goals; nothing else ranks.
+- One tool plays matches: `evaluate.py`. Each round is a round robin under a new noise seed; the
+  first answers "is the catalog healthy?" (stalls, signals), and rounds continue until "is this
+  candidate stronger than the champion at the last release?" is clear. The verdict is goals; nothing else ranks.
 - "Look closely" tools explain a result. They never judge one.
 
 ## The screen (dropped)
@@ -67,7 +67,7 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    collected counts as **unknown, not clean**.
 4. **One tool for matches.** Done 2026-11-12: `round_robin.py` merged into `evaluate.py`. Round 1 is
    a round robin of the core strategies and the reference (the champion at
-   the last release, a `.strategy` file); later rounds play only undecided candidates. No held-out
+   the last release, a `.strategy` file); later rounds repeat it under new seeds while a candidate is undecided. No held-out
    opponents, no `--vs-champion`, no standings. The strategies were renamed the same day
    (`catalog.RENAMED`).
 5. **One shared match and runner construction** for every tool. `tools/sim_setup.py` has `load_side` (a

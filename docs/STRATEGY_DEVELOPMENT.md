@@ -265,19 +265,19 @@ goals, under the realistic sim noise?
 ```mermaid
 flowchart TD
     p["Players: core (reference/players.json); --all: every strategy<br/>+ the reference: the champion at the last release, a .strategy file"]
-    r1["Round 1, noise seed 1: every pair once, candidates included<br/>signals and stalls of every player"]
-    rk["Round k, seed k: only undecided candidates'<br/>matches, and the reference's against the same opponents"]
+    r1["Round k, noise seed k: every pair once<br/>(only the undecided candidates stay after round 1)"]
+    st0{"in the match results?"}
     st["Every match stored in the match results<br/>replays/match_results/"]
     d{"P(candidate stronger), paired<br/>with the reference's results"}
     b["better: P >= 0.99<br/>promote by hand in players.json"]
     w["worse: P <= 0.2<br/>drop it"]
     u["undecided after 6 rounds<br/>drop it"]
-    p --> r1 --> d
-    r1 -.-> st
-    rk -.-> st
+    p --> r1 --> st0
+    st0 -- "yes: reuse" --> d
+    st0 -- "no: play, then store" --> st --> d
     d -- "P >= 0.99" --> b
     d -- "P <= 0.2" --> w
-    d -- "neither, rounds left" --> rk --> d
+    d -- "neither, rounds left: k + 1" --> r1
     d -- "neither, no rounds left" --> u
 ```
 
@@ -292,9 +292,10 @@ flowchart TD
   referee and simulator are today's for both sides. An older commit may know the champion by its old
   name (`catalog.RENAMED`); that is found. `--compare-with NAME` compares against NAME instead: a new
   version against the one it changes.
-- **Rounds.** Round k plays with noise seed k. Round 1 plays every pair of players once. Later rounds
-  play only the undecided candidates: each against the reference and the round's opponents, and the
-  reference against the same opponents. The candidate (then the reference) is config_a in odd rounds
+- **Rounds.** Every round is the same round robin, every pair of players once, under noise seed k;
+  after round 1 only the undecided candidates stay. The match results store makes it cheap: a match
+  whose code is unchanged is never played again, so a run plays only the matches of edited strategies
+  (and of a seed never played before). The candidate (then the reference) is config_a in odd rounds
   and config_b in even ones, so both meet each opponent in the same colour under the same noise (the
   noise is drawn per colour and robot, so one seed can favour a colour by half a goal).
 - **The decision** (`ratings.paired_difference`): the candidate's goal difference against each
@@ -323,10 +324,10 @@ flowchart TD
   from the store have no replay, so the pictures cover only what was played. Example
   (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
-- **Cost.** Round 1 with nothing stored is 15 matches (the five core and the reference, every pair once)
-  of up to 1200 s, roughly 20 min on 12 workers; a later round is 9 matches per candidate (candidate
-  vs reference, and each against the four other core strategies). `--all` makes round 1 66 matches. A clearly worse candidate is decided
-  after 1-2 rounds.
+- **Cost.** A round is 15 matches (five core and the reference, plus one per extra candidate pair) of
+  up to 1200 s, roughly 20 min on 12 workers, when nothing is stored. Once stored, editing one strategy
+  replays only its 5 matches per round; a change to shared code replays everything. `--all` makes a
+  round 66 matches. A clearly worse candidate is decided after 1-2 rounds.
 
 ### Strategy branches
 

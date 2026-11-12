@@ -91,14 +91,15 @@ def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matche
     assert sorted((x, y) for x, y, _ in rig.played) == [("a", "d"), ("b", "d")]
 
 
-def test_later_rounds_play_only_the_candidates_and_references_matches_with_sides_swapped(rig):
+def test_a_later_round_is_the_same_round_robin_under_the_next_seed_with_colours_swapped(rig):
     run_dir = rig.run("c", "--compare-with", "a", "--max-rounds", "2")
 
-    round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]
-    assert round_2  # equal results: undecided after round 1
-    assert all("c" in pair or "a" in pair for pair in round_2)
-    # each opponent against both c and a, now as config_a; opponents never meet each other again
-    assert sorted(round_2) == [("a", "c"), ("b", "a"), ("b", "c"), ("d", "a"), ("d", "c")]
+    round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]  # equal results: undecided after round 1
+    assert sorted(round_2) == [("a", "c"), ("b", "a"), ("b", "c"), ("d", "a"), ("d", "b"), ("d", "c")]
+
+    rig.version["c"] += 1  # edit the candidate: only its matches play again, in both rounds
+    rig.run("c", "--compare-with", "a", "--max-rounds", "2")
+    assert all("c" in (x, y) for x, y, _ in rig.played) and len(rig.played) == 6
     report = json.loads((run_dir / "report.json").read_text())
     assert report["candidates"]["c"]["verdict"] == "undecided"
     assert report["candidates"]["c"]["rounds"] == 2

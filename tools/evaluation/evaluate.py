@@ -33,9 +33,10 @@ candidates and the working-tree strategies, never the reference.
 Rounds
 ------
 Round k plays under sim-noise seed k (the reference world and robots, reference/world.json and
-robots.json). Round 1 plays every pair of players once, candidates included. Later rounds play only the
-undecided candidates' matches: each against the reference and the round's opponents, and the reference
-against those opponents. In every match the candidate (then the reference) is config_a in odd rounds and
+robots.json). Every round is the same round robin: every pair of players once, under seed k. Only the
+candidates still undecided stay in later rounds. Nothing is played twice: the match results store holds
+every match whose code is unchanged, so a run plays only the matches of edited strategies, and of a
+seed not played before. In every match the candidate (then the reference) is config_a in odd rounds and
 config_b in even ones, so a candidate and the reference meet each opponent with the same colour and
 noise. Matches are 1200 s of sim time at most (two 300 s halves of playing time, `MAX_MATCH_SECONDS`).
 
@@ -122,26 +123,15 @@ MAX_MATCH_SECONDS = 1200.0
 # --- who plays what ---------------------------------------------------------------------------
 
 
-def round_fixtures(
-    k: int, candidates: list[str], reference: str, opponents: list[str], full: bool
-) -> list[tuple[str, str, int]]:
-    """Round `k`'s (config_a, config_b, seed). `full`: every pair of candidates, reference and
-    opponents; otherwise each candidate against the reference and every opponent, and the reference
-    against every opponent. The earlier of the two in (candidates, reference, opponents) order is
-    config_a in odd rounds, so candidates and reference face each opponent with the same colour."""
+def round_fixtures(k: int, candidates: list[str], reference: str, opponents: list[str]) -> list[tuple[str, str, int]]:
+    """Round `k`'s (config_a, config_b, seed): every pair of candidates, reference and opponents once.
+    The store holds every match whose code is unchanged, so only the matches of edited strategies, or
+    of a seed not played before, are actually played. The earlier of the two in (candidates,
+    reference, opponents) order is config_a in odd rounds, so candidates and reference face each
+    opponent with the same colour."""
     order = list(dict.fromkeys([*candidates, reference, *opponents]))
-    rank = {n: i for i, n in enumerate(order)}
-    if full:
-        pairs = list(itertools.combinations(order, 2))
-    else:
-        pairs = [(c, o) for c in candidates for o in [reference, *opponents]] + [(reference, o) for o in opponents]
-    out = []
-    for x, y in pairs:
-        if x == y:
-            continue
-        first, second = sorted((x, y), key=rank.__getitem__)
-        out.append((first, second, k) if k % 2 else (second, first, k))
-    return list(dict.fromkeys(out))
+    pairs = itertools.combinations(order, 2)
+    return [(x, y, k) if k % 2 else (y, x, k) for x, y in pairs]
 
 
 def verdict(p_better: float, rounds: int, max_rounds: int) -> Optional[str]:
@@ -315,7 +305,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                 break
             opponents = [p for p in [*core, *reserve] if p not in candidates and p != reference]
             opponents_so_far |= set(opponents)
-            fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, full=k == 1)
+            fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents)
             round_dir = run_dir / f"round_{k}"
             round_dir.mkdir(parents=True, exist_ok=True)
             recs: dict[tuple[str, str], tuple[dict, bool]] = {}
