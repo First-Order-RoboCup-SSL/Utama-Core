@@ -209,7 +209,8 @@ benchmark_results/
 # local agent-tool config dirs
 .codex/
 .agents/
-.claude/
+.claude/*
+!.claude/skills/
 
 .vscode
 

@@ -161,6 +161,11 @@ declarations) — check there before reintroducing one of them.
 `docs/README.md` indexes every doc by kind and `docs/tools.md` every script; the ones agents
 need most:
 
+- `.claude/skills/` — three step-by-step playbooks over those scripts (plain Markdown, readable by
+  any agent): `explain-result` (how a strategy plays, why it won or lost), `debug-incident` (one bad
+  moment, from symptom to a fixed cause with a test), `field-session` (a test day on real robots and
+  its logs).
+
 - `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
