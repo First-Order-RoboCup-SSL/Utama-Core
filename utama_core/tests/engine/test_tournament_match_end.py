@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from tools import sim_setup
 from tools.evaluation import match
 from utama_core.entities.referee.stage import Stage
 
@@ -34,7 +35,7 @@ class _FakeRunner:
 
 
 def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
-    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
     result = match.run_match("tiki_taka", "low_block", duration_seconds=1200.0)
 
@@ -44,7 +45,7 @@ def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
 
 def test_the_cap_still_ends_a_match_that_never_reaches_full_time(monkeypatch):
     monkeypatch.setattr(_FakeRunner, "full_time_ticks", 10**9)
-    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
     match.run_match("tiki_taka", "low_block", duration_seconds=1.0)
 

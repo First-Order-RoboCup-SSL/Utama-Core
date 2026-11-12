@@ -13,14 +13,11 @@ results, use `tools/evaluation/round_robin.py`.
 
 import argparse
 
-from tools.sim_setup import N_ROBOTS, UnknownStrategy, load_side
-from utama_core.custom_referee import CustomReferee
+from tools.sim_setup import UnknownStrategy, load_side, sim_referee, sim_runner
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.run import StrategyRunner
 
 
 def _strategy(name: str) -> AbstractStrategy:
@@ -39,23 +36,11 @@ def main() -> None:
     yellow, blue = _strategy(args.yellow), _strategy(args.blue)  # fail on a bad name before the dashboard starts
 
     profile = load_profile("simulation")
-    referee = CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
+    referee = sim_referee()
     server = attach_dashboard()
     referee_view.attach(server, referee, profile)
 
-    runner = StrategyRunner(
-        strategy=yellow,
-        opp_strategy=blue,
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_ROBOTS,
-        exp_enemy=N_ROBOTS,
-        exp_ball=True,
-        referee=referee,
-        referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        show_live_status=True,
-    )
+    runner, _ = sim_runner(yellow, blue, referee=referee, show_live_status=True)
     runner.run()
 
 

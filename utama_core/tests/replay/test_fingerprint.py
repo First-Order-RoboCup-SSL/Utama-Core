@@ -356,7 +356,8 @@ def test_all_code_taken_out_of_the_base_is_in_every_players_fingerprint(graph):
 # Every place the match process calls into `PLAYER_SIDE`. A new one fails this test: is it behind
 # the boundary (then a `.strategy` file must do it in its own process), or `RUNNER_SIDE`?
 _RUNNER_REACHES_INTO_PLAYER_SIDE = {
-    "tools.evaluation.match": {"utama_core.engine", "utama_core.strategy"},  # builds the code-named ones
+    "tools.evaluation.match": {"utama_core.strategy"},  # the catalog's names
+    "tools.sim_setup": {"utama_core.engine", "utama_core.strategy"},  # builds the code-named ones (load_side)
     "utama_core.bundle.strategy_file": {"utama_core.engine"},
     "utama_core.run.side_runtime": {"utama_core.engine", "utama_core.motion_planning"},
     "utama_core.run.strategy_runner": {

@@ -61,3 +61,20 @@ def test_sim_runner_plays_us_yellow_on_the_right_with_six_a_side():
         assert runner.referee is referee
     finally:
         runner.close()
+
+
+def test_sim_referee_gives_the_first_kickoff_to_the_team_asked(monkeypatch):
+    profiles = []
+    monkeypatch.setattr(sim_setup, "CustomReferee", lambda profile, **_kw: profiles.append(profile) or object())
+
+    sim_setup.sim_referee(kickoff_team="blue")
+    sim_setup.sim_referee()
+
+    assert [p.game.kickoff_team for p in profiles] == ["blue", "yellow"]
+
+
+def test_sim_referee_injects_restarts_only_for_a_seeded_run():
+    from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
+
+    assert isinstance(sim_setup.sim_referee(fuzz_seed=3), RestartFuzzingReferee)
+    assert not isinstance(sim_setup.sim_referee(), RestartFuzzingReferee)

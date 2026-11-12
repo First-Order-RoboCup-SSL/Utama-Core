@@ -1,32 +1,38 @@
-"""One way to load a strategy and set up a simulated match, for the tools that play from a position or
-for a while (`repro_from_replay.py`, `moments.py`, `debug_match.py`, `main.py`).
+"""The one way to load a strategy and to set up a simulated match. Every tool that plays one uses these:
+`tools/evaluation/match.py` (round-robin, `evaluate.py`), `repro_from_replay.py`, `moments.py`,
+`debug_match.py` and `main.py`.
 
 - `load_side(name)`: a strategy by catalog name, a `.strategy` file by path, or `PATH.py:FUNCTION` (a
   `build(outfield_robot_ids, motion_controller)` in a scratch file, to try a tactic without a repo change).
-- `sim_runner(strategy, opponent, ...)`: the referee and the `StrategyRunner` for a 6-a-side rsim match,
-  our side yellow on the right, vision stream off.
+- `sim_referee(...)`: the referee of an rsim match: the "simulation" profile, with the kickoff team and,
+  for a seeded run, the restart fuzzing (`custom_referee/restart_fuzzer.py`).
+- `sim_runner(strategy, opponent, ...)`: the `StrategyRunner` for a 6-a-side rsim match against a referee
+  (`sim_referee()` by default), our side yellow on the right, vision stream off.
 
-`tools/evaluation/match.py` still builds its own runner: it is part of every cached match's fingerprint
-(`utama_core/replay/fingerprint.py`), so changing it replays every cached match and starts the
-evaluation ledger afresh. Move it onto these helpers together with the next change that forces that anyway.
+Nothing else constructs the referee or the rsim runner of a match. Changing this module changes the
+fingerprint of every match (`utama_core/replay/fingerprint.py`), so a round-robin plays them all again.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
 
-from tools.evaluation.match import N_OUTFIELD, OUTFIELD_ROBOT_IDS
 from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
 from utama_core.custom_referee import CustomReferee
+from utama_core.custom_referee.profiles.profile_loader import load_profile
+from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import StrategyRunner
 from utama_core.strategy import catalog
 
+N_OUTFIELD = 5  # + 1 goalkeeper per side
+OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 N_ROBOTS = N_OUTFIELD + 1  # per side, the goalkeeper included
 
 
@@ -59,13 +65,33 @@ def factory_for(name: str) -> Callable:
     return lambda outfield_robot_ids: partial(factory, outfield_robot_ids)
 
 
-def load_side(name: str, outfield_robot_ids: tuple[int, ...] = OUTFIELD_ROBOT_IDS) -> AbstractStrategy:
-    """A strategy to play: a `.strategy` file by path, `PATH.py:FUNCTION`, or a catalog name."""
+def load_side(name: str, outfield_robot_ids: Optional[tuple[int, ...]] = None) -> AbstractStrategy:
+    """A strategy to play: a `.strategy` file by path, `PATH.py:FUNCTION`, or a catalog name. The robots
+    are the outfield ones unless given; a `.strategy` file plays the robots it was built for unless given."""
     if name.endswith(SUFFIX):
         if not Path(name).is_file():
             raise UnknownStrategy(f"{name}: no such strategy file")
         return BundledStrategy(name, outfield_robot_ids)
-    return AbstractStrategy(build=factory_for(name)(outfield_robot_ids))
+    return AbstractStrategy(build=factory_for(name)(outfield_robot_ids or OUTFIELD_ROBOT_IDS))
+
+
+def sim_referee(
+    *,
+    kickoff_team: str = "yellow",
+    fuzz_seed: Optional[int] = None,
+    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
+) -> CustomReferee:
+    """The referee of an rsim match: the "simulation" profile, `kickoff_team` taking the first kickoff.
+    With `fuzz_seed`, a `RestartFuzzingReferee` injecting seeded extra legal restarts `fuzz_interval_s`
+    apart."""
+    profile = load_profile("simulation")
+    if kickoff_team != profile.game.kickoff_team:
+        profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team=kickoff_team))
+    if fuzz_seed is not None:
+        return RestartFuzzingReferee(
+            profile, seed=fuzz_seed, interval_s=fuzz_interval_s, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS
+        )
+    return CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
 
 
 def sim_runner(
@@ -74,19 +100,22 @@ def sim_runner(
     *,
     sim_noise: Optional[SimNoise] = None,
     initial_command: Optional[RefereeCommand] = RefereeCommand.PREPARE_KICKOFF_YELLOW,
+    referee: Optional[CustomReferee] = None,
+    my_team_is_right: bool = True,
     **runner_kwargs,
 ) -> tuple[StrategyRunner, CustomReferee]:
-    """The referee ("simulation" profile) and a `StrategyRunner` for `strategy` (yellow, on the right)
-    against `opponent` in rsim. `initial_command=None` keeps the runner's own default. Other keyword
-    arguments go to `StrategyRunner` (`match_log_path`, `stats_path`, `control_scheme`, ...)."""
-    referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
+    """A `StrategyRunner` for `strategy` (yellow) against `opponent` in rsim, refereed by `referee` (default
+    `sim_referee()`). `initial_command=None` keeps the runner's own default. Other keyword arguments go to
+    `StrategyRunner` (`match_log_path`, `stats_path`, `control_scheme`, `show_live_status`, ...)."""
+    if referee is None:
+        referee = sim_referee()
     if initial_command is not None:
         runner_kwargs["referee_initial_command"] = initial_command
     runner = StrategyRunner(
         strategy=strategy,
         opp_strategy=opponent,
         my_team_is_yellow=True,
-        my_team_is_right=True,
+        my_team_is_right=my_team_is_right,
         mode="rsim",
         exp_friendly=N_ROBOTS,
         exp_enemy=N_ROBOTS,

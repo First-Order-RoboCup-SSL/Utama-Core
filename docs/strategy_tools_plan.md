@@ -11,10 +11,10 @@ links back here.
   different ways. A reader cannot tell which one to run first, or which result to believe.
 - **The docs list scripts, not jobs.** `tools.md` says what each script is. It does not say
   which question the script answers, so a reader has to work that out.
-- **Runner set-up was written five times** (step 5 fixed four of them). Each of these builds its own strategy runner,
-  referee and dashboard:
-  `tools/evaluation/match.py`, `tools/debug_match.py`, `tools/repro_from_replay.py`,
-  `tools/moments.py` and `main.py`.
+- **Runner set-up was written five times** (step 5 fixed them all). Each of these built its own strategy runner,
+  referee and dashboard: `tools/evaluation/match.py`, `tools/debug_match.py`,
+  `tools/repro_from_replay.py`, `tools/moments.py` and `main.py`. Now they all build their referee and
+  runner in `tools/sim_setup.py`.
   Before step 5 only `match.py` loaded `.strategy` files (`utama_core/bundle/`), so the other four
   could not run a frozen baseline.
 
@@ -68,15 +68,14 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    the champion against the first reference opponent, under reference noise seed 2 by default.
    `evaluate.py` puts the side under test second in even rounds, so each (strategy, champion)
    match is its round-2 fixture (not with `--frozen`, whose opponents are packed files).
-5. **One shared match and runner construction** for the other tools. Done as `tools/sim_setup.py`
-   (`load_side`: a catalog name, a `.strategy` file or `PATH.py:FUNCTION`; `sim_runner`: the referee and
-   rsim runner), used by `repro_from_replay.py`, `moments.py` and `debug_match.py`; `main.py` loads its
-   strategies through it but keeps its own runner for the dashboard. So all four play `.strategy` files.
-   `match.py` is unchanged, and moves onto `sim_setup` with the next change that replays every match
-   anyway: editing `match.py`, or anything it imports, changes the
-   fingerprint of every stored match, so every match replays and the store is invalidated
-   (`utama_core/replay/fingerprint.py`). If it must change, batch it with other changes to shared
-   code and say so in the commit.
+5. **One shared match and runner construction** for every tool. `tools/sim_setup.py` has `load_side` (a
+   catalog name, a `.strategy` file or `PATH.py:FUNCTION`), `sim_referee` (the referee, its kickoff team and
+   seeded restart fuzzing) and `sim_runner` (the rsim `StrategyRunner`). `repro_from_replay.py`, `moments.py`,
+   `debug_match.py`, `main.py` and `tools/evaluation/match.py` all build through them, so every tool plays
+   `.strategy` files and the referee and runner exist in one place. `main.py` keeps its dashboard: the
+   referee is built before the dashboard attaches, the runner after. `match.py`'s fingerprint changed with
+   this (its set-up is now in `sim_setup.py`), so every stored match replays once. The match results store
+   (`replay/match_results.py`) changed the same fingerprints, so one replay covers both.
 6. **The screen.** The screen was built and dropped on 2026-11-12: any code change made the paired starts diverge within 0.1 s, and goals in 20 s starts were too rare to say "skip", so it could not save evaluations. `evaluate.py` stays the only gate.
 7. **Triage takes the foul listing.** Done: `triage.py --fouls`; `moments.py` lost `fouls` and `new`,
    and `--against` no longer uses a dated folder.

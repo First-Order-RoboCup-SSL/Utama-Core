@@ -13,22 +13,24 @@ one copy (the `PREPARE_KICKOFF_*` vs `FORCE_START` kickoff-ceremony fix; the
 the other and could easily have been missed. This module is the single place
 that logic lives now; each script above is a thin CLI over it, differing only
 in which strategies it selects, what duration it uses, and whether it sweeps
-side/kickoff as independent axes.
+side/kickoff as independent axes. The strategies, referee and rsim runner of a
+match come from `tools/sim_setup.py`, the one set-up the debugging tools share.
 """
 
 from __future__ import annotations
 
-import dataclasses
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from tools.sim_setup import (  # noqa: F401 -- re-exported
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    load_side,
+    sim_referee,
+    sim_runner,
+)
 from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
-from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
-from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
@@ -36,12 +38,9 @@ from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import 
     enable_sim_reuse,
 )
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
-from utama_core.run import StrategyRunner
 from utama_core.strategy import catalog
 from utama_core.strategy.catalog import plain_name
 
-N_OUTFIELD = 5  # + 1 goalkeeper per side
-OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
 # default is excluded from the auto-discovered catalog:
@@ -57,13 +56,6 @@ def _short_name(config_name: str) -> str:
     if config_name.endswith(SUFFIX):
         return Path(config_name).stem
     return plain_name(config_name)
-
-
-def _load_strategy(config_name: str) -> AbstractStrategy:
-    """A strategy by name, or a `.strategy` file by path."""
-    if config_name.endswith(SUFFIX):
-        return BundledStrategy(config_name)
-    return AbstractStrategy(build=catalog.builder(config_name, OUTFIELD_ROBOT_IDS))
 
 
 def _stats_to_dict(stats) -> dict:
@@ -172,9 +164,8 @@ def run_match(
     `tools/motion_planning_benchmark.py` for that).
 
     `fuzz_seed`, if set, swaps in `RestartFuzzingReferee` (see
-    `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
-    `CustomReferee`, so this match's referee injects extra seeded-random
-    legal restarts during live play.
+    `utama_core/custom_referee/restart_fuzzer.py`), so this match's referee, built by
+    `sim_setup.sim_referee`, injects extra seeded-random legal restarts during live play.
 
     `sim_noise`, if set, plays the match with seeded latency, kick speed noise and vision noise
     (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`, `docs/sim_realism.md`). The draws
@@ -183,26 +174,12 @@ def run_match(
     """
     enable_sim_reuse()
 
-    strategy_a = _load_strategy(config_a_name)
-    strategy_b = _load_strategy(config_b_name)
-
-    # "simulation" profile's kickoff_team defaults to "yellow"; override it to
-    # "blue" when B kicks off. Neither CustomReferee.from_profile_name nor
-    # RestartFuzzingReferee.from_profile_name takes a kickoff_team override,
-    # so build the profile by hand, then construct the referee from it directly.
-    profile = load_profile("simulation")
-    if not a_kicks_off:
-        profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team="blue"))
-    if fuzz_seed is not None:
-        referee = RestartFuzzingReferee(
-            profile,
-            seed=fuzz_seed,
-            interval_s=fuzz_interval_s,
-            n_robots_yellow=N_OUTFIELD + 1,
-            n_robots_blue=N_OUTFIELD + 1,
-        )
-    else:
-        referee = CustomReferee(profile, n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1)
+    strategy_a = load_side(config_a_name)
+    strategy_b = load_side(config_b_name)
+    # config_a kicks off unless told otherwise; the referee's kickoff team and the ceremony follow it.
+    referee = sim_referee(
+        kickoff_team="yellow" if a_kicks_off else "blue", fuzz_seed=fuzz_seed, fuzz_interval_s=fuzz_interval_s
+    )
     initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW if a_kicks_off else RefereeCommand.PREPARE_KICKOFF_BLUE
 
     match_tag = f"{_short_name(config_a_name)}_vs_{_short_name(config_b_name)}{match_tag_suffix}"
@@ -229,20 +206,14 @@ def run_match(
 
     resolved_scheme = None if control_scheme in (None, "auto") else control_scheme
 
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=a_is_right,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=initial_command,
-        control_scheme=resolved_scheme,
+    runner, _ = sim_runner(
+        strategy_a,
+        strategy_b,
         sim_noise=sim_noise,
+        initial_command=initial_command,
+        referee=referee,
+        my_team_is_right=a_is_right,
+        control_scheme=resolved_scheme,
         **extra_kwargs,
     )
 
