@@ -184,13 +184,32 @@ def play_and_record(
     """Play one match into `run_dir` and return its stored record (`match_results.record`), with its
     replay analysed. `run_kwargs` go to `match.run_match`."""
     result = run_match(config_a, config_b, run_dir=run_dir, **run_kwargs)
-    restarts = losses = None
+    restarts = losses = replay = None
     npz = Path(run_dir) / f"{tag(config_a, config_b)}.npz"
     if npz.exists():  # no replay: crashed before it was written
         restarts, losses = analyse_replay(npz)
+        replay = Path(os.path.relpath(npz.with_suffix(""), REPLAY_BASE_PATH)).as_posix()
     return match_results.record(
-        env, a_fp, b_fp, dataclasses.asdict(result), seed=seed, source=source, restarts=restarts, losses=losses
-    )
+        env, a_fp, b_fp, dataclasses.asdict(result), seed=seed, source=source, restarts=restarts, losses=losses,
+        replay=replay,
+    )  # fmt: skip
+
+
+def link_replay(rec: dict, round_dir: Path, a: str, b: str) -> bool:
+    """Link a reused match's files (replay, stats, intentions) into this round's folder under this
+    run's names, so every reader of a round folder sees all of its matches. False if the record has
+    no replay or its files were deleted."""
+    if not rec.get("replay"):
+        return False
+    stem = Path(REPLAY_BASE_PATH) / rec["replay"]
+    files = sorted(stem.parent.glob(f"{stem.name}.*"))
+    if not any(f.suffix == ".npz" for f in files):
+        return False
+    for f in files:
+        link = round_dir / f"{tag(a, b)}{f.name[len(stem.name):]}"
+        if not link.exists():
+            link.symlink_to(os.path.relpath(f, round_dir))
+    return True
 
 
 def result_row(rec: dict, a: str, b: str, reused: bool) -> dict:
@@ -258,6 +277,8 @@ def main(argv: Optional[list[str]] = None) -> None:
             candidates.remove(c)
 
     run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
+    while (Path(REPLAY_BASE_PATH) / run_id).exists():  # two runs started in the same second
+        run_id += "b"
     run_dir = Path(REPLAY_BASE_PATH) / run_id
     print(f"Reference {_short_name(reference)}; core {', '.join(_short_name(n) for n in core)}; environment {env}")
 
@@ -292,6 +313,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                     todo.append((a, b, seed))
                 else:
                     recs[(a, b)] = (rec, True)
+                    link_replay(rec, round_dir, a, b)
             reused += len(recs)
             print(
                 f"\nRound {k}: {len(fixtures)} matches, {len(recs)} from the match results store, {len(todo)} to play"

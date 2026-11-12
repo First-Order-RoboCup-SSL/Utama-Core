@@ -107,9 +107,12 @@ def record(
     losses: Optional[dict],
     a_is_right: bool = True,
     a_kicks_off: bool = True,
+    replay: Optional[str] = None,
 ) -> dict:
     """The stored record of one played match. `result` is a `match.MatchResult` as a dict; `restarts`
-    and `losses` are the replay analyses (None when the replay was not kept to analyse)."""
+    and `losses` are the replay analyses (None when the replay was not kept to analyse). `replay` is
+    where its files are, a stem relative to the replay base directory (`eval_<id>/round_<k>/a_vs_b`),
+    so a later run that reuses the match can link them into its own round folder."""
     stats = result.get("stats") or {}
     shots = stats.get("shots") or {}
     rec = {
@@ -131,6 +134,7 @@ def record(
         "stats": result.get("stats"),
         "restarts": restarts,
         "losses": losses,
+        "replay": replay,
     }
     return json.loads(json.dumps(rec))  # the shape it reads back in, tuples as lists
 

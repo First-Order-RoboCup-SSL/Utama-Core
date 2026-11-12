@@ -313,13 +313,13 @@ flowchart TD
 - **Output.** `replays/eval_<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
   per round `round_<k>/`: each played match's replay, intention log and stats as `<a>_vs_<b>.*`,
   `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
-  read. Matches taken from the store have no replay in the run.
+  read. A match taken from the store is linked in (symlinks) from the run that played it, so a
+  round folder holds all of its matches; one played before 2026-11-12, or whose run was deleted, has none.
 - **Promoting** is a decision, not a side effect: change the champion line in `reference/players.json`
   in a pull request; the next release makes it the reference.
 - **Pictures** (`tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`): for a candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
-  their fouls by rule, and a `summary.json` of the numbers behind them, written to DIR. They explain a verdict and never make one; matches taken
-  from the store have no replay, so the pictures cover only what was played. Example
+  their fouls by rule, and a `summary.json` of the numbers behind them, written to DIR. They explain a verdict and never make one. Example
   (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
 - **Cost.** A round is 15 matches (five core and the reference, plus one per extra candidate pair) of

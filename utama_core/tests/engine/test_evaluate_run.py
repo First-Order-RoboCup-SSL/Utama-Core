@@ -133,3 +133,23 @@ def test_at_ref_falls_back_to_the_name_a_strategy_had_at_that_commit(monkeypatch
     monkeypatch.setattr(evaluate, "frozen", fake_frozen)
     assert evaluate.at_ref("pendulum", "v2.5.0").endswith("split_shape@abc.strategy")
     assert built == ["pendulum", "split_shape"]
+
+
+def test_a_reused_match_is_linked_into_the_new_rounds_folder_from_the_run_that_played_it(rig, monkeypatch):
+    def run_match_writing_files(a, b, run_dir=None, **kwargs):
+        rig.played.append((a, b, kwargs["sim_noise"].seed))
+        for suffix in (".npz", ".stats.json"):
+            (run_dir / f"{evaluate.tag(a, b)}{suffix}").write_text(a + b)
+        return MatchResult(config_a=a, config_b=b, score_a=1, score_b=0, stats={"x": 1})
+
+    monkeypatch.setattr(evaluate, "run_match", run_match_writing_files)
+    monkeypatch.setattr(evaluate, "analyse_replay", lambda npz: (None, None))
+    first = rig.run()
+    rig.version["d"] += 1
+    second = rig.run()
+
+    assert sorted((x, y) for x, y, _ in rig.played) == [("a", "d"), ("b", "d")]
+    linked = second / "round_1" / "a_vs_b.npz"
+    assert linked.is_symlink() and linked.resolve() == (first / "round_1" / "a_vs_b.npz").resolve()
+    assert (second / "round_1" / "a_vs_b.stats.json").read_text() == "ab"
+    assert len(list((second / "round_1").glob("*.npz"))) == 3  # every match of the round, played or reused
