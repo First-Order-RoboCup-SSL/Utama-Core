@@ -37,7 +37,7 @@ class _FakeRunner:
 def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
     monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
-    result = match.run_match("tiki_taka", "low_block", duration_seconds=1200.0)
+    result = match.run_match("tiki_taka_plus", "split_shape", duration_seconds=1200.0)
 
     assert _FakeRunner.last.ticks == _FakeRunner.full_time_ticks
     assert (result.score_a, result.score_b) == (2, 1)
@@ -47,6 +47,6 @@ def test_the_cap_still_ends_a_match_that_never_reaches_full_time(monkeypatch):
     monkeypatch.setattr(_FakeRunner, "full_time_ticks", 10**9)
     monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
-    match.run_match("tiki_taka", "low_block", duration_seconds=1.0)
+    match.run_match("tiki_taka_plus", "split_shape", duration_seconds=1.0)
 
     assert _FakeRunner.last.ticks == match.TICKS_PER_SECOND

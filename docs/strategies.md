@@ -33,23 +33,9 @@ strategies named plays these.
 | `decoy_and_overload` | `DecoyOverloadTactic` (min 2) + `ShadowAndMarkTactic`, fixed 50/50. |
 | `clear_danger` | `counter_flow` postures plus an own-third `ClearBallTactic` danger-clearance valve. |
 
-**Retired** (2026-10-10): the bottom ten of the 2026-10-05 round-robin. Left out of a round-robin
-unless named (`RETIRED` in `tools/evaluation/round_robin.py`). Their code stays:
-kept strategies and tests build on some of them. A retired strategy comes back by being judged
-with `evaluate.py` against the reference opponents.
-
-| Strategy | Description |
-|---|---|
-| `tiki_taka` | 3 give-and-go + 2 shadow-and-mark with the ball; 3 press + 2 shadow without. |
-| `counter_press` | Full press on loss, low block otherwise, 4-up switch-of-play on winning the ball. |
-| `high_line_zone` | Zone screen (`BlockShapeTactic`) + switch attack, built to deny tiki_taka 1v1s. |
-| `three_slot` | Three concurrent slots: press + mark + give-and-go. Exercises N>2 scheduling. |
-| `switch_of_play` | `SwitchOfPlayTactic` (min 3) + `DefenseTactic`, fixed 50/50. |
-| `low_block` | `PassAndShootTactic` (min 2) + `DefenseTactic`, fixed 20/80 defense-heavy split. |
-| `zone_fluid` | Man-shape defense; give-and-go through the middle, decoy/overload in the final third. |
-| `score_aware_zone_flow` | `zone_fluid` plus a late-half scoreline shift (protect a lead / chase). |
-| `overload_flow` | `zone_fluid`; give-and-go grows 3→4 only after the possession edge holds ~1.5s. |
-| `shadow_switch` | `SwitchOfPlayTactic` relay attack + `ShadowAndMarkTactic` defense, 3/2. |
+**Deleted** (2026-11-12): the ten strategies retired on 2026-10-10 (`tiki_taka`, `counter_press`,
+`high_line_zone`, `three_slot`, `switch_of_play`, `low_block`, `zone_fluid`, `score_aware_zone_flow`,
+`overload_flow`, `shadow_switch`), because nobody knew whether they still worked. Git history keeps them.
 
 `default`: Everyone runs `PassAndShootTactic`; only 2 robots are ever commanded (see bugs). Excluded from round-robin discovery.
 
@@ -101,6 +87,6 @@ bugs" refer to them — read them with `git log -p -- docs/strategies.md`. Still
 - New strategy → add a row with a one-line description to the round-robin table.
 - New tournament → replace the matching results table (one table per tournament type) and
   record the run directory; don't append narrative. Findings belong in commit messages.
-- Strategy abandoned after losing → add it to `RETIRED` and move its row to the retired table.
+- Strategy abandoned after losing → delete its module and its row.
 - Only single matches (`--pair`), no round-robin → put them in the pull request, not here: this
   file holds round-robin and full-match results only.

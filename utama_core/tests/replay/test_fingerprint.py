@@ -323,7 +323,7 @@ def test_editing_one_real_strategy_does_not_change_another_configs_fingerprint(g
     modules = {c: f"utama_core.strategy.{c}" for c in _players()}
     for config, module in modules.items():
         assert graph.strategy_modules(config) & set(modules.values()) == {module}, config
-    assert graph.strategy_fingerprint("tiki_taka") != graph.strategy_fingerprint("counter_press")
+    assert graph.strategy_fingerprint("tiki_taka_plus") != graph.strategy_fingerprint("counter_flow")
 
 
 def test_every_tactic_a_strategy_builds_is_in_its_closure(graph):

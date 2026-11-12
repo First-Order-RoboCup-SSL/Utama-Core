@@ -34,7 +34,7 @@ OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 
 # Same pairing that surfaced the bug live.
 _NAME_A = "counter_flow"
-_NAME_B = "tiki_taka"
+_NAME_B = "tiki_taka_plus"
 
 
 def test_goalkeeper_converges_on_static_target_without_oscillating(headless):

@@ -47,8 +47,7 @@ TICKS_PER_SECOND = 60  # matches rsim's default step rate
 # despite the name, it isn't a competitive team — it's the kernel's minimal
 # single-tactic smoke-test scaffold (see its docstring), used across the test
 # suite with as few as zero outfield robots, and plays a real match with 3 of 5
-# outfield robots never issued a command. Every other strategy is playable here;
-# which ones a round-robin plays by default is round_robin.RETIRED's business.
+# outfield robots never issued a command. Every other strategy is playable here.
 _CONFIG_NAMES = [name for name in catalog.names() if name != "default"]
 
 

@@ -66,8 +66,7 @@ def test_vs_champion_plays_active_strategies_against_champion_with_reference_see
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
-    monkeypatch.setattr(tournament, "_CONFIG_NAMES", ["a", "b", "c", "champ"])
-    monkeypatch.setattr(tournament, "RETIRED", {"c"})
+    monkeypatch.setattr(tournament, "_CONFIG_NAMES", ["a", "b", "champ"])
     monkeypatch.setattr(tournament, "load_opponents", lambda *_a, **_k: {"champion": "champ", "opponents": ["a", "b"]})
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--vs-champion"])
 
@@ -93,7 +92,6 @@ def test_noise_is_not_defaulted_outside_vs_champion_and_an_explicit_spec_wins(tm
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
     monkeypatch.setattr(tournament, "REPLAY_BASE_PATH", tmp_path)
     monkeypatch.setattr(tournament, "_CONFIG_NAMES", ["a", "champ"])
-    monkeypatch.setattr(tournament, "RETIRED", set())
     monkeypatch.setattr(tournament, "load_opponents", lambda *_a, **_k: {"champion": "champ", "opponents": ["a"]})
 
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save", "a", "champ"])

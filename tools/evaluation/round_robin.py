@@ -9,7 +9,7 @@ ceremony, run_dir file layout) lives in `match.py`.
 Run:
     pixi run python tools/evaluation/round_robin.py [config ...] [flags]
 
-Configs are short names (`tiki_taka`); none means every config not in RETIRED. Flags:
+Configs are short names (`split_shape`); none means every strategy in the catalog. Flags:
     --pair A B              one match, A as config_a
     --vs-champion           the day-to-day health check: one match per active strategy against the
                             champion (reference/opponents.json), plus champion vs the first opponent;
@@ -35,7 +35,7 @@ Headless rsim, no external process required. For each distinct pair of the
 strategies `utama_core/strategy/catalog.py` finds (one `strategy/<name>.py` each),
 runs one `StrategyRunner` match (6v6: 1 goalkeeper + 5 outfield robots per
 side — enough for every factory's minimum, including the `min_attack=2`
-configs and `three_slot`'s three concurrent slots),
+configs),
 steps it until `CustomReferee` calls full time, and records the final
 score from its scoreboard.
 
@@ -122,22 +122,6 @@ from utama_core.replay import match_results
 from utama_core.replay.fingerprint import CodeGraph
 from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.strategy.catalog import plain_name
-
-# Left out of a round-robin unless named: the bottom ten of the 2026-10-05 full round-robin
-# (docs/strategies.md). Their code stays, since kept strategies and tests build on some of them.
-# Named here, outside the match results' fixtures, so retiring one reruns nothing.
-RETIRED = {
-    "tiki_taka",
-    "counter_press",
-    "high_line_zone",
-    "three_slot",
-    "switch_of_play",
-    "low_block",
-    "zone_fluid",
-    "score_aware_zone_flow",
-    "overload_flow",
-    "shadow_switch",
-}
 
 # A full match, as the rulebook has it: two halves of 300 s of playing time, the clock stopped
 # whenever no team may play the ball (`custom_referee/state_machine.py`), so about 710 s of
@@ -406,7 +390,7 @@ def main() -> None:
             if len(config_names) < 2:
                 raise SystemExit("Need at least 2 configs to play a round-robin.")
         else:
-            config_names = [name for name in _CONFIG_NAMES if name not in RETIRED]
+            config_names = list(_CONFIG_NAMES)
 
         if vs_champion:
             reference = load_opponents()

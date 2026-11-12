@@ -245,8 +245,7 @@ changes and run one round-robin over the batch.
 environment (the shared code and machine, the match length, the planner, the sim noise without its
 seed, the restart fuzzing), both players' fingerprints, their sides and the noise seed. So after a
 change to one strategy only its matches play, one per other config. A default round-robin plays the
-12 configs not in `RETIRED` (`tools/evaluation/round_robin.py`; the catalog has 22), so a change to one
-of them replays 11 of its 66 matches. Naming all 22 configs gives 21 of 231. What counts as "runs" is
+12 strategies of the catalog, so a change to one of them replays 11 of its 66 matches. What counts as "runs" is
 `utama_core/replay/fingerprint.py`'s: the strategy's own module, every module that imports
 (`strategy/pickers.py`, the tactics, the planner and its compiled library among them, whole files),
 and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing

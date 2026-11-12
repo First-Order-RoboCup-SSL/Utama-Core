@@ -3,7 +3,6 @@ in `utama_core/strategy/`.
 
 Replaces the earlier one-file-per-config pattern (`test_split_shape_kernel_strategy.py`,
 `test_press_and_pass_kernel_strategy.py`, `test_high_press_kernel_strategy.py`,
-`test_low_block_kernel_strategy.py`, `test_three_slot_kernel_strategy.py`,
 `test_give_and_go_solo_kernel_strategy.py`), each of which re-asserted the same
 handful of generic properties ("builds a Strategy", "runs N ticks without
 error", "partition covers every outfield robot", "goalkeeper stays pinned")
@@ -15,8 +14,7 @@ adapter/blackboard wiring itself, via `default` as one
 convenient example config — not "does this config's partition behave
 correctly") or `test_kernel_strategy_debug_status.py` (tests `debug_status()`
 mechanics specifically). Picker-level unit tests that don't need rsim at all
-(e.g. `fixed_ratio_picker`'s exact split ratios, `_three_way_picker`'s slot
-allocation) also stay separate, below, since they're cheap, precise, and
+(e.g. `fixed_ratio_picker`'s exact split ratios) also stay separate, below, since they're cheap, precise, and
 don't belong in a `StrategyRunner`-driven table.
 """
 
@@ -34,11 +32,7 @@ from utama_core.strategy.catalog import builder
 from utama_core.strategy.clear_danger import _clear_danger_picker
 from utama_core.strategy.clear_press_plus import _clear_press_plus_picker
 from utama_core.strategy.counter_flow import _counter_flow_picker
-from utama_core.strategy.counter_press import _counter_press_picker
 from utama_core.strategy.pickers import fixed_ratio_picker
-from utama_core.strategy.three_slot import _three_way_picker
-from utama_core.strategy.tiki_taka import _tiki_taka_picker
-from utama_core.strategy.zone_fluid import _zone_flow_picker
 
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
@@ -108,11 +102,11 @@ def test_fixed_ratio_picker_high_press_split():
     assert len(partition["defense"]) == 1
 
 
-def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
+def test_fixed_ratio_picker_defense_heavy_split_respects_min_attack_floor():
     """attack_fraction=0.2 on 5 robots rounds to 1, but PassAndShootTactic
     hard-requires >=2 (it unconditionally reads robot_ids[1]) — min_attack=2
-    floors the split rather than letting `low_block`
-    crash the tactic it wires (the exact regression this test guards)."""
+    floors the split rather than letting a defense-heavy
+    split crash the tactic it wires (the exact regression this test guards)."""
     picker = fixed_ratio_picker("attack", "defense", attack_fraction=0.2, min_attack=2)
     partition = picker(
         game=_NOBODY_ON_BALL,
@@ -122,66 +116,6 @@ def test_fixed_ratio_picker_low_block_split_respects_min_attack_floor():
     )
     assert len(partition["attack"]) == 2
     assert len(partition["defense"]) == 3
-
-
-def test_three_way_picker_splits_all_three_slots_when_all_applicable():
-    partition = _three_way_picker(
-        game=_NOBODY_ON_BALL,
-        free_robots=frozenset({1, 2, 3, 4, 5}),
-        prev_partition=None,
-        available_tactic_ids=frozenset({"press", "mark", "attack"}),
-    )
-    assert len(partition["press"]) == 1
-    assert len(partition["mark"]) == 2
-    assert len(partition["attack"]) == 2
-    assert frozenset().union(*partition.values()) == frozenset({1, 2, 3, 4, 5})
-
-
-def _holder_game(holder_id):
-    """A still ball in one robot's dribbler; nobody else near it."""
-    return SimpleNamespace(
-        ball=SimpleNamespace(p=SimpleNamespace(x=0.0, y=0.0), v=SimpleNamespace(x=0.0, y=0.0)),
-        friendly_robots={
-            rid: SimpleNamespace(has_ball=rid == holder_id, p=SimpleNamespace(x=-1.0 - rid, y=0.0))
-            for rid in range(1, 6)
-        },
-        enemy_robots={},
-    )
-
-
-def test_three_way_picker_gives_the_ball_holder_to_attack_not_press_or_mark():
-    # three_slot_vs_zone_fluid (2026-10-05) t=87.8: the taker of our free kick sat in "mark" and
-    # `kick_upfield` sent the ball the length of the pitch and out; 24 such kicks a match went to
-    # the presser or a shadow. The holder attacks, whichever slots are open.
-    for open_slots in ({"press", "mark", "attack"}, {"mark", "attack"}, {"press", "attack"}):
-        partition = _three_way_picker(
-            game=_holder_game(holder_id=5),
-            free_robots=frozenset({1, 2, 3, 4, 5}),
-            prev_partition=None,
-            available_tactic_ids=frozenset(open_slots),
-        )
-        assert 5 in partition["attack"], open_slots
-        assert frozenset().union(*partition.values()) == frozenset({1, 2, 3, 4, 5})
-
-
-def test_three_way_picker_keeps_the_holder_in_press_when_attack_is_unavailable():
-    partition = _three_way_picker(
-        game=_holder_game(holder_id=5),
-        free_robots=frozenset({1, 2, 3, 4, 5}),
-        prev_partition=None,
-        available_tactic_ids=frozenset({"press", "mark"}),
-    )
-    assert partition["press"] == frozenset({5})
-
-
-def test_three_way_picker_falls_back_to_attack_when_press_and_mark_inapplicable():
-    partition = _three_way_picker(
-        game=_NOBODY_ON_BALL,
-        free_robots=frozenset({1, 2, 3}),
-        prev_partition=None,
-        available_tactic_ids=frozenset({"attack"}),
-    )
-    assert partition == {"attack": frozenset({1, 2, 3})}
 
 
 def test_give_and_go_solo_always_assigns_everyone_to_attack(make_runner):
@@ -227,152 +161,7 @@ def _stub_game(friendly_dist, enemy_dist, ball_x: float, my_team_is_right: bool 
 
 
 _FIVE = frozenset({1, 2, 3, 4, 5})
-_ALL = frozenset({"attack", "defense", "press", "givego", "overload", "block"})
 
-
-def test_tiki_taka_attacks_with_three_when_ball_is_ours():
-    partition = _tiki_taka_picker(
-        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=0.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert len(partition["attack"]) == 3
-    assert len(partition["defense"]) == 2
-    assert frozenset().union(*partition.values()) == _FIVE
-
-
-def test_tiki_taka_presses_with_three_when_ball_is_lost():
-    partition = _tiki_taka_picker(
-        _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert len(partition["press"]) == 3
-    assert len(partition["defense"]) == 2
-
-
-def test_tiki_taka_unknown_edge_falls_back_to_conservative_press():
-    # Unknown possession edge (both None) must not send everyone forward.
-    partition = _tiki_taka_picker(
-        _stub_game(friendly_dist=None, enemy_dist=None, ball_x=0.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert len(partition["press"]) == 3
-    assert len(partition["defense"]) == 2
-
-
-def test_tiki_taka_press_inapplicable_covers_with_defense():
-    partition = _tiki_taka_picker(
-        _stub_game(friendly_dist=1.5, enemy_dist=0.2, ball_x=0.0),
-        _FIVE,
-        None,
-        frozenset({"attack", "defense"}),  # press out of pressing range
-    )
-    assert partition == {"defense": _FIVE}
-
-
-def test_tiki_taka_attack_pinned_folds_share_into_defense():
-    # Give-and-go committed mid-hop: its robots are pinned (not in the free
-    # pool) and "attack" never appears in available_tactic_ids — everyone
-    # free must still land in a legal slot.
-    partition = _tiki_taka_picker(
-        _stub_game(friendly_dist=0.2, enemy_dist=1.5, ball_x=-3.0),
-        _FIVE,
-        None,
-        frozenset({"defense", "press"}),
-    )
-    assert partition == {"defense": _FIVE}
-
-
-def test_counter_press_everyone_presses_when_lost():
-    partition = _counter_press_picker(
-        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert partition == {"press": _FIVE}
-
-
-def test_counter_press_drops_into_low_block_when_nothing_to_press():
-    partition = _counter_press_picker(
-        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
-        _FIVE,
-        None,
-        frozenset({"attack", "block"}),  # opponent shielded from the press
-    )
-    assert partition == {"block": _FIVE}
-
-
-def test_counter_press_attacks_with_four_and_one_screen_when_won():
-    partition = _counter_press_picker(
-        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert len(partition["attack"]) == 4
-    assert len(partition["block"]) == 1
-
-
-def test_counter_press_won_ball_without_block_sends_all_five_forward():
-    partition = _counter_press_picker(
-        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),
-        _FIVE,
-        None,
-        frozenset({"attack", "press"}),
-    )
-    assert partition == {"attack": _FIVE}
-
-
-def test_zone_flow_everyone_takes_shape_when_ball_lost():
-    partition = _zone_flow_picker(
-        _stub_game(friendly_dist=2.0, enemy_dist=0.3, ball_x=0.0),
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert partition == {"defense": _FIVE}
-
-
-def test_zone_flow_givego_trio_builds_up_in_middle_third():
-    partition = _zone_flow_picker(
-        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=0.0),  # mid third
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert len(partition["givego"]) == 3
-    assert len(partition["defense"]) == 2
-
-
-def test_zone_flow_overload_pair_swaps_in_for_final_third():
-    partition = _zone_flow_picker(
-        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),  # final third
-        _FIVE,
-        None,
-        _ALL,
-    )
-    assert partition["overload"] == frozenset({1, 2})
-    assert len(partition["defense"]) == 3
-
-
-def test_zone_flow_overload_pinned_builds_with_givego_instead():
-    partition = _zone_flow_picker(
-        _stub_game(friendly_dist=0.3, enemy_dist=2.0, ball_x=-3.0),  # final third
-        _FIVE,
-        None,
-        frozenset({"givego", "defense"}),  # decoy/overload duet elsewhere
-    )
-    assert len(partition["givego"]) == 3
-    assert len(partition["defense"]) == 2
-
-
-# --- clear-danger picker unit tests (danger valve + counter_flow postures) ---
 
 _CLEAR_ALL = frozenset({"attack", "press", "block", "clear"})
 

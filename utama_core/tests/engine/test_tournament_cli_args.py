@@ -62,8 +62,8 @@ def test_fuzz_restarts_and_interval_parsed_and_passed_to_run_match(tmp_path, mon
             "--fuzz-interval",
             "5",
             "10",
-            "low_block",
-            "tiki_taka",
+            "split_shape",
+            "tiki_taka_plus",
         ],
     )
 
@@ -94,8 +94,8 @@ def test_fuzz_restarts_off_by_default(tmp_path, monkeypatch):
         [
             "tournament.py",
             "--sequential",
-            "low_block",
-            "tiki_taka",
+            "split_shape",
+            "tiki_taka_plus",
         ],
     )
 
@@ -126,11 +126,13 @@ def test_pair_plays_exactly_that_one_pairing_in_the_given_order(tmp_path, monkey
         return _stub_result(config_a_name, config_b_name)
 
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
-    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "tiki_taka", "low_block"])
+    monkeypatch.setattr(
+        "sys.argv", ["tournament.py", "--sequential", "--no-save", "--pair", "tiki_taka_plus", "split_shape"]
+    )
 
     tournament.main()
 
-    assert calls == [("tiki_taka", "low_block")]
+    assert calls == [("tiki_taka_plus", "split_shape")]
 
 
 def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
@@ -146,7 +148,7 @@ def test_help_prints_usage_and_plays_nothing(monkeypatch, capsys):
         assert "--pair A B" in out and "replays/match_results/" in out
 
 
-def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_still_plays(tmp_path, monkeypatch):
+def test_no_configs_plays_every_pair_in_the_catalog_and_named_configs_play_only_their_pair(tmp_path, monkeypatch):
     calls = []
 
     def _fake_run_match(config_a_name, config_b_name, *_args, **_kwargs):
@@ -156,11 +158,10 @@ def test_no_configs_plays_every_config_but_the_retired_and_a_named_retired_one_s
     names = ["a", "b", "c"]
     monkeypatch.setattr(tournament, "run_match", _fake_run_match)
     monkeypatch.setattr(tournament, "_CONFIG_NAMES", names)
-    monkeypatch.setattr(tournament, "RETIRED", {"c"})
 
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save"])
     tournament.main()
-    assert calls == [("a", "b")]
+    assert sorted(calls) == [("a", "b"), ("a", "c"), ("b", "c")]
 
     calls.clear()
     monkeypatch.setattr("sys.argv", ["round_robin.py", "--sequential", "--no-save", "a", "c"])
@@ -185,8 +186,8 @@ def test_sim_noise_parsed_and_passed_to_run_match_and_summary(tmp_path, monkeypa
             "--sequential",
             "--sim-noise",
             '{"seed": 3, "latency_s": [0.05, 0.1], "kick_speed_sd": 0.2}',
-            "low_block",
-            "tiki_taka",
+            "split_shape",
+            "tiki_taka_plus",
         ],
     )
 
@@ -202,13 +203,13 @@ def test_match_seconds_is_part_of_the_environment_so_each_length_has_its_own_res
     # environment in the store, and the length is recorded in the summary.
     monkeypatch.setattr(tournament, "run_match", _stub_result)
     monkeypatch.setattr(
-        "sys.argv", ["tournament.py", "--sequential", "--match-seconds", "300", "low_block", "tiki_taka"]
+        "sys.argv", ["tournament.py", "--sequential", "--match-seconds", "300", "split_shape", "tiki_taka_plus"]
     )
     tournament.main()
     (summary_path,) = tmp_path.glob("tournament_*/summary.json")
     assert json.loads(summary_path.read_text())["max_match_seconds"] == 300.0
 
-    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "low_block", "tiki_taka"])
+    monkeypatch.setattr("sys.argv", ["tournament.py", "--sequential", "split_shape", "tiki_taka_plus"])
     tournament.main()
 
     envs = sorted((tmp_path / "match_results").iterdir())

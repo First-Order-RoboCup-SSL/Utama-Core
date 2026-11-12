@@ -14,7 +14,7 @@ import pytest
 from tools.evaluation import round_robin as tournament
 from utama_core.replay import match_results
 
-_CONFIGS = ["tiki_taka", "low_block", "high_press"]
+_CONFIGS = ["tiki_taka_plus", "press_and_pass", "high_press"]
 
 
 class _Graph:
@@ -27,7 +27,7 @@ class _Graph:
         return "base"
 
     def strategy_fingerprint(self, name):
-        return f"fp-{name}-{self.rig.version[name]}"
+        return f"{self.rig.version[name]}-{name}"  # version first: the tool keeps 16 characters
 
 
 @pytest.fixture
@@ -85,13 +85,13 @@ def test_a_second_run_takes_every_stored_match_and_reports_the_same_results(rig)
 
 def test_after_one_config_changes_only_its_matches_play(rig):
     rig.run()
-    rig.version["low_block"] += 1
+    rig.version["press_and_pass"] += 1
 
     rig.run()
 
     assert sorted(rig.played) == [
-        ("high_press", "low_block"),
-        ("low_block", "tiki_taka"),
+        ("high_press", "press_and_pass"),
+        ("press_and_pass", "tiki_taka_plus"),
     ]
 
 
@@ -109,17 +109,17 @@ def test_a_stored_match_keeps_the_restarts_and_losses_its_replay_gave(rig, monke
 
 
 def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
-    # Editing tiki_taka during the first match leaves that match's code as it was, so it is stored.
-    # The two tiki_taka matches finish under changed code, so neither is stored.
+    # Editing tiki_taka_plus during the first match leaves that match's code as it was, so it is stored.
+    # The two tiki_taka_plus matches finish under changed code, so neither is stored.
     def edit():
-        rig.version["tiki_taka"] = 9
+        rig.version["tiki_taka_plus"] = 9
 
     rig.on_play = edit
 
     rig.run()
 
     stored = [json.loads(p.read_text()) for p in rig.store.root.rglob("*.json")]
-    assert [(r["a"], r["b"]) for r in stored] == [("high_press", "low_block")]
+    assert [(r["a"], r["b"]) for r in stored] == [("high_press", "press_and_pass")]
 
 
 def test_a_no_save_run_plays_and_stores_nothing(rig, monkeypatch):

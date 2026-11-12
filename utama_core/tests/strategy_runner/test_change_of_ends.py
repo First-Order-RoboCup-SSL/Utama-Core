@@ -30,8 +30,8 @@ def test_the_teams_play_the_second_half_from_the_other_end(headless):
     profile = load_profile("simulation")
     profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, half_duration_seconds=HALF_S))
     runner = StrategyRunner(
-        strategy=AbstractStrategy(build=builder("tiki_taka", tuple(range(1, N_OUTFIELD + 1)))),
-        opp_strategy=AbstractStrategy(build=builder("tiki_taka", tuple(range(1, N_OUTFIELD + 1)))),
+        strategy=AbstractStrategy(build=builder("tiki_taka_plus", tuple(range(1, N_OUTFIELD + 1)))),
+        opp_strategy=AbstractStrategy(build=builder("tiki_taka_plus", tuple(range(1, N_OUTFIELD + 1)))),
         my_team_is_yellow=True,
         my_team_is_right=True,
         mode="rsim",

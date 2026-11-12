@@ -211,11 +211,10 @@ def save(m: Moment, path: Optional[Path] = None) -> Path:
 
 
 def catalog() -> list[str]:
-    """The round-robin's strategies: every strategy in the catalog, minus the
-    retired ones."""
-    from tools.evaluation.round_robin import _CONFIG_NAMES, RETIRED
+    """The round-robin's strategies: every strategy in the catalog."""
+    from tools.evaluation.round_robin import _CONFIG_NAMES
 
-    return [n for n in _CONFIG_NAMES if n not in RETIRED]
+    return list(_CONFIG_NAMES)
 
 
 def _referee_behaviour(name: str) -> tuple:

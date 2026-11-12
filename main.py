@@ -3,7 +3,7 @@ round-robin matches are.
 
 Run:
     pixi run main                          # split_shape vs high_press
-    pixi run main tiki_taka counter_flow   # any two names from docs/strategies.md
+    pixi run main split_shape counter_flow   # any two names from docs/strategies.md
     pixi run main a.strategy high_press    # or a .strategy file (tools/build_strategy.py)
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
