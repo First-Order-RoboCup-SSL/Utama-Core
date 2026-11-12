@@ -19,6 +19,10 @@ from the seeded sim noise: `evaluate.py`'s round k plays with seed k.
 `--all` (`tools/evaluation/reference/players.json`). Names changed on 2026-11-12; the results
 below were played under the old names (column "Was"), which `catalog.RENAMED` still loads.
 
+**Recording a verdict.** Write it as `evaluate.py` gives it: better / dropped / undecided, with
+P(better), the margin ± SD in goals per match, the seeds (1-6, or 101-106 for `--confirm`) and the
+run id. "Dropped" means not promising, not worse: an equal strategy is dropped about a third of the time.
+
 | Strategy | Was | Role | Description |
 |---|---|---|---|
 | `avalanche` | `overload_press` | core | 4-robot overload/switch attack + 1 block, built to outnumber a shadow line. |

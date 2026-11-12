@@ -22,7 +22,7 @@ def test_candidate_and_reference_meet_each_opponent_with_the_same_colour():
 
 def test_verdict_thresholds_are_inclusive_and_cap_rounds():
     assert evaluate.verdict(evaluate.PROMOTE, 1, 6) == "better"
-    assert evaluate.verdict(evaluate.DROP, 1, 6) == "worse"
+    assert evaluate.verdict(evaluate.DROP, 1, 6) == "dropped"
     assert evaluate.verdict(0.5, 5, 6) is None
     assert evaluate.verdict(0.5, 6, 6) == "undecided"
 
@@ -63,6 +63,16 @@ def test_paired_differences_use_same_seed_and_colour_and_orient_head_to_head():
 def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
     ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "3": {"seed": None}}
     assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
+
+
+def test_a_confirmation_run_uses_its_own_seeds_only():
+    ledger = {"1": {"seed": 1}, "101": {"seed": 101}, "102": {"seed": 102}, "107": {"seed": 107}}
+    assert list(evaluate._up_to_round(ledger, 2, first_seed=101)) == ["101", "102"]
+
+
+def test_a_rounds_seed_can_differ_from_its_number_but_colours_follow_the_round():
+    fixtures = evaluate.round_fixtures(1, ["c"], "ref", ["o"], seed=101)
+    assert ("c", "o", 101) in fixtures and ("ref", "o", 101) in fixtures
 
 
 def test_the_players_load_and_the_core_is_in_the_catalog():

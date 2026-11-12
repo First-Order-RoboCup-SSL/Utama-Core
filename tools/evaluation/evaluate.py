@@ -11,6 +11,8 @@ it plays rounds until each candidate is decided.
                         release tag), played from a `.strategy` file built once into replays/eval/frozen/
     --all               every strategy in the catalog plays, not only the core (occasionally, for a
                         wider field)
+    --confirm           play seeds 101-106 instead of 1-6: a second opinion on a "better" before
+                        promoting it, on seeds no candidate was tuned or chosen on
 
 Matches play in parallel, one fewer than the CPUs (at most 12). To explain a result: find_bugs.py,
 goal_sources, pitch_maps.py and explain.py on the run's round folders.
@@ -40,15 +42,21 @@ After each round each candidate is compared with the reference on paired matches
 the same seed and colour, plus their head-to-head matches. P(candidate stronger than reference):
 
 - **better** once P >= PROMOTE (0.99),
-- **worse** once P <= DROP (0.2),
+- **dropped** once P <= DROP (0.2): not promising. An equal strategy gets here about a third of the
+  time, so this is a search filter, not "worse",
 - **undecided** after `MAX_ROUNDS` (6) rounds: not clearly better, which for a search means drop it.
 
-Thresholds come from simulating the rule on 2026-11-11 (match noise SD 1.9 goals, six opponents, 6
-rounds, paired results correlated 0 to 1): two equal strategies were called "better" at most 3% of the
-time. Today's core gives five opponents and `ratings.NOISE_SD` is 1.6; the rates below are from that
-simulation, not re-checked for this setup. Unrelated
-strategies: one goal per match worse is dropped after ~2 rounds, one goal better found 61% of the time.
-A small change to a strategy (correlation ~0.9): one goal better found every time in ~3 rounds.
+How often the rule is right, on simulated results: `tools/evaluation/verdict_sim.py` (no matches); its
+test pins that two equal strategies are rarely called "better".
+
+Seeds 1-6 are the same for every candidate, and the store keeps the reference's results on them: a
+search that tries many candidates will find a false "better" now and then, and can fit to those seeds.
+Confirm a "better" with `--confirm` before promoting it.
+
+The reference is frozen with the shared code (tactics, skills, planner, engine) of the release, so a
+"better" can come from shared code changed since. Today's champion plays the same opponents with the
+same seeds and colours, so the report adds the candidate against it too, at no extra matches: there
+the shared code is the same on both sides. `evaluate.py <champion>` measures the shared code alone.
 
 Signals and stalls are reported, never judged on: they explain a result (docs/signals.md). The stall
 watchdog watches config_a only, so the report says how many matches each strategy was checked in.
@@ -113,6 +121,7 @@ from utama_core.strategy import catalog  # noqa: E402
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
+CONFIRM_SEED = 101  # --confirm's first seed: far from the 1..MAX_ROUNDS every run plays
 WORKERS = min(12, max(1, (os.cpu_count() or 1) - 1))  # 1 plays in this process (tests)
 FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
 # A full match: two halves of 300 s of playing time, the clock stopped whenever no team may play the
@@ -123,15 +132,19 @@ MAX_MATCH_SECONDS = 1200.0
 # --- who plays what ---------------------------------------------------------------------------
 
 
-def round_fixtures(k: int, candidates: list[str], reference: str, opponents: list[str]) -> list[tuple[str, str, int]]:
-    """Round `k`'s (config_a, config_b, seed): every pair of candidates, reference and opponents once.
+def round_fixtures(
+    k: int, candidates: list[str], reference: str, opponents: list[str], seed: Optional[int] = None
+) -> list[tuple[str, str, int]]:
+    """Round `k`'s (config_a, config_b, seed): every pair of candidates, reference and opponents once,
+    under `seed` (k by default).
     The store holds every match whose code is unchanged, so only the matches of edited strategies, or
     of a seed not played before, are actually played. The earlier of the two in (candidates,
     reference, opponents) order is config_a in odd rounds, so candidates and reference face each
     opponent with the same colour."""
+    seed = k if seed is None else seed
     order = list(dict.fromkeys([*candidates, reference, *opponents]))
     pairs = itertools.combinations(order, 2)
-    return [(x, y, k) if k % 2 else (y, x, k) for x, y in pairs]
+    return [(x, y, seed) if k % 2 else (y, x, seed) for x, y in pairs]
 
 
 def verdict(p_better: float, rounds: int, max_rounds: int) -> Optional[str]:
@@ -139,7 +152,7 @@ def verdict(p_better: float, rounds: int, max_rounds: int) -> Optional[str]:
     if p_better >= PROMOTE:
         return "better"
     if p_better <= DROP:
-        return "worse"
+        return "dropped"
     return "undecided" if rounds >= max_rounds else None
 
 
@@ -278,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("candidates", nargs="*")
     parser.add_argument("--at", metavar="REF")
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--confirm", action="store_true")
     parser.add_argument("--players", type=Path, help=argparse.SUPPRESS)  # tests: another players.json
     return parser
 
@@ -289,6 +303,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     reserve = [n for n in _CONFIG_NAMES if n not in core] if args.all else []
     ref = args.at or latest_release()
     reference = at_ref(resolve_names([champion_at(ref, setup["champion"])])[0], ref)
+    today = resolve_names([setup["champion"]])[0]  # today's champion, on today's shared code
+    first_seed = CONFIRM_SEED if args.confirm else 1
     candidates = [c for c in resolve_names(args.candidates) if c != reference]
 
     noise = SimNoise.from_dict(reference_noise()).to_dict()
@@ -337,8 +353,11 @@ def main(argv: Optional[list[str]] = None) -> None:
             if k > 1 and not open_:
                 break
             opponents = [p for p in [*core, *reserve] if p not in candidates and p != reference]
+            # today's champion first: it then meets every other opponent in the candidates' colour
+            opponents.sort(key=lambda p: p != today)
             opponents_so_far |= set(opponents)
-            fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents)
+            seed = first_seed + k - 1
+            fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, seed)
             round_dir = run_dir / f"round_{k}"
             round_dir.mkdir(parents=True, exist_ok=True)
             recs: dict[tuple[str, str], tuple[dict, bool]] = {}
@@ -403,7 +422,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
             rows = [result_row(rec, a, b, was_reused) for (a, b), (rec, was_reused) in recs.items()]
             names = sorted({n for pair in recs for n in pair})
-            summary = {"run_id": f"{run_id}/round_{k}", "round": k, "seed": k, "config_names": names}
+            summary = {"run_id": f"{run_id}/round_{k}", "round": k, "seed": seed, "config_names": names}
             summary["results"] = sorted(rows, key=lambda r: (r["config_a"], r["config_b"]))
             summary["failed"] = [f for f in failed if f["round"] == k]
             summary.update(signals(summary, {pair: rec for pair, (rec, _) in recs.items()}, round_dir))
@@ -411,7 +430,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             rounds.append(summary)
 
             if candidates:
-                ledger = _up_to_round(store.load(env, fps=fps), k)
+                ledger = _up_to_round(store.load(env, fps=fps), k, first_seed)
                 fit = _fit(ledger, fps, {*open_, reference, *opponents_so_far})
                 for c in list(open_):
                     diffs, h2h = paired(ledger, fps, c, reference, sorted(opponents_so_far))
@@ -437,8 +456,21 @@ def main(argv: Optional[list[str]] = None) -> None:
             f"  {_short_name(c):<28} {r['verdict'].upper():<10} P(better) {r['p_better']:.2f}  "
             f"margin {r['margin']:+.2f} ± {r['margin_sd']:.2f} goals/match  after {r['rounds']} round(s)"
         )
-        upto = _up_to_round(ledger, r["rounds"])
+        upto = _up_to_round(ledger, r["rounds"], first_seed)
         r["per_opponent"] = _per_opponent(upto, fps, c, reference, sorted(opponents_so_far))
+        if today in fps and today not in (c, reference):  # not the same code as the reference
+            others = sorted(opponents_so_far - {today})
+            diffs, h2h = paired(upto, fps, c, today, others)
+            fit = _fit(upto, fps, {c, today, *others})
+            margin, sd = ratings.paired_difference(diffs, h2h, fit.noise_sd)
+            r["vs_todays_champion"] = {
+                "name": today, "p_better": round(ratings.p_positive(margin, sd), 3), "margin": round(margin, 2),
+                "margin_sd": round(sd, 2), "pairs": len(diffs), "head_to_head": len(h2h),
+            }  # fmt: skip
+            print(
+                f"    against today's {_short_name(today)} (same shared code): P(better) "
+                f"{r['vs_todays_champion']['p_better']:.2f}  margin {margin:+.2f} ± {sd:.2f}"
+            )
         r["stalls"] = stall_coverage(upto, fps, c)
         print(f"    {'opponent':<26} {'candidate GD':>12} {'reference GD':>12} {'matches':>8} (same seed and colour)")
         for o, row in r["per_opponent"].items():
@@ -459,6 +491,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "core": core,
                 "environment": env,
                 "rule": {"promote": PROMOTE, "drop": DROP, "max_rounds": MAX_ROUNDS},
+                "seeds": [first_seed, first_seed + len(rounds) - 1],
                 "candidates": report,
                 "failed": failed,
                 "rounds": [{"round": s["round"], "matches": len(s["results"])} for s in rounds],
@@ -485,10 +518,10 @@ def _fit(ledger: dict, fps: dict[str, str], players: set[str]) -> ratings.Rating
     return ratings.fit(matches, names=sorted(players))
 
 
-def _up_to_round(ledger: dict, k: int) -> dict:
-    """The stored matches of rounds 1..k (seeds 1..k): a verdict after round k uses those only,
-    whatever later rounds the store already holds, so it doesn't depend on earlier runs."""
-    return {f: e for f, e in ledger.items() if e["seed"] is not None and e["seed"] <= k}
+def _up_to_round(ledger: dict, k: int, first_seed: int = 1) -> dict:
+    """The stored matches of rounds 1..k (seeds first_seed..first_seed+k-1): a verdict after round k
+    uses those only, whatever other seeds the store already holds, so it doesn't depend on earlier runs."""
+    return {f: e for f, e in ledger.items() if e["seed"] is not None and first_seed <= e["seed"] < first_seed + k}
 
 
 def _margins(ledger: dict, fps: dict, side: str, o: str) -> dict[tuple, int]:

@@ -51,8 +51,12 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
   filled (then the whole round robin plays); say so before waiting on it.
 - Round 1 is a round robin: a stall reported there is a bug. Fix it (the `debug-incident`
   skill) before reading the verdict.
-- The verdict is goals only: better (P ≥ 0.99), worse (P ≤ 0.2) or undecided after 6 rounds.
-  Every other signal explains it (the `explain-result` skill), never overrules it.
+- The verdict is goals only: better (P ≥ 0.99), dropped (P ≤ 0.2: not promising, not "worse")
+  or undecided after 6 rounds. Every other signal explains it (the `explain-result` skill), never
+  overrules it.
+- On a "better", read the line "against today's <champion>": the reference carries the release's
+  shared code, so if shared code changed since, that line is the strategy change alone. Then
+  confirm on fresh seeds before promoting (ask first): `evaluate.py NAME --confirm`.
 
 ## 5. Record and promote
 
@@ -63,6 +67,20 @@ pixi run python tools/evaluation/evaluate.py NAME [NAME ...]
   the strategy's is merged: CI rejects a `strategy/*` branch that touches anything outside the
   strategy files. It becomes the reference at the next release (evaluate.py reads the champion
   from `players.json` as it was at that release).
+
+## Searching (many candidates)
+
+- Every candidate meets the same reference results on seeds 1-6: try 20 and one may come out
+  "better" by luck, or by fitting those seeds. Only a "better" that holds under `--confirm` counts.
+- Keep a list of every variant tried, with its verdict and margin, in the PR, so a reviewer sees
+  how many tries one winner came from.
+- Change one idea per candidate; several candidates go in one `evaluate.py` call.
+
+## Judging a shared-code change
+
+Not on a strategy branch. Batch the changes, then (ask first) `evaluate.py <champion>`: today's
+champion on today's shared code against itself frozen at the last release. Its margin is what the
+shared code did. Every stored match replays, so it is a full run.
 
 ## Rules
 

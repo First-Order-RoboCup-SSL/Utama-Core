@@ -241,3 +241,34 @@ def test_a_crashed_match_is_reported_not_stored_and_the_run_finishes(rig):
 def test_same_code_keeps_the_first_name_of_each_fingerprint():
     fps = {"ref": "1", "cand": "2", "a": "1", "b": "3", "c": "2"}
     assert evaluate.same_code(["ref", "cand", "a", "b", "c"], fps) == {"a": "ref", "c": "cand"}
+
+
+def test_confirm_plays_fresh_seeds_and_ignores_the_usual_ones(rig, monkeypatch):
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    rig.run("c")
+    run_dir = rig.run("c", "--confirm")
+
+    assert rig.played and {seed for *_, seed in rig.played} <= {101, 102}  # nothing reused from seeds 1-2
+    report = json.loads((run_dir / "report.json").read_text())
+    assert report["seeds"][0] == 101
+    assert json.loads((run_dir / "round_1" / "summary.json").read_text())["seed"] == 101
+
+
+def test_the_candidate_is_also_measured_against_todays_champion_when_shared_code_moved(rig, tmp_path, monkeypatch):
+    # today's champion "d" sits last in the core; the release froze it before a shared-code change
+    players = tmp_path / "players_d.json"
+    players.write_text(json.dumps({"champion": "d", "core": CORE}))
+    monkeypatch.setattr(evaluate, "at_ref", lambda name, ref: f"replays/eval/frozen/{name}@v0.strategy")
+    rig.version["d"] = 1  # differs from its frozen copy (version 0)
+    monkeypatch.setattr(evaluate, "MAX_ROUNDS", 2)
+    run_dir = rig.run("c", "--players", str(players))
+
+    r = json.loads((run_dir / "report.json").read_text())["candidates"]["c"]
+    vs = r["vs_todays_champion"]
+    # paired against "a" and "b" in every round: "d" meets them in the candidate's colour
+    assert vs["name"] == "d" and vs["pairs"] == 2 * r["rounds"] and vs["head_to_head"] == r["rounds"]
+
+
+def test_no_second_estimate_when_todays_champion_is_the_reference(rig):
+    run_dir = rig.run("c")  # the stub reference is "a" itself
+    assert "vs_todays_champion" not in json.loads((run_dir / "report.json").read_text())["candidates"]["c"]

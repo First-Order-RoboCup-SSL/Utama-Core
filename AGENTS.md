@@ -52,7 +52,7 @@ One term per thing; reuse these instead of coining new ones.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
 - **Evaluation / reference / match results** — `tools/evaluation/evaluate.py`: is a candidate
-  stronger than the reference, the champion at the last release (`--at REF` for another
+  stronger than the reference, the champion at the last release (`--confirm` re-checks a "better" on fresh seeds; `--at REF` for another
   release)? Round k plays under sim-noise seed k in the simulated world and robots
   (`tools/evaluation/reference/world.json`, `robots.json`): every round the same round robin, repeated
   while a candidate is undecided, decided on paired results (candidate and reference against the same

@@ -231,7 +231,7 @@ kernel invariants. Give its partitioner pure-function tests in `tests/strategy/t
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
 2. **Matches:** `tools/evaluation/evaluate.py <name>` (see [Evaluating a strategy](#evaluating-a-strategy)):
-   is it better than the champion at the last release, worse, or not clearly either? Several
+   is it better than the champion at the last release, dropped (not promising), or not clearly either? Several
    candidates go in one call. Its round 1 is a round robin, so the same run reports stalls and
    signals; a stall is a bug to fix before anything else.
 
@@ -272,7 +272,7 @@ flowchart TD
     st["Every match stored in the match results<br/>replays/match_results/"]
     d{"P(candidate stronger), paired<br/>with the reference's results"}
     b["better: P >= 0.99<br/>promote by hand in players.json"]
-    w["worse: P <= 0.2<br/>drop it"]
+    w["dropped: P <= 0.2<br/>not promising"]
     u["undecided after 6 rounds<br/>drop it"]
     p --> r1 --> st0
     st0 -- "yes: reuse" --> d
@@ -303,11 +303,11 @@ flowchart TD
   opponent minus the reference's, same opponent, seed and colour, from rounds 1..k, plus their
   head-to-head matches. Paired results face the same noise, so much of it cancels: all of it
   for identical code, little for unrelated strategies. P(candidate stronger) >= 0.99 is **better**,
-  <= 0.2 **worse**, and after 6 rounds it is **undecided**: not clearly better, so drop it.
-  Simulated (match noise SD 1.9 goals): two equal strategies are called better at most 3% of the
-  time. An unrelated strategy one goal per match worse is dropped after ~2 rounds, one goal better
-  found 61% of the time, half a goal 20%. A small edit (paired results correlated ~0.9): one goal
-  better found every time in ~3 rounds, half a goal 55%. Check the per-opponent table: a candidate
+  <= 0.2 **dropped**, and after 6 rounds it is **undecided**: not clearly better, so drop it.
+  "Dropped" means not promising, not worse: an equal strategy gets there about a third of the time.
+  How often the rule is right, for each effect size and correlation: `tools/evaluation/verdict_sim.py`
+  (simulated results, no matches; its test pins that equal strategies are rarely called better).
+  Check the per-opponent table: a candidate
   far better against one opponent and worse against the rest is a matchup, not a better strategy.
 - **Stalls** are reported, never judged on. The watchdog watches config_a only
   (`run/strategy_runner.py` records stats for config_a), so the report says in how many matches each
@@ -317,6 +317,13 @@ flowchart TD
   `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
   read. A match taken from the store is linked in (symlinks) from the run that played it, so a
   round folder holds all of its matches; one played before 2026-11-12, or whose run was deleted, has none.
+- **Two traps in a "better".** Seeds 1-6 are the same for every candidate, and the store keeps the
+  reference's results on them: across many candidates a false "better" turns up now and then, and a
+  search can fit to those seeds. Confirm with `evaluate.py NAME --confirm` (seeds 101-106) before
+  promoting. And the reference carries the release's shared code (tactics, skills, planner, engine), so
+  a "better" can come from shared code changed since: the report adds the candidate against today's
+  champion, same opponents, seeds and colours, no extra matches, where the shared code is the same on
+  both sides. `evaluate.py <champion>` measures shared-code changes alone.
 - **Promoting** is a decision, not a side effect: change the champion line in `reference/players.json`
   in a pull request; the next release makes it the reference.
 - **Pictures** (`tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`): for a candidate,
@@ -327,7 +334,7 @@ flowchart TD
 - **Cost.** A round is 15 matches (five core and the reference, plus one per extra candidate pair) of
   up to 1200 s, roughly 20 min on 12 workers, when nothing is stored. Once stored, editing one strategy
   replays only its 5 matches per round; a change to shared code replays everything. `--all` makes a
-  round 66 matches. A clearly worse candidate is decided after 1-2 rounds.
+  round 66 matches. A clearly worse candidate is dropped after 1-2 rounds.
 
 ### Strategy branches
 
@@ -396,7 +403,7 @@ whoever runs it.
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
 - **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
-- **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`); see
+- **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`, `--confirm`); see
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
   `tools/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
