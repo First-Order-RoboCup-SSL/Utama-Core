@@ -19,6 +19,7 @@ match come from `tools/sim_setup.py`, the one set-up the debugging tools share.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -31,6 +32,7 @@ from tools.sim_setup import (  # noqa: F401 -- re-exported
     sim_runner,
 )
 from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
@@ -42,6 +44,13 @@ from utama_core.strategy import catalog
 from utama_core.strategy.catalog import plain_name
 
 TICKS_PER_SECOND = 60  # matches rsim's default step rate
+
+
+def replay_name(run_dir: Path, match_tag: str) -> str:
+    """A match's replay name: its path under REPLAY_BASE_PATH, no suffix, so the replay lands in
+    `run_dir` as `<match_tag>.npz`."""
+    return Path(os.path.relpath(Path(run_dir) / match_tag, REPLAY_BASE_PATH)).as_posix()
+
 
 # default is excluded from the auto-discovered catalog:
 # despite the name, it isn't a competitive team — it's the kernel's minimal
@@ -173,21 +182,10 @@ def run_match(
     if run_dir is not None:
         extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
         extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
-        # replay_name is relative to REPLAY_BASE_PATH, not run_dir, since replays
-        # live under a fixed replays/ root — nest it under the same tournament
-        # subdirectory so the two stay next to each other on disk.
-        #
-        # Columnar (.npz) rather than pickle (.pkl): ~13 MB/match in the old
-        # format vs. a fraction of that here, and every reader a tournament
-        # run's replays are actually fed through — `load_frames_in_range`
-        # (`replay_player.py`, used by `render_window`) and
-        # `find_stuck_windows` (`analysis/stuck_detector.py`) — already dispatches on
-        # `.npz` vs `.pkl` by extension, so nothing downstream of a
-        # tournament run breaks. Only the interactive `play_replay`/
-        # `get_latest_replay_name` CLI helpers in `replay_player.py` still
-        # hardcode `.pkl`.
+        # The writer puts a replay at REPLAY_BASE_PATH / replay_name: name it so the .npz lands in
+        # run_dir beside the match's other files, however deep run_dir is (eval_<id>/round_<k>/).
         extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
-            replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
+            replay_name=replay_name(run_dir, match_tag), overwrite_existing=True
         )
 
     runner, _ = sim_runner(
