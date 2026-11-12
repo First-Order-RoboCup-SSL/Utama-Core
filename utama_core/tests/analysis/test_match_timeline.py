@@ -2,7 +2,7 @@ import json
 
 import numpy as np
 
-from tools.match_timeline import (
+from tools.debug.match_timeline import (
     FLIP_BACKS_PER_MIN,
     FLIP_S,
     MIN_LIVE_S,

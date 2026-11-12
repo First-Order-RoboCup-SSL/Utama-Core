@@ -66,7 +66,7 @@ A pull request into `main` needs:
 4. every Copilot comment reviewed (not all must be addressed: Copilot makes mistakes too);
 5. an approval from an assigned reviewer.
 
-A strategy branch (`strategy/*`) is also checked by `tools/check_strategy_branch.py`: it must not
+A strategy branch (`strategy/*`) is also checked by `tools/dev/check_strategy_branch.py`: it must not
 change the evaluation or the opponents it is scored against.
 
 ## `CLAUDE.md` and `AGENTS.md`

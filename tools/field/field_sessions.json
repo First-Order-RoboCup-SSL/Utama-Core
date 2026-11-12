@@ -1,5 +1,5 @@
 {
-  "note": "Every field session, and which measurements it may be used for. tools/field_physics.py reads only what is allowed here. Stop rule: a number enters the sim only if it repeats across runs, or its spread is deliberately used as the range.",
+  "note": "Every field session, and which measurements it may be used for. tools/field/field_physics.py reads only what is allowed here. Stop rule: a number enters the sim only if it repeats across runs, or its spread is deliberately used as the range.",
   "source_archive": "replays/field_logs_20261102_211613.tar.gz (untrimmed, local only; do not delete). Trimmed logs: release v2.5.0, field_logs_20261102_233700.tar.gz.",
   "measurements": ["loop_delay", "ball_roll", "ball_noise", "robot_noise"],
   "sessions": {

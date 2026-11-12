@@ -1,5 +1,5 @@
 """`utama_core/analysis/fouls.py`: our side's fouls in a run with the referee command active, as
-`tools/find_bugs.py --fouls` lists them (moved from `moments.py fouls` on 2026-11-11)."""
+`tools/debug/find_bugs.py --fouls` lists them (moved from `tools/debug/moments.py fouls` on 2026-11-11)."""
 
 import json
 
@@ -124,7 +124,7 @@ def test_fouls_json_is_the_foul_list_or_the_by_counts_as_rows():
 
 
 def test_find_bugs_fouls_filters_then_counts(tmp_path):
-    from tools.find_bugs import fouls_report
+    from tools.debug.find_bugs import fouls_report
 
     run = _run(tmp_path, [_foul(1.0), _foul(2.0, rule="out_of_bounds"), _foul(3.0, rule="crashing")])
     assert len(fouls_report(run)) == 2  # out_of_bounds is a stoppage, left out

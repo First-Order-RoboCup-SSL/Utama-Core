@@ -24,7 +24,7 @@ they suggest changing, never a new ranking.
    the stall coverage. Look up any signal in `docs/signals.md`: where it lives, its reference
    range, and what an off value usually means.
 
-2. **Is something broken?** `pixi run python tools/find_bugs.py ROUND_DIR --strategy NAME`
+2. **Is something broken?** `pixi run python tools/debug/find_bugs.py ROUND_DIR --strategy NAME`
    (about 20 s a match; `--restarts` adds restart geometry, a minute a match). Open
    `find_bugs/index.md` first: the worst matches, findings by kind, a picture each. Our fouls by
    rule: `--fouls --by strategy,rule`. A stall, thrash or foul is a bug, not a style: hand it to
@@ -38,7 +38,7 @@ they suggest changing, never a new ranking.
    from?".
 
 4. **How does it play, on the pitch?**
-   - One strategy against the field: `pixi run python tools/pitch_maps.py ROUND_DIR --out DIR`
+   - One strategy against the field: `pixi run python tools/debug/pitch_maps.py ROUND_DIR --out DIR`
      (positions with and without the ball, shots, fouls; every panel turned so the strategy
      attacks right).
    - A candidate against the champion, side by side on one scale:

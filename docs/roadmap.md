@@ -86,7 +86,7 @@ entry by its title, not its number.
    (`ci.yml:41,43`).
 
 7. **Match timeline in the dashboard.** Built 2026-10-21 (`dashboard/static/timeline.js`): the
-    swimlanes of `tools/match_timeline.py` (referee band, each robot's tactic, possession, distance
+    swimlanes of `tools/debug/match_timeline.py` (referee band, each robot's tactic, possession, distance
     to the ball, events) under the Replay tab's controls, following the cursor, click or drag to
     seek; and in the Live tab, the last minutes up to now. Switch ticks, shots and a possession
     band (each situation's side) as in the tool. The Replay side panel's Play list replaces the raw
@@ -161,7 +161,7 @@ entry by its title, not its number.
       spread in the sim (more realistic, but noisier round-robins).
     - *Measuring, built 2026-10-21:* every camera run records an SSL game log (raw vision,
       referee, radio bytes both ways: `GameLogWriter`); `examples/shooting_drill.py
-      --calibrate` plays fixed moves (`tactics/scripted_moves.py`), and `tools/robot_calibration.py`
+      --calibrate` plays fixed moves (`tactics/scripted_moves.py`), and `tools/field/robot_calibration.py`
       measures loop delay, speed gain, acceleration, vision noise and kick speed from any such log.
       Checked on a synthetic robot (delay within 10 ms, acceleration within 15 %; turn
       acceleration only roughly, its ramp lasts a few frames) and on grSim; not yet on a real robot.

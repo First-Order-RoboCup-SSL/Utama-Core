@@ -1,10 +1,10 @@
-"""`tools/pitch_maps.py` on tiny synthetic replays: the side normalisation, possession and the
+"""`tools/debug/pitch_maps.py` on tiny synthetic replays: the side normalisation, possession and the
 goalkeeper exclusion, and that each figure is written."""
 
 import numpy as np
 import pytest
 
-from tools import pitch_maps as pm
+from tools.debug import pitch_maps as pm
 from utama_core.engine.match_stats import _POSSESSION_RADIUS_M
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_reader import ColumnarReplay

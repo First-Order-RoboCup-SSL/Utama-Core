@@ -34,10 +34,10 @@ bidirectional radio packets, and session metadata.
 
 Every field log contains the ground-truth signals needed to evaluate robot hardware:
 
-### Robot Calibration (`tools/robot_calibration.py`)
+### Robot Calibration (`tools/field/robot_calibration.py`)
 Recovers physical dynamics and kicker geometry from a field test:
 ```bash
-pixi run python tools/robot_calibration.py replays/field/<run>.log.gz
+pixi run python tools/field/robot_calibration.py replays/field/<run>.log.gz
 ```
 - **Loop Latency**: Sensing-to-action delay measured between commanded motion and camera-observed velocity (~61–62 ms).
 - **Acceleration Limits**: Measured forward acceleration (~4.0–6.0 m/s²) vs. lateral acceleration (~2.7–3.6 m/s²).
@@ -58,10 +58,10 @@ Scans logs for incidents where robots came closer than 0.25 m:
 pixi run python -m utama_core.analysis.close_calls replays/field/*real*.log.gz
 ```
 
-### Converting to Replay (`tools/convert_ssl_log.py`)
+### Converting to Replay (`tools/realism/convert_ssl_log.py`)
 Converts an SSL game log into our columnar `.npz` + `.pkl` replay format for replay visualization and scenario debugging:
 ```bash
-pixi run python tools/convert_ssl_log.py replays/field/<run>.log.gz --out replays/field/
+pixi run python tools/realism/convert_ssl_log.py replays/field/<run>.log.gz --out replays/field/
 ```
 
 ---
@@ -77,14 +77,14 @@ pixi run package-field --compress-in-place
 ```
 Reduces log sizes by **50%–60%** with zero data loss. All analysis tools support `.log.gz` out of the box.
 
-### 2. Trimming Idle Time Sectors (`tools/trim_idle_log.py`)
+### 2. Trimming Idle Time Sectors (`tools/field/trim_idle_log.py`)
 Field sessions frequently capture long periods of inactivity where the referee command is `HALT` or `STOP` (e.g. operators manually setting up the ball or discussing tests). Over **55% of field log duration is trailing dead time**:
 ```bash
 # Preview reduction without modifying files
-pixi run python tools/trim_idle_log.py replays/field/<run>.log.gz --dry-run
+pixi run python tools/field/trim_idle_log.py replays/field/<run>.log.gz --dry-run
 
 # Trim dead stretches and trailing halt in-place
-pixi run python tools/trim_idle_log.py replays/field/<run>.log.gz --in-place
+pixi run python tools/field/trim_idle_log.py replays/field/<run>.log.gz --in-place
 # Or batch trim all field logs:
 pixi run trim-field
 ```
@@ -92,7 +92,7 @@ pixi run trim-field
 - Fully strips trailing idle time recorded after drills end.
 - Typically cuts file size by **65%–75%** while preserving every active drill frame.
 
-### 3. Packaging & Distributing (`tools/package_logs.py`)
+### 3. Packaging & Distributing (`tools/field/package_logs.py`)
 Creates self-contained release archives of field logs and calibration results:
 ```bash
 pixi run package-field

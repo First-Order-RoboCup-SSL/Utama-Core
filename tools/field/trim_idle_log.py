@@ -7,8 +7,8 @@ stretches longer than `--min-idle` seconds while retaining a safety buffer (`--p
 transitions.
 
 Usage:
-    pixi run python tools/trim_idle_log.py replays/field/<run>.log.gz [--out OUT] [--dry-run]
-    pixi run python tools/trim_idle_log.py replays/field/*.log.gz --in-place
+    pixi run python tools/field/trim_idle_log.py replays/field/<run>.log.gz [--out OUT] [--dry-run]
+    pixi run python tools/field/trim_idle_log.py replays/field/*.log.gz --in-place
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

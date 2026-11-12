@@ -27,7 +27,7 @@ Per robot that was sent commands:
   ball sensor read on, and whether the ball was still on at the end (`BALL_LOST_M`). A
   `examples/calibrate_robot.py` run holds, turns and drives with the ball, then kicks it 3 times.
 
-    pixi run python tools/robot_calibration.py replays/field/<run>.log [--json OUT]
+    pixi run python tools/field/robot_calibration.py replays/field/<run>.log [--json OUT]
 """
 
 from __future__ import annotations

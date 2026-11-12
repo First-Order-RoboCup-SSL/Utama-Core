@@ -37,7 +37,7 @@ from utama_core.strategy.riptide import _riptide_picker
 _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
 # Every strategy, as round-robins discover them, so a new one is covered without editing this
-# file (a strategy branch can't: see tools/check_strategy_branch.py).
+# file (a strategy branch can't: see tools/dev/check_strategy_branch.py).
 _CONFIGS = [pytest.param(name, id=name) for name in catalog.names() if name != "default"]
 
 

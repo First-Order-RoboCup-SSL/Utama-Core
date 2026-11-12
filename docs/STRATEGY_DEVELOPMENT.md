@@ -97,7 +97,7 @@ every outfield robot *before* any `Tactic` ticks, reusing the `*Step` classes in
 `custom_referee/actions.py`. Strategies can override a restart formation via
 `Strategy(referee_overrides=...)`. See `docs/custom_referee.md`.
 
-To see where the override sends every robot for a restart, run `tools/restart_picture.py`
+To see where the override sends every robot for a restart, run `tools/debug/restart_picture.py`
 (`REPLAY.npz --t S`, or `--all-restarts` for one small panel per restart command in the replay). It
 records each commanded target without changing the engine, and flags a target inside the 0.8 m keep-out
 or a defence area it must avoid. Shown below: one match's restarts from our side (top) and from the other
@@ -327,7 +327,7 @@ flowchart TD
   strategy was checked; "unknown" means none was.
 - **Output.** `replays/eval_<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
   per round `round_<k>/`: each played match's replay, intention log and stats as `<a>_vs_<b>.*`,
-  `summary.json` and `ball_losses.md`, the layout `find_bugs.py`, `pitch_maps.py` and `goal_sources`
+  `summary.json` and `ball_losses.md`, the layout `tools/debug/find_bugs.py`, `tools/debug/pitch_maps.py` and `goal_sources`
   read. A match taken from the store is linked in (symlinks) from the run that played it, so a
   round folder holds all of its matches; one played before 2026-11-12, or whose run was deleted, has none.
 - **Two traps in a "better".** The reference's results on every seed are stored and reused, so
@@ -360,7 +360,7 @@ reaches `main` by pull request:
 2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
    `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
    `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
-   (`tools/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
+   (`tools/dev/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
    skill or an engine primitive, is a separate change on an ordinary branch.
 3. Leave the opponents as they are on `main`: either add new strategy modules or change exactly one existing strategy, never both, and never
    `pickers.py`, `catalog.py` or an existing tactic: the opponents run those. To improve a tactic, copy it into
@@ -399,7 +399,7 @@ whoever runs it.
   robot/ball trails over a window, optionally anchored on a `MatchLog` event. **Default to this
   over `load_frames_in_range()`**: a coordinate dump is expensive in context and easy to misread
   spatially. Use raw frames only for an exact number once the picture has localized the issue.
-- **`tools/match_timeline.py`** — one match window as swimlanes on a shared time axis: the referee
+- **`tools/debug/match_timeline.py`** — one match window as swimlanes on a shared time axis: the referee
   command band, one lane per robot coloured by the tactic it was in (a thin tick at each switch, a
   dark strip where it had the ball), each robot's distance to the ball, and goals, fouls and shots on
   top. Use it for thrashing (a robot switching tactics every few ticks), a tactic stuck committed, or
@@ -410,7 +410,7 @@ whoever runs it.
   Thrashing in `pendulum` against `weaver`: robots 2-4 flip between the attack and defence
   slots about every 1.5 s, in pairs of rows at the same tick. It is not pendulum's alone: most
   strategies that split attack and defence on possession take a tactic for under 1 s and revert about
-  5 times a minute (the `tactic_thrash` finding, with the numbers per strategy in `match_timeline.py`):
+  5 times a minute (the `tactic_thrash` finding, with the numbers per strategy in `tools/debug/match_timeline.py`):
   ![pendulum lanes thrashing between attack and defence slots](img/match_timeline/pendulum_100-160.png)
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
@@ -418,7 +418,7 @@ whoever runs it.
 - **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
 - **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`); see
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
-  `tools/repro_from_replay.py` restarts it from any moment with tracing on.
+  `tools/debug/repro_from_replay.py` restarts it from any moment with tracing on.
 - **Ball losses** (`analysis/turnover_breakdown.py`) — runs after every saved tournament and
   writes `ball_losses.md`; see [Reading a round](#reading-a-round).
   `python -m utama_core.analysis.turnover_breakdown <run_dir>` re-runs it on an older run.
@@ -439,9 +439,9 @@ whoever runs it.
   stay paired; the same seed replays a match exactly. Settings and draws go into each replay
   (`columnar_reader.load_sim_noise`) and `summary.json`, and into the match key only when set.
   Ranges and their sources are in `tools/evaluation/reference/world.json` (the Phase 1 numbers are in `docs/sim_realism.md`).
-- **`tools/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
+- **`tools/debug/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
   why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
-- **`tools/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
+- **`tools/debug/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
   match with tracing on, instead of re-running the whole match (`--help` for flags).
 
 ### Debugging a foul or failure
@@ -451,9 +451,9 @@ override, the planner, the referee itself, or the check that flagged it. Of the 
 this way (table below), two were the referee or the check, not the robot. The steps alone, as a
 checklist, are the `debug-incident` skill (`.claude/skills/`); this section keeps the reasons and the bugs found.
 
-Start with `tools/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
+Start with `tools/debug/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
 and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it
-means, and confirm with the numbers in its message (or `replay_trace.py --events`) before concluding anything. `find_bugs.py` reads only the friendly side of
+means, and confirm with the numbers in its message (or `tools/debug/replay_trace.py --events`) before concluding anything. `tools/debug/find_bugs.py` reads only the friendly side of
 each match (the intentions log is written for it): a strategy's matches where it is config_a. In a round each pair plays once,
 so a strategy is config_a in only some of its matches (`summary.json`'s `stalls_checked` counts them).
 
@@ -461,10 +461,10 @@ The same steps as a flowchart; the moment branch is the optional step 5.
 
 ```mermaid
 flowchart TD
-    find["1. Find it<br/>find_bugs.py RUN_DIR --strategy NAME<br/>(index.md, then findings.jsonl)"]
-    look["2. Look at it<br/>replay_trace.py REPLAY T0 T1 --events<br/>repro_from_replay.py REPLAY --t S --summary IDS"]
+    find["1. Find it<br/>tools/debug/find_bugs.py RUN_DIR --strategy NAME<br/>(index.md, then findings.jsonl)"]
+    look["2. Look at it<br/>tools/debug/replay_trace.py REPLAY T0 T1 --events<br/>tools/debug/repro_from_replay.py REPLAY --t S --summary IDS"]
     q{"Restart or placement geometry?<br/>a field state alone decides it"}
-    moment["Capture a moment<br/>moments.py capture REPLAY --t S<br/>play --seeds 0-4 must fail on 4 of 5"]
+    moment["Capture a moment<br/>tools/debug/moments.py capture REPLAY --t S<br/>play --seeds 0-4 must fail on 4 of 5"]
     cause["3. Find the cause in the code<br/>tactic or override, target, planner;<br/>was the rule really broken?"]
     fix["4. Fix the cause<br/>with a unit test at the boundary"]
     done["Done: the unit test is the protection<br/>(a captured moment stays as a check)"]
@@ -475,28 +475,28 @@ flowchart TD
     cause --> fix --> done
 ```
 
-The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `pitch_maps.py`) write their flags as JSON with `--findings`: filter on that, open the picture to understand a flag, and never conclude from a picture alone.
+The picture tools (`tools/debug/match_timeline.py`, `tools/debug/restart_picture.py`, `tools/debug/plan_trace.py`, `tools/debug/pitch_maps.py`) write their flags as JSON with `--findings`: filter on that, open the picture to understand a flag, and never conclude from a picture alone.
 
-1. **Find it.** `tools/find_bugs.py` is the one starting point for "what went wrong in a run" (see the
+1. **Find it.** `tools/debug/find_bugs.py` is the one starting point for "what went wrong in a run" (see the
    start of this section). It flags thrashing and stalls, and restart geometry with `--restarts`.
-   For our side's fouls by rule, `pixi run python tools/find_bugs.py ROUND_DIR --fouls --by
+   For our side's fouls by rule, `pixi run python tools/debug/find_bugs.py ROUND_DIR --fouls --by
    strategy,rule` counts our side's fouls (any of strategy, rule, tactic, restart; `out_of_bounds`, the ball
    leaving the field, is a stoppage and left out unless `--include-stoppages`); without `--by` it
    lists each with its time, robot, tactic and the referee command then active
    (`--skip-own-restart` drops fouls during our own restarts; `--json` writes either form as JSON).
-2. **Look at it.** `tools/replay_trace.py REPLAY T0 T1` is the text timeline of the window:
+2. **Look at it.** `tools/debug/replay_trace.py REPLAY T0 T1` is the text timeline of the window:
    referee command, ball, nearest robot per side; `--events` lists the kicks, possession,
    referee changes and fouls instead; `--json` gives either as JSON.
-   `tools/repro_from_replay.py REPLAY --t S --summary 3` replays that state with the tactics'
+   `tools/debug/repro_from_replay.py REPLAY --t S --summary 3` replays that state with the tactics'
    `match_log` tracing on and prints each listed robot's tactic, position and target every
    0.25 s (trace keys name tactics, not strategies). In a parallel worktree, run
-   `tools/setup_worktree.sh` first.
+   `tools/dev/setup_worktree.sh` first.
    When a robot does something odd near an obstacle or a keep-out zone (a carrot that swings round a robot,
-   a robot parked just inside a circle), `tools/plan_snapshot.py REPLAY --t S --robot ID --target X Y`
+   a robot parked just inside a circle), `tools/debug/plan_snapshot.py REPLAY --t S --robot ID --target X Y`
    draws what the planner decided on that tick: the obstacles and clearance rings, the keep-out circle,
    the target and the carrot it returned (`--side enemy` for the other strategy's robot; example:
    ![kick-off robot parked inside the keep-out circle](img/plan_snapshot/kickoff_keep_out.png)).
-   `tools/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` runs the same planner on every
+   `tools/debug/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` runs the same planner on every
    tick of a window and draws the robot's path, each tick's carrot and the distances over time, so a
    defect that unfolds over seconds shows as a trace (example: the kick-off robot of
    ![a kick-off window](img/plan_trace/kickoff_keep_out.png)). The robot's positions are the replay's,
@@ -510,7 +510,7 @@ The picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `
    target is off the field". That test is the protection, and it does not need the foul to
    reproduce.
 5. **Optionally keep a moment**, where a field state alone decides the behaviour (restart and
-   placement geometry under the referee override). `tools/moments.py capture REPLAY --t S --name
+   placement geometry under the referee override). `tools/debug/moments.py capture REPLAY --t S --name
    ... --check ... --note "..." [--out PATH]` saves the state; `play JSON --seeds 0-4` must fail on
    at least 4 of 5 before the fix (`--against REF` plays the code at REF beside it; `--events`
    lists referee changes, fouls, keep-out entries and kicks; `--strategy scratch.py:function`
@@ -524,11 +524,11 @@ steered along their recorded paths for 1-2 s (tried 2026-10-17, reverted in `9c2
 velocities cannot be set either: every rsim teleport resets all robots (`SSLWorld::replace`). So
 for open play, go from the trace to the code and a unit test.
 
-A moment's `checks` are `tools/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or referee rule names; its `requires` (`restart_lasts`,
+A moment's `checks` are `tools/debug/moments.py`'s `CHECKS` (`keeps_clear`, `stop_speed`) or referee rule names; its `requires` (`restart_lasts`,
 `robot_near_ball`) fail it with `did not arise` when the situation it tests never happened. A
 restart moment plays one strategy, since the referee override moves every outfield robot the same
 way whatever the strategy. Moments are captured from replays (`capture`); hand-made templates
-(`moments.py new`) were removed on 2026-11-11. Moments are not a gate on strategies: they pin shared-code bugs.
+(`tools/debug/moments.py new`) were removed on 2026-11-11. Moments are not a gate on strategies: they pin shared-code bugs.
 
 | Symptom | Looked like | Cause | Fix | Test |
 |---|---|---|---|---|
@@ -582,11 +582,11 @@ planner, the referee) is failing every strategy at once.
 
 ## Real matches
 
-`tools/convert_ssl_log.py` turns the league's official game logs
+`tools/realism/convert_ssl_log.py` turns the league's official game logs
 (https://ssl.robocup.org/game-logs/) into replays in our format, so `load_columnar_replay`,
 `render_window`, `scenario_from_replay` and the analyses read a real match like one of ours:
 
-    pixi run python -I tools/convert_ssl_log.py --corpus 2022-2026 --jobs 2 --out <dir outside replays/>
+    pixi run python -I tools/realism/convert_ssl_log.py --corpus 2022-2026 --jobs 2 --out <dir outside replays/>
 
 Only the converted files are kept: each raw log (up to 370 MB) is deleted once converted, and a
 converted match takes about 35 MB. The published Division B logs for 2022-2026 are 118
@@ -631,4 +631,4 @@ What a converted match holds, and where it differs from a sim replay (the detail
   filtering (ghost robots, ball jumps), and their referee also sends `GOAL_*` and
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
-The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_sources.py` lists a replay's situations and goals.
+The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/debug/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_sources.py` lists a replay's situations and goals.

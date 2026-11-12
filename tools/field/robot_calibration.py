@@ -2,13 +2,13 @@
 """A robot's numbers (loop delay, speed and turn tracking, acceleration, vision noise, kick speed)
 from a recorded field test. See `utama_core/analysis/robot_calibration.py`.
 
-    pixi run python tools/robot_calibration.py replays/field/<run>.log [--json OUT]
+    pixi run python tools/field/robot_calibration.py replays/field/<run>.log [--json OUT]
 """
 
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

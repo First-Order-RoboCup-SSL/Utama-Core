@@ -2,7 +2,7 @@
 # ruff: noqa: E402
 """Find the bugs in a run dir: which problems happened in which matches, with the numbers, and a picture for the worst.
 
-    pixi run python tools/find_bugs.py REPLAYS_OR_RUN_DIR [--strategy NAME ...] [--matches 3] [--out DIR]
+    pixi run python tools/debug/find_bugs.py REPLAYS_OR_RUN_DIR [--strategy NAME ...] [--matches 3] [--out DIR]
                                     [--max-pictures 8] [--workers 2] [--restarts]
 
 Start here when a strategy plays badly. For each strategy the friendly side (config_a, the only side the
@@ -12,7 +12,7 @@ intentions log covers) of its `--matches` worst matches by goal difference is an
 - `stall` (`stuck_detector.find_stuck_windows`): a window with the ball frozen while a friendly robot oscillates,
   or a restart held far too long (`restart_stall`). No `plan_trace` here: it needs the robot's target, which
   the replay does not record, and a guessed target draws carrots that mean nothing; trace a stalled robot by hand
-  with `tools/plan_trace.py --target X Y` once you know where it was going;
+  with `tools/debug/plan_trace.py --target X Y` once you know where it was going;
 - `target_in_keep_out`, `keep_out_short`, `target_in_defense_area` (`restart_picture.restart_findings`): only
   with `--restarts`, which is slow (about 45 s a match).
 
@@ -27,12 +27,12 @@ their scores, the finding counts by kind, then each pictured finding with its me
 
 `--fouls` instead lists our side's (config_a's) fouls in a round-robin run, each with the referee command
 active then and whether that restart was ours or theirs: the starting points for a regression moment
-(`tools/moments.py capture`). `--rule NAME` keeps one rule, `--skip-own-restart` leaves out fouls during our
+(`tools/debug/moments.py capture`). `--rule NAME` keeps one rule, `--skip-own-restart` leaves out fouls during our
 own restarts, `--by strategy,rule` counts per combination instead (columns: strategy, rule, tactic,
 restart), `--json` writes JSON. `out_of_bounds`, the ball leaving the field, is a stoppage and is left out
-unless `--include-stoppages` (`utama_core/analysis/fouls.py`; until 2026-11-11 `moments.py fouls`).
+unless `--include-stoppages` (`utama_core/analysis/fouls.py`; until 2026-11-11 `tools/debug/moments.py fouls`).
 
-    pixi run python tools/find_bugs.py replays/eval_<id>/round_1 --fouls [--rule keep_out] [--by strategy,rule]
+    pixi run python tools/debug/find_bugs.py replays/eval_<id>/round_1 --fouls [--rule keep_out] [--by strategy,rule]
 """
 
 from __future__ import annotations
@@ -51,13 +51,13 @@ from typing import Optional, Union
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import match_timeline
+from tools.debug import match_timeline
+from tools.debug.plan_trace import replay_game_at
 from tools.evaluation.match import _short_name
-from tools.plan_trace import replay_game_at
 from utama_core.analysis import fouls as fouls_lib
 from utama_core.analysis.findings import Finding, write_jsonl
 from utama_core.analysis.matches import STEM, Match, load_match

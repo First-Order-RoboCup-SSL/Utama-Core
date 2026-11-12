@@ -457,7 +457,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         # "Known open bugs") has hand-written a one-off print of exactly this
         # tuple in a throwaway trace script. Recording it here instead means
         # any future investigation can get it back for free via
-        # `debug_match.py --match-log <path>` + `load_jsonl`, with zero
+        # `tools/debug/debug_match.py --match-log <path>` + `load_jsonl`, with zero
         # runtime cost when match_log is unset (the default for every normal
         # run/test/tournament).
         if ctx.match_log is not None:

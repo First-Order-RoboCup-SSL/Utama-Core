@@ -34,19 +34,19 @@ does something else, the ball goes elsewhere, or our robot never gets there.
 
 A moment comes from a replay (`capture`); `save` and `load` refuse an invalid one, naming each
 problem (ids, field lines, check and strategy names). Starting points: our side's fouls in a run,
-`pixi run python tools/find_bugs.py replays/eval_<id>/round_1 --fouls` (until 2026-11-11 `moments.py fouls`).
+`pixi run python tools/debug/find_bugs.py replays/eval_<id>/round_1 --fouls` (until 2026-11-11 `tools/debug/moments.py fouls`).
 Capture one from a replay (its noise and designated position come with it; `--out` writes
 elsewhere than utama_core/tests/moments/):
-    pixi run python tools/moments.py capture replays/eval_<id>/round_1/<a>_vs_<b>.npz --t 254.65 \\
+    pixi run python tools/debug/moments.py capture replays/eval_<id>/round_1/<a>_vs_<b>.npz --t 254.65 \\
         --name free_kick_defender_drives_in --check keeps_clear --strategy <a> --opponent <b> \\
         --note "..." [--out PATH]
 Play one (`--seed N` replays its noise with another seed, the JSON untouched):
-    pixi run python tools/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
+    pixi run python tools/debug/moments.py play utama_core/tests/moments/<name>.json [--strategy NAME] [--seed N]
 Play it under several seeds as one table, compare with the code at a git ref (a worktree under
 `AGAINST_DIR`, to remove with `git worktree remove --force`), look at its events (referee changes, fouls,
 keep-out entries, kicks, closest approaches), or try a scratch strategy file's factory:
-    pixi run python tools/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
-    pixi run python tools/moments.py play <json> --strategy path/to/scratch.py:my
+    pixi run python tools/debug/moments.py play <json> --seeds 0-4 [--against HEAD~3] [--events]
+    pixi run python tools/debug/moments.py play <json> --strategy path/to/scratch.py:my
 """
 
 from __future__ import annotations
@@ -67,11 +67,10 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import sim_setup  # noqa: E402
 from tools.evaluation.match import (  # noqa: E402
     N_OUTFIELD,
     OUTFIELD_ROBOT_IDS,
@@ -84,6 +83,7 @@ from utama_core.replay.scenario import (  # noqa: E402
     Scenario,
     scenario_from_replay,
 )
+from utama_core.run import sim_setup  # noqa: E402
 from utama_core.strategy.catalog import plain_name  # noqa: E402
 
 MOMENTS_DIR = REPO_ROOT / "utama_core" / "tests" / "moments"
@@ -671,7 +671,7 @@ def _git(*args: str, cwd: Path = REPO_ROOT) -> str:
 
 def ref_worktree(ref: str) -> Path:
     """A worktree of the tree at `ref` under `AGAINST_DIR` (reused if it is there at that commit),
-    with the main tree's `.pixi` and compiled extensions, and this `tools/moments.py` in place of
+    with the main tree's `.pixi` and compiled extensions, and this `tools/debug/moments.py` in place of
     its own: the same judge plays the moment, only the code under test differs, so any commit can
     be compared, including ones from before `--seeds`. Not removed afterwards."""
     sha = _git("rev-parse", "--verify", f"{ref}^{{commit}}")
@@ -689,12 +689,16 @@ def ref_worktree(ref: str) -> Path:
     for pattern in BUILD_ARTIFACTS:
         for src in REPO_ROOT.glob(pattern):
             shutil.copy2(src, path / src.relative_to(REPO_ROOT))
-    shutil.copy2(Path(__file__).resolve(), path / "tools" / "moments.py")
+    (path / "tools" / "debug").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(Path(__file__).resolve(), path / "tools" / "debug" / "moments.py")
+    sim = path / "utama_core" / "run" / "sim_setup.py"
+    if not sim.exists():  # a commit from before sim_setup moved into utama_core: the judge needs it
+        shutil.copy2(sim_setup.__file__, sim)
     return path
 
 
 def ref_cells(json_path: Path, name: str, seeds: list[int], tree: Path) -> dict[int, list[str]]:
-    """{seed: failures} for one strategy, played in `tree` by this `tools/moments.py` (copied there by
+    """{seed: failures} for one strategy, played in `tree` by this `tools/debug/moments.py` (copied there by
     `ref_worktree`; its env's python, run directly so pixi cannot re-solve the shared env)."""
     fd, out = tempfile.mkstemp(dir=AGAINST_DIR, suffix=".json")
     os.close(fd)
@@ -702,7 +706,7 @@ def ref_cells(json_path: Path, name: str, seeds: list[int], tree: Path) -> dict[
     env = {**os.environ, "PATH": f"{python.parent}{os.pathsep}{os.environ.get('PATH', '')}"}
     cmd = [
         str(python),
-        "tools/moments.py",
+        "tools/debug/moments.py",
         "play",
         str(json_path),
         "--strategy",

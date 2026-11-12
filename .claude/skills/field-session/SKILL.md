@@ -18,7 +18,7 @@ fix only those.
    "!!". It cannot see batteries or kicker charge.
 2. On a "!!":
    - **Vision quiet or dropping**: check the network link before any code. Multicast over a
-     2.4 GHz phone hotspot dropped frames on 2026-10-29. `pixi run python tools/vision_check.py
+     2.4 GHz phone hotspot dropped frames on 2026-10-29. `pixi run python tools/field/vision_check.py
      --seconds 5` listens alone; `--guided ball` checks cameras against 9 known spots.
    - **Under 80% of commands answered**: range, interference or a flat battery.
    - **Lid swapped**: `pixi run find-robots`, and calibrate again (the profile's tag offset
@@ -44,19 +44,19 @@ caps are 0.3 m/s and 0.6 rad/s on real robots (balls are lost turning faster).
 
 1. **Keep the raw logs.** `replays/field/<YYYYMMDD_HHMMSS>_real_<name>.log.gz`. Never delete
    an untrimmed log or archive; ask before deleting anything under `replays/`.
-2. **Trim dead time** to new files: `pixi run python tools/trim_idle_log.py
+2. **Trim dead time** to new files: `pixi run python tools/field/trim_idle_log.py
    replays/field/<run>.log.gz --dry-run`, then without `--dry-run` (`--in-place` only on copies).
-3. **Register the session** in `tools/field_sessions.json`: its setup, and which measurements
+3. **Register the session** in `tools/field/field_sessions.json`: its setup, and which measurements
    (`loop_delay`, `ball_roll`, `ball_noise`, `robot_noise`) it may be used for. Only registered
    sessions are read.
-4. **Measure the world**: `pixi run python tools/field_physics.py [--json OUT]` prints each
+4. **Measure the world**: `pixi run python tools/field/field_physics.py [--json OUT]` prints each
    measurement per (day, radio) with its spread and whether the days agree. Stop rule: a number
    enters the sim (`tools/evaluation/reference/world.json`) only if it repeats across days, or
    its spread is deliberately used as the range. Changing `world.json` changes every match's
    environment: every stored result plays again, so batch it and ask first.
-5. **One robot's numbers from a log**: `pixi run python tools/robot_calibration.py
+5. **One robot's numbers from a log**: `pixi run python tools/field/robot_calibration.py
    replays/field/<run>.log [--json OUT]`.
-6. **Share**: `pixi run python tools/package_logs.py field [DIR] [--dry-run]` compresses the
+6. **Share**: `pixi run python tools/field/package_logs.py field [DIR] [--dry-run]` compresses the
    logs and bundles calibration and hardware config.
 7. **Write down** what broke and what was measured (a dated note; open follow-ups listed).
    Bugs seen on the pitch go through the `debug-incident` skill with the field log as the

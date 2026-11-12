@@ -43,7 +43,7 @@ and are replaced by our own measurements once hardware tests are possible.
 
 ## What we found (2026-10-14)
 
-Real: 54 official Division B matches from 2025–2026 (`tools/convert_ssl_log.py`). Sim: the
+Real: 54 official Division B matches from 2025–2026 (`tools/realism/convert_ssl_log.py`). Sim: the
 baseline round-robin `tournament_20261014_144456` (66 matches). An expected-goals (xG) model
 was fitted on real shots. On held-out matches it ranks shots with AUC 0.82 and its predicted
 rates agree with observed ones.
@@ -92,7 +92,7 @@ friction). **Within** means kick-to-kick noise for the same robot.
 
 | Parameter | Why it matters | From official logs? | rsim today |
 |---|---|---|---|
-| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating; for our robots, `tools/robot_calibration.py` on a recorded field test (command sent to motion seen) | None: commands act on the next tick |
+| Sensing-to-action latency (vision, decision, radio, motor response) | Likeliest cause of the keeper gap | Only as other teams' total reaction time: from a kick to their keeper accelerating; for our robots, `tools/field/robot_calibration.py` on a recorded field test (command sent to motion seen) | None: commands act on the next tick |
 | Ball rolling deceleration (and the switch from sliding to rolling) | Pass and shot timing; keeper reaction time | Yes: fit free-rolling segments, per match (venue carpet) | Fixed in the C++ physics (`vendor/rSim`) |
 | Kick speed: between and within | How much time the keeper has; pass weight | Yes: peak ball speed after each kick, per team | Fixed |
 | Kick direction error | Wide rate (6% vs 22%) | Partly: shot miss distance, pass error relative to the receiver | None: exact |
@@ -165,7 +165,7 @@ starts. Evaluation changes and strategy changes go in separate commits.
 
 ### Phase 0: Bring the analysis into the repo (2–3 days) — done 2026-10-16
 
-`pixi run python tools/realism_scorecard.py` (see `docs/tools.md`); package
+`pixi run python tools/realism/realism_scorecard.py` (see `docs/tools.md`); package
 `utama_core/analysis/realism/`, real reference `real_2025_2026.json`. On the baseline it
 reproduces the outcome numbers above. Rows failing on the baseline: goal rate in every xG
 band, keeper and defender share, wide or post, ball speed kept, kick speed spread, keeper
@@ -179,7 +179,7 @@ The xG and shot-outcome analysis currently lives outside the repo (`~/dev/ssl/xg
     minutes late.
   - `xg.py`: the model fit and the decomposition.
   - `shot_outcomes.py`: what happened to each shot.
-- Add a `tools/realism_scorecard.py` entry point, and unit tests on the shot detector and goal
+- Add a `tools/realism/realism_scorecard.py` entry point, and unit tests on the shot detector and goal
   linking using small synthetic frames.
 - Commit the fitted real xG coefficients as data, so the sim side doesn't need the real logs.
 - Done when: the scorecard reproduces the numbers above for the baseline.
@@ -424,7 +424,7 @@ From the logs in `replays/field/20261022_*_real_*.log`, one robot (blue 2, firmw
 and kicked 9 times, so these are small samples. The radio log (`RADIO_OUT`) says when the
 dribbler and kicker were commanded. Kicks and ball slow-down come from one camera's raw ball
 detections, because the two cameras disagreed by several cm. Vision noise comes from
-`tools/robot_calibration.py`.
+`tools/field/robot_calibration.py`.
 
 | Measure | Ours | League / sim |
 |---|---|---|
@@ -575,5 +575,5 @@ from one match per pairing is not evidence.
 
 - [`signals.md`](signals.md): how strategies are measured.
 - [`roadmap.md`](roadmap.md): the workstream entry.
-- `tools/convert_ssl_log.py`: official logs as replays.
+- `tools/realism/convert_ssl_log.py`: official logs as replays.
 - `vendor/rSim/FORK_NOTES.md`: physics fork changes.

@@ -2,7 +2,7 @@
 # ruff: noqa: E402
 """One match window as swimlanes: referee command, each robot's tactic, distance to the ball, events.
 
-    pixi run python tools/match_timeline.py replays/eval_<id>/round_1/<a>_vs_<b>.npz 100 160 --side friendly
+    pixi run python tools/debug/match_timeline.py replays/eval_<id>/round_1/<a>_vs_<b>.npz 100 160 --side friendly
 
 Stacked panels on one time axis (Gantt-style, no dual axes):
 1. the referee command band: live play, STOP, kickoff, free kick, penalty, placement, HALT (goal and
@@ -19,7 +19,7 @@ lanes empty; the command band, possession strips and distances still work.
 Prints, for the side: tactic switches per minute and the longest single tactic span, per robot.
 `--out` defaults to a `.timeline_<side>_<t0>-<t1>.png` beside the replay.
 
-Reuses `tools/replay_trace.py` for the event list (kicks, possession, referee changes, fouls, goals) and
+Reuses `tools/debug/replay_trace.py` for the event list (kicks, possession, referee changes, fouls, goals) and
 the status messages, and `analysis/turnover_breakdown.analyse_match` for shots.
 """
 
@@ -42,11 +42,11 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import replay_trace  # noqa: E402
+from tools.debug import replay_trace  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
 from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.entities.referee.referee_command import RefereeCommand  # noqa: E402
@@ -64,7 +64,7 @@ FLIP_BACKS_PER_MIN = 2.0
 # Under this much live play a rate is noise (one switch in 10 s reads as 6 per minute): no thrash finding.
 MIN_LIVE_S = 30.0
 
-# Styling shared with tools/figure_style.py so the figures read as one set.
+# Styling shared with tools/debug/figure_style.py so the figures read as one set.
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 FOR, AGAINST = "#2a78d6", "#eb6834"  # categorical slots 1 and 2
 SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]

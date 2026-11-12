@@ -23,8 +23,8 @@ whole loop, so a field symptom becomes a cause, and then a regression test, in m
   - operator notes (`NOTE`, from the dashboard's Note box);
   - the run info: code version, the vision-to-radio mapping, the field.
 - Beside the log is a `.npz` replay of the world the strategy saw.
-- `analysis/robot_calibration.py` reads the log for one robot's numbers. `tools/plan_snapshot.py`
-  draws one planner decision from an `.npz`, and `tools/moments.py` turns an `.npz` tick into a
+- `analysis/robot_calibration.py` reads the log for one robot's numbers. `tools/debug/plan_snapshot.py`
+  draws one planner decision from an `.npz`, and `tools/debug/moments.py` turns an `.npz` tick into a
   regression moment.
 
 Missing:
@@ -80,7 +80,7 @@ pictures in the same style as `plan_snapshot`, not plots against time.
    still move as they really did. So it says what the fixed code would have decided at the
    moment it went wrong, not what would have happened next. That is exactly the check a fix
    needs, and why the result is a test and not a claim.
-5. `--moment` writes the first diverging tick as a regression moment (`tools/moments.py`'s format)
+5. `--moment` writes the first diverging tick as a regression moment (`tools/debug/moments.py`'s format)
    or a unit-test fixture: robot, ball and referee state, and the command it should have given.
    The fix's regression test then starts from the real field state.
 

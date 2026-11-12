@@ -1,11 +1,11 @@
 """World physics measured from field logs, for the sim's settings: loop delay, ball rolling
 deceleration, and detection noise at rest for the ball and the robots.
 
-Only the sessions and measurements allowed in `tools/field_sessions.json` are read. Each log's
+Only the sessions and measurements allowed in `tools/field/field_sessions.json` are read. Each log's
 values are grouped by (day, radio) and printed as a median with its middle half and count, then
 checked for agreement across the groups: a setting is only trusted if the days repeat it.
 
-    pixi run python tools/field_physics.py [--logs replays/field] [--workers 2] [--json OUT]
+    pixi run python tools/field/field_physics.py [--logs replays/field] [--workers 2] [--json OUT]
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Optional
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

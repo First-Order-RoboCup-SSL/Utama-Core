@@ -1,7 +1,7 @@
-"""debug_match.py — one-off ad hoc match runner for tactic debugging.
+"""tools/debug/debug_match.py — one-off ad hoc match runner for tactic debugging.
 
 Run:
-    pixi run python tools/debug_match.py --strategy riptide \\
+    pixi run python tools/debug/debug_match.py --strategy riptide \\
         --opponent wolfpack --duration 90 --headless
 
 Replaces the pattern of hand-writing a fresh `StrategyRunner(...)` block per
@@ -38,14 +38,14 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.evaluation.match import TICKS_PER_SECOND
-from tools.sim_setup import UnknownStrategy, load_side, sim_runner
 from utama_core.engine.match_log import load_jsonl
 from utama_core.run import StrategyRunner
+from utama_core.run.sim_setup import UnknownStrategy, load_side, sim_runner
 
 
 class _TargetRecorder:

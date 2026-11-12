@@ -14,7 +14,7 @@ from diagram_style import Diagram  # noqa: E402
 NAMES = [
     "StrategyRunner",
     "tools/evaluation/evaluate.py",
-    "tools/convert_ssl_log.py",
+    "tools/realism/convert_ssl_log.py",
     "utama_core/run/strategy_runner.py",
     "utama_core/replay/ssl_log.py",
     "utama_core/replay/columnar_writer.py",
@@ -29,9 +29,9 @@ NAMES = [
     "utama_core/analysis/turnover_breakdown.py",
     "utama_core/analysis/restart_outcomes.py",
     "utama_core/analysis/stuck_detector.py",
-    "tools/moments.py",
-    "tools/replay_trace.py",
-    "tools/repro_from_replay.py",
+    "tools/debug/moments.py",
+    "tools/debug/replay_trace.py",
+    "tools/debug/repro_from_replay.py",
 ]
 
 d = Diagram(
@@ -97,7 +97,7 @@ d.box(
     "chances, turnover_breakdown,\nrestart_outcomes, stuck_detector",
     kind="output",
 )
-d.box(165, 48, 34, 18, "tools/", "moments.py,\nreplay_trace.py,\nrepro_from_replay.py", kind="output")
+d.box(165, 48, 34, 18, "tools/debug/", "moments.py,\nreplay_trace.py,\nrepro_from_replay.py", kind="output")
 d.box(165, 26, 34, 12, "ratings.py", "the verdict's test", kind="output")
 d.arrow((142, 98), (148, 92))
 d.arrow((142, 94), (148, 72))

@@ -1,4 +1,4 @@
-"""Unit tests for tools/field_physics.py: the register filter, step delays, ball rolls, agreement.
+"""Unit tests for tools/field/field_physics.py: the register filter, step delays, ball rolls, agreement.
 
 No real logs and no rsim: the ball roll is checked on a synthetic ball with a known deceleration.
 """
@@ -10,7 +10,7 @@ import types
 import numpy as np
 import pytest
 
-from tools import field_physics
+from tools.field import field_physics
 
 
 def _group(median: float, n: int) -> dict:

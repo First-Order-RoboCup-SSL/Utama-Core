@@ -1,6 +1,6 @@
 ---
 name: debug-incident
-description: Take one bad moment in a match (a foul, a stall, a robot thrashing, driving into the ball at a restart, a strange path near an obstacle) from symptom to a fixed cause with a regression test. Use when find_bugs.py or a replay shows a specific incident, or the user points at a time in a match. Not for "why did this strategy lose" in general (that is the explain-result skill).
+description: Take one bad moment in a match (a foul, a stall, a robot thrashing, driving into the ball at a restart, a strange path near an obstacle) from symptom to a fixed cause with a regression test. Use when tools/debug/find_bugs.py or a replay shows a specific incident, or the user points at a time in a match. Not for "why did this strategy lose" in general (that is the explain-result skill).
 ---
 
 # Debug one incident
@@ -12,28 +12,28 @@ so far, is `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure"; read i
 below that is unclear.
 
 Inputs: a replay `REPLAY` (`replays/eval_<id>/round_<k>/<a>_vs_<b>.npz`, or any `.npz`) and a
-time `S` in seconds. In a parallel worktree, run `tools/setup_worktree.sh` first.
+time `S` in seconds. In a parallel worktree, run `tools/dev/setup_worktree.sh` first.
 
 ## 1. Find it
 
-`pixi run python tools/find_bugs.py ROUND_DIR --strategy NAME` → `find_bugs/index.md`, then
+`pixi run python tools/debug/find_bugs.py ROUND_DIR --strategy NAME` → `find_bugs/index.md`, then
 filter `find_bugs/findings.jsonl` on the kind you care about. Open the finding's picture,
 then confirm with the numbers in its message. Only the friendly side (config_a) is checked.
 
 ## 2. Look at it
 
-Pick the tool by the question. `match_timeline.py`, `restart_picture.py` and `plan_trace.py` take
+Pick the tool by the question. `tools/debug/match_timeline.py`, `tools/debug/restart_picture.py` and `tools/debug/plan_trace.py` take
 `--findings` to write their flags as JSON.
 
 | Question | Command |
 |---|---|
-| What happened in this window, in text? | `tools/replay_trace.py REPLAY T0 T1` (`--events`: kicks, possession, referee changes, fouls) |
-| Which tactic was each robot in, and what was it aiming at? | `tools/repro_from_replay.py REPLAY --t S --summary IDS` (replays the state with tracing on, prints tactic, position, target every 0.25 s) |
-| Swimlanes: referee, each robot's tactic, distance to ball | `tools/match_timeline.py REPLAY T0 T1 --side friendly` |
-| Where did the referee override send everyone at this restart? Legal? | `tools/restart_picture.py REPLAY --t S` (`--all-restarts`, `--side enemy`) |
-| What did the planner decide on this tick? | `tools/plan_snapshot.py REPLAY --t S --robot ID --target X Y` (`--side enemy`) |
-| How did the plan evolve over a few seconds? | `tools/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` |
-| Run a fresh short match with my own traces | `tools/debug_match.py --strategy A --opponent B --duration 60 --stop-on-goal`, with `ctx.match_log.trace(...)` calls added in the tactic |
+| What happened in this window, in text? | `tools/debug/replay_trace.py REPLAY T0 T1` (`--events`: kicks, possession, referee changes, fouls) |
+| Which tactic was each robot in, and what was it aiming at? | `tools/debug/repro_from_replay.py REPLAY --t S --summary IDS` (replays the state with tracing on, prints tactic, position, target every 0.25 s) |
+| Swimlanes: referee, each robot's tactic, distance to ball | `tools/debug/match_timeline.py REPLAY T0 T1 --side friendly` |
+| Where did the referee override send everyone at this restart? Legal? | `tools/debug/restart_picture.py REPLAY --t S` (`--all-restarts`, `--side enemy`) |
+| What did the planner decide on this tick? | `tools/debug/plan_snapshot.py REPLAY --t S --robot ID --target X Y` (`--side enemy`) |
+| How did the plan evolve over a few seconds? | `tools/debug/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` |
+| Run a fresh short match with my own traces | `tools/debug/debug_match.py --strategy A --opponent B --duration 60 --stop-on-goal`, with `ctx.match_log.trace(...)` calls added in the tactic |
 
 All run as `pixi run python tools/<tool>.py ...`. Never conclude from a picture alone.
 
@@ -56,8 +56,8 @@ Only when a field state alone decides the behaviour (restart and placement geome
 referee override); open-play fouls almost never reproduce from a captured state.
 
 ```
-pixi run python tools/moments.py capture REPLAY --t S --name NAME --check CHECK --note "..."
-pixi run python tools/moments.py play utama_core/tests/moments/NAME.json --seeds 0-4
+pixi run python tools/debug/moments.py capture REPLAY --t S --name NAME --check CHECK --note "..."
+pixi run python tools/debug/moments.py play utama_core/tests/moments/NAME.json --seeds 0-4
 ```
 
 It must fail on at least 4 of 5 seeds before the fix. If the fix is not in the same change,

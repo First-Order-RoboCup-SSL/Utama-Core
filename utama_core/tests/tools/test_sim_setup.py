@@ -1,10 +1,10 @@
-"""`tools/sim_setup.py`: which names load which strategy, and the runner it sets up."""
+"""`utama_core/run/sim_setup.py`: which names load which strategy, and the runner it sets up."""
 
 import pytest
 
-from tools import sim_setup
 from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.run import sim_setup
 
 
 @pytest.mark.parametrize(

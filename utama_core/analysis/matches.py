@@ -2,7 +2,7 @@
 
 A match file's stem is `<config_a>_vs_<config_b>` (an evaluate.py round folder, or an old round-robin);
 evaluate.py runs before 2026-11-12 added `_s<seed>`, still read. config_a is the friendly side (yellow) in every run. Shared by `tools/evaluation/explain.py`
-and `tools/find_bugs.py`.
+and `tools/debug/find_bugs.py`.
 """
 
 from __future__ import annotations

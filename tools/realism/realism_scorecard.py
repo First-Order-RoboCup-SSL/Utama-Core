@@ -3,12 +3,12 @@
 """Realism scorecard: a round-robin's matches against real Division B matches, component by
 component (attempts, chance quality, keeper saves, misses, ball slow-down, kick speed ...).
 
-    # the real side, from converted official logs (`tools/convert_ssl_log.py`); rewrites the
+    # the real side, from converted official logs (`tools/realism/convert_ssl_log.py`); rewrites the
     # committed reference (xG model + real rows)
-    pixi run python tools/realism_scorecard.py --real ~/dev/ssl/official-logs/2025 ~/dev/ssl/official-logs/2026
+    pixi run python tools/realism/realism_scorecard.py --real ~/dev/ssl/official-logs/2025 ~/dev/ssl/official-logs/2026
 
     # a round-robin against the reference
-    pixi run python tools/realism_scorecard.py --sim replays/tournament_<id>
+    pixi run python tools/realism/realism_scorecard.py --sim replays/tournament_<id>
 
 Per-match shot records are cached: the real ones in `--real-cache`, the sim ones in
 `<run_dir>/realism_shots.jsonl`; a cache is reused unless `--refresh`. What each row means and
@@ -23,7 +23,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

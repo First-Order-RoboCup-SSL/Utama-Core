@@ -1,6 +1,6 @@
 """On-pitch pictures of how each strategy plays, from one round-robin run.
 
-    pixi run python tools/pitch_maps.py replays/eval_<id>/round_1 [--out docs/img/signals]
+    pixi run python tools/debug/pitch_maps.py replays/eval_<id>/round_1 [--out docs/img/signals]
 
 Every strategy gets one panel per figure, in name order (never a ranking). All
 panels use one frame: the strategy attacks toward +x, its own goal is on the left (-x), and
@@ -41,11 +41,11 @@ import numpy as np  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import figure_style as sr  # noqa: E402
+from tools.debug import figure_style as sr  # noqa: E402
 from utama_core.analysis import turnover_breakdown  # noqa: E402
 from utama_core.analysis.findings import Finding, write_jsonl  # noqa: E402
 from utama_core.config.field_params import STANDARD_FIELD_DIMS as F  # noqa: E402

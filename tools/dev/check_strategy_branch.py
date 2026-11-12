@@ -1,7 +1,7 @@
-"""check_strategy_branch.py — fail if a strategy branch could score better without playing better.
+"""tools/dev/check_strategy_branch.py — fail if a strategy branch could score better without playing better.
 
 Run:
-    python tools/check_strategy_branch.py --base origin/main
+    python tools/dev/check_strategy_branch.py --base origin/main
 
 A strategy is scored by the round-robin and the evaluation. If the branch that changes it, often
 written by an agent, could also change the evaluation or its opponents, it could raise its score

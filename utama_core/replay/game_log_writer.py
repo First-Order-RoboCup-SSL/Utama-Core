@@ -4,7 +4,7 @@ Our replays hold the filtered world; measuring the real robots needs what went i
 before any filter: every vision packet as received (raw detections with ssl-vision's
 `t_capture`), the referee's state, and the radio's bytes both ways. `GameLogWriter` writes
 them in the league's game-log format (`ssl_log.py`), so the tools for official logs read a
-field test unchanged: `tools/convert_ssl_log.py` turns it into a replay, and its raw-vision
+field test unchanged: `tools/realism/convert_ssl_log.py` turns it into a replay, and its raw-vision
 sidecar gives our camera's noise. Records:
 
 - `VISION_2014`: each `SSL_WrapperPacket`, byte for byte.

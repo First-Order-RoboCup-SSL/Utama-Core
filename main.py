@@ -4,7 +4,7 @@ round-robin matches are.
 Run:
     pixi run main                          # pendulum vs wolfpack
     pixi run main pendulum riptide   # any two names from docs/strategies.md
-    pixi run main a.strategy wolfpack    # or a .strategy file (tools/build_strategy.py)
+    pixi run main a.strategy wolfpack    # or a .strategy file (tools/dev/build_strategy.py)
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
 Yellow (the first strategy) starts on the right and kicks off. For many matches with
@@ -13,11 +13,11 @@ results, use `tools/evaluation/evaluate.py`.
 
 import argparse
 
-from tools.sim_setup import UnknownStrategy, load_side, sim_referee, sim_runner
 from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.run.sim_setup import UnknownStrategy, load_side, sim_referee, sim_runner
 
 
 def _strategy(name: str) -> AbstractStrategy:

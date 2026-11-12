@@ -8,10 +8,10 @@
     "ball_slide_decel": [2.5, 4.0]
   },
   "sources": {
-    "latency_s": "Field logs (tools/field_physics.py, tools/field_sessions.json): command to vision about 50 to 60 ms on 2026-10-28 (2 radios, wired vision), 80 to 88 ms on 2026-10-27 (one calibration run). The range spans both.",
+    "latency_s": "Field logs (tools/field/field_physics.py, tools/field/field_sessions.json): command to vision about 50 to 60 ms on 2026-10-28 (2 radios, wired vision), 80 to 88 ms on 2026-10-27 (one calibration run). The range spans both.",
     "vision": "League logs, docs/sim_realism.md: robot noise 0.4 to 1 mm, heading 0.2 to 0.3 degrees. Our lab's ball at rest measures 0.3 to 0.7 mm.",
     "vanishing": "League logs, docs/sim_realism.md: 0.1 to 0.9% of detections missing.",
-    "ball_roll_decel": "Spans our carpet, about 0.20 m/s^2 (2026-10-28, 43 kicks, tools/field_physics.py), to the league's, about 0.29 (docs/sim_realism.md) and a little above.",
+    "ball_roll_decel": "Spans our carpet, about 0.20 m/s^2 (2026-10-28, 43 kicks, tools/field/field_physics.py), to the league's, about 0.29 (docs/sim_realism.md) and a little above.",
     "ball_slide_decel": "docs/sim_realism.md, unchanged from the 2026-10-17 settings."
   }
 }

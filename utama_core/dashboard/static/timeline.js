@@ -1,5 +1,5 @@
 // Match timeline: a window of the match as swimlanes, the dashboard's version of
-// tools/match_timeline.py's figure, in the Replay tab around the viewed frame and in the
+// tools/debug/match_timeline.py's figure, in the Replay tab around the viewed frame and in the
 // Live tab up to now. Top to bottom, on one time axis:
 //   - the referee command band (live play, STOP, kickoff, free kick, penalty, placement, HALT);
 //   - possession: whose ball it is, in the team's colour. In a replay, one span per situation

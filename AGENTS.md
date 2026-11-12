@@ -37,7 +37,7 @@ One term per thing; reuse these instead of coining new ones.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
 - **Moment / regression moment** — a field state (captured from a replay) that reproduced a
-  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/moments.py`).
+  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/debug/moments.py`).
   A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
   the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
   the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
@@ -45,7 +45,7 @@ One term per thing; reuse these instead of coining new ones.
   box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
-  `tools/pitch_maps.py` (and `tools/evaluation/explain.py` for a candidate against the champion), always
+  `tools/debug/pitch_maps.py` (and `tools/evaluation/explain.py` for a candidate against the champion), always
   turned so the strategy attacks right. Position map: a heatmap of where the outfield robots stand in
   live play, with the ball and without it, plus each robot's mean position. Shot map: every shot at
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
@@ -62,7 +62,7 @@ One term per thing; reuse these instead of coining new ones.
   the store holds is never played again. Promoting is a one-line change to `players.json` in a PR; it takes effect as the reference at the next release.
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
-- **Strategy file** — a `.strategy` file (`utama_core/bundle/`, `tools/build_strategy.py`) is a
+- **Strategy file** — a `.strategy` file (`utama_core/bundle/`, `tools/dev/build_strategy.py`) is a
   zip of one strategy and the whole `utama_core` package at one commit; it plays in its own process, game frames in and
   robot commands out, in simulation or on real robots (`BundledStrategy(path, robot_ids)`). `evaluate.py` plays the reference from
   such a file of the last release (kept in `replays/eval/frozen/`), so a change to shared code never moves
@@ -71,7 +71,7 @@ One term per thing; reuse these instead of coining new ones.
   friction, vision noise and dropouts, latency) comes from measurements; robot capability (kick,
   dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
   in the control layer. The test: would better robots change it? `tools/evaluation/reference/
-  world.json`, `robots.json`; field sessions in `tools/field_sessions.json`.
+  world.json`, `robots.json`; field sessions in `tools/field/field_sessions.json`.
 - **Situation / goal sources** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal sources (`utama_core/analysis/goal_sources.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
@@ -130,7 +130,7 @@ declarations) — check there before reintroducing one of them.
 - **Always pass `--headless`** when running any simulator/integration test:
   `pixi run pytest utama_core/tests/ --headless`. Much faster; there is no reason to run
   with graphics in an agent loop.
-- A git worktree for a parallel agent: run `tools/setup_worktree.sh` inside it (links `.pixi`,
+- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (links `.pixi`,
   copies the compiled planner/simulator `.so` files; without them tests differ).
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.

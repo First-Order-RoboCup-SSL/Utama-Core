@@ -19,7 +19,7 @@ Run in the Live tab's Strategy panel restarts the tactic.
 (that one halts on the second robot it never sees): it plays fixed moves
 (`tactics/scripted_moves.py`) instead of shooting. Put it near the middle of the camera's view
 facing +x, with 0.8 m clear ahead and 0.6 m to its left, and a ball at rest in view; Force Start.
-Then: pixi run python tools/robot_calibration.py replays/field/<run>_calibrate.log
+Then: pixi run python tools/field/robot_calibration.py replays/field/<run>_calibrate.log
 """
 
 import sys

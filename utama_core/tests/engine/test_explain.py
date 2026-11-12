@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from tools import pitch_maps as pm
+from tools.debug import pitch_maps as pm
 from tools.evaluation import explain
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D

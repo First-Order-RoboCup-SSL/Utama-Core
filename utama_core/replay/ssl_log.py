@@ -4,7 +4,7 @@ The league publishes every official match as a game log: the network packets see
 match, gzipped. `convert_log` turns one into the `<stem>.npz` + `<stem>.sparse_referee.pkl` pair
 a round-robin match writes, through `ColumnarReplayWriter`, so `load_columnar_replay`,
 `render_window`, `scenario_from_replay` and the analyses read a real match like one of ours.
-`tools/convert_ssl_log.py` converts files or downloads the published logs.
+`tools/realism/convert_ssl_log.py` converts files or downloads the published logs.
 
 Log format: the header `SSL_LOG_FILE` and a big-endian int32 version, then records of int64
 receive time [ns], int32 message type, int32 size and the serialized message. Types read here:
@@ -52,7 +52,7 @@ What a converted replay holds:
 - `<stem>.source.json`: the log, teams, final score, tracker source and field geometry, and
   under `extras` which of the sidecars below were written.
 
-Sidecars, for measuring physics and vision rather than replaying (`tools/convert_ssl_log.py`
+Sidecars, for measuring physics and vision rather than replaying (`tools/realism/convert_ssl_log.py`
 can add them to a replay already converted). Teams are in kick-off colours like the replay
 (yellow friendly), positions in metres in field coordinates, times `ts` in seconds on the
 replay's clock. The arrays are `np.savez_compressed` archives named `.zip`, so a glob for

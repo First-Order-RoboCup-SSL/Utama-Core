@@ -1,4 +1,4 @@
-"""repro_from_replay.py — reload a replay's field state at a given timestamp
+"""tools/debug/repro_from_replay.py — reload a replay's field state at a given timestamp
 into a fresh headless rsim match, and tick forward with match_log tracing on.
 
 Why this exists: finding a stall today means running an evaluation
@@ -41,7 +41,7 @@ for the full rationale):
   starts with whatever the freshly-seeded `CustomReferee` defaults to.
 
 Usage:
-    pixi run python tools/repro_from_replay.py replays/tournament_.../match.npz \\
+    pixi run python tools/debug/repro_from_replay.py replays/tournament_.../match.npz \\
         --t 260 --duration 15 --control-scheme trajsample \\
         --trace-out /tmp/repro_trace.jsonl
 
@@ -87,18 +87,18 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.evaluation.match import N_OUTFIELD, OUTFIELD_ROBOT_IDS, TICKS_PER_SECOND
-from tools.sim_setup import load_side, sim_runner
 from utama_core.bundle.strategy_file import SUFFIX
 from utama_core.engine.match_log import load_jsonl
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_reader import load_sim_noise
 from utama_core.replay.scenario import Scenario, apply_scenario, scenario_from_replay
 from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
+from utama_core.run.sim_setup import load_side, sim_runner
 from utama_core.strategy import catalog
 
 _STILL_STALLED_WINDOW_S = 10.0

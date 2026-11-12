@@ -1,6 +1,6 @@
 """Picture of what the fast-path planner decided for one robot on one tick.
 
-    pixi run python tools/plan_snapshot.py REPLAY.npz --t 260 --robot 4 --target -1.0 -0.3 --side enemy
+    pixi run python tools/debug/plan_snapshot.py REPLAY.npz --t 260 --robot 4 --target -1.0 -0.3 --side enemy
 
 Rebuilds the field state at `--t` from the replay (`utama_core.replay.scenario`), runs the planner's
 `_path_to` for the robot toward `--target`, and writes a PNG: the pitch around the robot, every robot
@@ -12,7 +12,7 @@ no `--target`, the robot's own position 0.5 s later stands in for it, and the te
 
 Use it when a robot does something odd near an obstacle or a keep-out zone (see
 docs/STRATEGY_DEVELOPMENT.md, "Debugging a foul or failure"). The picture is one tick: pair it with
-`tools/replay_trace.py` for the timeline.
+`tools/debug/replay_trace.py` for the timeline.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import argparse
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

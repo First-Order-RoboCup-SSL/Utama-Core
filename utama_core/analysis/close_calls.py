@@ -4,7 +4,7 @@
 Reads SSL game logs written on real robots (`StrategyRunner(game_log_path=...)`): the camera's
 raw detections (one camera per robot, `robot_calibration._main_camera`) and the referee's
 commands. Each robot's track is the camera's view of its tag; pass a robot's tag offset
-(`--tag`, as `tools/robot_calibration.py` takes it) to measure from the robot's centre.
+(`--tag`, as `tools/field/robot_calibration.py` takes it) to measure from the robot's centre.
 
 Only the robots a run drove count (its run info's `vision_to_cmd`): ssl-vision misreads a tag
 as another pattern now and then. A close call is one stretch with the two centres nearer than

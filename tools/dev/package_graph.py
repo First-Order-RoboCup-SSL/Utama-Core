@@ -1,6 +1,6 @@
 """Package dependency graph of `utama_core/`, as a Mermaid flowchart, and the stated import rules it breaks.
 
-    pixi run python tools/package_graph.py
+    pixi run python tools/dev/package_graph.py
 
 Parses every `.py` under `utama_core/` with `ast` (nothing is imported) and counts imports between
 first-level packages (`engine`, `replay`, ...). Test code is not scanned as a source, but an import
@@ -21,7 +21,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "utama_core"
 TESTS = "tests"
 

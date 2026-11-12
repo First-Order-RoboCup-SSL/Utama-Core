@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from tools import sim_setup
 from tools.evaluation import match
 from utama_core.entities.referee.stage import Stage
+from utama_core.run import sim_setup
 
 
 class _FakeRunner:

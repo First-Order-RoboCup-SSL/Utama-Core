@@ -1,4 +1,4 @@
-"""`tools/repro_from_replay.py --summary`: per-robot rows from match_log events, and their text."""
+"""`tools/debug/repro_from_replay.py --summary`: per-robot rows from match_log events, and their text."""
 
 import importlib.util
 from pathlib import Path
@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-_TOOL = Path(__file__).resolve().parents[3] / "tools" / "repro_from_replay.py"
+_TOOL = Path(__file__).resolve().parents[3] / "tools" / "debug" / "repro_from_replay.py"
 _spec = importlib.util.spec_from_file_location("repro_from_replay", _TOOL)
 repro = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(repro)

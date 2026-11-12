@@ -2,12 +2,12 @@
 
 The procedure for a test day with real robots: ssl-vision on its own Linux laptop sending vision
 over the network, and our stack on a Windows laptop in WSL with the radio dongle. Each part is
-checked on its own before anything drives a robot: vision with `tools/vision_check.py`, the radio
+checked on its own before anything drives a robot: vision with `tools/field/vision_check.py`, the radio
 with teleop, then both together in the field check of `examples/shooting_drill.py`.
 
 ```
 vision laptop (Linux)                      robot laptop (Windows + WSL)
-  cameras -> ssl-vision  --multicast-->      tools/vision_check.py, then the runner
+  cameras -> ssl-vision  --multicast-->      tools/field/vision_check.py, then the runner
                          224.5.23.2:10006    radio dongle (USB, passed into WSL) -> robots
 ```
 
@@ -22,7 +22,7 @@ vision laptop (Linux)                      robot laptop (Windows + WSL)
    README lists, then `sudo sh install_spinnaker.sh`: yes to the udev entry (add your user to
    `flirimaging`) and to USB-FS 1000 MB. Build ssl-vision with
    `cmake -B build -DUSE_SPINNAKER=true -DUSE_V4L=true && make -C build`.
-2. Add our field as a preset: `git apply tools/ssl-vision-lab-field.patch` in the ssl-vision
+2. Add our field as a preset: `git apply tools/field/ssl-vision-lab-field.patch` in the ssl-vision
    checkout (copy the file over), then rebuild. Field Configuration gets a **Lab Field** button
    (3 m x 2.25 m, goal 0.8 m, defense area 1 m x 0.5 m, two cameras). Do not use the Division B
    button with two cameras: it sets the camera count to 1.
@@ -91,14 +91,14 @@ with **Save Settings**, not on a crash.
 On the robot laptop, in WSL:
 
 ```
-pixi run python tools/vision_check.py
+pixi run python tools/field/vision_check.py
 ```
 
 Expect each camera at about its frame rate and the field at 3000 x 2250 mm. Nothing at all
 means the network or the firewall (steps 3-4 above, step 1 here); one camera missing means its
 capture is not running.
 
-After a calibration, check it against known spots: `tools/vision_check.py --guided ball`, then
+After a calibration, check it against known spots: `tools/field/vision_check.py --guided ball`, then
 `--guided "blue 2"` (any robot, facing +x). It asks for the ball or robot on the 9 points
 (corners, edge midpoints, centre) and prints each camera's error there; the results land in
 `replays/field/*_vision_truth_*.json` to compare with the next setup. The pattern points at the
@@ -261,7 +261,7 @@ the new profile is no worse. Ten kicks a side tell apart only differences of a f
 
 Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
 far to trust them. An older log is measured again with
-`pixi run python tools/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002`
+`pixi run python tools/field/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002`
 (`--tag` per robot: its `tag_forward_m`, `tag_left_m`).
 
 

@@ -1,4 +1,4 @@
-"""Picture of where the referee override sends every friendly robot for one restart (`tools/restart_picture.py`).
+"""Picture of where the referee override sends every friendly robot for one restart (`tools/debug/restart_picture.py`).
 
 For a replay state whose referee command is a restart (STOP, timeouts, kick-offs, penalties, free kicks,
 ball placement), this runs `RefereeOverride.tick` exactly as the strategy does and records the target

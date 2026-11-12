@@ -1,6 +1,6 @@
 """The fast-path planner over a time window: one robot's plan, tick by tick.
 
-    pixi run python tools/plan_trace.py REPLAY.npz --t0 250 --t1 262 --robot 4 --side enemy --target -1.0 -0.3
+    pixi run python tools/debug/plan_trace.py REPLAY.npz --t0 250 --t1 262 --robot 4 --side enemy --target -1.0 -0.3
 
 For each sampled time in [t0, t1] (every `--step` s) it rebuilds the field state from the replay
 (`utama_core.replay.scenario`), runs the planner's `_path_to` for the robot, and records the robot's
@@ -9,7 +9,7 @@ speed. It writes one PNG: a pitch panel with the robot's path coloured by time a
 carrot joined to the robot, above time panels for robot-to-ball distance (with the keep-out
 distance), robot-to-carrot length, speed and the referee command. Read-only; the planner is not
 changed. Without `--target` each tick's target is the robot's position `--lookahead` s later, the
-stand-in `tools/plan_snapshot.py` uses; the figure says so. `--json` prints the per-sample rows.
+stand-in `tools/debug/plan_snapshot.py` uses; the figure says so. `--json` prints the per-sample rows.
 
 Use it when a robot's behaviour near an obstacle or keep-out zone unfolds over time, where one
 `plan_snapshot` tick cannot show it (see docs/STRATEGY_DEVELOPMENT.md, "Debugging a foul or failure").
@@ -26,7 +26,7 @@ from pathlib import Path
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keep pygame's banner off stdout (--findings -)
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

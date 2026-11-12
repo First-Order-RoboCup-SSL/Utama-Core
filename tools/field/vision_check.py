@@ -13,8 +13,8 @@ centre of the field ssl-vision announces), averages each camera there for `--sec
 each camera's error at each point. Cameras that agree with each other can both be wrong; this
 says by how much. The results are saved to `replays/field/` as the baseline for the next setup.
 
-    pixi run python tools/vision_check.py [--seconds 5]
-    pixi run python tools/vision_check.py --guided ball [--seconds 2]
+    pixi run python tools/field/vision_check.py [--seconds 5]
+    pixi run python tools/field/vision_check.py --guided ball [--seconds 2]
 """
 
 import argparse
@@ -28,7 +28,7 @@ import time
 from itertools import combinations
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

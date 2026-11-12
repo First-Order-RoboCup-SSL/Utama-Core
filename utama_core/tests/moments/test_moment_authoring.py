@@ -1,5 +1,5 @@
-"""Pure checks (no rsim) of moments in `tools/moments.py`: loading, saving, the validation errors and
-`play --seed`. (Hand-made templates, `moments.py new`, were removed on 2026-11-11: moments are captured
+"""Pure checks (no rsim) of moments in `tools/debug/moments.py`: loading, saving, the validation errors and
+`play --seed`. (Hand-made templates, `tools/debug/moments.py new`, were removed on 2026-11-11: moments are captured
 from replays.)"""
 
 import dataclasses
@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
 
 PROBE = moments.MOMENTS_DIR / "free_kick_defender_dodges_into_ball.json"
 

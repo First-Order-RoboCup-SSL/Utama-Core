@@ -561,7 +561,7 @@ def test_try_reuse_ignores_priority_conflict_when_priority_blocking_disabled():
     """Pins the restart-formation fix (roadmap "trajsample liveness fixes", session following
     the recheck-window fix above): even after shrinking the recheck window to
     0.5s, a real kickoff still stalled 100% of the time in a live
-    `debug_match.py` run, traced to a DIFFERENT mechanism than the recheck
+    `tools/debug/debug_match.py` run, traced to a DIFFERENT mechanism than the recheck
     window -- priority-blocking itself, not just how far ahead it looks.
 
     At a `PREPARE_KICKOFF_YELLOW`/similar restart, every non-keeper teammate

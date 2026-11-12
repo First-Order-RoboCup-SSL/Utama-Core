@@ -17,7 +17,7 @@ per camera, our stack in WSL on the robot laptop (`docs/real_robot_setup.md`).
   early on; after the distortion was retuned in ssl-vision, 5 cm, then 85 mm later in the day
   (`replays/field/20261022_211142_score_goal.log`, constant 83–85 mm in every frame).
   Something moved between those checks, and nothing tells us when.
-- **Against known spots** (`vision_check.py --guided ball`,
+- **Against known spots** (`tools/field/vision_check.py --guided ball`,
   `replays/field/20261022_212332_vision_truth_ball.json`): camera 0 saw 7 of 9 points, 33 mm
   mean error, 61 mm worst; camera 1 saw 5 of 9, 55 mm mean, 92 mm worst. Neither saw the ball
   at (1500, 0), right in front of the +x goal.
@@ -51,7 +51,7 @@ Built during the test day; it hides the cameras' disagreement but cannot remove 
 - `PositionRefiner` takes a ball inside the field or a goal over one outside them, then the one
   nearest the last ball. Replayed, `20261022_213347_score_goal.log`'s ball jumps of over 0.3 m in one frame went
   from 5,439 to 4.
-- `tools/vision_check.py` prints where each camera puts each robot and ball and the gap
+- `tools/field/vision_check.py` prints where each camera puts each robot and ball and the gap
   between them, and with `--guided` checks each camera against 9 known spots and saves the
   result as a baseline.
 
@@ -202,7 +202,7 @@ Run on recorded frames where possible, so they need no test-day time beyond the 
   focal length and distortion.
 - Tags or checkerboards on known spots for each camera's position and height; feed the result
   into ssl-vision.
-- Rerun `vision_check.py --guided ball` and compare with the 2026-10-22 baseline above.
+- Rerun `tools/field/vision_check.py --guided ball` and compare with the 2026-10-22 baseline above.
 - **Down to about 1 cm:** calibration was the main problem. Stay on ssl-vision with our
   calibration tool (option 1), and assumption 2 is wrong.
 - **Not down:** the error is elsewhere (colour, ssl-vision's simpler camera model), which
@@ -222,7 +222,7 @@ None yet. Record each result here with its date, the recording it used and the n
 
 ## Plan now (team decision, 2026-10-25)
 
-The team chose the full in-house stack. The guided check by hand (`vision_check.py --guided`)
+The team chose the full in-house stack. The guided check by hand (`tools/field/vision_check.py --guided`)
 took too long to run every session, and we have one ball, which rolls off its spot. So
 experiments 1 and 2 no longer decide anything: their questions become pass marks below. Every
 step is measured on recordings, so most of the work happens off test days.

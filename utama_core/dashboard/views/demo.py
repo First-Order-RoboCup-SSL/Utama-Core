@@ -11,7 +11,7 @@ Two more requests ride on the same switch:
 - settings (`settings`: name -> the values it takes): sent with Run, they apply from the demo
   it starts (the script sets the examples' config block from them);
 - the field check (`checks`: real robots only): stops the demo as a switch does, the script runs
-  `tools/field_check.py`'s check with the radio free (each robot turns on the spot), its lines
+  `tools/field/field_check.py`'s check with the radio free (each robot turns on the spot), its lines
   shown under the panel, then starts the same demo again.
 """
 

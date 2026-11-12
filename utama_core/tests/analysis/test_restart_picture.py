@@ -1,4 +1,4 @@
-"""tools/restart_picture.py's capture of the referee override's commanded targets (no simulator)."""
+"""tools/debug/restart_picture.py's capture of the referee override's commanded targets (no simulator)."""
 
 import json
 import math

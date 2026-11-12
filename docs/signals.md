@@ -86,7 +86,7 @@ Check these first: a broken strategy's other signals mean nothing.
 
 | Signal | Where | Meaning | Reference | If it's off |
 |---|---|---|---|---|
-| Stalls | STALLS; `stats.stall_events` | `RESTART_STALL`: a restart held > 15 s, with a one-line diagnosis. `COMMITTED_FROZEN`: ball moved < 5 cm for > 10 s in live play while a slot was committed, with who holds the ball | 10 of 231 matches | A bug to fix before anything else. Restart it from its replay with `tools/repro_from_replay.py`, look with `tools/replay_trace.py` and `render_window()` |
+| Stalls | STALLS; `stats.stall_events` | `RESTART_STALL`: a restart held > 15 s, with a one-line diagnosis. `COMMITTED_FROZEN`: ball moved < 5 cm for > 10 s in live play while a slot was committed, with who holds the ball | 10 of 231 matches | A bug to fix before anything else. Restart it from its replay with `tools/debug/repro_from_replay.py`, look with `tools/debug/replay_trace.py` and `render_window()` |
 | Possession backstop | `results[*].possession_backstop` | possession pinned 100/0 with the ball barely moving: a freeze the watchdog missed | 0 | Same as a stall |
 | Restarts not taken | RESTARTS; `restarts.by_kind[*].outcomes` | a kickoff, free kick or penalty `voided`, `timeout`, `stopped_before_kick` instead of `taken` | free kicks: 3414 taken of 3467 | The taker can't reach or kick the ball: restart positioning, a planner clamp, a keep-out circle |
 | Fouls by rule | FOULS; `fouls` | every foul by rule, then strategy/tactic of the offending robot | per strategy 6.3 (`chameleon`) · 7.9 · 23.3 (`three_slot`); run: out_of_bounds 2938, excessive_dribbling 448, defense_area 310, crashing 307 | One tactic dominating a rule is its bug: dribbling too far, entering the box, driving into robots |

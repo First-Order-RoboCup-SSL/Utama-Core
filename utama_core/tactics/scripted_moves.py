@@ -3,7 +3,7 @@
 `ScriptedMovesTactic` sends `CALIBRATION_SCRIPT`'s raw velocity commands, step by step, to the
 one robot it is given, then stands still. Run with a game log being recorded
 (`StrategyRunner(game_log_path=...)`), the log holds each command as sent and the robot's
-motion as the camera saw it; `tools/robot_calibration.py` turns that into the robot's
+motion as the camera saw it; `tools/field/robot_calibration.py` turns that into the robot's
 numbers (vision noise, delay, speed and turn tracking, acceleration). The ball part of a
 calibration fetches the ball itself instead (`examples/ball_trials.py`).
 

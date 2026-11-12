@@ -9,7 +9,7 @@ Run:
   at the last release: stalls and signals (`--all` plays every strategy).
 - `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
   at the last release. The way to judge a strategy. `--help` lists the flags.
-- `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
+- `pixi run python tools/debug/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
   instrumented matchup.
 
 rsim is deterministic: re-running an identical match gives an identical result. Variance comes

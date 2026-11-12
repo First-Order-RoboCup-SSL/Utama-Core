@@ -1,4 +1,4 @@
-"""`tools/field_check.py` flags a slow camera, a missing ball or lids, and no vision at all; the
+"""`tools/field/field_check.py` flags a slow camera, a missing ball or lids, and no vision at all; the
 robots part flags a robot answering few of its commands."""
 
 import collections
@@ -8,7 +8,7 @@ from pathlib import Path
 from utama_core.team_controller.controllers.real import find_robots as fr
 
 spec = importlib.util.spec_from_file_location(
-    "field_check", Path(__file__).resolve().parents[3] / "tools" / "field_check.py"
+    "field_check", Path(__file__).resolve().parents[3] / "tools" / "field" / "field_check.py"
 )
 field_check = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(field_check)

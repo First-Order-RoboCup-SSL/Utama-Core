@@ -1,9 +1,9 @@
-"""Pure checks (no rsim) of `play`'s options in `tools/moments.py`: the seed parser, the events
+"""Pure checks (no rsim) of `play`'s options in `tools/debug/moments.py`: the seed parser, the events
 list and the strategy resolver."""
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
 from utama_core.entities.referee.referee_command import RefereeCommand
 
 DT = 1 / moments.TICKS_PER_SECOND

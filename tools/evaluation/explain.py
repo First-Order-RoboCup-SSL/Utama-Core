@@ -15,9 +15,9 @@ Writes to DIR:
 - `fouls.png`: each strategy's fouls by rule, one fixed colour per rule (`pitch_maps.plot_fouls`);
 - `summary.json`: the numbers behind the pictures per side, and the paired goal difference per
   opponent (same opponent, seed and colour, as `evaluate.py` pairs them), where the run has them.
-- `find_bugs/`: `tools/find_bugs.py` on the candidate's two worst matches as config_a (`index.md` first).
+- `find_bugs/`: `tools/debug/find_bugs.py` on the candidate's two worst matches as config_a (`index.md` first).
 
-Everything is in the attacking frame of `pitch_maps.py` (attacking right). Goals come from the
+Everything is in the attacking frame of `tools/debug/pitch_maps.py` (attacking right). Goals come from the
 replay's final referee state (the score), fouls from the match's `.stats.json`.
 """
 
@@ -40,9 +40,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import figure_style as sr  # noqa: E402
-from tools import find_bugs  # noqa: E402
-from tools import pitch_maps as pm  # noqa: E402
+from tools.debug import figure_style as sr  # noqa: E402
+from tools.debug import find_bugs  # noqa: E402
+from tools.debug import pitch_maps as pm  # noqa: E402
 from tools.evaluation.match import _short_name  # noqa: E402
 from utama_core.analysis.matches import Match, find_matches  # noqa: E402
 
@@ -194,7 +194,7 @@ def explain(run_dir, candidate: str, champion: str, out_dir, workers: int = 2) -
         "fouls_rules_shown": pm.top_rules(views),
         "notes": (
             "Matches are those in the run dir; a match reused from the store is a link to the run that played it. "
-            "Positions and fouls exclude the goalkeeper and out-of-bounds (as pitch_maps.py)."
+            "Positions and fouls exclude the goalkeeper and out-of-bounds (as tools/debug/pitch_maps.py)."
         ),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))

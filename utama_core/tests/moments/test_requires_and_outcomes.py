@@ -1,11 +1,11 @@
-"""Pure checks (no rsim) of the `requires` conditions in `tools/moments.py`: each fires on the case it guards and not on the one it must allow, over
+"""Pure checks (no rsim) of the `requires` conditions in `tools/debug/moments.py`: each fires on the case it guards and not on the one it must allow, over
 synthetic ticks."""
 
 import dataclasses
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
 from utama_core.entities.referee.referee_command import RefereeCommand
 
 DT = 1 / moments.TICKS_PER_SECOND

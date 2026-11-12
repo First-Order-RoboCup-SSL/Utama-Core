@@ -17,7 +17,7 @@ so the studied strategy attacks right. Zone names (defensive third, the box, ...
 
 ## Start here: find bugs
 
-`pixi run python tools/find_bugs.py RUN_DIR --strategy NAME` picks the strategy's worst matches (by goal
+`pixi run python tools/debug/find_bugs.py RUN_DIR --strategy NAME` picks the strategy's worst matches (by goal
 difference, among those it played as config_a), collects every problem the tools flag (tactic flip-backs,
 stalls, and with `--restarts` illegal restart targets), and draws the worst few with the picture for that
 kind. Read its `index.md` first: each problem's numbers, then the picture path. About 20 s a match
@@ -81,7 +81,7 @@ two and a half times the next strategy; the others take 69-98.
 Each foul at the ball's spot, coloured by rule (one fixed colour per rule, the same in every panel):
 which rules a strategy breaks, and where on the pitch.
 
-Draw: `pixi run python tools/pitch_maps.py replays/tournament_<id>` (a full round-robin, about 3 min).
+Draw: `pixi run python tools/debug/pitch_maps.py replays/tournament_<id>` (a full round-robin, about 3 min).
 
 ## 2. A candidate against the champion
 
@@ -109,7 +109,7 @@ whole round-robin, a tactic held under 1 s and then reverted (a flip-back) happe
 minute in most strategies that split attack and defence on possession, 13 in `terrier`, and
 almost never in `ricochet`, `wolfpack` or `mirage`. Not fixed yet.
 
-Draw: `pixi run python tools/match_timeline.py REPLAY.npz T0 T1`.
+Draw: `pixi run python tools/debug/match_timeline.py REPLAY.npz T0 T1`.
 
 ## 4. A restart
 
@@ -123,7 +123,7 @@ Robot 3 starts inside the circle and is sent to exactly 0.80 m.
 Across more replays this picture found a real defect: the step that clears robots out of the circle
 stops 1 cm short and leaves them at 0.79 m (`keep_out_short` in the findings). Fixed.
 
-Draw: `pixi run python tools/restart_picture.py REPLAY.npz --t S`, or `--all-restarts` for one panel per
+Draw: `pixi run python tools/debug/restart_picture.py REPLAY.npz --t S`, or `--all-restarts` for one panel per
 restart command in the match.
 
 ## 5. The motion planner on fixed scenarios
@@ -163,7 +163,7 @@ tick). Here `weaver`'s robot 4 (the replay's enemy side) sits on the keep-out ci
 (−1.0, −0.3) is across the circle. The planner's answer is a carrot 5 cm away: push the robot out to
 0.85 m first.
 
-Draw: `pixi run python tools/plan_snapshot.py REPLAY.npz --t S --robot ID [--side enemy] [--target X Y]`.
+Draw: `pixi run python tools/debug/plan_snapshot.py REPLAY.npz --t S --robot ID [--side enemy] [--target X Y]`.
 
 ### A window
 
@@ -180,7 +180,7 @@ robot's path is the old behaviour, and the carrot line (0.05 m, at 0.85 m from t
 planner would do from there: push out first. The annotation names it "pushed out of the keep-out"; a
 short carrot with nothing to push out of is labelled "parked".
 
-Draw: `pixi run python tools/plan_trace.py REPLAY.npz --t0 S --t1 S --robot ID [--side enemy]
+Draw: `pixi run python tools/debug/plan_trace.py REPLAY.npz --t0 S --t1 S --robot ID [--side enemy]
 [--target X Y]`.
 
 ## Which picture for which question

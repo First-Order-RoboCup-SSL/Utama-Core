@@ -245,7 +245,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
         keep_out (Sequence[FieldBounds]): Rectangles no robot may enter (vision coordinates): each
             robot's speed into them is capped (`field_fence.py`), and on a camera run one inside
-            forces HALT (`field_check.py`). Defaults to none.
+            forces HALT (`tools/field/field_check.py`). Defaults to none.
         fence_field_lines (bool): On camera runs, fence the touch and goal lines as well as the edges
             of `field_bounds` inside the field; off by default, as a robot fetching a ball out of play
             must cross them. On for a run that never needs to (calibration).

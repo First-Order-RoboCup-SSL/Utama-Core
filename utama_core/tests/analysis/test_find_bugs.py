@@ -1,4 +1,4 @@
-"""tools/find_bugs.py without replays: which matches are chosen (each strategy's worst N as config_a, by goal
+"""tools/debug/find_bugs.py without replays: which matches are chosen (each strategy's worst N as config_a, by goal
 difference), the picture ranking and cap, and the index's text. Match files are empty stubs and their scores
 come from a fake `final_score`, so nothing is simulated or drawn from a real replay."""
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import find_bugs
+from tools.debug import find_bugs
 from utama_core.analysis import matches as match_files
 from utama_core.analysis.findings import Finding
 

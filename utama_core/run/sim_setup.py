@@ -1,6 +1,6 @@
 """The one way to load a strategy and to set up a simulated match. Every tool that plays one uses these:
-`tools/evaluation/match.py` (round-robin, `evaluate.py`), `repro_from_replay.py`, `moments.py`,
-`debug_match.py` and `main.py`.
+`tools/evaluation/match.py` (round-robin, `evaluate.py`), `tools/debug/repro_from_replay.py`, `tools/debug/moments.py`,
+`tools/debug/debug_match.py` and `main.py`.
 
 - `load_side(name)`: a strategy by catalog name, a `.strategy` file by path, or `PATH.py:FUNCTION` (a
   `build(outfield_robot_ids, motion_controller)` in a scratch file, to try a tactic without a repo change).

@@ -6,7 +6,7 @@ lid it wears?
     pixi run field-check                 # radios 0 to 7
     pixi run field-check --radios 0 1
 
-1. Vision (`vision_check.py`, 2 s): cameras and their packets per second, the field size, the ball
+1. Vision (`tools/field/vision_check.py`, 2 s): cameras and their packets per second, the field size, the ball
    and the lids in view. Nothing heard: it stops there.
 2. Robots (`find-robots`): each radio that answers turns about 70 degrees on the spot and back;
    the lid that turned is its; the share of its commands it answered; its profile. The pairing is
@@ -21,8 +21,8 @@ import socket
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-for p in (REPO_ROOT, REPO_ROOT / "tools"):
+REPO_ROOT = Path(__file__).resolve().parents[2]
+for p in (REPO_ROOT, REPO_ROOT / "tools" / "field"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 

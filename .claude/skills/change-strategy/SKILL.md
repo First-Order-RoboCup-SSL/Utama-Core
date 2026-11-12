@@ -12,7 +12,7 @@ to forget.
 
 ## 1. Branch
 
-`strategy/<idea>` from `main`. In a git worktree run `tools/setup_worktree.sh`, and symlink
+`strategy/<idea>` from `main`. In a git worktree run `tools/dev/setup_worktree.sh`, and symlink
 `replays` from the main checkout so the match results store is shared.
 
 ## 2. Change one thing
@@ -27,7 +27,7 @@ to forget.
   change the copy.
 - No module-level state (keep it inside `build`), no import-time effects, no imports of another
   strategy. CI checks a `strategy/*` branch touches only `strategy/`, new `tactics/` modules,
-  `tests/strategy/` and `docs/strategies.md` (`tools/check_strategy_branch.py`).
+  `tests/strategy/` and `docs/strategies.md` (`tools/dev/check_strategy_branch.py`).
 - Every change needs a reason in game terms (what the robots will do differently, and why
   that wins goals), not a threshold nudged until results move.
 

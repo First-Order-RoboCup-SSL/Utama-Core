@@ -468,7 +468,7 @@ def find_stuck_windows(
       `RefereeSidecar`) to reconstruct the command per frame; only if
       *that* is also unavailable does this check skip entirely, exactly as
       before — not every replay (a unit-test fixture, a non-refereed
-      `debug_match.py` run) carries referee state or a sidecar.
+      `tools/debug/debug_match.py` run) carries referee state or a sidecar.
     - **Ball possessed.** A window where some robot (either team) has
       `has_ball=True` for at least `possession_fraction` of its frames is a
       robot legitimately holding/shielding the ball, not a stall — this is

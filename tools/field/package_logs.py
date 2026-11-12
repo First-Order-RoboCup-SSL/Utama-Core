@@ -8,8 +8,8 @@ Modes:
      with calibration files and hardware configurations for sharing.
 
 Usage:
-    pixi run python tools/package_logs.py tournament [DIR_OR_ID] [--out OUT] [--with-intentions] [--dry-run]
-    pixi run python tools/package_logs.py field [DIR] [--out OUT] [--compress-in-place] [--dry-run]
+    pixi run python tools/field/package_logs.py tournament [DIR_OR_ID] [--out OUT] [--with-intentions] [--dry-run]
+    pixi run python tools/field/package_logs.py field [DIR] [--out OUT] [--compress-in-place] [--dry-run]
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def find_latest_tournament(replays_dir: Path) -> Optional[Path]:

@@ -1,8 +1,8 @@
 """Picture of where the referee override sends every robot for one restart.
 
-    pixi run python tools/restart_picture.py REPLAY.npz --t 260 [--side enemy] [--out PATH]
-    pixi run python tools/restart_picture.py REPLAY.npz --all-restarts [--side enemy] [--out PATH]
-    pixi run python tools/restart_picture.py REPLAY.npz --findings - [--side enemy]
+    pixi run python tools/debug/restart_picture.py REPLAY.npz --t 260 [--side enemy] [--out PATH]
+    pixi run python tools/debug/restart_picture.py REPLAY.npz --all-restarts [--side enemy] [--out PATH]
+    pixi run python tools/debug/restart_picture.py REPLAY.npz --findings - [--side enemy]
 
 Rebuilds the field state at `--t` from the replay (`utama_core.replay.scenario`), runs
 `RefereeOverride.tick` for the replay's referee command there, exactly as the strategy does, and draws
@@ -34,7 +34,7 @@ from pathlib import Path
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # keep pygame's banner off stdout (--findings -)
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

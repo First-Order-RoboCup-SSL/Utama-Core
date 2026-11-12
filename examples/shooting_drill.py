@@ -31,7 +31,7 @@ Measuring a robot (`--calibrate attacker|defender`): that robot plays fixed move
 1 m/s, sideways, turns) while the other stands still. Put it 1 m inside the area, facing
 along the field's long side, and a ball at rest in view; Force Start. Halting (to put it
 back) restarts the interrupted move. Then measure it from the recorded log:
-    pixi run python tools/robot_calibration.py replays/field/<run>.log
+    pixi run python tools/field/robot_calibration.py replays/field/<run>.log
 Calibrate near the middle of the camera's view: its noise grows towards the image edges.
 Run it twice per robot (early and late): how far the two runs disagree is how far to trust them.
 Gain and loop delay should agree closely; acceleration, turning above all, is only rough.
@@ -39,7 +39,7 @@ Gain and loop delay should agree closely; acceleration, turning above all, is on
 The rest of a test day's measurements, any run (every real run records a log):
   - Floor friction: roll the ball by hand across open floor 8-10 times at different speeds,
     away from robots. Then convert the log and fit its free-rolling segments:
-        pixi run python tools/convert_ssl_log.py replays/field/<run>.log --out replays/field/converted
+        pixi run python tools/realism/convert_ssl_log.py replays/field/<run>.log --out replays/field/converted
         pixi run python -m utama_core.analysis.physics_ranges --real replays/field/converted
     The result replaces BALL_ROLL_DECEL (`config/settings.py`, the league's 0.29 m/s^2).
   - Kick speed: 5+ kicks per robot with the ball placed at its kicker (the attacker kicks in

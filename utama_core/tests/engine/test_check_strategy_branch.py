@@ -1,4 +1,4 @@
-"""`tools/check_strategy_branch.py`: a strategy branch may change strategy code only, may not change
+"""`tools/dev/check_strategy_branch.py`: a strategy branch may change strategy code only, may not change
 its opponents, and its code may not reach outside itself.
 
 Lives outside `tests/strategy/` on purpose: that directory is on the allowlist, so a strategy branch
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.check_strategy_branch import (
+from tools.dev.check_strategy_branch import (
     ALLOWED,
     _load_fingerprint,
     changed_paths,
@@ -43,7 +43,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
         "utama_core/engine/strategy.py",
         "utama_core/analysis/goal_sources.py",
         "tools/evaluation/match.py",
-        "tools/check_strategy_branch.py",
+        "tools/dev/check_strategy_branch.py",
         ".github/workflows/ci.yml",
         # Prefix matches on whole directory names only.
         "utama_core/strategy_runner/x.py",

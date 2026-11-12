@@ -1,7 +1,7 @@
 """Pack one strategy and the code it runs on into a `.strategy` file.
 
-    pixi run python tools/build_strategy.py pendulum pendulum.strategy
-    pixi run python tools/build_strategy.py pendulum frozen.strategy --ref v2.5.0
+    pixi run python tools/dev/build_strategy.py pendulum pendulum.strategy
+    pixi run python tools/dev/build_strategy.py pendulum frozen.strategy --ref v2.5.0
 
 Without `--ref` it takes the working tree as it stands, uncommitted changes included.
 """
@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

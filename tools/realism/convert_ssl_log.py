@@ -1,7 +1,7 @@
 """Official RoboCup SSL game logs as replays in our format (`utama_core/replay/ssl_log.py`).
 
-    pixi run python tools/convert_ssl_log.py LOG_OR_DIR ... --out DIR [--raw-vision]
-    pixi run python tools/convert_ssl_log.py --corpus 2022-2026 --out DIR [--division div-b] [--jobs 4]
+    pixi run python tools/realism/convert_ssl_log.py LOG_OR_DIR ... --out DIR [--raw-vision]
+    pixi run python tools/realism/convert_ssl_log.py --corpus 2022-2026 --out DIR [--division div-b] [--jobs 4]
         [--raw-vision] [--backfill-extras]
 
 The first form converts game logs (`*.log.gz`; a directory: every log under it). The second
@@ -44,7 +44,7 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

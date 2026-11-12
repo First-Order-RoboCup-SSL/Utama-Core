@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_worktree.sh — prepare a git worktree of this repo to run tests and tools.
+# tools/dev/setup_worktree.sh — prepare a git worktree of this repo to run tests and tools.
 #
 # Run inside the worktree (not the main checkout). It makes the worktree usable without a
 # fresh `pixi install` or planner build:
@@ -8,7 +8,7 @@
 #     the main checkout. Without them the planner falls back to Python and results differ.
 # Idempotent: re-running changes nothing that is already in place. Prints one line per action.
 #
-# Usage: tools/setup_worktree.sh
+# Usage: tools/dev/setup_worktree.sh
 set -euo pipefail
 
 wt_root="$(git rev-parse --show-toplevel)"

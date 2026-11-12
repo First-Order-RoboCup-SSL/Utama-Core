@@ -159,7 +159,7 @@ class TwoDPID(AbstractPID[Vector2D]):
         flipping sign every few ticks — 6+ reversals — as it repeatedly shot
         past the target and corrected, until the ball rolled out of play
         during the oscillation window. Reproduced synthetically too
-        (`debug_match.py` trace): carrot pinned at `carrot_err≈1.0` while
+        (`tools/debug/debug_match.py` trace): carrot pinned at `carrot_err≈1.0` while
         `true_err` closed from >3m to <0.15m at 1.5-2.0 m/s, no deceleration
         signal reaching the PID until far too late.
 

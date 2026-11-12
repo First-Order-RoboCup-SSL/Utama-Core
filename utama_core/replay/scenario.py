@@ -8,7 +8,7 @@ the whole match from t=0 in a fresh headless run just to get back to that
 one tick. `scenario_from_replay()` + `apply_scenario()` skip that: read the
 single nearest frame from the replay, then teleport a freshly-constructed
 `StrategyRunner` (same two strategies, same profile — see
-`repro_from_replay.py`) directly into that field state, so the investigator
+`tools/debug/repro_from_replay.py`) directly into that field state, so the investigator
 can start ticking (with `match_log` tracing on) from just before the stall.
 
 Coordinate frame: `GameFrame.friendly_robots`/`enemy_robots`/`ball` store
@@ -30,7 +30,7 @@ is verified by `apply_scenario` itself reading back the first post-teleport
 
 A replay only ever records one side's perspective (`ReplayWriterConfig`/
 `ColumnarReplayWriterConfig.is_my_perspective`, and
-`tournament.run_match`/`repro_from_replay.py` both always construct the
+`tournament.run_match`/`tools/debug/repro_from_replay.py` both always construct the
 runner with `my_team_is_yellow=True, my_team_is_right=True` — config_a is
 always yellow/friendly, and right in the first half; `scenario_from_replay` turns a
 second-half frame so it is right here too) — so `friendly_robots` in the replay is
@@ -134,7 +134,7 @@ class Scenario:
 
     `friendly_robots`/`enemy_robots` follow the replay's own perspective
     (see module docstring): friendly is config_a (yellow/right in every
-    `tournament.run_match`/`repro_from_replay.py` construction), enemy is
+    `tournament.run_match`/`tools/debug/repro_from_replay.py` construction), enemy is
     config_b.
     """
 
@@ -176,7 +176,7 @@ def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:
 
 
 def _frame_origin(replay_path: Path) -> float:
-    """The `ts` of the replay's first frame. Times on the sidecar's and `replay_trace.py`'s
+    """The `ts` of the replay's first frame. Times on the sidecar's and `tools/debug/replay_trace.py`'s
     clock (and the `t_seconds` callers pass, from `fouls` or a StallEvent) count from it, not
     from 0: a frame's `ts` starts at one tick (1/60 s in these replays)."""
     if replay_path.suffix == ".npz":
@@ -319,7 +319,7 @@ def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCo
 def scenario_from_replay(replay_path, t_seconds: float, *, showing: Optional[RefereeCommand] = None) -> Scenario:
     """Read the frame nearest `t_seconds` from `replay_path` and build a
     `Scenario` from it. `t_seconds` counts from the replay's first frame, the clock the sidecar,
-    `fouls` and `replay_trace.py` use (see `_frame_origin`). It merges in the referee command from
+    `fouls` and `tools/debug/replay_trace.py` use (see `_frame_origin`). It merges in the referee command from
     the `.intentions.jsonl` sidecar (frames themselves carry no referee data — see module
     docstring) and the two strategy config names from the tournament directory's `summary.json`,
     when available.
@@ -433,7 +433,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     Friendly robots are teleported as `runner.my_team_is_yellow`'s color,
     enemy robots as the opposite color — matching how the replay was
     recorded (see module docstring: config_a/friendly is always yellow/right
-    in `tournament.run_match`/`repro_from_replay.py`, but `apply_scenario`
+    in `tournament.run_match`/`tools/debug/repro_from_replay.py`, but `apply_scenario`
     itself just follows whatever `runner.my_team_is_yellow` says, so it also
     works for a runner built with the opposite orientation).
 

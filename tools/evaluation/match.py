@@ -14,7 +14,7 @@ the other and could easily have been missed. This module is the single place
 that logic lives now; each script above is a thin CLI over it, differing only
 in which strategies it selects, what duration it uses, and whether it sweeps
 side/kickoff as independent axes. The strategies, referee and rsim runner of a
-match come from `tools/sim_setup.py`, the one set-up the debugging tools share.
+match come from `utama_core/run/sim_setup.py`, the one set-up the debugging tools share.
 """
 
 from __future__ import annotations
@@ -24,13 +24,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from tools.sim_setup import (  # noqa: F401 -- re-exported
-    N_OUTFIELD,
-    OUTFIELD_ROBOT_IDS,
-    load_side,
-    sim_referee,
-    sim_runner,
-)
 from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
 from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.referee.referee_command import RefereeCommand
@@ -40,6 +33,13 @@ from utama_core.rsoccer_simulator.Simulators.robosim.robosim_wrapper import (
     enable_sim_reuse,
 )
 from utama_core.rsoccer_simulator.Utils.sim_noise import SimNoise
+from utama_core.run.sim_setup import (  # noqa: F401 -- re-exported
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    load_side,
+    sim_referee,
+    sim_runner,
+)
 from utama_core.strategy import catalog
 from utama_core.strategy.catalog import plain_name
 

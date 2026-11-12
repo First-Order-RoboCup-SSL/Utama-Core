@@ -5,7 +5,7 @@ nearest robot of each side, one line per referee change and every `--every` tick
 
 The first thing to run on a stalled match or a voided restart, before rendering it:
 
-    pixi run python tools/replay_trace.py replays/tournament_<id>/<a>_vs_<b>.npz 20 40
+    pixi run python tools/debug/replay_trace.py replays/tournament_<id>/<a>_vs_<b>.npz 20 40
 
 `--events` prints the events in the window instead of the periodic rows, one line each:
   KICK   the ball's speed rises by >= 0.5 m/s in one tick, or leaves rest (< 0.5 to >= 1.0 m/s);
@@ -40,7 +40,7 @@ from typing import Optional
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
