@@ -32,8 +32,8 @@ One term per thing; reuse these instead of coining new ones.
   every signal, in `replays/eval_<id>/round_1/summary.json`. Older runs of the deleted `round_robin.py`
   are `replays/tournament_<id>/`. W-D-L there is a signal, never a verdict: there are no standings.
 - **Core / reserve strategies** — the core (`tools/evaluation/reference/players.json`) plays every
-  round; every other strategy in the catalog is reserve, two rotated in per round by its seed (`--all`
-  plays them all), for a diverse field without playing twelve every time.
+  round; every other strategy in the catalog is reserve and plays only in an occasional `--all` run,
+  for a wider field. The verdict needs only fixed opponents, the same for candidate and reference.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
 - **Moment / regression moment** — a field state (captured from a replay) that reproduced a

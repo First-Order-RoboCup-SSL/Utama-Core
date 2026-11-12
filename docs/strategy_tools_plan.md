@@ -26,7 +26,7 @@ links back here.
 |---|---|---|
 | Does it break? | `pixi run test`, which includes the regression moments in `utama_core/tests/moments/`. Stalls: recorded in the match results for every match and reported by `evaluate.py` with how many matches checked them; `--strict` fails on one | Today |
 | Is it better? | `tools/evaluation/evaluate.py CANDIDATE`: paired against the champion at the last release. The only verdict | Today |
-| Does everything still run, after a shared-code change? | `tools/evaluation/evaluate.py` with no candidate: one round robin of the core, two reserve and the reference (28 matches), with stalls and signals. `--all` plays every strategy, occasionally | Today |
+| Does everything still run, after a shared-code change? | `tools/evaluation/evaluate.py` with no candidate: one round robin of the core and the reference (15 matches), with stalls and signals. `--all` plays every strategy, occasionally | Today |
 | What went wrong in these matches (bugs: thrashing, stalls, restart geometry, fouls)? | `tools/find_bugs.py` (`--fouls` for our side's fouls), then the picture tools. find_bugs finds bugs, not why a strategy loses in football terms. For that, see `ball_losses.md` in the run folder, `docs/signals.md`, and the goal sources (`utama_core/analysis/goal_sources.py`) | Today |
 | Keep a fixed bug fixed? | A unit test at the cause. For restart and placement geometry, a regression moment, which is already part of `pixi run test`. `tools/moments.py` writes new ones | Today |
 | Look closely at one thing? | `tools/repro_from_replay.py`, the picture tools, `tools/debug_match.py` | Today |
@@ -66,7 +66,7 @@ played by `pixi run test`. Changes to `tools/moments.py`, done 2026-11-11:
    stall watchdog covers config_a only, so coverage is partial. A match whose stats were not
    collected counts as **unknown, not clean**.
 4. **One tool for matches.** Done 2026-11-12: `round_robin.py` merged into `evaluate.py`. Round 1 is
-   a round robin of the core strategies, two reserve rotated by seed and the reference (the champion at
+   a round robin of the core strategies and the reference (the champion at
    the last release, a `.strategy` file); later rounds play only undecided candidates. No held-out
    opponents, no `--vs-champion`, no standings. The strategies were renamed the same day
    (`catalog.RENAMED`).

@@ -26,14 +26,6 @@ def test_two_candidates_share_the_references_fixtures_and_meet_only_in_round_one
     assert ("c1", "c2", 1) in evaluate.round_fixtures(1, ["c1", "c2"], "ref", ["o1"], full=True)
 
 
-def test_reserve_rotates_two_per_round_and_all_plays_everyone():
-    core, reserve = ["a", "b"], ["r1", "r2", "r3"]
-    assert evaluate.round_players(core, reserve, 1) == ["a", "b", "r1", "r2"]
-    assert evaluate.round_players(core, reserve, 2) == ["a", "b", "r3", "r1"]
-    assert evaluate.round_players(core, reserve, 5, everyone=True) == core + reserve
-    assert evaluate.round_players(core, ["r1"], 1) == ["a", "b", "r1"]  # one reserve is not played twice
-
-
 def test_verdict_thresholds_are_inclusive_and_cap_rounds():
     assert evaluate.verdict(evaluate.PROMOTE, 1, 6) == "better"
     assert evaluate.verdict(evaluate.DROP, 1, 6) == "worse"

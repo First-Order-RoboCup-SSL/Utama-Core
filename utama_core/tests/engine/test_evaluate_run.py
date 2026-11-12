@@ -15,7 +15,7 @@ from tools.evaluation import evaluate
 from tools.evaluation.match import MatchResult
 from utama_core.replay import match_results
 
-CORE = ["a", "b"]
+CORE = ["a", "b", "d"]
 RESERVE = ["r1", "r2", "r3"]
 
 
@@ -64,23 +64,21 @@ def rig(tmp_path, monkeypatch):
     return rig
 
 
-def test_with_no_candidate_one_round_plays_every_pair_of_the_round_players(rig):
+def test_with_no_candidate_one_round_plays_every_pair_of_the_core(rig):
     run_dir = rig.run("--compare-with", "a")
 
-    # core a, b; reserve r1, r2 in round 1 (c and r3 wait for another seed); a is also the reference
-    assert sorted((x, y) for x, y, _ in rig.played) == [
-        ("a", "b"),
-        ("a", "r1"),
-        ("a", "r2"),
-        ("b", "r1"),
-        ("b", "r2"),
-        ("r1", "r2"),
-    ]
+    # the core a, b, d; a is also the reference; the reserve r1, r2, r3 and c play only with --all
+    assert sorted((x, y) for x, y, _ in rig.played) == [("a", "b"), ("a", "d"), ("b", "d")]
     assert {seed for *_, seed in rig.played} == {1}
     summary = json.loads((run_dir / "round_1" / "summary.json").read_text())
-    assert len(summary["results"]) == 6 and "strategies" in summary
+    assert len(summary["results"]) == 3 and "strategies" in summary
     assert not (run_dir / "round_2").exists()
     assert json.loads((run_dir / "report.json").read_text())["candidates"] == {}
+
+
+def test_all_adds_every_other_strategy_in_the_catalog(rig):
+    rig.run("--compare-with", "a", "--all")
+    assert len(rig.played) == 7 * 6 // 2  # a, b, d, r1, r2, r3, c: every pair once
 
 
 def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matches_play(rig):
@@ -88,9 +86,9 @@ def test_a_second_run_plays_nothing_and_after_an_edit_only_that_strategys_matche
     rig.run("--compare-with", "a")
     assert rig.played == []
 
-    rig.version["r1"] += 1
+    rig.version["d"] += 1
     rig.run("--compare-with", "a")
-    assert sorted((x, y) for x, y, _ in rig.played) == [("a", "r1"), ("b", "r1"), ("r1", "r2")]
+    assert sorted((x, y) for x, y, _ in rig.played) == [("a", "d"), ("b", "d")]
 
 
 def test_later_rounds_play_only_the_candidates_and_references_matches_with_sides_swapped(rig):
@@ -99,8 +97,8 @@ def test_later_rounds_play_only_the_candidates_and_references_matches_with_sides
     round_2 = [(x, y) for x, y, seed in rig.played if seed == 2]
     assert round_2  # equal results: undecided after round 1
     assert all("c" in pair or "a" in pair for pair in round_2)
-    assert ("r3", "c") in round_2 and ("r3", "a") in round_2  # round 2's reserve; c and a are config_b
-    assert ("a", "c") in round_2
+    # each opponent against both c and a, now as config_a; opponents never meet each other again
+    assert sorted(round_2) == [("a", "c"), ("b", "a"), ("b", "c"), ("d", "a"), ("d", "c")]
     report = json.loads((run_dir / "report.json").read_text())
     assert report["candidates"]["c"]["verdict"] == "undecided"
     assert report["candidates"]["c"]["rounds"] == 2
@@ -117,21 +115,21 @@ def test_fuzzing_reaches_every_match_and_is_its_own_environment(rig):
     rig.run("--compare-with", "a")
     rig.run("--compare-with", "a", "--fuzz-restarts", "7", "--fuzz-interval", "10", "20")
 
-    assert len(rig.played) == 6  # a fuzzed run reuses no unfuzzed match
+    assert len(rig.played) == 3  # a fuzzed run reuses no unfuzzed match
     assert all(kw["fuzz_seed"] == 7 and kw["fuzz_interval_s"] == (10.0, 20.0) for kw in rig.kwargs)
     assert len(list(rig.store.root.iterdir())) == 2
 
 
 def test_a_match_is_stored_only_if_its_code_is_unchanged_when_it_finishes(rig):
     def edit():
-        rig.version["r2"] = 9
+        rig.version["d"] = 9
 
     rig.on_play = edit
     rig.run("--compare-with", "a")
 
     stored = {(r["a"], r["b"]) for r in map(json.loads, map(lambda p: p.read_text(), rig.store.root.rglob("*.json")))}
     assert ("a", "b") in stored
-    assert not any("r2" in pair for pair in stored)
+    assert not any("d" in pair for pair in stored)
 
 
 def test_at_ref_falls_back_to_the_name_a_strategy_had_at_that_commit(monkeypatch, tmp_path):

@@ -1,5 +1,5 @@
 {
-  "note": "evaluate.py's players. The champion is the reference at the last release: promote a strategy by changing this line in a PR. The core plays every round; every other strategy in the catalog is reserve, two rotated in per round. Core chosen 2026-11-12 to cover every tactic the strategies use.",
+  "note": "evaluate.py's players. The champion is the reference at the last release: promote a strategy by changing this line in a PR. The core plays every round; every other strategy in the catalog is reserve, played only with --all. Core chosen 2026-11-12 to cover every tactic the strategies use.",
   "champion": "pendulum",
   "core": ["pendulum", "breakwater", "avalanche", "mirage", "wolfpack"]
 }

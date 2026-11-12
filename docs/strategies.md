@@ -5,8 +5,8 @@ is core or reserve, and the latest results.
 
 Run:
 
-- `pixi run python tools/evaluation/evaluate.py` — one round robin of the core, two reserve and the
-  champion at the last release: stalls and signals (`--all` plays every strategy).
+- `pixi run python tools/evaluation/evaluate.py` — one round robin of the core and the champion
+  at the last release: stalls and signals (`--all` plays every strategy).
 - `pixi run python tools/evaluation/evaluate.py <name>` — judges a candidate against the champion
   at the last release. The way to judge a strategy. `--help` lists the flags.
 - `pixi run python tools/debug_match.py --strategy <a> --opponent <b> [--dump-ticks PATH]` — one
@@ -15,8 +15,8 @@ Run:
 rsim is deterministic: re-running an identical match gives an identical result. Variance comes
 from the seeded sim noise: `evaluate.py`'s round k plays with seed k.
 
-**The catalog.** Core strategies play every round of `evaluate.py`; reserve ones rotate in, two per
-round (`tools/evaluation/reference/players.json`). Names changed on 2026-11-12; the results
+**The catalog.** Core strategies play every round of `evaluate.py`; reserve ones play only with
+`--all` (`tools/evaluation/reference/players.json`). Names changed on 2026-11-12; the results
 below were played under the old names (column "Was"), which `catalog.RENAMED` still loads.
 
 | Strategy | Was | Role | Description |

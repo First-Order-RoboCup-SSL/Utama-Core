@@ -264,7 +264,7 @@ goals, under the realistic sim noise?
 
 ```mermaid
 flowchart TD
-    p["Players: core (reference/players.json) + 2 reserve rotated by seed<br/>+ the reference: the champion at the last release, a .strategy file"]
+    p["Players: core (reference/players.json); --all: every strategy<br/>+ the reference: the champion at the last release, a .strategy file"]
     r1["Round 1, noise seed 1: every pair once, candidates included<br/>signals and stalls of every player"]
     rk["Round k, seed k: only undecided candidates'<br/>matches, and the reference's against the same opponents"]
     st["Every match stored in the match results<br/>replays/match_results/"]
@@ -282,9 +282,8 @@ flowchart TD
 ```
 
 - **Players** (`tools/evaluation/reference/players.json`): the champion and the core strategies,
-  which play every round. Every other strategy in the catalog is reserve: two play each round, rotated
-  by the round's seed, so the field stays diverse without twelve strategies every round (`--all`
-  plays them all). The simulated world and robots are `world.json` and `robots.json` in the same
+  which play every round. Every other strategy in the catalog is reserve and plays only with `--all`,
+  an occasional run for a wider field (for example before a release). The simulated world and robots are `world.json` and `robots.json` in the same
   folder (`sim_settings.py` loads them).
 - **The reference** is the champion as it was at the latest release tag (`--at REF` for another
   commit), played from a `.strategy` file built once into `replays/eval/frozen/`. A change to shared
@@ -324,8 +323,9 @@ flowchart TD
   from the store have no replay, so the pictures cover only what was played. Example
   (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
-- **Cost.** Round 1 with nothing stored is 28 matches (8 players) of up to 1200 s, roughly 30-40 min on
-  12 workers; a later round is about 2 x 7 matches per candidate. A clearly worse candidate is decided
+- **Cost.** Round 1 with nothing stored is 15 matches (the five core and the reference, every pair once)
+  of up to 1200 s, roughly 20 min on 12 workers; a later round is 9 matches per candidate (candidate
+  vs reference, and each against the four other core strategies). `--all` makes round 1 66 matches. A clearly worse candidate is decided
   after 1-2 rounds.
 
 ### Strategy branches

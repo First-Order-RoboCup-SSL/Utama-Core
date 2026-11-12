@@ -11,7 +11,8 @@ it plays rounds until each candidate is decided.
                         release tag), played from a `.strategy` file built once into replays/eval/frozen/
     --compare-with NAME the reference is NAME instead (a strategy in the working tree, or a .strategy
                         file): a new version against the one it changes
-    --all               every strategy in the catalog plays, not only the core and two reserve
+    --all               every strategy in the catalog plays, not only the core (occasionally, for a
+                        wider field)
     --max-rounds N      rounds before a candidate is called undecided (default 6)
     --max-workers N     matches at once (default 12; 1 plays in this process)
     --strict            exit non-zero if any match of the run stalled
@@ -24,8 +25,8 @@ it plays rounds until each candidate is decided.
 Players
 -------
 `reference/players.json` names the champion and the core strategies, which play every round. Every
-other strategy in the catalog is reserve: two of them play each round, rotated by the round's seed
-(diversity without playing all twelve every time); `--all` plays them all. The reference (the champion
+other strategy in the catalog is reserve: it plays only with `--all`, an occasional run for a wider
+field (the verdict needs only fixed opponents, the same for candidate and reference). The reference (the champion
 at the last release) plays every round too. It is a frozen file, so a change to shared code moves the
 candidates and the working-tree strategies, never the reference.
 
@@ -112,7 +113,6 @@ from utama_core.strategy import catalog  # noqa: E402
 PROMOTE = 0.99
 DROP = 0.2
 MAX_ROUNDS = 6
-RESERVE_PER_ROUND = 2
 FROZEN_DIR = Path("replays/eval/frozen")  # relative: a file's path is its name in the match results
 # A full match: two halves of 300 s of playing time, the clock stopped whenever no team may play the
 # ball, about 710-870 s of sim time. This only caps a match that can't reach full time.
@@ -120,14 +120,6 @@ MAX_MATCH_SECONDS = 1200.0
 
 
 # --- who plays what ---------------------------------------------------------------------------
-
-
-def round_players(core: list[str], reserve: list[str], k: int, everyone: bool = False) -> list[str]:
-    """The strategies of round `k`: the core, and `RESERVE_PER_ROUND` reserve rotated by `k`."""
-    if everyone or not reserve:
-        return [*core, *reserve]
-    picks = [reserve[(RESERVE_PER_ROUND * (k - 1) + i) % len(reserve)] for i in range(RESERVE_PER_ROUND)]
-    return list(dict.fromkeys([*core, *picks]))
 
 
 def round_fixtures(
@@ -268,7 +260,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         raise SystemExit("--at and --compare-with both choose the reference: give one")
     setup = load_players(args.players) if args.players else load_players()
     core = resolve_names(setup["core"])
-    reserve = [n for n in _CONFIG_NAMES if n not in core]
+    reserve = [n for n in _CONFIG_NAMES if n not in core] if args.all else []
     if args.compare_with:
         reference = resolve_names([args.compare_with])[0]
     else:
@@ -321,7 +313,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         for k in range(1, args.max_rounds + 1):
             if k > 1 and not open_:
                 break
-            opponents = [p for p in round_players(core, reserve, k, args.all) if p not in candidates and p != reference]
+            opponents = [p for p in [*core, *reserve] if p not in candidates and p != reference]
             opponents_so_far |= set(opponents)
             fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, full=k == 1)
             round_dir = run_dir / f"round_{k}"
