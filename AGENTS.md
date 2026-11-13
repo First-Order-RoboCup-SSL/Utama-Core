@@ -20,7 +20,7 @@ exists yet: say so in your change rather than guessing.
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/strategy.md` | Engine changes are rare: a new primitive, not a new strategy |
 | Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/strategy.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/referee/` | `docs/referee.md` | |
-| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning.md` | |
+| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `tutorials/first_planner.md`, `docs/motion_planning.md` | |
 | Simulation | `utama_core/simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `utama_core/simulator` is the Python env on top of it |
 | Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `tutorials/field_day.md`, `docs/real_robots.md` | |
 
@@ -189,7 +189,8 @@ need most:
 
 - `tutorials/` — the beginner path: `first_strategy.md` (a toy strategy, then evaluation),
   `first_tactic.md` (two tactics, a partitioner, a memory, tests), `debug_a_moment.md` (the open
-  keeper bug, from replay to a failing test). Keep them short, simple and runnable:
+  keeper bug, from replay to a failing test), `first_planner.md` (a planner scored on the
+  benchmark). Keep them short, simple and runnable:
   `tests/strategy/test_tutorial_code.py` runs their code.
 - `docs/strategy.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.

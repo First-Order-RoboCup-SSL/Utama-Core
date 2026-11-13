@@ -14,9 +14,9 @@ TUTORIALS = Path(__file__).resolve().parents[3] / "tutorials"
 
 
 def block(page: str, first_line: str) -> str:
-    """The page's one Python block that starts with `first_line`."""
+    """The page's one Python block whose first line is `first_line`."""
     blocks = re.findall(r"```python\n(.*?)```", (TUTORIALS / page).read_text(), re.S)
-    (code,) = [b for b in blocks if b.startswith(first_line)]
+    (code,) = [b for b in blocks if b.split("\n", 1)[0] == first_line]
     return code
 
 
@@ -61,3 +61,26 @@ def test_debug_a_moment_shows_the_open_keeper_bug():
     # fixed: update tutorials/debug_a_moment.md (and pick another open bug), then this test.
     with pytest.raises(AssertionError):
         tests["test_the_keeper_fetches_a_ball_rolling_slowly_through_its_box"]()
+
+
+def test_first_planner_drives_and_its_own_tests_pass(monkeypatch):
+    from utama_core.config.enums import Mode
+    from utama_core.entities.data.vector import Vector2D
+    from utama_core.tests.fixtures.game_builder import build_game, make_robot
+
+    path = "# utama_core/motion_planning/controllers/beeline.py"
+    game = build_game({0: make_robot(0, is_friendly=True)}, {})
+    for first_line in (path, path + " (step 5: with steering)"):
+        beeline = types.ModuleType("utama_core.motion_planning.controllers.beeline")
+        exec(compile(block("first_planner.md", first_line), "beeline.py", "exec"), beeline.__dict__)
+        velocity, turn = beeline.BeelineController(Mode.RSIM).calculate(game, 0, Vector2D(1.0, 0.0), 0.0)
+        assert velocity.x > 0 and velocity.y == 0 and turn == 0
+
+    # The page's test file imports the module: give it the step-5 one.
+    monkeypatch.setitem(sys.modules, "utama_core.motion_planning.controllers.beeline", beeline)
+    tests = _test_functions(
+        run(block("first_planner.md", "# utama_core/tests/motion_planning/test_beeline.py"), "test_beeline")
+    )
+    assert len(tests) == 4
+    for test in tests:
+        test()

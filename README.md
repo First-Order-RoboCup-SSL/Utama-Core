@@ -27,6 +27,7 @@ real robots are optional ([external setup](docs/real_robots.md#external-tools-gr
 |---|---|
 | Your first strategy | [tutorials/first_strategy.md](tutorials/first_strategy.md), then [first_tactic.md](tutorials/first_tactic.md) |
 | Why did a robot do that? | [tutorials/debug_a_moment.md](tutorials/debug_a_moment.md) |
+| Write a motion planner | [tutorials/first_planner.md](tutorials/first_planner.md) |
 | Writing or changing a strategy, tactic or skill | [docs/strategy.md](docs/strategy.md) |
 | Seeing what the robots did, and why | `pixi run dashboard` (every strategy's maps and replays); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/strategy.md](docs/strategy.md), [docs/signals.md](docs/signals.md) |
