@@ -30,7 +30,6 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
             [
                 "utama_core/strategy/new_idea.py",
                 "utama_core/tests/strategy/test_new_idea.py",
-                "docs/strategies.md",
             ]
         )
         == []
@@ -48,7 +47,7 @@ def test_strategy_modules_tests_and_catalog_are_allowed():
         # Prefix matches on whole directory names only.
         "utama_core/strategy_runner/x.py",
         "utama_core/tests/run/test_x.py",
-        "docs/strategies.md.bak",
+        "docs/strategies.md",  # the catalog doc is gone: the dashboard reads the strategies
     ],
 )
 def test_anything_else_is_reported(path):
@@ -61,7 +60,6 @@ def test_allowlist_is_strategy_code_only():
         "utama_core/strategy/",
         "utama_core/tactics/",
         "utama_core/tests/strategy/",
-        "docs/strategies.md",
     )
 
 
@@ -193,11 +191,10 @@ def test_changing_pickers_or_deleting_a_strategy_is_reported():
     assert opponent_problems({"utama_core/strategy/b.py": "D"})
 
 
-def test_tests_and_the_catalog_do_not_count_as_strategies():
+def test_tests_do_not_count_as_strategies():
     changes = {
         "utama_core/strategy/a.py": "M",
         "utama_core/tests/strategy/test_a.py": "A",
-        "docs/strategies.md": "M",
     }
     assert opponent_problems(changes) == []
 

@@ -42,7 +42,6 @@ ALLOWED = (
     "utama_core/strategy/",
     "utama_core/tactics/",  # new modules only (check 2)
     "utama_core/tests/strategy/",
-    "docs/strategies.md",
 )
 
 STRATEGY_DIR = "utama_core/strategy/"
