@@ -42,7 +42,7 @@ One term per thing; reuse these instead of coining new ones.
   the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
   the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
-  box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
+  box, danger: defined once, with a diagram, in `docs/signals.md ("Pitch zones")`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
   `tools/debug/pitch_maps.py` (and `tools/evaluation/explain.py` for a candidate against the champion), always
@@ -108,7 +108,7 @@ One term per thing; reuse these instead of coining new ones.
   for planner, simulator, vision and hardware work: see the Work areas table above.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
-`utama_core/skills/`, or `tools/evaluation/`/`docs/strategies.md`, read
+`utama_core/skills/`, or `tools/evaluation/`, read
 [`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
 referee-restart handling, lessons from past tactic bugs, and the observability tooling
 (`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to
@@ -176,16 +176,14 @@ need most:
 - `docs/referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
   tracks genuinely open items (don't assume something is missing without checking there
   first — it may already be resolved and the surrounding doc just stale).
-- `docs/referee_design_decisions.md` — referee rule-by-rule design decisions.
-- `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
-  assuming a doc's claim about "not yet built" is still accurate — these drift.
+- `docs/referee.md ("Design decisions")` — referee rule-by-rule design decisions.
 - `docs/signals.md` — every signal we record about how a strategy plays (stalls, fouls, chances
   created and conceded, ball losses, pass receptions, restarts), grouped by the question it
   answers, with where it lives in `summary.json`, a reference range and what an off value means.
   Read it when designing or debugging a strategy, and before adding a metric; they are
   diagnostics, not objectives.
-- `docs/strategies.md` — strategy catalog: core or reserve, description, and real match
-  results per strategy.
+- `pixi run dashboard`, Strategies tab — every strategy: core or reserve, its description (the
+  module docstring), verdicts, maps and matches, read from the code and `replays/`.
 - `utama_core/tests/engine/` and `utama_core/tests/run/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.

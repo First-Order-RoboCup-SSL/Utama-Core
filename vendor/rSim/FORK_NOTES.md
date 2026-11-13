@@ -5,8 +5,11 @@ Forked at commit: `b413932b7b4bbc0fc399f6a979e4cfcc4f56264f` (tag `v1.2`, the
 same version this repo's `pixi.toml` pins via `rc-robosim>=1.2,<2` on PyPI).
 
 This fork is the physics step of the rsim stack. The diagram of the whole tick, from
-`StrategyRunner` through the seeded sim noise to this C++ code and back, is in
-[docs/sim_realism.md](../../docs/sim_realism.md#how-one-rsim-tick-is-built).
+`StrategyRunner` through the seeded sim noise to this C++ code and back:
+
+![One rsim tick: the command-side noise, the C++ physics and the vision-side noise](../../docs/img/sim_realism/rsim_tick.png)
+
+Drawn by `docs/img/sim_realism/make_rsim_tick.py`; rerun it when a name in it changes.
 
 ## Why this is here
 

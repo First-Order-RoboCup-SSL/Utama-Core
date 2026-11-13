@@ -1,4 +1,4 @@
-"""Draws one_tick.png for docs/pipeline_method.md and the README: one tick of StrategyRunner, from the data
+"""Draws one_tick.png for docs/architecture.md ("Pipeline method") and the README: one tick of StrategyRunner, from the data
 sources to the robots, with the class or module behind each box.
 
 pixi run python docs/img/pipeline/make_one_tick.py

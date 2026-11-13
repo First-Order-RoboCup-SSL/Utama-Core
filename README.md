@@ -19,20 +19,20 @@ strategy layer that decides what every robot does.
 **New here? Write your first strategy: [docs/first_strategy.md](docs/first_strategy.md).**
 
 Everything runs in rsim with the in-process referee; grSim, the official GameController and
-real robots are optional ([external setup](docs/setup_external.md)).
+real robots are optional ([external setup](docs/real_robot_setup.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision)).
 
 ## What are you working on?
 
 | Task | Start here |
 |---|---|
 | Your first strategy | [docs/first_strategy.md](docs/first_strategy.md) |
-| Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
-| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
+| Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md) |
+| Seeing what the robots did, and why | `pixi run dashboard` (every strategy's maps and replays); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
 | Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md) |
 | The referee | [docs/referee.md](docs/referee.md) |
 | Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
-| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/setup_external.md](docs/setup_external.md) |
+| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/real_robot_setup.md, "External tools"](docs/real_robot_setup.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision) |
 | Which script does what | [docs/tools.md](docs/tools.md) |
 | Everything else | [docs/README.md](docs/README.md), the index of every doc |
 
@@ -76,7 +76,7 @@ One tick of `StrategyRunner`, from vision, robot and referee data to robot comma
 ![One tick of StrategyRunner](docs/img/pipeline/one_tick.png)
 
 The same tick as a diagram, with every module: [docs/architecture.md](docs/architecture.md). How
-vision, robot and referee data become one `Game`: [docs/pipeline_method.md](docs/pipeline_method.md).
+vision, robot and referee data become one `Game`: [docs/architecture.md, "Pipeline method"](docs/architecture.md#pipeline-method).
 
 ## Contributing
 
@@ -89,4 +89,14 @@ Work on a branch and open a pull request into `main`. A pull request needs:
 4. every Copilot comment reviewed (not necessarily accepted);
 5. an approval from an assigned reviewer.
 
-Editor setup, pre-commit troubleshooting and the pixi environments: [docs/contributing.md](docs/contributing.md).
+Tips:
+
+- Run `pixi install` again after adding a package (a folder with an `__init__.py`).
+- In VS Code, if the run button picks the wrong environment, choose the interpreter by hand
+  (`Ctrl + Shift + P` → `Select Interpreter`). Format on save with the `Black Formatter` extension.
+- When a commit fails the pre-commit checks, the hook has often fixed the files already: stage
+  them and commit again.
+- A strategy branch (`strategy/*`) may change strategy code only
+  (`tools/dev/check_strategy_branch.py`), so it can't change what it is scored against.
+- `CLAUDE.md` is a symlink to `AGENTS.md`: edit `AGENTS.md`. On native Windows without Developer
+  Mode, fix it with `git config --global core.symlinks true && git checkout -- CLAUDE.md`.

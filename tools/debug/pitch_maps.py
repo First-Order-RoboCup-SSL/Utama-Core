@@ -427,7 +427,7 @@ def plot_fouls(views, order, labels, path: Path) -> None:
 
 def zone_findings(views: list[MatchView], order: list[str], images: Optional[dict[str, str]] = None) -> list[Finding]:
     """Six descriptive `zone_share` findings per strategy: the share of its in-possession and of its
-    out-of-possession outfield samples in each third (docs/pitch_zones.md). No threshold: they describe."""
+    out-of-possession outfield samples in each third (docs/signals.md ("Pitch zones")). No threshold: they describe."""
     third = L / 3  # the thirds' boundaries in the common frame, at x = +-1.5 m
     out: list[Finding] = []
     for name in order:

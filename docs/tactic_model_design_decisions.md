@@ -4,13 +4,12 @@ Why the strategy layer (`utama_core/engine/`, `utama_core/tactics/`,
 `utama_core/strategy/`) is shaped the way it is. The code is the source of
 truth for *how*; this file records *why* and what was deliberately not built. The design
 borrowed vocabulary from Sumatra (TIGERs Mannheim) and OS process scheduling to stress-test
-ideas, not as a mandate to copy either's weight. For the general allocation framework see
-[`scheduling_math_model.md`](scheduling_math_model.md).
+ideas, not as a mandate to copy either's weight.
 
 Section numbers are stable because code comments cite them. Gaps are sections merged or
 removed: §7 (splitting policy) was resolved by §11; §8/§9 (orphan robots, deadlock detection)
-are under Deferred; §12/§17 (tactic and config inventories) live in `docs/strategies.md` and
-the code.
+are under Deferred; §12/§17 (tactic and config inventories) live in
+the code (`utama_core/strategy/`, `utama_core/tactics/`).
 
 ## Settled
 

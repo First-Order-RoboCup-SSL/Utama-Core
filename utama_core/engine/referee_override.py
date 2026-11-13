@@ -26,7 +26,7 @@ requires ("robots must stop immediately", see `HaltStep`).
 together under "just freeze", which was wrong for the other two:
 
 - STOP's actual rule is stricter than a freeze: "stop in place, AND stay
-  >= 0.5m from the ball" (`docs/referee_gui.md`). A robot already
+  >= 0.5m from the ball" (`docs/referee.md ("Operator panel")`). A robot already
   inside that keep-out radius at the exact instant STOP is entered (e.g. a
   carrier mid-dribble, or `goalkeep.py`'s own retrieval branch driving the
   keeper up to a loose ball) has no way to comply by freezing — it is

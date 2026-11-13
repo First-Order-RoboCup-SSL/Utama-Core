@@ -20,7 +20,7 @@ You can pick any two strategies:
 pixi run main riptide terrier
 ```
 
-The strategies are listed in [strategies.md](strategies.md).
+Step 2 shows every strategy on the dashboard.
 
 ## 2. Look around our strategies
 
@@ -212,7 +212,6 @@ You decide what to keep.
 
 ## Where to go next
 
-- [strategies.md](strategies.md): every strategy and how it plays.
 - [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): how strategies and tactics really work.
   Read it when you want to write a proper tactic.
 - `utama_core/tactics/`: real tactics to copy from.

@@ -190,7 +190,7 @@ def test_rule_colours_take_fixed_slots_in_rank_order():
 
 
 def test_zone_findings_are_six_descriptive_shares_per_strategy_in_the_pitch_zone_names():
-    # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/pitch_zones.md).
+    # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/signals.md ("Pitch zones")).
     view = pm.MatchView(
         strategy="a",
         pos_x=np.array([-2.0, 0.0, 2.0, 2.5]),

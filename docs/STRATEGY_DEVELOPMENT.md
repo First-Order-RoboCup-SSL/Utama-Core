@@ -3,7 +3,7 @@
 New to the repo? Start with [first_strategy.md](first_strategy.md); this page is the reference.
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
-`utama_core/strategy/`, or `tools/evaluation/`/`docs/strategies.md`. Assumes you've read the
+`utama_core/strategy/`, or `tools/evaluation/`. Assumes you've read the
 root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
 — read it before proposing a change to the kernel's shape.
 
@@ -228,7 +228,7 @@ pieces in `strategy/pickers.py` rather than re-deriving them:
 
 `tests/engine/test_all_strategy_configs.py` picks it up the same way and runs it through the
 kernel invariants. Give its partitioner pure-function tests in `tests/strategy/test_<name>.py` (a
-`Game` built by hand, no rsim), and add a row to `docs/strategies.md`'s table.
+`Game` built by hand, no rsim), and give the module a one-line docstring: the dashboard shows it.
 
 **Evaluating one,** cheapest first; stop as soon as a step fails:
 1. **Tests:** its own, `test_all_strategy_configs.py`, then the full suite `--headless`.
@@ -358,8 +358,7 @@ reaches `main` by pull request:
    from the main checkout first: pixi needs the environment, and the match results store
    (`replays/match_results/`) is what keeps a match from playing again.
 2. Change only `utama_core/strategy/`, `utama_core/tactics/` (new modules only),
-   `utama_core/tests/strategy/` (tests for your strategy and any tactic you add) and
-   `docs/strategies.md`. CI fails a `strategy/*` pull request that changes anything else
+   and `utama_core/tests/strategy/` (tests for your strategy and any tactic you add). CI fails a `strategy/*` pull request that changes anything else
    (`tools/dev/check_strategy_branch.py`, run from `main`'s copy). Anything else it needs, such as a
    skill or an engine primitive, is a separate change on an ordinary branch.
 3. Leave the opponents as they are on `main`: either add new strategy modules or change exactly one existing strategy, never both, and never
@@ -370,7 +369,7 @@ reaches `main` by pull request:
    no changing attributes of what it imports. CI checks all of this statically, from `main`'s
    copy of the checker; the reviewer still reads the diff. Tests import pickers from your module
    directly.
-4. Write, test and evaluate it as above, and record the verdict in `docs/strategies.md`.
+4. Write, test and evaluate it as above, and put the verdict in the pull request.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
    an evaluation, read the "X from the match results store, M to play" line it prints: M much larger
    than your own matches means the store is stale (shared code changed since it was filled).
@@ -411,11 +410,11 @@ whoever runs it.
   slots about every 1.5 s, in pairs of rows at the same tick. It is not pendulum's alone: most
   strategies that split attack and defence on possession take a tactic for under 1 s and revert about
   5 times a minute (the `tactic_thrash` finding, with the numbers per strategy in `tools/debug/match_timeline.py`):
-  ![pendulum lanes thrashing between attack and defence slots](img/match_timeline/pendulum_100-160.png)
+  ![pendulum lanes thrashing between attack and defence slots](img/match_timeline/split_shape_100-160.png)
 - **`render_clip()`** (`analysis/render_clip.py`) — MP4 of a window for humans, ball-following
   or full-pitch camera; sim ball teleports are never shown. Needs `ffmpeg`. Commands behind
   committed clips: `assets/clips/README.md`.
-- **`docs/strategies.md`** — every strategy, core or reserve, and the latest results.
+- **`pixi run dashboard`**, Strategies tab — every strategy, core or reserve, its verdicts, maps and matches.
 - **`tools/evaluation/evaluate.py`** — every match run (`NAME ...`, `--at REF`, `--all`); see
   [Evaluating a strategy](#evaluating-a-strategy). To look again at one stalled match, use its replay:
   `tools/debug/repro_from_replay.py` restarts it from any moment with tracing on.
@@ -438,7 +437,7 @@ whoever runs it.
   colour and robot id only, so every pairing in a run gets the same physics and A/B comparisons
   stay paired; the same seed replays a match exactly. Settings and draws go into each replay
   (`columnar_reader.load_sim_noise`) and `summary.json`, and into the match key only when set.
-  Ranges and their sources are in `tools/evaluation/reference/world.json` (the Phase 1 numbers are in `docs/sim_realism.md`).
+  Ranges and their sources are in `tools/evaluation/reference/world.json`.
 - **`tools/debug/replay_trace.py REPLAY.npz T0 T1`** — text trace of a window: referee command and
   why it changed, ball, nearest robot per side. The first look at a stall or a voided restart.
 - **`tools/debug/repro_from_replay.py`** — reload a replay's field state at time *t* into a fresh headless
@@ -504,7 +503,7 @@ The picture tools (`tools/debug/match_timeline.py`, `tools/debug/restart_picture
    ball, while the current planner's carrot from those states is the push-out point 0.85 m from the ball.
 3. **Find the cause in the code**, from what the trace shows: which tactic or override sent the
    robot there, and the target, waypoint and obstacles it used. Ask whether the rule was really
-   broken (real rules, `docs/referee_design_decisions.md`) and whether the check reads it
+   broken (real rules, `docs/referee.md ("Design decisions")`) and whether the check reads it
    right.
 4. **Fix the cause, with a unit test at the boundary** (CLAUDE.md, Testing), e.g. "a computed
    target is off the field". That test is the protection, and it does not need the foul to
@@ -542,7 +541,7 @@ way whatever the strategy. Moments are captured from replays (`capture`); hand-m
 | STOP with the ball just out over the goal line: our robot drives into their keeper (field day 2026-10-27) | robot ignoring a robot | the clear-of-the-ball target, clamped back onto the pitch, was 0.23 m from the keeper standing on its line | field-day-20261027 branch: clearing targets keep `_ROBOT_SPACING_M` (2 robot radii + 10 cm) from every robot, moving on round the ball | `test_referee_unit.py` (TestClearingTargetsKeepOffRobots) |
 
 The last row matters on real robots only: in sim matches `StrategyRunner` teleports a placed ball
-to its target (`docs/referee_design_decisions.md`, Ball placement), so our placer never
+to its target (`docs/referee.md ("Design decisions")`, Ball placement), so our placer never
 runs in a round-robin. Its moment was dropped for that reason: check that a moment's behaviour
 happens in sim matches at all before keeping it. The placer is still slow (about 5 s round the
 ball, and the carry curves off line), a real-robot item.
@@ -619,7 +618,7 @@ What a converted match holds, and where it differs from a sim replay (the detail
   `NORMAL_START` and keeps `DIRECT_FREE_*` until the next stoppage. The converter switches it
   to `NORMAL_START` once the ball has moved 0.05 m, as our referee does.
 - `<stem>.source.json` holds the teams, the final score, the tracker used and the field size.
-- Sidecars for measuring physics and vision (sim realism, [sim_realism.md](sim_realism.md)),
+- Sidecars for measuring physics and vision (sim realism),
   not read by any replay tool: `<stem>.kicks.json`, every kick the tracker reported (start,
   kicker, start position, velocity estimates, stop); `<stem>.tracker.zip`, per-tick ball and
   robot visibility and robot angular velocity; with `--raw-vision`, `<stem>.vision.zip`, every

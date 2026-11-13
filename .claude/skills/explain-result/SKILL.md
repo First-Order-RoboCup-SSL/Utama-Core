@@ -45,7 +45,7 @@ they suggest changing, never a new ranking.
      `pixi run python tools/evaluation/explain.py ROUND_DIR CANDIDATE REFERENCE --out DIR`
      (`positions.png`, `shots.png`, `fouls.png`, `summary.json`). REFERENCE is the name as
      `report.json` gives it (a frozen file is named by its stem, e.g. `split_shape@cffe3a28`).
-   Zones: use the names in `docs/pitch_zones.md` (defensive / middle / attacking third, wings, box).
+   Zones: use the names in `docs/signals.md ("Pitch zones")` (defensive / middle / attacking third, wings, box).
 
 5. **Write it up** in a few lines: the verdict and margin; which opponents decided it; the
    two or three signals or pictures that explain it, with numbers; any bug found (handed to

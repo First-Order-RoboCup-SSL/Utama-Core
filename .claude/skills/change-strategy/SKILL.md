@@ -27,7 +27,7 @@ to forget.
   change the copy.
 - No module-level state (keep it inside `build`), no import-time effects, no imports of another
   strategy. CI checks a `strategy/*` branch touches only `strategy/`, new `tactics/` modules,
-  `tests/strategy/` and `docs/strategies.md` (`tools/dev/check_strategy_branch.py`).
+  `tests/strategy/` (`tools/dev/check_strategy_branch.py`).
 - Every change needs a reason in game terms (what the robots will do differently, and why
   that wins goals), not a threshold nudged until results move.
 
@@ -60,7 +60,7 @@ pixi run evaluate NAME [NAME ...]
 
 ## 5. Record and promote
 
-- Add or update the strategy's row in `docs/strategies.md` with the verdict and margin.
+- Write the strategy's one-line description in its module docstring: the dashboard shows it.
 - Open a draft pull request into `main` with the result. An agent never merges.
 - Better than the champion: promoting is one line in `tools/evaluation/reference/players.json`
   (`champion`, and the core if it should play every round), in its own small pull request after

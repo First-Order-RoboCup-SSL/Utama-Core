@@ -24,7 +24,7 @@ What it does:
 
 On the dashboard's Live tab, the field check must be all green or amber before Force Start:
 a red row (robot not seen, outside the camera half, radio lost, wrong field size) halts the
-robots at once. See docs/referee_gui.md, "Field check".
+robots at once. See docs/referee.md ("Operator panel"), "Field check".
 
 Measuring a robot (`--calibrate attacker|defender`): that robot plays fixed moves instead
 (`tactics/scripted_moves.py`, about 70 s: 10 s still, steps forward and back at 0.3, 0.6 and

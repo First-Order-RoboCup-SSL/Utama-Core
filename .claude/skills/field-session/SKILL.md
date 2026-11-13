@@ -6,7 +6,7 @@ description: Run a test day on the real robots, and process what it recorded - c
 # A field session
 
 Setup and the meaning of each check: `docs/real_robot_setup.md`. Log format and readers:
-`docs/field_logs.md`. On the field, time is short: run the one command, read its "!!" lines,
+`docs/real_robot_setup.md ("Field logs")`. On the field, time is short: run the one command, read its "!!" lines,
 fix only those.
 
 ## At the start
@@ -60,4 +60,4 @@ caps are 0.3 m/s and 0.6 rad/s on real robots (balls are lost turning faster).
    logs and bundles calibration and hardware config.
 7. **Write down** what broke and what was measured (a dated note; open follow-ups listed).
    Bugs seen on the pitch go through the `debug-incident` skill with the field log as the
-   replay (`docs/field_log_replay.md`).
+   replay.

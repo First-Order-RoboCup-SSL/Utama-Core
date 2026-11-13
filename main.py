@@ -3,7 +3,7 @@ round-robin matches are.
 
 Run:
     pixi run main                          # pendulum vs wolfpack
-    pixi run main pendulum riptide   # any two names from docs/strategies.md
+    pixi run main pendulum riptide   # any two names on the dashboard's Strategies tab
     pixi run main a.strategy wolfpack    # or a .strategy file (tools/dev/build_strategy.py)
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
@@ -25,7 +25,7 @@ def _strategy(name: str) -> AbstractStrategy:
     try:
         return load_side(name)
     except UnknownStrategy as e:
-        raise SystemExit(f"{e} (docs/strategies.md)") from None
+        raise SystemExit(f"{e} (the strategies: utama_core/strategy/)") from None
 
 
 def main() -> None:
