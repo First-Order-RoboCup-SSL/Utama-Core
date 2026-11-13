@@ -46,8 +46,10 @@ TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
 def replay_name(run_dir: Path, match_tag: str) -> str:
     """A match's replay name: its path under REPLAY_BASE_PATH, no suffix, so the replay lands in
-    `run_dir` as `<match_tag>.npz`."""
-    return Path(os.path.relpath(Path(run_dir) / match_tag, REPLAY_BASE_PATH)).as_posix()
+    `run_dir` as `<match_tag>.npz`. Both paths are resolved first: a worktree's replays/ is a link
+    to the main checkout's, and a run_dir given by its real path would otherwise climb out of it."""
+    target = (Path(run_dir) / match_tag).resolve()
+    return Path(os.path.relpath(target, Path(REPLAY_BASE_PATH).resolve())).as_posix()
 
 
 # default is excluded from the auto-discovered catalog:
