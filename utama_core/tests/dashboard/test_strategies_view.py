@@ -124,7 +124,27 @@ def test_matches_are_from_the_strategys_side_with_their_replays_and_reused_ones_
     ]
     by_opponent = {m["opponent"]: m["replay"] for m in matches}
     assert by_opponent["wolfpack"] == "eval_20261112_100000/round_1/mirage_vs_wolfpack.npz"
-    assert by_opponent["pendulum (last release)"] is None
+    assert by_opponent["pendulum (last release)"] is None  # no replay file in the fixture
+
+
+def test_a_frozen_files_replay_is_found_under_the_name_evaluate_saves_it_as(replays):
+    (replays / "eval_20261112_100000" / "round_1" / "pendulum@ab12cd34_vs_mirage.npz").write_bytes(b"")
+    matches = _strategy(view.load_strategies(replays), "mirage")["matches"]
+    (m,) = [m for m in matches if m["opponent"] == "pendulum (last release)"]
+    assert m["replay"] == "eval_20261112_100000/round_1/pendulum@ab12cd34_vs_mirage.npz"
+
+
+def test_todays_strategy_against_its_last_release_is_listed(replays):
+    path = replays / "eval_20261112_100000" / "round_1" / "summary.json"
+    summary = json.loads(path.read_text())
+    summary["results"].append(_row("replays/eval/frozen/pendulum@ab12cd34.strategy", "pendulum", 0, 4))
+    _write(path, summary)
+    (m,) = _strategy(view.load_strategies(replays), "pendulum")["matches"]
+    assert (m["opponent"], m["score"]) == ("pendulum (last release)", [4, 0])
+
+
+def test_the_tests_minimal_strategy_is_not_listed(replays):
+    assert "default" not in [s["name"] for s in view.load_strategies(replays)["strategies"]]
 
 
 def test_the_frozen_files_matches_are_not_todays_strategys(replays):
@@ -146,7 +166,7 @@ def test_a_run_groups_its_rounds_and_its_report_without_the_bulky_stalls(replays
     assert run["report"]["candidates"]["mirage"]["verdict"] == "dropped"
     assert "stalls" not in run["report"]["candidates"]["mirage"]
     results = run["rounds"][0]["results"]
-    assert [r["display_a"] for r in results] == ["mirage", "pendulum", "wolfpack"]
+    assert [r["display_a"] for r in results] == ["mirage", "pendulum (last release)", "wolfpack"]
     # only the stall flag of each match's stats is sent: the full stats are megabytes over all runs
     assert [r["stalled"] for r in results] == [True, False, False]
     assert not any("stats" in r for r in results)

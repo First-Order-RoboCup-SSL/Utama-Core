@@ -38,7 +38,7 @@ _OUTFIELD_IDS = (1, 2, 3, 4, 5)
 
 # Every strategy, as round-robins discover them, so a new one is covered without editing this
 # file (a strategy branch can't: see tools/dev/check_strategy_branch.py).
-_CONFIGS = [pytest.param(name, id=name) for name in catalog.names() if name != "default"]
+_CONFIGS = [pytest.param(name, id=name) for name in catalog.player_names()]
 
 
 @pytest.fixture

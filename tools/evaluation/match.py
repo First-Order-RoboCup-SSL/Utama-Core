@@ -55,7 +55,7 @@ def replay_name(run_dir: Path, match_tag: str) -> str:
 # single-tactic smoke-test scaffold (see its docstring), used across the test
 # suite with as few as zero outfield robots, and plays a real match with 3 of 5
 # outfield robots never issued a command. Every other strategy is playable here.
-_CONFIG_NAMES = [name for name in catalog.names() if name != "default"]
+_CONFIG_NAMES = catalog.player_names()
 
 
 def _short_name(config_name: str) -> str:

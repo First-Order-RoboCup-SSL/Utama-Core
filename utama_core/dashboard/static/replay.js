@@ -307,7 +307,7 @@ function framesFromColumns(c) {
     if (fieldView) fieldView.draw(frame);
     if (timeline) timeline.draw(frame.ts);
     markPlay(frame.ts);
-    renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
+    renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true, hideFriendly: true });
     renderTacticStatusInto("replay-tactic-entries", tacticStatus, {
       emptyLabel: "no tactic data at this frame",
     });

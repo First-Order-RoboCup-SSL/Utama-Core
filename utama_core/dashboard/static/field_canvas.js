@@ -232,7 +232,8 @@ class FieldCanvas {
             toY(bot.y + headingM * Math.sin(bot.orientation))
           );
           ctx.stroke();
-          this._label(ctx, bot.id, cx, cy - r - 2, "bottom", "bold " + textPx, fill);
+          // yellow text is unreadable on the light pitch: the id takes a darker yellow
+          this._label(ctx, bot.id, cx, cy - r - 2, "bottom", "bold " + textPx, fill === FIELD_COLORS.yellow ? "#a16207" : fill);
           if (label && tactics[String(bot.id)]) {
             this._label(ctx, tactics[String(bot.id)], cx, cy + r + 2, "top", textPx, FIELD_COLORS.marker);
           }

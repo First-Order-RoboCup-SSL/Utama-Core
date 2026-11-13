@@ -18,6 +18,14 @@ def names() -> list[str]:
     return sorted(p.stem for p in _PACKAGE.glob("*.py") if "\ndef build(" in p.read_text())
 
 
+TEST_ONLY = "default"  # everyone attacks with one tactic: the tests' minimal strategy, never a player
+
+
+def player_names() -> list[str]:
+    """Every strategy that plays matches: `names()` without the tests' minimal one."""
+    return [name for name in names() if name != TEST_ONLY]
+
+
 # The names strategies had until 2026-11-12, so old replays and summaries still load. Only `builder`
 # and `current_name` read this: replay files keep the names they were saved under, so `plain_name`
 # (which tools use to find those files) does not.

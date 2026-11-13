@@ -169,7 +169,7 @@
         const [f, a] = m.score;
         const res = f > a ? "win" : f < a ? "loss" : "draw";
         return (
-          `<div class="match"><span>${esc(m.opponent)}</span>` +
+          `<div class="match"><span title="${esc(m.opponent)}">${esc(m.opponent)}</span>` +
           `<span class="row" style="align-items:center; gap:8px;"><span class="score ${res}">${f}–${a}</span>` +
           `${m.stalled ? pill("stalled", "dropped") : ""}${replayButton(m.replay)}</span></div>`
         );

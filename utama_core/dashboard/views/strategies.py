@@ -75,6 +75,11 @@ def display_name(config: str) -> str:
     return catalog.current_name(config)
 
 
+def _label(config: str) -> str:
+    """How a player is shown in a match: its catalog name, marked when it is the last release's file."""
+    return display_name(config) + (" (last release)" if is_frozen(config) else "")
+
+
 def _newest_first(run_id: str) -> tuple:
     """A sort key: by the run's date and time (`eval_` and `tournament_` alike), then its id."""
     m = re.search(r"\d{8}_\d{6}", run_id)
@@ -113,11 +118,17 @@ def _summaries(base: Path) -> list[tuple[Path, dict]]:
     return out
 
 
+def _file_name(config: str) -> str:
+    """A player's name in replay file names, as `tools/evaluation/match._short_name` writes it: a
+    `.strategy` file by its file name (`split_shape@cffe3a28`), anything else by its plain name."""
+    return Path(config).stem if config.endswith(".strategy") else catalog.plain_name(config)
+
+
 def _replay_path(base: Path, run_dir: Path, result: dict) -> Optional[str]:
     """The result's replay, relative to `base`: `evaluate.py` writes `<a>_vs_<b>.npz`. Older runs
     (the retired `ladder.py`, `full_match_tournament.py`) wrote side and kickoff tags,
     `<a>_vs_<b>_<R|L><K|k>` (as `.pkl` for the latter)."""
-    stem = f"{catalog.plain_name(result['config_a'])}_vs_{catalog.plain_name(result['config_b'])}"
+    stem = f"{_file_name(result['config_a'])}_vs_{_file_name(result['config_b'])}"
     names = [f"{stem}.npz", f"{stem}.pkl"]
     if "a_is_right" in result:
         names.insert(0, f"{stem}_{'R' if result['a_is_right'] else 'L'}{'K' if result.get('a_kicks_off') else 'k'}.pkl")
@@ -191,19 +202,25 @@ def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]
     for _, summary in summaries:
         run_id = summary.get("run_id", "")
         for r in summary.get("results", []):
-            a, b = display_name(r["config_a"]), display_name(r["config_b"])
-            # a match reused from the store is listed under the run that played it
-            if name not in (a, b) or a == b or r.get("reused"):
+            if r.get("reused"):  # listed under the run that played it
                 continue
-            if is_frozen(r["config_a"] if a == name else r["config_b"]):
-                continue  # the last release's file playing, not today's strategy
-            mine, theirs, opponent = (r["score_a"], r["score_b"], b) if a == name else (r["score_b"], r["score_a"], a)
-            if is_frozen(r["config_b"] if a == name else r["config_a"]):
-                opponent += " (last release)"
+            sides = (
+                (r["config_a"], r["config_b"], r["score_a"], r["score_b"]),
+                (r["config_b"], r["config_a"], r["score_b"], r["score_a"]),
+            )
+            # today's strategy only (not the last release's file of it), and never against itself
+            mine = [
+                side
+                for side in sides
+                if display_name(side[0]) == name and not is_frozen(side[0]) and _label(side[1]) != name
+            ]
+            if not mine:
+                continue
+            _, them, score_me, score_them = mine[0]
             out.append(
                 {
-                    "opponent": opponent,
-                    "score": [mine, theirs],
+                    "opponent": _label(them),
+                    "score": [score_me, score_them],
                     "seed": r.get("seed"),
                     "run_id": run_id,
                     "date": run_date(run_id),
@@ -296,7 +313,7 @@ def load_strategies(base: Optional[Path] = None) -> dict:
     summaries = _summaries(base) if base.exists() else []
     reports = _reports(base) if base.exists() else []
     strategies = []
-    for name in catalog.names():
+    for name in catalog.player_names():
         path = STRATEGY_DIR / f"{name}.py"
         doc = _docstring(path)
         strategies.append(
@@ -329,7 +346,7 @@ def load_runs(base: Optional[Path] = None) -> list[dict]:
     runs: dict[str, dict] = {}
     for path, summary in _summaries(base):
         for r in summary.get("results", []):
-            r["display_a"], r["display_b"] = display_name(r["config_a"]), display_name(r["config_b"])
+            r["display_a"], r["display_b"] = _label(r["config_a"]), _label(r["config_b"])
             # the page needs only whether it stalled; the full stats are ~95% of the payload
             r["stalled"] = _stalled(r)
             r.pop("stats", None)

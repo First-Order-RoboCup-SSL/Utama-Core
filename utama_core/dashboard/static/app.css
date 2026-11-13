@@ -276,7 +276,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dumbbell .dot { position: absolute; top: 2px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; }
 .dumbbell .dot.this { background: var(--accent); }
 .dumbbell .dot.others { background: #fff; border: 2px solid #9ca3af; }
-.matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.match > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match .score { white-space: nowrap; }
+.match > .row { flex-wrap: nowrap; flex-shrink: 0; }
 .match { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: .88rem; }
 .match .score { font-weight: 600; font-variant-numeric: tabular-nums; }
 .match .win { color: var(--ok); } .match .loss { color: var(--fail); } .match .draw { color: var(--muted); }
