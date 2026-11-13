@@ -57,7 +57,7 @@ For the four jobs that chain several of them, follow a skill in `.claude/skills/
 
 | Script | Purpose |
 |---|---|
-| `tools/dev/setup_worktree.sh` | Run inside a git worktree: links `.pixi` to the main checkout's and copies the gitignored compiled `.so` extensions (planner, rsim). Idempotent; one line per action |
+| `tools/dev/setup_worktree.sh` | Run inside a git worktree: links `.pixi` to the main checkout's and copies the gitignored compiled `.so` extensions (planner, rsim). Idempotent; one line per action. Symlink `replays` too, so the worktree shares the match results store; run one evaluation at a time per laptop |
 
 ## Playing matches
 

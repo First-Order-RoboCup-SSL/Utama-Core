@@ -71,7 +71,10 @@ One term per thing; reuse these instead of coining new ones.
 - **World / robot capability** — simulator settings fall into two kinds: the world (ball
   friction, vision noise and dropouts, latency) comes from measurements; robot capability (kick,
   dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
-  in the control layer. The test: would better robots change it? `tools/evaluation/reference/
+  in the control layer. The test: would better robots change it? Two decisions follow: evaluation runs
+  robots at 2 m/s, the speed we are building toward, not today's 1 m/s; and kicks have one power,
+  as our kicker does, so no variable-kick settings in sim or skills. What we measured on our robots:
+  `docs/real_robots.md`, "Our robots". `tools/evaluation/reference/
   world.json`, `robots.json`; field sessions in `tools/field/field_sessions.json`.
 - **Situation / goal sources** — a situation starts when a restart goes live or a side wins the
   ball in open play; the goal sources (`utama_core/analysis/goal_sources.py`) gives each goal to
@@ -147,6 +150,10 @@ declarations) — check there before reintroducing one of them.
   `test_bang_bang_edge_cases.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
   a regression elsewhere fails. Don't chase rsim-only dribble test failures as if they were
   kernel bugs; verify on grsim if genuinely unsure.
+- rsim is deterministic on one machine but not across CPUs (the planner's numba kernels are compiled
+  `fastmath` for the host), so CI plays a slightly different game. Don't assert outcomes of
+  multi-second rsim games: assert invariants, or write a pure unit test. A CI-only rsim failure is
+  CPU numerics first.
 - Before trusting any test result (yours or another agent's), prefer independently
   re-running it and reading real output over trusting a self-report — this codebase has
   been touched by both humans and agents, and a claimed "all tests pass" is only as

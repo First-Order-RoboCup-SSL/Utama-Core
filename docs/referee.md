@@ -140,6 +140,10 @@ again afterwards.
 - **Operator GUI "suggested next step"** based on the current command, so an operator decides
   only *when* to advance, not *what*.
 - **`TeamInfo` should be a frozen dataclass**: item 8 under Design decisions.
+- **A lone defender touching the ball in its box, keeper outside, is not called**: `DefenseAreaRule`
+  only looks once more than `max_defenders` robots are inside. Found by running every rule over the
+  118 official Division B matches (2026-10-12): ball out and goals agree with the officials about
+  95% of the time; the three bugs it found are fixed.
 
 Resolved (kept here so nobody re-reports them): the old friendly-first, ≤0.15m proximity
 last-touch heuristic and its yellow default (replaced by `infer_last_touch_team`), double touch,

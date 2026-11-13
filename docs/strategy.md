@@ -314,6 +314,9 @@ flowchart TD
   - **confirm**, fresh seeds 101-106, on their diffs alone: the same drop rule, then **better** if a
     one-sided paired t-test gives p <= ALPHA (0.05), else **undecided** (not clearly better: drop it).
 
+  Why so many matches: one match's goal difference varies by about 3 goals between seeds (measured
+  2026-10-12), so a 1-goal edge needs about 36 matches per pairing to show; paired diffs cancel much
+  of that.
   Only fresh seeds accept, so a candidate chosen because it looked good on seeds 1-6, or fitted to
   them, is not accepted on that luck. "Dropped" means not promising, not worse: an equal strategy is
   dropped at the first look about half the time. ROUNDS and ALPHA are provisional: ROUNDS is to be set
@@ -567,6 +570,35 @@ original numpy paths, byte-identical to before (`8c191eea`); the evaluation's wo
 all inherit it. The two modes agree to 1e-9 per call but matches diverge after the first differing
 tick, so a baseline recorded in one mode is only comparable with a candidate run in the same mode.
 
+## Tried and rejected
+
+Ideas that look obvious from the signals and cost a day to disprove. Each was measured with paired
+drills: the same moments from one run's replays, replayed with one side changed. Don't re-propose one
+without new evidence (field data, a changed world), and add yours here when you reject one.
+
+| Idea | Result | Date |
+|---|---|---|
+| Sprint at a contested ball (`go_to_ball`: within 1.2 m, an enemy within 0.6 m of it) | **Shipped**: +7 points of possession on free balls, +7 more on balls an enemy holds | 2026-11-10 |
+| Face the ball before closing; line up in front of the enemy's dribbler; widen the sprint; carry speed and acceleration caps in sim | No gain over the sprint alone | 2026-11-10 |
+| Receiver retreats as the ball arrives (a "cushion"); first-time shots | No gain below 5 m/s; receivers 10-20° off the ball's line caught 7% | 2026-11-09 |
+| Brake harder when receiving | No gain. Most missed receptions are the kick noise in `robots.json`, chosen to match real pass completion: by design | 2026-11-10 |
+| Faster free kicks (taker sprints) | Kick 1.5 s sooner, but passes received 92 → 75: an enemy is still crossing the lane | 2026-11-10 |
+| Pass early when pressed (an enemy closing within 0.35-0.5 m) | Possession −9 to −12 points, more free kicks against: a 5 m/s kick reaches a mate 1 m away before they can adjust | 2026-11-10 |
+| Clear towards the touch line instead of upfield | Fewer free kicks against in our half, more overall, less possession, same goals | 2026-11-10 |
+| 1.5 m minimum distance for the restart pass (open play keeps 1.5 m, restarts 0.7 m) | No difference | 2026-11-10 |
+| rsim's faster ODE solver (`dWorldQuickStep`) | 23% faster matches, but a robot driving sideways drifts 18-24 cm over 3 m | 2026-10-10 |
+
+Two facts behind several of these: passes under 1.5 m are half of all passes and only 28% are
+received (1.5-3.5 m: about 50%); and a pass whose line passes within 4 cm of the receiver's centre is
+caught 82-97% of the time, beyond 4 cm under 30%.
+
+## Known open bugs
+
+- **The keeper ignores a slow ball rolling through its own box.** `skills/goalkeep.py` fetches a
+  ball in the box only below `_RETRIEVE_BALL_SPEED` (0.3 m/s); a ball rolling slower than a shot but
+  faster than that, wide of the goal, is watched until it goes out. Seen in the v2.6.0 replays,
+  `pendulum_vs_wolfpack` at 3:52 (wolfpack's keeper). Left open on purpose as a first task.
+
 ## Reading a round
 
 Every `evaluate.py` run prints round 1's sections and writes each round's data to
@@ -634,3 +666,18 @@ What a converted match holds, and where it differs from a sim replay (the detail
   `INDIRECT_FREE_*`. The corpus above starts in 2022.
 
 The scenario bench (retired 2026-10-17) replayed 10 s starts harvested from replays; to look at one point in a replay use `tools/debug/repro_from_replay.py <replay> --t <s>`, and to pin a failure there add a regression moment ("Debugging a foul or failure", above), and `analysis/goal_sources.py` lists a replay's situations and goals.
+
+### What real matches showed (2026-10)
+
+From the 118 converted Division B matches, against our sim at the time. The scripts are outside the
+repo (`~/dev/ssl/xg-analysis/`); the full write-up is in git history (`docs/sim_realism.md`, deleted
+2026-11-13).
+
+- Real matches have about 3-4 goals and about 40 free kicks; most goals come from the ball won in
+  open play, about 19% from set pieces. Real matches are live only about 15% of the time.
+- Shot totals and finishing roughly matched the sim's, but only because differences cancel: sim
+  keepers saved twice as often, and sim shots went wide far less often. Judge realism by component
+  (keeper reaction, ball slow-down, kick noise), never by goal totals.
+- A value model fitted on real matches (who scores within 10 s; AUC 0.82 on held-out years) did not
+  rank strategies with fewer matches than goals do. xG failed as a ranker too (`docs/signals.md`,
+  "Ranking").

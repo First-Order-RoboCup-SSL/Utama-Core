@@ -1,8 +1,32 @@
 # Real robots
 
-The reference for real-robot work: what a field log holds and the tools that read it, and the
+The reference for real-robot work: what we know about our robots, what a field log holds and the tools that read it, and the
 external software (grSim, the official GameController, AutoReferee, ssl-vision). The procedure for a
 test day is the tutorial [tutorials/field_day.md](../tutorials/field_day.md).
+
+## Our robots
+
+What we have measured on our two robots (radio 0 and radio 1), from field logs of 2026-10-27 to
+10-29. Each robot's numbers live in `utama_core/config/robots/radio_<n>.json`, written by
+`pixi run calibrate`; they apply on real robots only (the sim assumes league-level robots, see
+"World / robot capability" in `AGENTS.md`).
+
+- **The kicker has one power.** A full kick leaves at about 2.2 m/s on radio 0 (the sim kicks at
+  about 5). Strength varies with charge and battery; don't chase it. No variable-power settings
+  in sim or skills until the hardware has it.
+- **Kicks bend with where the ball sits on the dribbler:** about 4 degrees per cm off centre on
+  radio 0, 1 on radio 1, plus a small bias. Passes and shots correct for it (`kick_bend_deg_per_cm`,
+  `kick_bias_deg`).
+- **The dribbler is weak.** Robots lose the ball when they turn or move sideways or backwards with
+  it, so `move()` caps carrying at 0.3 m/s and 0.6 rad/s on real robots. A first guess: tune it on
+  the field (`pixi run calibrate` has a carry ladder).
+- **Motion:** about 79 ms from command to motion; turns about 9% faster than commanded; sideways
+  acceleration about 1.8 m/s^2 against about 5 forwards.
+- **The lid is not the robot.** A robot is its radio (motors, kicker, dribbler); the patterned lid
+  can be swapped. `pixi run find-robots` pairs them.
+- **Vision over Wi-Fi is patchy.** Over a phone hotspot, packets arrived bunched and lost and the
+  field check kept halting. When a run halts on vision gaps, check how the laptop gets vision before
+  touching code.
 
 ## Field logs
 
