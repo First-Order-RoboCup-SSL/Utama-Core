@@ -213,7 +213,9 @@ You decide what to keep.
 
 ## Where to go next
 
-- [strategy.md](../docs/strategy.md): how strategies and tactics really work.
-  Read it when you want to write a proper tactic.
+- [Your first tactic](first_tactic.md): part 2. Rookie gets a defence, a partitioner, a memory and
+  tests.
+- [Debug a moment](debug_a_moment.md): why did a robot do that? From a replay to the cause and a test.
+- [strategy.md](../docs/strategy.md): how strategies and tactics really work: the reference.
 - `utama_core/tactics/`: real tactics to copy from.
 - `utama_core/skills/`: every skill a robot can use.

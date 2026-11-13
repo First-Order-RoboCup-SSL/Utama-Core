@@ -186,8 +186,10 @@ need most:
 
 - `.agents/skills/` — step-by-step playbooks over those scripts (see "Skills" below).
 
-- `tutorials/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
-  simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.
+- `tutorials/` — the beginner path: `first_strategy.md` (a toy strategy, then evaluation),
+  `first_tactic.md` (two tactics, a partitioner, a memory, tests), `debug_a_moment.md` (the open
+  keeper bug, from replay to a failing test). Keep them short, simple and runnable:
+  `tests/strategy/test_tutorial_code.py` runs their code.
 - `docs/strategy.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/strategy_design.md` — kernel/Tactic/Partitioner design rationale.
