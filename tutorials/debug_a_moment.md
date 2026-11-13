@@ -126,9 +126,22 @@ pull request; the team runs one evaluation over a batch of shared fixes, rather 
 When the fix lands, update this page: `utama_core/tests/strategy/test_tutorial_code.py` fails
 until you do, on purpose.
 
+## Finding your own moment
+
+This page started from a moment someone had already found. With your own strategy, look in two
+places, after an evaluation (`replays/eval_<id>/round_1`):
+
+- **What broke:** `pixi run python tools/debug/find_bugs.py replays/eval_<id>/round_1 --strategy NAME`
+  lists robots that thrash between tactics, stalls and (with `--fouls`) fouls, in your worst
+  matches, with a picture of each. Its report is `find_bugs/index.md` in that folder.
+- **What cost goals:** on the dashboard, open your worst matches and watch the 10 seconds before
+  each goal you conceded. A goal that keeps happening the same way is worth a moment.
+
+Then follow this page from step 2.
+
 ## Where to go next
 
 - [strategy.md](../docs/strategy.md), "Debugging a foul or failure": every debugging tool, and
   the bugs found so far.
-- `pixi run python tools/debug/find_bugs.py replays/eval_20261112_225153/round_1 --strategy pendulum`
-  finds moments like this one in a whole round: stalls, fouls, robots that thrash.
+- The `explain-result` skill (`.agents/skills/explain-result/SKILL.md`): ask a coding agent why
+  a strategy won or lost over a whole evaluation, with position and shot maps.
