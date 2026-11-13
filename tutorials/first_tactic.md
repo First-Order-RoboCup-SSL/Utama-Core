@@ -154,6 +154,12 @@ pixi run main rookie wolfpack
 Do two robots stay back? Does one robot keep chasing, or does the job still flip? Try
 `SWITCH_MARGIN = 0.0` and watch the difference.
 
+Watch the defenders too. When two robots are about as far from our goal, `split` swaps them
+between attack and defence, back and forth (in our test match, three or four times a minute).
+That is the chaser's problem again, one level up. `split` gets `previous`, last tick's split: make
+it keep last tick's defenders unless another robot is clearly nearer our goal, and add a test for
+it like the chaser's.
+
 ## 7. Test the decisions
 
 Watching shows a few seconds; a test checks a decision every time anyone changes the code. Test
