@@ -148,8 +148,9 @@ declarations) — check there before reintroducing one of them.
 - **Always pass `--headless`** when running any simulator/integration test:
   `pixi run pytest utama_core/tests/ --headless`. Much faster; there is no reason to run
   with graphics in an agent loop.
-- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (links `.pixi`,
-  copies the compiled planner/simulator `.so` files; without them tests differ).
+- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (its own pixi
+  environment, about 2 min the first time: pixi can't share one across directories; `replays` linked
+  to the main checkout's; the compiled planner/simulator `.so` files copied, without which tests differ).
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.
 - `--level quick|full` (defined in the root `conftest.py`, not `utama_core/tests/

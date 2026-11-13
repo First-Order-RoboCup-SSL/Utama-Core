@@ -33,6 +33,7 @@ Pick the tool by the question. `tools/debug/match_timeline.py`, `tools/debug/res
 | Where did the referee override send everyone at this restart? Legal? | `tools/debug/restart_picture.py REPLAY --t S` (`--all-restarts`, `--side enemy`) |
 | What did the planner decide on this tick? | `tools/debug/plan_snapshot.py REPLAY --t S --robot ID --target X Y` (`--side enemy`) |
 | How did the plan evolve over a few seconds? | `tools/debug/plan_trace.py REPLAY --t0 S --t1 S --robot ID [--target X Y]` |
+| A replay of one fresh match (to trace, or to watch on the dashboard) | `pixi run python -m tools.evaluation.match A B --duration 120` (prints the replay's path) |
 | Run a fresh short match with my own traces | `tools/debug/debug_match.py --strategy A --opponent B --duration 60 --stop-on-goal`, with `ctx.match_log.trace(...)` calls added in the tactic |
 
 All run as `pixi run python tools/<tool>.py ...`. Never conclude from a picture alone.

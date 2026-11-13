@@ -223,3 +223,25 @@ def run_match(
         a_kicks_off=a_kicks_off,
         stats=_stats_to_dict(stats) if stats is not None else None,
     )
+
+
+def main() -> None:
+    """One headless match with its replay kept, to watch on the dashboard or trace with tools/debug/."""
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(description="Play one headless rsim match and keep its replay.")
+    parser.add_argument("a", help="yellow: a strategy name, a .strategy file or PATH.py:FUNCTION")
+    parser.add_argument("b", help="blue")
+    parser.add_argument("--duration", type=float, default=120.0, help="sim seconds at most (default 120)")
+    parser.add_argument("--out", type=Path, help="folder for replay and stats (default replays/matches/<time>)")
+    args = parser.parse_args()
+
+    run_dir = args.out or REPLAY_BASE_PATH / "matches" / time.strftime("%Y%m%d_%H%M%S")
+    result = run_match(args.a, args.b, duration_seconds=args.duration, run_dir=run_dir)
+    print(f"{result.config_a} {result.score_a} - {result.score_b} {result.config_b}")
+    print(f"replay: {Path(run_dir) / f'{_short_name(args.a)}_vs_{_short_name(args.b)}'}.npz")
+
+
+if __name__ == "__main__":
+    main()
