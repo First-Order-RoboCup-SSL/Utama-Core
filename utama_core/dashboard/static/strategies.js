@@ -189,6 +189,7 @@
           <div class="meta-row"><span>${renderTactics(s)}</span><span>${renderVerdict(s)}</span>
             <code class="muted" title="watch it: pixi run main ${esc(s.name)} wolfpack">${esc(s.file)}</code></div>
         </div>
+        ${s.signals || s.matches.length ? "" : `<div class="muted">No matches yet. Reserve strategies play in <code>pixi run evaluate --all</code>.</div>`}
         ${renderMaps(s)}
         ${renderSignals(s)}
         ${renderMatches(s)}

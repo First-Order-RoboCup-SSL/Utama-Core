@@ -1,7 +1,7 @@
 # Your first strategy
 
 This page takes you from zero to a strategy of your own, playing in the simulator.
-You need no knowledge of the codebase. Allow about an hour.
+You need no knowledge of the codebase. Allow about an hour and a half.
 
 First, install everything: follow steps 1 to 3 of the [README](../README.md#quick-start).
 
@@ -22,7 +22,35 @@ pixi run main riptide terrier
 
 The strategies are listed in [strategies.md](strategies.md).
 
-## 2. Three words you need
+## 2. Look around our strategies
+
+The dashboard shows every strategy, how it plays and replays of its matches. To fill it, download
+[`replays-v2.6.0.zip`](https://github.com/First-Order-RoboCup-SSL/Utama-Core/releases/download/v2.6.0/replays-v2.6.0.zip)
+(160 MB: the core strategies playing each other once) and unpack it:
+
+```
+pixi run python -m zipfile -e replays-v2.6.0.zip replays/
+pixi run dashboard
+```
+
+Open http://localhost:8080 and click **Strategies**.
+
+![A strategy's page](img/dashboard/strategy_page.png)
+
+- **On the pitch**: where its robots stand with the ball and without it (darker is more time), and
+  where its shots came from. Every picture attacks to the right.
+- **How it plays**: each number beside the other strategies' average. These explain a style; more is
+  not always better.
+- **Matches**: click ▶ to watch one.
+
+![A replay](img/dashboard/replay.png)
+
+The replay shows the robots, the referee's decisions and which tactic each robot ran, on a timeline
+under the pitch. The list on the right has one row per restart or ball won; click a row to jump to it.
+
+Pick two strategies with different maps and watch a match of each. What do they do differently?
+
+## 3. Three words you need
 
 - **Strategy**: decides what the whole team does. One file in `utama_core/strategy/`.
   The file's name is the strategy's name.
@@ -34,7 +62,7 @@ The strategies are listed in [strategies.md](strategies.md).
 The goalkeeper is handled for you. Your strategy controls the other five robots.
 Restarts (kickoffs, free kicks, stops) are also handled for you.
 
-## 3. Make a branch
+## 4. Make a branch
 
 ```
 git switch main
@@ -42,7 +70,7 @@ git pull
 git switch -c strategy/rookie
 ```
 
-## 4. Write the strategy
+## 5. Write the strategy
 
 Create the file `utama_core/strategy/rookie.py` and paste this in:
 
@@ -108,7 +136,7 @@ What it does:
 - It returns one command per robot.
 - `build` puts the tactic into a strategy. Every strategy file needs a `build` function.
 
-## 5. Watch it play
+## 6. Watch it play
 
 ```
 pixi run main rookie wolfpack
@@ -116,7 +144,7 @@ pixi run main rookie wolfpack
 
 Your team is yellow. Does the chaser reach the ball? Do the helpers follow the play?
 
-## 6. Change something
+## 7. Change something
 
 Try one small change, then watch again:
 
@@ -126,7 +154,7 @@ Try one small change, then watch again:
 
 Change one thing at a time, so you know what made the difference.
 
-## 7. Test it
+## 8. Test it
 
 ```
 pixi run pytest utama_core/tests/engine/test_all_strategy_configs.py --headless
@@ -136,7 +164,7 @@ pixi run lint
 
 All three must pass before you open a pull request.
 
-## 8. Is it better? Run an evaluation
+## 9. Is it better? Run an evaluation
 
 Watching one match is not enough. Football is full of luck.
 The evaluation plays many matches and tells you if your strategy beats the champion (our best strategy).
@@ -165,11 +193,10 @@ Read two things:
 
 Ignore everything else in the output for now.
 
-To see it all in a browser, run `pixi run dashboard` and open http://localhost:8080.
-The **Strategies** tab shows every strategy: what it does, its verdicts, how it plays and its matches.
-Click ▶ on a match to watch its replay.
+Then open the dashboard again: `rookie` is on the **Strategies** tab with its verdict, its maps
+and its matches, beside the strategies you looked at in step 2.
 
-## 9. Now let an agent write one
+## 10. Now let an agent write one
 
 You know how a strategy works now. A coding agent (like Claude Code) can write and test new ones
 much faster. This repo has a step-by-step guide for agents: the `change-strategy` skill.
