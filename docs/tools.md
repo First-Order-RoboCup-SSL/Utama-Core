@@ -20,7 +20,7 @@ Everything below is for specialists.
 
 Pick the tool by the question you have.
 
-For the four jobs that chain several of them, follow a skill in `.claude/skills/`: `change-strategy`, `explain-result`,
+For the four jobs that chain several of them, follow a skill in `.agents/skills/`: `change-strategy`, `explain-result`,
 `debug-incident`, `field-session`.
 
 | Question | Tool |

@@ -172,7 +172,7 @@ Lessons from bugs that recurred (mostly `SwitchOfPlayTactic`, `tactics/switch_of
 
 ## Writing and evaluating a strategy
 
-The steps from branch to pull request, as a checklist: the `change-strategy` skill (`.claude/skills/`).
+The steps from branch to pull request, as a checklist: the `change-strategy` skill (`.agents/skills/`).
 
 A strategy is a combination of existing tactics plus a partitioner that decides how many robots
 each gets. Most new strategies need no new tactic. When one does, add it as a new module in
@@ -453,7 +453,7 @@ whoever runs it.
 A foul or failure seen in a match is a symptom: the cause may be the robot, the shared referee
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot. The steps alone, as a
-checklist, are the `debug-incident` skill (`.claude/skills/`); this section keeps the reasons and the bugs found.
+checklist, are the `debug-incident` skill (`.agents/skills/`); this section keeps the reasons and the bugs found.
 
 Start with `tools/debug/find_bugs.py RUN_DIR --strategy NAME`: open its `index.md` for the worst matches, the finding counts by kind
 and the pictured findings. Filter `findings.jsonl` on the kind you care about, open that finding's picture to see what it

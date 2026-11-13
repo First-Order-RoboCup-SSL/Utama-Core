@@ -99,5 +99,6 @@ Tips:
   them and commit again.
 - A strategy branch (`strategy/*`) may change strategy code only
   (`tools/dev/check_strategy_branch.py`), so it can't change what it is scored against.
-- `CLAUDE.md` is a symlink to `AGENTS.md`: edit `AGENTS.md`. On native Windows without Developer
-  Mode, fix it with `git config --global core.symlinks true && git checkout -- CLAUDE.md`.
+- `CLAUDE.md` is a symlink to `AGENTS.md`, and `.claude/skills` to `.agents/skills`: edit the
+  targets. On native Windows without Developer
+  Mode, fix it with `git config --global core.symlinks true && git checkout -- CLAUDE.md .claude/skills`.

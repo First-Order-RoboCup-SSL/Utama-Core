@@ -84,6 +84,20 @@ One term per thing; reuse these instead of coining new ones.
 - **Situation rates** — how often each situation type happens per team per live minute, from
   real Division B matches or our matches (`goal_sources --rates PATH`).
 
+## Skills
+
+Step-by-step playbooks for the jobs that chain several scripts, in `.agents/skills/<name>/SKILL.md`
+(plain Markdown with a `name`/`description` header; `.claude/skills` is a symlink to the folder).
+When a task matches one, read that file and follow it, whatever agent you are. The docs keep the
+reasons; the skills keep the steps.
+
+| Skill | Use it to |
+|---|---|
+| `change-strategy` | write or change a strategy, test it, evaluate it against the champion, promote it |
+| `explain-result` | explain how a strategy plays and why it won or lost, from an evaluation's replays |
+| `debug-incident` | take one bad moment in a match from symptom to a fixed cause with a regression test |
+| `field-session` | run a test day on the real robots and process its logs |
+
 ## Repo map
 
 - `utama_core/engine/` — the scheduler/protocol infra: `Strategy`, `Tactic`, `TickContext`,
@@ -170,11 +184,7 @@ declarations) — check there before reintroducing one of them.
 `docs/README.md` indexes every doc by kind and `docs/tools.md` every script; the ones agents
 need most:
 
-- `.claude/skills/` — four step-by-step playbooks over those scripts (plain Markdown, readable by
-  any agent): `change-strategy` (write, test, evaluate and promote a strategy), `explain-result` (how
-  a strategy plays, why it won or lost), `debug-incident` (one bad moment, from symptom to a fixed
-  cause with a test), `field-session` (a test day on real robots and its logs). The docs keep the
-  reasons; the skills keep the steps.
+- `.agents/skills/` — step-by-step playbooks over those scripts (see "Skills" below).
 
 - `tutorials/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
   simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.

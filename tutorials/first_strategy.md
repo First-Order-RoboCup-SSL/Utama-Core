@@ -198,12 +198,13 @@ and its matches, beside the strategies you looked at in step 2.
 
 ## 10. Now let an agent write one
 
-You know how a strategy works now. A coding agent (like Claude Code) can write and test new ones
-much faster. This repo has a step-by-step guide for agents: the `change-strategy` skill.
+You know how a strategy works now. A coding agent (Claude Code, Codex, Cursor or another) can write and
+test new ones much faster. This repo has step-by-step guides for agents in `.agents/skills/`; the one
+for strategies is `change-strategy`.
 
-Open Claude Code in the repo and ask, for example:
+Open your agent in the repo and ask, for example:
 
-> Use the change-strategy skill. Make a new strategy where two robots always defend near our goal
+> Follow the change-strategy skill (.agents/skills/change-strategy/SKILL.md). Make a new strategy where two robots always defend near our goal
 > and three attack.
 
 The agent makes the branch, writes the strategy, runs the tests and asks you before it runs
