@@ -1,65 +1,67 @@
 """match.py — shared match-construction/running mechanics for the
-evaluation drivers (`round_robin.py`, `evaluate.py`).
+evaluation driver (`evaluate.py`).
 
-Why this exists: `round_robin.py`'s `run_match` and the since-retired
+Why this exists: `evaluate.py`'s `run_match` and the since-retired
 `full_match_tournament.py`'s `run_match_cell` were ~80% identical code (build
-two strategies from kernel_strategy factory names, construct a referee with
+two strategies from their names, construct a referee with
 the right kickoff-team/initial-command, wire up match_log/stats/replay paths,
 build and step a `StrategyRunner`, read back the score) that had drifted into
 two independent copies differing only in a few real parameters (duration,
-whether side/kickoff are fixed or swept, fuzzing). Correctness fixes found in
+whether side/kickoff are fixed or swept). Correctness fixes found in
 one copy (the `PREPARE_KICKOFF_*` vs `FORCE_START` kickoff-ceremony fix; the
 `_stats_to_dict` StallEvent-serialization fix) had to be manually ported to
 the other and could easily have been missed. This module is the single place
 that logic lives now; each script above is a thin CLI over it, differing only
 in which strategies it selects, what duration it uses, and whether it sweeps
-side/kickoff as independent axes.
+side/kickoff as independent axes. The strategies, referee and rsim runner of a
+match come from `utama_core/run/sim_setup.py`, the one set-up the debugging tools share.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
-from utama_core.custom_referee.restart_fuzzer import RestartFuzzingReferee
-from utama_core.engine.abstract_strategy import AbstractStrategy
+from utama_core.bundle.strategy_file import SUFFIX, BundledStrategy
+from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.columnar_writer import ColumnarReplayWriterConfig
-from utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper import (
-    enable_sim_reuse,
+from utama_core.run.sim_setup import (  # noqa: F401 -- re-exported
+    N_OUTFIELD,
+    OUTFIELD_ROBOT_IDS,
+    load_side,
+    sim_referee,
+    sim_runner,
 )
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
-from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
+from utama_core.simulator.simulators.robosim.robosim_wrapper import enable_sim_reuse
+from utama_core.simulator.utils.sim_noise import SimNoise
+from utama_core.strategy import catalog
+from utama_core.strategy.catalog import plain_name
 
-N_OUTFIELD = 5  # + 1 goalkeeper per side
-OUTFIELD_ROBOT_IDS = tuple(range(1, N_OUTFIELD + 1))
 TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
-# build_default_kernel_strategy is excluded from the auto-discovered catalog:
+
+def replay_name(run_dir: Path, match_tag: str) -> str:
+    """A match's replay name: its path under REPLAY_BASE_PATH, no suffix, so the replay lands in
+    `run_dir` as `<match_tag>.npz`."""
+    return Path(os.path.relpath(Path(run_dir) / match_tag, REPLAY_BASE_PATH)).as_posix()
+
+
+# default is excluded from the auto-discovered catalog:
 # despite the name, it isn't a competitive team — it's the kernel's minimal
 # single-tactic smoke-test scaffold (see its docstring), used across the test
 # suite with as few as zero outfield robots, and plays a real match with 3 of 5
-# outfield robots never issued a command. Every other factory is playable here;
-# which ones a round-robin plays by default is round_robin.RETIRED's business.
-_CONFIG_NAMES = [
-    name
-    for name in dir(kernel_strategy)
-    if name.startswith("build_")
-    and name.endswith("_kernel_strategy")
-    and callable(getattr(kernel_strategy, name))
-    and name != "build_default_kernel_strategy"
-]
+# outfield robots never issued a command. Every other strategy is playable here.
+_CONFIG_NAMES = catalog.player_names()
 
 
 def _short_name(config_name: str) -> str:
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    if config_name.endswith(SUFFIX):
+        return Path(config_name).stem
+    return plain_name(config_name)
 
 
 def _stats_to_dict(stats) -> dict:
@@ -97,7 +99,7 @@ def _stats_to_dict(stats) -> dict:
 @dataclass
 class MatchResult:
     """One match's outcome. `a_is_right`/`a_kicks_off` default to the
-    `round_robin.py`'s fixed convention (config_a starts on the right and
+    `evaluate.py`'s fixed convention (config_a starts on the right and
     kicks off the first half; with halves the teams change ends at half-time).
     """
 
@@ -127,12 +129,9 @@ def run_match(
     a_kicks_off: bool = True,
     run_dir: Optional[Path] = None,
     match_tag_suffix: str = "",
-    control_scheme: str = "fpp",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
     sim_noise: Optional[SimNoise] = None,
 ) -> MatchResult:
-    """Play one match between two kernel-strategy factories, until the referee calls full
+    """Play one match between two strategies, until the referee calls full
     time (two halves of the profile's `half_duration_seconds` of playing time, the clock
     stopped whenever no team may play the ball) or `duration_seconds` of sim time pass,
     whichever is first. The cap only ends a match that can't finish: two 300 s halves took
@@ -161,47 +160,19 @@ def run_match(
     `match_tag_suffix` is appended to the per-match file tag (e.g. a side/
     kickoff cell tag like `_Rk`) so cells for the same pair don't collide.
 
-    `control_scheme` is used for both sides (matching StrategyRunner's
-    default of falling back to `control_scheme` when `opp_control_scheme` is
-    unset) — these tournament drivers compare strategies against each other,
-    not motion planners against each other (see
-    `tools/motion_planning_benchmark.py` for that).
-
-    `fuzz_seed`, if set, swaps in `RestartFuzzingReferee` (see
-    `utama_core/custom_referee/restart_fuzzer.py`) instead of plain
-    `CustomReferee`, so this match's referee injects extra seeded-random
-    legal restarts during live play.
+    Both sides use the fpp planner (`tools/motion_planning_benchmark.py` compares planners).
 
     `sim_noise`, if set, plays the match with seeded latency, kick speed noise and vision noise
-    (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`, `docs/sim_realism.md`). The draws
+    (`utama_core/simulator/utils/sim_noise.py`, `docs/sim_realism.md`). The draws
     depend on the seed, team colour and robot id only, so the same `sim_noise` gives every
     pairing the same physics.
     """
     enable_sim_reuse()
 
-    build_a = getattr(kernel_strategy, config_a_name)
-    build_b = getattr(kernel_strategy, config_b_name)
-
-    strategy_a = AbstractStrategy(build_kernel_strategy=build_a(OUTFIELD_ROBOT_IDS))
-    strategy_b = AbstractStrategy(build_kernel_strategy=build_b(OUTFIELD_ROBOT_IDS))
-
-    # "simulation" profile's kickoff_team defaults to "yellow"; override it to
-    # "blue" when B kicks off. Neither CustomReferee.from_profile_name nor
-    # RestartFuzzingReferee.from_profile_name takes a kickoff_team override,
-    # so build the profile by hand, then construct the referee from it directly.
-    profile = load_profile("simulation")
-    if not a_kicks_off:
-        profile = dataclasses.replace(profile, game=dataclasses.replace(profile.game, kickoff_team="blue"))
-    if fuzz_seed is not None:
-        referee = RestartFuzzingReferee(
-            profile,
-            seed=fuzz_seed,
-            interval_s=fuzz_interval_s,
-            n_robots_yellow=N_OUTFIELD + 1,
-            n_robots_blue=N_OUTFIELD + 1,
-        )
-    else:
-        referee = CustomReferee(profile, n_robots_yellow=N_OUTFIELD + 1, n_robots_blue=N_OUTFIELD + 1)
+    strategy_a = load_side(config_a_name)
+    strategy_b = load_side(config_b_name)
+    # config_a kicks off unless told otherwise; the referee's kickoff team and the ceremony follow it.
+    referee = sim_referee(kickoff_team="yellow" if a_kicks_off else "blue")
     initial_command = RefereeCommand.PREPARE_KICKOFF_YELLOW if a_kicks_off else RefereeCommand.PREPARE_KICKOFF_BLUE
 
     match_tag = f"{_short_name(config_a_name)}_vs_{_short_name(config_b_name)}{match_tag_suffix}"
@@ -209,39 +180,20 @@ def run_match(
     if run_dir is not None:
         extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
         extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
-        # replay_name is relative to REPLAY_BASE_PATH, not run_dir, since replays
-        # live under a fixed replays/ root — nest it under the same tournament
-        # subdirectory so the two stay next to each other on disk.
-        #
-        # Columnar (.npz) rather than pickle (.pkl): ~13 MB/match in the old
-        # format vs. a fraction of that here, and every reader a tournament
-        # run's replays are actually fed through — `load_frames_in_range`
-        # (`replay_player.py`, used by `render_window`) and
-        # `find_stuck_windows` (`analysis/stuck_detector.py`) — already dispatches on
-        # `.npz` vs `.pkl` by extension, so nothing downstream of a
-        # tournament run breaks. Only the interactive `play_replay`/
-        # `get_latest_replay_name` CLI helpers in `replay_player.py` still
-        # hardcode `.pkl`.
+        # The writer puts a replay at REPLAY_BASE_PATH / replay_name: name it so the .npz lands in
+        # run_dir beside the match's other files, however deep run_dir is (eval_<id>/round_<k>/).
         extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
-            replay_name=f"{run_dir.name}/{match_tag}", overwrite_existing=True
+            replay_name=replay_name(run_dir, match_tag), overwrite_existing=True
         )
 
-    resolved_scheme = None if control_scheme in (None, "auto") else control_scheme
-
-    runner = StrategyRunner(
-        strategy=strategy_a,
-        opp_strategy=strategy_b,
-        my_team_is_yellow=True,
-        my_team_is_right=a_is_right,
-        mode="rsim",
-        exp_friendly=N_OUTFIELD + 1,
-        exp_enemy=N_OUTFIELD + 1,
-        exp_ball=True,
-        referee=referee,
-        enable_vision_stream=False,
-        referee_initial_command=initial_command,
-        control_scheme=resolved_scheme,
+    runner, _ = sim_runner(
+        strategy_a,
+        strategy_b,
         sim_noise=sim_noise,
+        initial_command=initial_command,
+        referee=referee,
+        my_team_is_right=a_is_right,
+        control_scheme="fpp",
         **extra_kwargs,
     )
 
@@ -256,6 +208,9 @@ def run_match(
         stats = runner.match_stats.finalize() if runner.match_stats is not None else None
     finally:
         runner.close()
+        for strategy in (strategy_a, strategy_b):
+            if isinstance(strategy, BundledStrategy):
+                strategy.close()
 
     return MatchResult(
         config_a=config_a_name,

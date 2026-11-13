@@ -1,13 +1,12 @@
 """`tools/evaluation/explain.py` on a synthetic run dir of real columnar replays: the side assignment
 (a candidate's numbers come from its own matches, against any opponent), the goals from the final
-referee state, the paired goal difference, the four files, and `evaluate.py --explain` off by default."""
+referee state, the paired goal difference and the four files."""
 
 import json
 
 import pytest
 
-from tools import pitch_maps as pm
-from tools.evaluation import evaluate, explain
+from tools.evaluation import explain
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, GameFrame, Robot
@@ -20,8 +19,8 @@ from utama_core.replay.columnar_writer import (
 )
 
 CAND, CHAMP, OPP1, OPP2 = (
-    "build_cand_kernel_strategy",
-    "build_champ_kernel_strategy",
+    "cand",
+    "champ",
     "build_opp1_kernel_strategy",
     "build_opp2_kernel_strategy",
 )
@@ -55,8 +54,8 @@ def _referee(score_yellow, score_blue):
 
 def _write_match(run_dir, a, b, score_a, score_b, seed=None):
     """A three-tick match, config_a (yellow, friendly) scoring `score_a`; the team with the ball is
-    always the friendly one. Written the way `evaluate.py`/`round_robin.py` name their files."""
-    stem = f"{pm.sr.short(a)}_vs_{pm.sr.short(b)}" + ("" if seed is None else f"_s{seed}")
+    always the friendly one. Written the way `evaluate.py` names their files."""
+    stem = f"{explain._short_name(a)}_vs_{explain._short_name(b)}" + ("" if seed is None else f"_s{seed}")
     path = run_dir / f"{stem}.npz"
     cfg = ColumnarReplayWriterConfig(replay_name=stem, overwrite_existing=True, checkpoint_every_s=0)
     writer = ColumnarReplayWriter(cfg, my_team_is_yellow=True, exp_friendly=3, exp_enemy=3, path=path)
@@ -107,7 +106,7 @@ def test_explain_writes_the_four_files(run_dir, tmp_path):
         data = (out / name).read_bytes()
         assert data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) < 250_000
     assert json.loads((out / "summary.json").read_text())["candidate"] == "cand"
-    assert (out / "triage" / "index.md").exists()  # the candidate's worst matches, as config_a
+    assert (out / "find_bugs" / "index.md").exists()  # the candidate's worst matches, as config_a
 
 
 def test_each_side_counts_its_own_matches_and_goals(run_dir, tmp_path):
@@ -133,17 +132,4 @@ def test_paired_difference_uses_same_opponent_seed_and_colour(run_dir, tmp_path)
 
 def test_explain_refuses_when_a_side_has_no_replay(run_dir, tmp_path):
     with pytest.raises(FileNotFoundError):
-        explain.explain(run_dir, "build_nobody_kernel_strategy", CHAMP, tmp_path / "out", workers=1)
-
-
-def test_evaluate_explain_is_off_by_default():
-    assert evaluate.build_parser().parse_args(["build_x_kernel_strategy"]).explain is False
-    assert evaluate.build_parser().parse_args(["build_x_kernel_strategy", "--explain"]).explain is True
-
-
-def test_an_explain_failure_never_escapes(monkeypatch, tmp_path):
-    def boom(*args, **kwargs):
-        raise RuntimeError("no replays")
-
-    monkeypatch.setattr(explain, "explain", boom)
-    evaluate._explain(tmp_path, "eval_test", [CAND], CHAMP)  # must print and return, not raise
+        explain.explain(run_dir, "nobody", CHAMP, tmp_path / "out", workers=1)

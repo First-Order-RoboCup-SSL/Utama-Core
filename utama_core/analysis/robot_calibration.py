@@ -2,7 +2,7 @@
 
 Reads an SSL game log written by `GameLogWriter` (`StrategyRunner(game_log_path=...)`) on real
 robots: the radio packets as sent and the camera's raw detections, on one clock. Best from a
-`--calibrate` run of `examples/shooting_drill.py` (fixed moves, `ScriptedMovesTactic`);
+`--calibrate` run of `tools/field/shooting_drill.py` (fixed moves, `ScriptedMovesTactic`);
 any run works, with fewer clean steps.
 
 Per robot that was sent commands:
@@ -25,9 +25,9 @@ Per robot that was sent commands:
 - **Dribbling**: per constant command held at least `DRIBBLE_MIN_S` with the dribbler on, where
   the ball sat in the robot's frame (forward of its centre, to its left), how much of the time the
   ball sensor read on, and whether the ball was still on at the end (`BALL_LOST_M`). A
-  `examples/calibrate_robot.py` run holds, turns and drives with the ball, then kicks it 3 times.
+  `tools/field/calibrate_robot.py` run holds, turns and drives with the ball, then kicks it 3 times.
 
-    pixi run python tools/robot_calibration.py replays/field/<run>.log [--json OUT]
+    pixi run python tools/field/robot_calibration.py replays/field/<run>.log [--json OUT]
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ import numpy as np
 
 from utama_core.replay.game_log_writer import RADIO_IN, RADIO_OUT, RUN_INFO
 from utama_core.replay.ssl_log import VISION_2014, read_records
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 

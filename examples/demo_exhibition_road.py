@@ -8,11 +8,11 @@ Run:
 What it does:
   - Uses GREAT_EXHIBITION_FIELD_DIMS (4 m × 3 m) — the compact field sized
     for the Exhibition Road festival venue.
-  - Builds a custom RefereeProfile inline (same style as Utama-Strategy/main.py)
+  - Builds a custom RefereeProfile inline (same style as `main.py`, run with `pixi run main` in this repo)
     with all rules enabled and human-operator auto-advance settings so a
     festival steward can control the game from the browser GUI.
   - 2v2 format: two yellow robots vs two blue robots, matching the small field.
-  - WanderingStrategy is used so robots visibly move and you can watch the
+  - wandering_strategy is used so robots visibly move and you can watch the
     RefereeOverride tree interrupt them when you issue commands from the
     dashboard.
   - The referee is attached to the browser dashboard at
@@ -35,8 +35,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utama_core.config.field_params import GREAT_EXHIBITION_FIELD_DIMS
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import (
+from utama_core.dashboard import attach_dashboard
+from utama_core.dashboard.views import referee as referee_view
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import (
     AutoAdvanceConfig,
     DefenseAreaConfig,
     GameConfig,
@@ -46,10 +48,8 @@ from utama_core.custom_referee.profiles.profile_loader import (
     RefereeProfile,
     RulesConfig,
 )
-from utama_core.dashboard import attach_dashboard
-from utama_core.dashboard.views import referee as referee_view
 from utama_core.run import StrategyRunner
-from utama_core.tests.referee.wandering_strategy import WanderingStrategy
+from utama_core.tests.referee.wandering_strategy import wandering_strategy
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -122,8 +122,8 @@ def main() -> None:
     referee_view.attach(server, referee, _EXHIBITION_PROFILE)
 
     runner = StrategyRunner(
-        strategy=WanderingStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),
-        opp_strategy=WanderingStrategy(field_dims=GREAT_EXHIBITION_FIELD_DIMS),
+        strategy=wandering_strategy(tuple(range(N_ROBOTS)), GREAT_EXHIBITION_FIELD_DIMS),
+        opp_strategy=wandering_strategy(tuple(range(N_ROBOTS)), GREAT_EXHIBITION_FIELD_DIMS),
         my_team_is_yellow=MY_TEAM_IS_YELLOW,
         my_team_is_right=MY_TEAM_IS_RIGHT,
         mode="rsim",

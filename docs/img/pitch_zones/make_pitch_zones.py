@@ -1,4 +1,4 @@
-"""Draws pitch_zones.png for docs/pitch_zones.md, from STANDARD_FIELD_DIMS.
+"""Draws pitch_zones.png for docs/signals.md ("Pitch zones"), from STANDARD_FIELD_DIMS.
 
 pixi run python docs/img/pitch_zones/make_pitch_zones.py
 """

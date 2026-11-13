@@ -65,7 +65,7 @@ def fixed_ratio_picker(attack_id: str, defense_id: str, attack_fraction: float, 
 # ---------------------------------------------------------------------------
 # Arena strategies — plan-driven multi-tactic teams (2026-08-20 addition)
 #
-# The barebone factories (default/split_shape/low_block/...) exist to exercise
+# The barebone factories (default/pendulum/low_block/...) exist to exercise
 # the kernel machinery; these three are meant as *playable* teams: every
 # posture reads live game state (ball ownership, ball zone), every posture
 # has both an attack and a defense answer, and the allocation reacts to the
@@ -286,14 +286,10 @@ def _kicker_at_still_ball(game: Game) -> Optional[RobotId]:
 
     rid, robot = min(game.friendly_robots.items(), key=lambda item: dist(item[1]))
     enemy_nearest = min((dist(e) for e in game.enemy_robots.values()), default=math.inf)
-    return rid if dist(robot) <= _KICK_REACH_M and dist(robot) < enemy_nearest else None
-
-
-def holds_ball(game: Game, robot_id: RobotId) -> bool:
-    """True if `robot_id` is on the ball (dribbler contact) or is the kicker waiting at a
-    still ball: the robot `carrier_first` puts first."""
-    robot = game.friendly_robots.get(robot_id)
-    return robot is not None and (robot.has_ball or robot_id == _kicker_at_still_ball(game))
+    # An enemy in reach too is a contest, not a kicker waiting. Comparing the two distances there
+    # (0.112 m against 0.113 m) changed the answer every tick and with it who held the attack
+    # slot, each change wiping that tactic's memory (press_and_pass_vs_tiki_taka_plus, 2026-11-09).
+    return rid if dist(robot) <= _KICK_REACH_M < enemy_nearest else None
 
 
 def clearer_first(game: Game, ordered: list[RobotId]) -> list[RobotId]:

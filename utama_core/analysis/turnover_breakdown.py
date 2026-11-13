@@ -1,6 +1,6 @@
 """Breakdown of *how* the friendly team loses the ball, over a tournament run's replays.
 
-`round_robin.py` runs this after every saved run: headline numbers go into
+`evaluate.py` runs this after every saved run: headline numbers go into
 `summary.json` under `ball_losses`, the full report into `ball_losses.md` beside it. For an
 existing run:
 
@@ -50,6 +50,7 @@ from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.engine.match_stats import _POSSESSION_RADIUS_M, MatchStatsAccumulator
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import load_frames_in_range
+from utama_core.strategy.catalog import plain_name
 
 LIVE = {RefereeCommand.NORMAL_START, RefereeCommand.FORCE_START}
 # Restarts that hand the ball to blue (the enemy). Kickoffs are excluded: blue kicks off
@@ -431,7 +432,7 @@ def report(run_name: str, results: list[dict], summary: dict) -> str:
     recorded = {f"{r['config_a']}_vs_{r['config_b']}": (r["stats"] or {}).get("turnovers") for r in summary["results"]}
 
     def short(name: str) -> str:
-        return name.removeprefix("build_").removesuffix("_kernel_strategy")
+        return plain_name(name)
 
     recorded = {"_vs_".join(short(p) for p in k.split("_vs_")): v for k, v in recorded.items()}
     mismatches = [

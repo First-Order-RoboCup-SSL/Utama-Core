@@ -24,7 +24,7 @@ from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVi
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.data.vision import VisionBallData, VisionData, VisionRobotData
 from utama_core.entities.game import Ball, FieldBounds, GameFrame, Robot
-from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
+from utama_core.entities.game.mapping_utils import map_friendly_enemy_to_colors
 
 
 def _in_field_or_goal(x: float, y: float, dimensions: FieldDimensions) -> bool:

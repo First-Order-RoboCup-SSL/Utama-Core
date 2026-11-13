@@ -872,7 +872,10 @@ class _RestartGame:
 
         self.referee = _FakeReferee(command)
         self.my_team_is_yellow = True
-        self.ball = SimpleNamespace(p=SimpleNamespace(x=ball_x, y=0.0))
+        self.ball = SimpleNamespace(p=SimpleNamespace(x=ball_x, y=0.0), v=SimpleNamespace(x=0.0, y=0.0))
+        self.friendly_robots = {}
+        self.enemy_robots = {}
+        self.ts = 0.0
 
 
 def _held_restart_strategy():

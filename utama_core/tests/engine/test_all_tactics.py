@@ -8,7 +8,7 @@ command for every assigned robot", "is_committed() returns a bool") with
 near-identical boilerplate around a real `StrategyRunner`/rsim fixture. A
 single parametrized suite over `_TACTIC_CASES` below gives the same coverage
 without the duplication, and — concretely — would have caught
-`PassAndShootTactic`'s `robot_ids[1]` crash (see `build_low_block_kernel_strategy`
+`PassAndShootTactic`'s `robot_ids[1]` crash (see `low_block`
 in `strategy/low_block.py`) automatically instead of requiring a bespoke test
 to notice a Tactic has an undeclared minimum robot count.
 
@@ -58,7 +58,7 @@ _TACTIC_CASES = [
 @pytest.fixture
 def runner_factory():
     from utama_core.run.strategy_runner import StrategyRunner
-    from utama_core.tests.strategy_runner.strat_runner_test_utils import DummyStrategy
+    from utama_core.tests.run.strat_runner_test_utils import DummyStrategy
 
     made = []
 
@@ -627,7 +627,7 @@ def test_give_and_go_first_touch_never_shoots_solo_with_a_teammate_available(run
     ends up the only robot near the dead ball and re-touches it itself,
     which SSL's double-touch rule forbids for the whole window from
     NORMAL_START until some *other* robot touches the ball first. Found
-    live: `build_tiki_taka_kernel_strategy` vs `build_counter_press_kernel_strategy`,
+    live: `tiki_taka` vs `counter_press`,
     robot 1 shot from the kickoff spot on the very first tick with two idle
     teammates standing by, then re-collected its own dead ball ~3.5s later.
 

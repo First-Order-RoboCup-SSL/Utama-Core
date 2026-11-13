@@ -40,20 +40,20 @@ from typing import Optional
 import pygame
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
-from utama_core.custom_referee import CustomReferee, RefereeGeometry
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.rsoccer_simulator.src.Render import COLORS, SSLRenderField
-from utama_core.rsoccer_simulator.src.Render.ball import RenderBall
-from utama_core.rsoccer_simulator.src.Render.overlay import (
+from utama_core.referee import CustomReferee, RefereeGeometry
+from utama_core.simulator.render import COLORS, SSLRenderField
+from utama_core.simulator.render.ball import RenderBall
+from utama_core.simulator.render.overlay import (
     OverlayObject,
     OverlayType,
     RenderOverlay,
 )
-from utama_core.rsoccer_simulator.src.Render.robot import RenderSSLRobot
+from utama_core.simulator.render.robot import RenderSSLRobot
 
 # ---------------------------------------------------------------------------
 # Scene definition

@@ -1,7 +1,7 @@
 """Tests for `utama_core.replay.scenario` (replay-to-repro reconstruction).
 
 See `utama_core/replay/scenario.py`'s module docstring for why this module
-exists and `docs/STRATEGY_DEVELOPMENT.md`'s Observability section for how it
+exists and `docs/strategy.md`'s Observability section for how it
 fits alongside `MatchLog`/`render_window`/the stall watchdog.
 """
 
@@ -18,8 +18,8 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.scenario import RobotState, Scenario, apply_scenario
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.strategy.catalog import builder
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
@@ -29,7 +29,7 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "100,100"
 
 
 def _idle_strategy() -> AbstractStrategy:
-    return AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy(()))
+    return AbstractStrategy(build=builder("default", ()))
 
 
 class _ApplyScenarioTestManager(AbstractTestManager):
@@ -370,7 +370,7 @@ def _replay_runner(frame):
     """What `apply_scenario` touches of a runner, with the referee `_build_runner` gives it."""
     from types import SimpleNamespace
 
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
 
     referee = CustomReferee.from_profile_name("simulation", n_robots_yellow=6, n_robots_blue=6)
     referee.seed_clock(frame.ts, RefereeCommand.PREPARE_KICKOFF_YELLOW)

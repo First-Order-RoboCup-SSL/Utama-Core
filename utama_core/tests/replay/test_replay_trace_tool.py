@@ -8,7 +8,7 @@ import pytest
 
 from utama_core.entities.referee.referee_command import RefereeCommand as C
 
-_TOOL = Path(__file__).resolve().parents[3] / "tools" / "replay_trace.py"
+_TOOL = Path(__file__).resolve().parents[3] / "tools" / "debug" / "replay_trace.py"
 _spec = importlib.util.spec_from_file_location("replay_trace", _TOOL)
 replay_trace = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(replay_trace)

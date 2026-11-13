@@ -5,67 +5,98 @@ Durable context for any coding agent (not just Claude) working in this repo.
 ## What this repo is
 
 Utama-Core is the RoboCup SSL (Small Size League) team's robot-control stack: vision
-ingestion, motion planning, robot control, a simulator (`rsoccer_simulator`, "rsim"), and
+ingestion, motion planning, robot control, a simulator (`utama_core/simulator`, "rsim"), and
 the strategy layer that decides what each robot does. `Utama-Strategy` is a sibling repo
 and is stale — all active strategy work happens here, on top of the tactic-kernel model.
 
 ## Work areas
 
-Pick the row for what you are changing and read its doc first. "Doc" is `TODO` where none
+Pick the row for what you are changing and read its doc first. `tutorials/` holds step-by-step
+pages for people (follow them in order); `docs/` holds the reference (look things up). Keep that split. "Doc" is `TODO` where none
 exists yet: say so in your change rather than guessing.
 
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
-| Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
-| Referee | `utama_core/custom_referee/` | `docs/custom_referee.md` | |
-| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
-| Simulation | `utama_core/rsoccer_simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `rsoccer_simulator` is the Python env on top of it |
-| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
+| Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/strategy.md` | Engine changes are rare: a new primitive, not a new strategy |
+| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/strategy.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Referee | `utama_core/referee/` | `docs/referee.md` | |
+| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning.md` | |
+| Simulation | `utama_core/simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `utama_core/simulator` is the Python env on top of it |
+| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `tutorials/field_day.md`, `docs/real_robots.md` | |
 
 ## Glossary
 
 One term per thing; reuse these instead of coining new ones.
 
-- **Round-robin / tournament run** — every strategy config plays every other once
-  (`tools/evaluation/round_robin.py`); writes `replays/tournament_<id>/summary.json` and adds its matches to the evaluation ledger.
-  The check for stalls and the occasional health check of the whole catalog; a single
-  strategy is judged with `evaluate.py` (below). With `--reuse` only matches whose code changed rerun.
-- **Standings** — only a round-robin's ranking: wins and draws as `round_robin.py` prints them,
-  or points per match (3 a win, 1 a draw) as `metric_correlation.py` computes them. Not the
-  verdict on a strategy; see Evaluation.
+- **Round robin / health check** — round 1 of `evaluate.py` (below): every player meets every other
+  once; with no candidate it is the whole run. Reports stalls (with how many matches checked them) and
+  every signal, in `replays/eval_<id>/round_1/summary.json`. Older runs of the deleted `round_robin.py`
+  are `replays/tournament_<id>/`. W-D-L there is a signal, never a verdict: there are no standings.
+- **Core / reserve strategies** — the core (`tools/evaluation/reference/players.json`) plays every
+  round; every other strategy in the catalog is reserve and plays only in an occasional `--all` run,
+  for a wider field. The verdict needs only fixed opponents, the same for candidate and reference.
 - **Motion planning benchmark** — `tools/motion_planning_benchmark.py`: the planner alone on
   fixed scenarios. Unrelated to any strategy.
-- **Moment / regression moment** — a field state (from a replay or by hand) that reproduced a
-  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/moments.py`).
+- **Moment / regression moment** — a field state (captured from a replay) that reproduced a
+  bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/debug/moments.py`).
   A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
   the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
-  the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
+  the bugs found so far: `docs/strategy.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
-  box, danger: defined once, with a diagram, in `docs/pitch_zones.md`. Use those names.
+  box, danger: defined once, with a diagram, in `docs/signals.md ("Pitch zones")`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
 - **Position map / shot map** — on-pitch pictures of a strategy over many matches, drawn by
-  `tools/pitch_maps.py` (and `evaluate.py --explain` for a candidate against the champion), always
+  `tools/debug/pitch_maps.py` (and `tools/evaluation/explain.py` for a candidate against the champion), always
   turned so the strategy attacks right. Position map: a heatmap of where the outfield robots stand in
   live play, with the ball and without it, plus each robot's mean position. Shot map: every shot at
   the spot it was struck from, own and conceded. They explain how a strategy plays; never a ranking.
 - **Signal** — an interpretable measure of how a strategy plays (shots, danger conceded, real
   ball losses, stalls ...), for explaining results, never a target. All listed in `docs/signals.md`.
-- **Evaluation / ratings / reference pool / ledger** — `tools/evaluation/evaluate.py`: is a
-  candidate stronger than the champion of a fixed, versioned reference pool
-  (`tools/evaluation/pools/pool_vN.json`)? Rounds of matches against the pool's opponents under
-  seeded sim noise, decided on paired results (candidate and champion against the same opponent
-  under the same noise) and stopping once the answer is clear; ratings (strength ± SD in goals
-  per match, `analysis/ratings.py`) over every match in the ledger (`replays/eval/ledger.jsonl`).
+- **Evaluation / reference / match results** — `pixi run evaluate NAME` (`tools/evaluation/evaluate.py`): is a candidate
+  stronger than the reference, the champion at the last release (`--at REF` for another
+  release)? A screen on seeds 1-6 only drops; a candidate that survives it is accepted or not on fresh
+  seeds 101-106 (paired t-test). Each round plays under one sim-noise seed in the simulated world and robots
+  (`tools/evaluation/reference/world.json`, `robots.json`): every round the same round robin, repeated
+  while a candidate is open, decided on paired results (candidate and reference against the same
+  opponent under the same noise, `analysis/ratings.py`) and stopping once the answer is clear. Every
+  match goes to the match results store (`replays/match_results/`, `replay/match_results.py`); a match
+  the store holds is never played again. Promoting is a one-line change to `players.json` in a PR; it takes effect as the reference at the next release.
   Goals only: shots, xG and the other signals were tested as rankers and rejected
   (`docs/signals.md`, "Ranking"). The day-to-day way to judge a strategy.
-- **Situation / goal ledger** — a situation starts when a restart goes live or a side wins the
-  ball in open play; the goal ledger (`utama_core/analysis/goal_ledger.py`) gives each goal to
+- **Strategy file** — a `.strategy` file (`utama_core/bundle/`, `tools/dev/build_strategy.py`) is a
+  zip of one strategy and the whole `utama_core` package at one commit; it plays in its own process, game frames in and
+  robot commands out, in simulation or on real robots (`BundledStrategy(path, robot_ids)`). `evaluate.py` plays the reference from
+  such a file of the last release (kept in `replays/eval/frozen/`), so a change to shared code never moves
+  the reference. The referee and the simulator stay today's for both sides. A file is a player like any strategy name wherever one is named (`evaluate.py`, `players.json`), with the same replays, stats and logs. Its fingerprint is computed like the code's, so a file and the code it was built from are one player in the match results.
+- **World / robot capability** — simulator settings fall into two kinds: the world (ball
+  friction, vision noise and dropouts, latency) comes from measurements; robot capability (kick,
+  dribbler, motors) is assumed good at league level, and real robots' shortfalls are compensated
+  in the control layer. The test: would better robots change it? Two decisions follow: evaluation runs
+  robots at 2 m/s, the speed we are building toward, not today's 1 m/s; and kicks have one power,
+  as our kicker does, so no variable-kick settings in sim or skills. What we measured on our robots:
+  `docs/real_robots.md`, "Our robots". `tools/evaluation/reference/
+  world.json`, `robots.json`; field sessions in `tools/field/field_sessions.json`.
+- **Situation / goal sources** — a situation starts when a restart goes live or a side wins the
+  ball in open play; the goal sources (`utama_core/analysis/goal_sources.py`) gives each goal to
   the latest situation less than 10 s before it, so goals per match = Σ situations per match ×
   P(goal). Situation types: own / opponent ball won or free kick in each third, own / opponent
   kickoff or penalty, force start. See `docs/signals.md`.
 - **Situation rates** — how often each situation type happens per team per live minute, from
-  real Division B matches or our round-robin (`goal_ledger --rates PATH`).
+  real Division B matches or our matches (`goal_sources --rates PATH`).
+
+## Skills
+
+Step-by-step playbooks for the jobs that chain several scripts, in `.agents/skills/<name>/SKILL.md`
+(plain Markdown with a `name`/`description` header; `.claude/skills` is a symlink to the folder).
+When a task matches one, read that file and follow it, whatever agent you are. The docs keep the
+reasons; the skills keep the steps.
+
+| Skill | Use it to |
+|---|---|
+| `change-strategy` | write or change a strategy, test it, evaluate it against the champion, promote it |
+| `explain-result` | explain how a strategy plays and why it won or lost, from an evaluation's replays |
+| `debug-incident` | take one bad moment in a match from symptom to a fixed cause with a regression test |
+| `field-session` | run a test day on the real robots and process its logs |
 
 ## Repo map
 
@@ -73,31 +104,30 @@ One term per thing; reuse these instead of coining new ones.
   `MatchLog`, `AbstractStrategy`, referee-override plumbing. Strategy-dev work touches this
   rarely, mostly to add a new primitive, not a new strategy. Named `engine/`, not `kernel/`,
   specifically to avoid colliding with "kernel strategy" — the model's own established
-  vocabulary (every factory is `build_*_kernel_strategy`, e.g. `build_tiki_taka_kernel_strategy`)
-  — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
+  vocabulary — so "where do I find the kernel strategies" unambiguously means `strategy/` below, not here.
 - `utama_core/strategy/` — the actual strategies people write, run, and compare
-  (`build_*_kernel_strategy` factories — `tiki_taka`, `counter_flow`, etc.), one module per
-  strategy (`strategy/<name>.py`, with the pickers only it uses) plus `pickers.py` for helpers
-  shared by several; `kernel_strategy.py` re-exports every factory, so a new strategy must be
-  imported there to be discovered. This is where day-to-day strategy-dev edits land.
+  (`tiki_taka`, `riptide`, etc.), one module per strategy (`strategy/<name>.py`, with one
+  `build(outfield_robot_ids, motion_controller)` and the pickers only it uses) plus `pickers.py`
+  for helpers shared by several. The module's name is the strategy's name and `catalog.py` finds
+  them, so a new strategy is a new file. This is where day-to-day strategy-dev edits land.
 - `utama_core/tactics/` — reusable `Tactic` implementations (`GiveAndGoTactic`,
   `PressAndContainTactic`, ...) that strategies compose.
 - `utama_core/skills/` — lower-level per-robot primitives (`go_to_ball`, `block_attacker`,
   ...) tactics call directly.
-- `utama_core/custom_referee/` — the in-process referee (rules, restart positioning).
+- `utama_core/referee/` — the in-process referee (rules, restart positioning).
 - `utama_core/replay/` — the replay file format (writer, player, columnar reader/writer), scenario
   rebuilding from a replay, and the match-result cache/fingerprint.
 - `utama_core/analysis/` — offline analyses of tournament runs and replays (`turnover_breakdown`,
   `restart_outcomes`, `stuck_detector`, `render_window`, `render_clip`, `list_runs`). Imports
   `replay/`; `replay/` never imports it.
-- Everything else (`motion_planning/`, `rsoccer_simulator/`, `team_controller/`,
-  `data_processing/`, `entities/`, `global_utils/`) is infrastructure the strategy layer
+- Everything else (`motion_planning/`, `simulator/`, `team_controller/`,
+  `data_processing/`, `entities/`, `geometry/`) is infrastructure the strategy layer
   sits on top of. Writing a strategy rarely needs to change it, but it is the main work area
   for planner, simulator, vision and hardware work: see the Work areas table above.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
-`utama_core/skills/`, or `tools/evaluation/`/`docs/strategies.md`, read
-[`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
+`utama_core/skills/`, or `tools/evaluation/`, read
+[`docs/strategy.md`](docs/strategy.md)** — the tactic-kernel model,
 referee-restart handling, lessons from past tactic bugs, and the observability tooling
 (`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to
 that half of the repo rather than duplicated here for every task.
@@ -109,7 +139,7 @@ after a concrete case forces it — not in anticipation of one. If a change star
 accumulating multiple new named concepts, stop and check whether that was actually asked
 for. This is a deliberate, repeatedly-stated project preference, not an oversight to fix:
 prefer the smallest mechanism that solves the problem actually in front of you. `docs/
-tactic_model_design_decisions.md` documents several concepts explicitly deferred for
+strategy_design.md` documents several concepts explicitly deferred for
 exactly this reason (concurrent-slot priority tuning, `Tactic` min/max robot-count
 declarations) — check there before reintroducing one of them.
 
@@ -118,7 +148,7 @@ declarations) — check there before reintroducing one of them.
 - **Always pass `--headless`** when running any simulator/integration test:
   `pixi run pytest utama_core/tests/ --headless`. Much faster; there is no reason to run
   with graphics in an agent loop.
-- A git worktree for a parallel agent: run `tools/setup_worktree.sh` inside it (links `.pixi`,
+- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (links `.pixi`,
   copies the compiled planner/simulator `.so` files; without them tests differ).
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.
@@ -131,9 +161,13 @@ declarations) — check there before reintroducing one of them.
   In rsim, `run_test`'s `episode_timeout` is game time (rsim runs several times faster than
   real time), so a test's budget doesn't depend on machine load.
 - A known defect is a `strict=True` xfail on exactly the cases that hit it (see
-  `bang_bang_edge_cases_test.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
+  `test_bang_bang_edge_cases.py`'s `_seeds_with_known_defect`), so a fix shows as XPASS and
   a regression elsewhere fails. Don't chase rsim-only dribble test failures as if they were
   kernel bugs; verify on grsim if genuinely unsure.
+- rsim is deterministic on one machine but not across CPUs (the planner's numba kernels are compiled
+  `fastmath` for the host), so CI plays a slightly different game. Don't assert outcomes of
+  multi-second rsim games: assert invariants, or write a pure unit test. A CI-only rsim failure is
+  CPU numerics first.
 - Before trusting any test result (yours or another agent's), prefer independently
   re-running it and reading real output over trusting a self-report — this codebase has
   been touched by both humans and agents, and a claimed "all tests pass" is only as
@@ -150,22 +184,24 @@ declarations) — check there before reintroducing one of them.
 `docs/README.md` indexes every doc by kind and `docs/tools.md` every script; the ones agents
 need most:
 
-- `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
+- `.agents/skills/` — step-by-step playbooks over those scripts (see "Skills" below).
+
+- `tutorials/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
+  simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.
+- `docs/strategy.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
-- `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
-- `docs/custom_referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
+- `docs/strategy_design.md` — kernel/Tactic/Partitioner design rationale.
+- `docs/referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
   tracks genuinely open items (don't assume something is missing without checking there
   first — it may already be resolved and the surrounding doc just stale).
-- `docs/custom_referee_design_decisions.md` — referee rule-by-rule design decisions.
-- `docs/roadmap.md` — running list of larger, not-yet-scheduled workstreams; check before
-  assuming a doc's claim about "not yet built" is still accurate — these drift.
+- `docs/referee.md ("Design decisions")` — referee rule-by-rule design decisions.
 - `docs/signals.md` — every signal we record about how a strategy plays (stalls, fouls, chances
   created and conceded, ball losses, pass receptions, restarts), grouped by the question it
   answers, with where it lives in `summary.json`, a reference range and what an off value means.
   Read it when designing or debugging a strategy, and before adding a metric; they are
   diagnostics, not objectives.
-- `docs/strategies.md` — strategy catalog: status, description, and real round-robin
-  results per `build_*_kernel_strategy` factory.
-- `utama_core/tests/engine/` and `utama_core/tests/strategy_runner/` — the real
+- `pixi run dashboard`, Strategies tab — every strategy: core or reserve, its description (the
+  module docstring), verdicts, maps and matches, read from the code and `replays/`.
+- `utama_core/tests/engine/` and `utama_core/tests/run/` — the real
   tactic-kernel test surface; everywhere else is largely infrastructure (motion planning,
   vision, controllers) that predates and sits below the kernel model.

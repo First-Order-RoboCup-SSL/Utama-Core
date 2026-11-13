@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import utama_core.skills.src.defend_parameter as dp
+import utama_core.skills.defend_parameter as dp
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.config.referee_constants import OWN_DEFENSE_AREA_STANDOFF_DISTANCE
 from utama_core.entities.data.vector import Vector2D, Vector3D

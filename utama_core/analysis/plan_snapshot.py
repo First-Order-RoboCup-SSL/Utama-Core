@@ -1,4 +1,4 @@
-"""A picture of what `FastPathPlanner` decided for one robot on one tick (`tools/plan_snapshot.py`).
+"""A picture of what `FastPathPlanner` decided for one robot on one tick (`tools/debug/plan_snapshot.py`).
 
 Builds the `Game` the planner saw (from a replay frame via `replay.scenario`, or from a hand-made
 state via `build_game`), runs the planner's own `_path_to`, and draws the pitch around the robot:
@@ -33,13 +33,14 @@ from utama_core.entities.game.field import Field
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _keeps_off_ball,
 )
 from utama_core.replay.scenario import Scenario, scenario_from_replay
+from utama_core.strategy.catalog import plain_name
 
-# Same ink and palette as tools/signal_report.py (FOR = friendly, AGAINST = enemy).
+# Same ink and palette as tools/debug/figure_style.py (FOR = friendly, AGAINST = enemy).
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 FOR, AGAINST = "#2a78d6", "#eb6834"
 CARROT = "#1baf7a"  # categorical slot 3: the planner's output, distinct from the team colours
@@ -179,7 +180,7 @@ def _stadium(a: np.ndarray, b: np.ndarray, r: float, n: int = 24) -> np.ndarray:
 def _short(config_name: Optional[str]) -> str:
     if not config_name:
         return "?"
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
 
 
 def style_axes(ax):

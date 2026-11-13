@@ -1,4 +1,4 @@
-"""The fast-path planner over a time window: how one robot's plan unfolded (`tools/plan_trace.py`).
+"""The fast-path planner over a time window: how one robot's plan unfolded (`tools/debug/plan_trace.py`).
 
 `plan_snapshot` shows one tick. This runs the same `FastPathPlanner._path_to` on every sampled
 tick of a window, builds the `Game` each tick saw from a callback (so tests can feed synthetic
@@ -51,7 +51,7 @@ from utama_core.analysis.plan_snapshot import (
 from utama_core.config.field_params import STANDARD_FIELD_DIMS, FieldDimensions
 from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.fastpathplanning.planner import (
+from utama_core.motion_planning.fastpathplanning.planner import (
     FastPathPlanner,
     _keeps_off_ball,
 )
@@ -60,7 +60,7 @@ GameAt = Callable[[float], Game]
 
 # Single-hue ramp (light to dark FOR blue) for time; the carrot dots keep the carrot colour.
 TIME_CMAP = mcolors.LinearSegmentedColormap.from_list("time", ["#d6e6fa", FOR, "#0f3d7a"])
-# Referee bands: categorical slots from tools/signal_report.py, STOP grey, BALL_PLACEMENT ink.
+# Referee bands: categorical slots from tools/debug/figure_style.py, STOP grey, BALL_PLACEMENT ink.
 REFEREE_COLOURS = {
     "HALT": "#e4e3df",
     "STOP": "#e4e3df",

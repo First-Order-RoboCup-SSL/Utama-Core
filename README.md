@@ -14,27 +14,26 @@ strategy layer that decides what every robot does.
 2. `pixi install` in the repository root, then `pixi run precommit-install` so every commit is
    linted.
 3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
-4. Play one headless match between two strategies and save its replay:
+4. `pixi run main` to watch a match in the simulator (Ctrl+C to stop).
 
-       pixi run python tools/evaluation/round_robin.py --pair tiki_taka low_block
-
-5. `pixi run python dashboard_server.py` and open http://localhost:8080 to watch replays and
-   browse tournament results.
+**New here? Write your first strategy: [tutorials/first_strategy.md](tutorials/first_strategy.md).**
 
 Everything runs in rsim with the in-process referee; grSim, the official GameController and
-real robots are optional ([external setup](docs/setup_external.md)).
+real robots are optional ([external setup](docs/real_robots.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision)).
 
 ## What are you working on?
 
 | Task | Start here |
 |---|---|
-| Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/strategies.md](docs/strategies.md) |
-| Seeing what the robots did, and why | [docs/visual_guide.md](docs/visual_guide.md); `tools/triage.py RUN_DIR` for a run's worst problems |
-| Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md), [docs/signal_report.md](docs/signal_report.md) |
-| The referee | [docs/custom_referee.md](docs/custom_referee.md) |
-| Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
+| Your first strategy | [tutorials/first_strategy.md](tutorials/first_strategy.md) |
+| Writing or changing a strategy, tactic or skill | [docs/strategy.md](docs/strategy.md) |
+| Seeing what the robots did, and why | `pixi run dashboard` (every strategy's maps and replays); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
+| Judging whether a strategy is better | [docs/strategy.md](docs/strategy.md), [docs/signals.md](docs/signals.md) |
+| The referee | [docs/referee.md](docs/referee.md) |
+| Motion planning | [docs/motion_planning.md](docs/motion_planning.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
-| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/setup_external.md](docs/setup_external.md) |
+| A test day with real robots | [tutorials/field_day.md](tutorials/field_day.md) |
+| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/real_robots.md, "External tools"](docs/real_robots.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision) |
 | Which script does what | [docs/tools.md](docs/tools.md) |
 | Everything else | [docs/README.md](docs/README.md), the index of every doc |
 
@@ -44,21 +43,22 @@ Coding agents: read [AGENTS.md](AGENTS.md) first (`CLAUDE.md` is a symlink to it
 
 Everything lives under `utama_core/`:
 
-- `strategy/`: the strategies (one module per `build_*_kernel_strategy` factory, re-exported by `kernel_strategy.py`)
-- `tactics/`, `skills/`, `shared/`: reusable tactics, per-robot skills, and geometry they share
+- `strategy/`: the strategies (one module each, named after the strategy)
+- `tactics/`, `skills/`, `geometry/`: reusable tactics, per-robot skills, and the geometry they share
 - `engine/`: the tactic-kernel infrastructure (`Strategy`, `Tactic`, `TickContext`, `MatchLog`, referee overrides)
-- `custom_referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
+- `referee/`: the in-process referee (rules, state machine, restart positioning, profiles)
 - `motion_planning/`: path planning and motion control
 - `run/`: the main loop (`StrategyRunner`)
 - `replay/`: replay files, the match-result cache and code fingerprints
 - `analysis/`: offline analyses of tournament runs and replays (ball losses, chances, restarts, stalls)
-- `rsoccer_simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
+- `simulator/`: the Python simulator environment over the rSim physics fork in `vendor/rSim/`
 - `team_controller/`, `data_processing/`: vision, robot radio and referee input
 - `dashboard/`: the browser dashboard
-- `entities/`, `config/`, `global_utils/`: data classes, settings and constants, utilities
+- `entities/`, `config/`, `geometry/`: data classes, settings and constants, geometry helpers
 - `tests/`: all tests
 
-Scripts live in `tools/` (tournaments in `tools/evaluation/`) and `examples/`; see
+Scripts live in `tools/` (grouped by who uses them: `debug/`, `field/`, `realism/`, `dev/`; the
+strategy evaluation in `tools/evaluation/`) and `examples/`; see
 [docs/tools.md](docs/tools.md).
 
 ## Field conventions
@@ -77,7 +77,7 @@ One tick of `StrategyRunner`, from vision, robot and referee data to robot comma
 ![One tick of StrategyRunner](docs/img/pipeline/one_tick.png)
 
 The same tick as a diagram, with every module: [docs/architecture.md](docs/architecture.md). How
-vision, robot and referee data become one `Game`: [docs/pipeline_method.md](docs/pipeline_method.md).
+vision, robot and referee data become one `Game`: [docs/architecture.md, "Pipeline method"](docs/architecture.md#pipeline-method).
 
 ## Contributing
 
@@ -90,4 +90,15 @@ Work on a branch and open a pull request into `main`. A pull request needs:
 4. every Copilot comment reviewed (not necessarily accepted);
 5. an approval from an assigned reviewer.
 
-Editor setup, pre-commit troubleshooting and the pixi environments: [docs/contributing.md](docs/contributing.md).
+Tips:
+
+- Run `pixi install` again after adding a package (a folder with an `__init__.py`).
+- In VS Code, if the run button picks the wrong environment, choose the interpreter by hand
+  (`Ctrl + Shift + P` → `Select Interpreter`). Format on save with the `Black Formatter` extension.
+- When a commit fails the pre-commit checks, the hook has often fixed the files already: stage
+  them and commit again.
+- A strategy branch (`strategy/*`) may change strategy code only
+  (`tools/dev/check_strategy_branch.py`), so it can't change what it is scored against.
+- `CLAUDE.md` is a symlink to `AGENTS.md`, and `.claude/skills` to `.agents/skills`: edit the
+  targets. On native Windows without Developer
+  Mode, fix it with `git config --global core.symlinks true && git checkout -- CLAUDE.md .claude/skills`.

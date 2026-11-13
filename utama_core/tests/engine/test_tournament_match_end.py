@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from tools.evaluation import match
 from utama_core.entities.referee.stage import Stage
+from utama_core.run import sim_setup
 
 
 class _FakeRunner:
@@ -34,11 +35,9 @@ class _FakeRunner:
 
 
 def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
-    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
-    result = match.run_match(
-        "build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy", duration_seconds=1200.0
-    )
+    result = match.run_match("weaver", "pendulum", duration_seconds=1200.0)
 
     assert _FakeRunner.last.ticks == _FakeRunner.full_time_ticks
     assert (result.score_a, result.score_b) == (2, 1)
@@ -46,8 +45,8 @@ def test_a_match_ends_at_full_time_not_at_the_sim_time_cap(monkeypatch):
 
 def test_the_cap_still_ends_a_match_that_never_reaches_full_time(monkeypatch):
     monkeypatch.setattr(_FakeRunner, "full_time_ticks", 10**9)
-    monkeypatch.setattr(match, "StrategyRunner", _FakeRunner)
+    monkeypatch.setattr(sim_setup, "StrategyRunner", _FakeRunner)
 
-    match.run_match("build_tiki_taka_kernel_strategy", "build_low_block_kernel_strategy", duration_seconds=1.0)
+    match.run_match("weaver", "pendulum", duration_seconds=1.0)
 
     assert _FakeRunner.last.ticks == match.TICKS_PER_SECOND

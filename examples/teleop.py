@@ -10,7 +10,7 @@ Open http://localhost:8080, pick the robot in the Teleop panel, tick "keys drive
 Start. W/S forward and back, A/D sideways, Q/E turn, Shift faster, B kicks, F turns the dribbler
 on and off; Space halts as everywhere on the page. A robot stops when its keys are let go, when
 the page stops sending (closed, the network gone) and on Halt. No rules, no goals: nothing but
-the operator stops play. Robots are `shooting_drill.py`'s (`ROBOT_A`, `ROBOT_B` here), each
+the operator stops play. Robots are `tools/field/shooting_drill.py`'s (`ROBOT_A`, `ROBOT_B` here), each
 kept inside the area in play.
 """
 
@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import argparse
 from typing import Optional
 
-from shooting_drill import (
+from tools.field.shooting_drill import (
     CAMERA_HALF,
     DASHBOARD_PORT,
     FIELD,
@@ -34,12 +34,11 @@ from shooting_drill import (
     _referee_profile,
     on_field,
 )
-
-from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import teleop as teleop_view
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee import CustomReferee
 from utama_core.run import StrategyRunner
 from utama_core.tactics.teleop import TeleopDrive, TeleopTactic
 

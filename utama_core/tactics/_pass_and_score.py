@@ -22,8 +22,9 @@ from utama_core.engine.context import TickContext
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.field_scaling import scale_point_from_standard_field
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.field_scaling import scale_point_from_standard_field
+from utama_core.geometry.pass_and_score_geometry import (
+    ANNOUNCE_PASS_RAD,
     at_target,
     ball_line_receive_point,
     carry_exhausted,
@@ -39,18 +40,14 @@ from utama_core.shared.pass_and_score_geometry import (
     intercept_point,
     kick_bend,
     no_shot_reposition_target,
+    open_teammate,
     oriented_towards,
     score_pass_setup,
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import (
-    empty_command,
-    kick,
-    move,
-    turn_on_spot,
-)
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command, kick, move, turn_on_spot
 
 _MIN_SETUP_CLEARANCE = 0.35  # metres — must be > FPP's SAFE_OBSTACLES_RADIUS (0.26 m)
 _SETUP_SAMPLE_COUNT = 48
@@ -445,15 +442,37 @@ _SHOT_SWITCH_MARGIN = (
 FACE_GOAL_RAD = 0.3
 
 
+_LAY_OFF_TOLERANCE_RAD = 0.1
+
+
 def move_for_a_shot(game: Game, ctx: TickContext, robot_id: int) -> RobotCommand:
-    """No clear shot: with the ball, slide sideways for one (`no_shot_reposition_target`),
-    facing the goal. A robot that took the ball facing elsewhere pivots on it to face the goal
+    """No clear shot: pass to an open teammate; with none, slide sideways for a shot
+    (`no_shot_reposition_target`), facing the goal. A robot that took the ball facing elsewhere pivots on it to face the goal
     first: turning while sliding lost the ball every time on the real robots (shooting drill,
     2026-10-28), while the pivot is what pass_receive turns with. It pivots only with the ball
     sensor on: seen on the dribbler's edge but not on the sensor, the pivot turned away from
     the ball and pushed it off (save_and_counter, 2026-10-28), so it settles the ball first."""
     goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
     robot = game.friendly_robots[robot_id]
+    teammate = open_teammate(game, robot_id) if has_ball(game, robot_id) else None
+    if teammate is not None:
+        # Sliding sideways gains no ground and was the loop behind the jams of 2026-11-09.
+        target_oren = robot.p.angle_to(game.friendly_robots[teammate].p) - kick_bend(
+            game, ctx.motion_controller, robot_id
+        )
+        if oriented_towards(game, robot_id, target_oren, ANNOUNCE_PASS_RAD):
+            ctx.expected_receivers.add(teammate)
+        if oriented_towards(game, robot_id, target_oren, _LAY_OFF_TOLERANCE_RAD):
+            ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · passing")
+            return kick()
+        ctx.trace(game, f"shoot[{robot_id}]", "no clear shot · turning to pass")
+        return turn_on_spot(
+            game=game,
+            motion_controller=ctx.motion_controller,
+            robot_id=robot_id,
+            target_oren=target_oren,
+            dribbling=True,
+        )
     goal_oren = robot.p.angle_to(Vector2D(goal_x, (goal_y1 + goal_y2) / 2.0))
     if not oriented_towards(game, robot_id, goal_oren, FACE_GOAL_RAD):
         if not has_ball(game, robot_id):

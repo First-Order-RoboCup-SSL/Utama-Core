@@ -1,10 +1,10 @@
-"""Every regression moment (`tools/moments.py`, the JSON files beside this one) against every
+"""Every regression moment (`tools/debug/moments.py`, the JSON files beside this one) against every
 strategy it concerns. A moment with a `known_failure` is a strict xfail, so its fix shows as
 XPASS: then delete the `known_failure`."""
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
 
 
 def _cases():

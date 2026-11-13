@@ -1,4 +1,4 @@
-"""Draws state_machine.png for docs/custom_referee.md ("## State machine and auto-advance"): the referee
+"""Draws state_machine.png for docs/referee.md ("## State machine and auto-advance"): the referee
 commands GameStateMachine moves between, with the trigger or timer on each transition. The blue line is the
 live-play cycle: STOP, a free kick, NORMAL_START, and a stopping foul or goal back to STOP.
 
@@ -17,14 +17,14 @@ LABEL_BOX = {"facecolor": SURFACE, "edgecolor": "none", "pad": 1.0}
 NAMES = [
     "GameStateMachine",
     "RefereeCommand",
-    "utama_core/custom_referee/state_machine.py",
+    "utama_core/referee/state_machine.py",
 ]
 
 d = Diagram(
     200,
     138,
     "Referee commands and their transitions",
-    "custom_referee/state_machine.py, GameStateMachine. A box is a RefereeCommand (* = the team); each arrow is "
+    "referee/state_machine.py, GameStateMachine. A box is a RefereeCommand (* = the team); each arrow is "
     "its trigger or timer.",
     figsize=(16, 11.5),
 )

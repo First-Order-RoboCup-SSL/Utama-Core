@@ -46,11 +46,11 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.git_utils import git_revision
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.replay.git_utils import git_revision
 from utama_core.run import StrategyRunner
-from utama_core.skills.src.utils.move_utils import move
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.skills.utils.move_utils import move
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
@@ -666,7 +666,7 @@ def _go_to_targets_strategy(
             ctx=TickContext(motion_controller=motion_controller),
         )
 
-    return AbstractStrategy(build_kernel_strategy=build, exp_ball=False)
+    return AbstractStrategy(build=build, exp_ball=False)
 
 
 class _ControllerTimer:
@@ -782,7 +782,7 @@ class BenchmarkManager(AbstractTestManager):
         # controller commanded. Suppress `max_speed_mps`/
         # `max_observed_acceleration_mps2` (and therefore `speed_limit_exceeded`)
         # for a short settling window per teleported robot -- the same
-        # estimator-transient caveat docs/motion_planning_comparison.md
+        # estimator-transient caveat docs/motion_planning.md
         # already documents for acceleration applies here too.
         self._settling_until_tick: dict[RobotKey, int] = {}
         # Measured directly (see the comment above): the simulator's
@@ -961,7 +961,7 @@ class BenchmarkManager(AbstractTestManager):
         # A real physical limit (RSIM_PARAMS.MAX_VEL, plus measurement
         # tolerance) is a hard pass/fail gate, unlike acceleration: observed
         # acceleration is reconstructed from filtered simulator velocity and
-        # can include estimator transients (see docs/motion_planning_comparison.md),
+        # can include estimator transients (see docs/motion_planning.md),
         # so it stays diagnostic-only rather than gating `passed`.
         speed_limit_exceeded = self.max_speed_mps > RSIM_PARAMS.MAX_VEL + SPEED_LIMIT_TOLERANCE
         return {
@@ -1198,7 +1198,7 @@ def markdown_report(payload: dict) -> str:
 
 
 # --- Figures (`--figures DIR`) -------------------------------------------------------------
-# Style copied from tools/signal_report.py. matplotlib is imported only when figures are written,
+# Style copied from tools/debug/figure_style.py. matplotlib is imported only when figures are written,
 # so a default run neither loads it nor changes its output.
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 # Categorical slots in fixed order. A scheme keeps the same slot in every figure; slots are never cycled.

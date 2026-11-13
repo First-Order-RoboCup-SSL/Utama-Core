@@ -1,0 +1,46 @@
+from utama_core.config.enums import Mode
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.pid.pid import get_pids
+from utama_core.simulator.ssl.envs import SSLStandardEnv
+
+
+class FastPathPlanningController(MotionController):
+    def __init__(self, mode: Mode, rsim_env: SSLStandardEnv | None = None):
+        super().__init__(mode, rsim_env)
+        self.pid_oren, self.pid_trans = get_pids(mode)
+        self.fpp = FastPathPlanner(env=rsim_env)
+
+    def calculate(
+        self,
+        game: Game,
+        robot_id: int,
+        target_pos: Vector2D,
+        target_oren: float,
+    ) -> tuple[Vector2D, float]:
+        field = game.field
+
+        field_bounds = field.field_bounds
+        robot = game.friendly_robots[robot_id]
+
+        oren = self.pid_oren.calculate(target_oren, robot.orientation, robot_id)
+
+        pos = self.fpp._path_to(game, robot_id, target_pos, field_bounds)
+        # `pos` is a lookahead carrot, not the robot's real destination — see
+        # `TwoDPID.set_final_target`'s docstring for why the braking-distance
+        # cap needs `target_pos` (the true destination) directly, even though
+        # `calculate()` below still steers toward the carrot.
+        self.pid_trans.set_final_target(robot_id, target_pos)
+        vel = self.pid_trans.calculate(pos, robot.p, robot_id)
+
+        return vel, oren
+
+    def sent(self, robot_id: int, velocity: Vector2D, angular_vel: float) -> None:
+        self.pid_trans.accel_limiter.set_last(robot_id, velocity)
+        self.pid_oren.accel_limiter.set_last(robot_id, angular_vel)
+
+    def reset(self, robot_id):
+        self.pid_oren.reset(robot_id)
+        self.pid_trans.reset(robot_id)

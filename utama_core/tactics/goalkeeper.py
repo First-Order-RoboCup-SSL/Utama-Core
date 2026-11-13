@@ -23,9 +23,9 @@ from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.controllers.pid_controller import PIDController
-from utama_core.skills.src.goalkeep import goalkeep
-from utama_core.skills.src.utils.move_utils import empty_command
+from utama_core.motion_planning.controllers.pid_controller import PIDController
+from utama_core.skills.goalkeep import goalkeep
+from utama_core.skills.utils.move_utils import empty_command
 
 
 @dataclass
@@ -80,7 +80,7 @@ class GoalkeeperTactic(BaseTactic[GoalkeeperMem]):
         if mem.pid_controller is None:
             mem.pid_controller = PIDController(ctx.motion_controller.mode, ctx.motion_controller.rsim_env)
 
-        command = goalkeep(game, mem.pid_controller, self.robot_id)
+        command = goalkeep(game, mem.pid_controller, self.robot_id, ctx)
         if command is None:
             command = empty_command(False)
         return {self.robot_id: command}, mem

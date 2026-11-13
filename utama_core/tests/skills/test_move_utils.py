@@ -7,8 +7,8 @@ from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.skills.src.utils.move_utils import move, turn_on_spot
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
+from utama_core.skills.utils.move_utils import _sprint_velocity, move, turn_on_spot
 
 PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS
 
@@ -221,10 +221,10 @@ def test_a_robot_that_loses_the_ball_ramps_from_the_carry_speed_it_was_sent(cont
     0.3 m/s sent: ramping from the 1 m/s never sent lurched the real robot 0.9 m/s sideways
     (dribble_and_shoot, 2026-10-28)."""
     from utama_core.config.enums import Mode
-    from utama_core.motion_planning.src.controllers.fastpathplanning import (
+    from utama_core.motion_planning.controllers.fastpathplanning import (
         FastPathPlanningController,
     )
-    from utama_core.motion_planning.src.controllers.pid_controller import PIDController
+    from utama_core.motion_planning.controllers.pid_controller import PIDController
 
     mc = {"fpp": FastPathPlanningController, "pid": PIDController}[controller](Mode.REAL)
     mc.pose_ahead = PoseAhead(0.0)
@@ -293,3 +293,59 @@ def test_only_real_robots_have_a_slowest_turn():
 
     assert REAL_PARAMS.MIN_TURN == _MIN_TURN
     assert RSIM_PARAMS.MIN_TURN is GRSIM_PARAMS.MIN_TURN is None
+
+
+def _head_on(distance: float, ours: float, theirs: float):
+    enemy = Robot(
+        id=0,
+        is_friendly=False,
+        has_ball=False,
+        p=Vector2D(distance, 0.0),
+        v=Vector2D(-theirs, 0.0),
+        a=Vector2D(0, 0),
+        orientation=0.0,
+    )
+    game = _game({1: _robot(1, 0.0, 0.0, True)}, {0: enemy}, (3.0, 3.0))
+    mc = MagicMock()
+    mc.min_turn = None
+    mc.robot_carry = {}
+    mc.pose_ahead = PoseAhead(0.0)
+    mc.calculate.return_value = (Vector2D(ours, 0.0), 0.0)
+    return game, mc
+
+
+def test_move_brakes_for_an_enemy_coming_head_on():
+    game, mc = _head_on(2 * ROBOT_RADIUS + 0.02, 1.5, 1.5)
+    command = move(game, mc, 1, Vector2D(2.0, 0.0), 0.0)
+    assert command.local_forward_vel == pytest.approx(0.5 + math.sqrt(3.0 * 0.02))
+    mc.sent.assert_called_once()
+
+
+def test_move_keeps_a_legal_approach_to_an_enemy_standing_still():
+    game, mc = _head_on(2 * ROBOT_RADIUS + 0.02, 1.2, 0.0)
+    assert move(game, mc, 1, Vector2D(2.0, 0.0), 0.0).local_forward_vel == pytest.approx(1.2)
+    mc.sent.assert_not_called()
+
+
+def test_move_is_not_capped_outside_braking_range():
+    game, mc = _head_on(1.21, 2.0, 2.0)
+    assert move(game, mc, 1, Vector2D(2.0, 0.0), 0.0).local_forward_vel == pytest.approx(2.0)
+
+
+def test_move_is_not_capped_driving_away_from_an_enemy():
+    game, mc = _head_on(0.25, -2.0, 2.0)
+    assert move(game, mc, 1, Vector2D(-2.0, 0.0), 0.0).local_forward_vel == pytest.approx(-2.0)
+
+
+def test_a_sprint_goes_as_fast_as_it_can_still_stop():
+    velocity = _sprint_velocity(Vector2D(0.0, 0.0), Vector2D(0.125, 0.0), max_speed=2.0, max_acceleration=4.0)
+    assert velocity.x == pytest.approx(1.0) and velocity.y == 0.0
+
+
+def test_a_sprint_is_capped_at_top_speed():
+    velocity = _sprint_velocity(Vector2D(0.0, 0.0), Vector2D(0.0, 1.0), max_speed=2.0, max_acceleration=4.0)
+    assert velocity.y == pytest.approx(2.0)
+
+
+def test_a_sprint_already_on_the_target_stands_still():
+    assert _sprint_velocity(Vector2D(1.0, 1.0), Vector2D(1.0, 1.0), max_speed=2.0, max_acceleration=4.0).mag() == 0.0

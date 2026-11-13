@@ -1,26 +1,24 @@
 """Fingerprints of the code a match runs, so a deterministic rsim result can be reused.
 
 An rsim match is a pure function of the code each side runs, the pairing and the run
-settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that code:
+settings (`docs/strategy.md`, "Determinism"). This module names that code:
 
-- `strategy_fingerprint(config)`: one `build_*_kernel_strategy` factory. `kernel_strategy.py`
-  only re-exports the factories; the module it imports each from counts as a whole file,
-  with every repo module that imports in turn (function-level imports included, the shared
-  `strategy/pickers.py` and the tactics among them). Editing one strategy's module leaves
-  the other configs' fingerprints alone; editing `pickers.py` moves every config that
-  imports it.
-- `base_fingerprint(entry)`: everything both sides share, from the module that plays the
-  match (`tools.evaluation.match`): runner, planner, referee, sim wrapper, the rsim subprocess script, the files
-  next to that code (referee profiles), both pixi environments (every installed package's
-  name, version and build), the installed robosim binary, the CPU model and the
-  environment variables that change numerics.
-- `match_key(...)`: those fingerprints plus every run setting.
+- `strategy_fingerprint(config)`: one player, a strategy in the catalog or a `.strategy` file:
+  every repo module its code imports (function-level imports included, the shared
+  `strategy/pickers.py`, the tactics, the planner) and the non-code files next to them (the
+  compiled planner among them). Its name is not part of it, so a file and the code it was built
+  from are the same player, while a file built from other code is not. Editing one strategy's
+  module leaves the other players alone; editing `pickers.py` moves every player that imports it.
+- `base_fingerprint(entry)`: what the match process runs whoever plays, from the module that plays
+  the match (`tools.evaluation.match`): runner, referee, sim wrapper, the rsim subprocess script, the
+  files next to that code (referee profiles), both pixi environments (every installed package's
+  name, version and build), the installed robosim binary, the CPU model and the environment
+  variables that change numerics. Not the code behind the process boundary (`PLAYER_SIDE`): a
+  `.strategy` file brings its own, so editing a skill replays no match between two files.
+- The run settings (duration, sim noise, sides) and the two players'
+  fingerprints make up a match's fixture in `replay/match_results.py`.
 
-`kernel_strategy.py` imports every strategy module, and they run in every match whichever
-config is playing, so a module only one config uses still runs its import-time code in every
-match. A module whose
-import-time code can change something outside itself (`_import_time_effects`) is moved
-into the base. `audit()` lists every place the code reaches outside the import graph
+`audit()` lists every place the code reaches outside the import graph
 (environment, files, subprocesses, dynamic imports, module-level state);
 `tests/replay/test_fingerprint.py` pins that list, so a new one fails a test until someone
 decides how it enters the fingerprint.
@@ -46,12 +44,33 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-KERNEL_STRATEGY = "utama_core.strategy.kernel_strategy"
-ROUND_ROBIN_ENTRY = "tools.evaluation.match"
+STRATEGY_PACKAGE = "utama_core.strategy"
+MATCH_ENTRY = "tools.evaluation.match"
+
+# Behind the process boundary: a player's own code, which a `.strategy` file carries a copy of.
+PLAYER_SIDE = (
+    STRATEGY_PACKAGE,
+    "utama_core.tactics",
+    "utama_core.skills",
+    "utama_core.motion_planning",
+    "utama_core.engine",
+    "utama_core.geometry.pass_and_score_geometry",
+)
+# The parts of those the match process runs itself, whoever plays: looking a strategy up, the base
+# class a `.strategy` file's proxy inherits, and the log and stats it writes.
+RUNNER_SIDE = (
+    "utama_core.strategy.catalog",
+    "utama_core.engine.abstract_strategy",
+    "utama_core.engine.match_log",
+    "utama_core.engine.match_stats",
+    "utama_core.engine.tactic",
+)
+# Part of every player though no strategy imports it: where a side's motion controller comes from.
+PLAYER_ROOTS = ("utama_core.motion_planning.common.control_schemes",)
 
 # Code that runs but is not imported: `robosim_wrapper.py` starts it as a script in the
 # `robosim` pixi environment.
-SUBPROCESS_SCRIPTS = ("utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_subprocess",)
+SUBPROCESS_SCRIPTS = ("utama_core.simulator.simulators.robosim.robosim_subprocess",)
 
 # Environment variables that change play: UTAMA_EXACT_MATH (`config/settings.py`) and the
 # thread/JIT knobs of numba and the BLAS numpy links against.
@@ -119,6 +138,14 @@ class _Module:
         return self.path.read_bytes() if self.path is not None else b""
 
 
+def _within(module: str, packages: Iterable[str]) -> bool:
+    return any(module == p or module.startswith(p + ".") for p in packages)
+
+
+def _is_player_side(module: str) -> bool:
+    return _within(module, PLAYER_SIDE) and not _within(module, RUNNER_SIDE)
+
+
 class CodeGraph:
     """The repo's import graph, parsed from source (nothing is imported). A snapshot: each
     file is read once, so build a new one after editing code."""
@@ -142,7 +169,7 @@ class CodeGraph:
             mod = _Module(name, base.with_suffix(".py"), is_package=False)
         elif (base / "__init__.py").is_file():
             mod = _Module(name, base / "__init__.py", is_package=True)
-        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/skills/src
+        elif base.is_dir() and "." in name:  # namespace package, e.g. utama_core/motion_planning/common
             return _Module(name, None, is_package=True)
         else:
             return None
@@ -233,73 +260,38 @@ class CodeGraph:
                     rows.append(f"{p.relative_to(self.root).as_posix()}  {_sha(p.read_bytes())}")
         return sorted(rows)
 
-    # --- kernel_strategy.py, the registry of factories ----------------------------------
-
-    @cached_property
-    def factory_modules(self) -> dict[str, str]:
-        """Each `build_*_kernel_strategy` the registry re-exports -> the repo module that
-        defines it."""
-        mod = self.module(KERNEL_STRATEGY)
-        found = {}
-        for stmt in mod.tree.body:
-            if not isinstance(stmt, ast.ImportFrom):
-                continue
-            source = self._resolve_from(mod, stmt)
-            home = self.module(source) if source is not None else None
-            if home is None or home.tree is None:
-                continue
-            defined = {s.name for s in home.tree.body if isinstance(s, ast.FunctionDef)}
-            for alias in stmt.names:
-                name = alias.asname or alias.name
-                if name.startswith("build_") and name.endswith("_kernel_strategy") and alias.name in defined:
-                    found[name] = source
-        return found
-
-    def factory_module(self, config: str) -> str:
-        if config not in self.factory_modules:
-            raise KeyError(f"{config} is not a factory {KERNEL_STRATEGY} re-exports")
-        return self.factory_modules[config]
-
-    # --- what both sides share ----------------------------------------------------------
-
-    def kernel_import_closure(self) -> set[str]:
-        """Every repo module `import kernel_strategy` runs, whichever config plays."""
-        return self.closure([KERNEL_STRATEGY]) - {KERNEL_STRATEGY}
-
-    def ambient_modules(self) -> dict[str, list[str]]:
-        """Modules kernel_strategy imports whose import-time code can reach outside them
-        (module name -> what it does). They run in every match, so they join the base."""
-        found = {}
-        for name in sorted(self.kernel_import_closure()):
-            mod = self.module(name)
-            if mod.tree is None:
-                continue
-            effects = [e for stmt in mod.tree.body for e in _import_time_effects(stmt)]
-            if effects:
-                found[name] = effects
-        return found
+    # --- what a player runs, and what every match runs ------------------------------------
 
     def base_modules(self, entries: Iterable[str]) -> set[str]:
-        entries = list(entries)
-        cut = {KERNEL_STRATEGY}
-        mods = self.closure(entries + list(SUBPROCESS_SCRIPTS), cut=cut) - cut
-        # The entries only look factories up by name. Shared code that imports kernel_strategy
-        # could call any factory or helper it re-exports, so every strategy module is then shared.
-        if any(KERNEL_STRATEGY in self.imports(m) for m in mods - set(entries)):
-            mods |= self.closure([KERNEL_STRATEGY])
-        return mods | self.closure(self.ambient_modules())
+        roots = list(entries) + list(SUBPROCESS_SCRIPTS)
+        cut = {m for m in self.closure(roots) if _is_player_side(m)}
+        return self.closure(roots, cut=cut) - cut
 
     def strategy_modules(self, config: str) -> set[str]:
-        return self.closure([self.factory_module(config)])
+        module = f"{STRATEGY_PACKAGE}.{config}"
+        if self.module(module) is None:
+            raise KeyError(f"no strategy {config} in {self.root}")
+        return self.closure([module, *PLAYER_ROOTS])
 
     def strategy_fingerprint(self, config: str) -> str:
         key = ("strategy", config)
         if key not in self._fingerprints:
-            mods = self.strategy_modules(config)
-            self._fingerprints[key] = _digest(
-                ["factory", config, self.factory_module(config), "files"] + self.file_digests(mods)
-            )
+            if config.endswith(".strategy"):
+                self._fingerprints[key] = self._file_fingerprint(config)
+            else:
+                mods = self.strategy_modules(config)
+                self._fingerprints[key] = _digest(
+                    ["player", "files"] + self.file_digests(mods) + ["data"] + self.data_files(mods)
+                )
         return self._fingerprints[key]
+
+    def _file_fingerprint(self, path: str) -> str:
+        """The same function over the file's own copy of the repo. The host and the manifest it adds are
+        outside every closure, so a file and the code it was built from fingerprint the same."""
+        from utama_core.bundle.archive import read_manifest, unpack
+
+        root = unpack(self.root / path)
+        return CodeGraph(root).strategy_fingerprint(read_manifest(root)["strategy"])
 
     def base_fingerprint(self, entries: Iterable[str]) -> str:
         key = ("base", tuple(entries))
@@ -488,50 +480,3 @@ def environment_pin(root: Path = REPO_ROOT) -> dict:
         "cpu": _cpu_model(),
         "env": {k: v for k, v in sorted(os.environ.items()) if k.startswith(ENV_PREFIXES)},
     }
-
-
-def match_key(
-    graph: CodeGraph,
-    config_a: str,
-    config_b: str,
-    *,
-    duration_seconds: float,
-    a_is_right: bool = True,
-    a_kicks_off: bool = True,
-    control_scheme: str = "fpp",
-    fuzz_seed: Optional[int] = None,
-    fuzz_interval_s: tuple[float, float] = (25.0, 45.0),
-    recorded: bool = True,
-    sim_noise: Optional[dict] = None,
-) -> str:
-    """Key of one `match.run_match` call: same key, same result. `recorded` is
-    whether it ran with a `run_dir` (the match log and stats recorder are then live).
-    `sim_noise` (`SimNoise.to_dict()`) enters the key only when set, so matches without it
-    keep their keys."""
-    settings = {
-        "duration_seconds": duration_seconds,
-        "a_is_right": a_is_right,
-        "a_kicks_off": a_kicks_off,
-        "control_scheme": control_scheme,
-        "fuzz_seed": fuzz_seed,
-        "fuzz_interval_s": list(fuzz_interval_s) if fuzz_seed is not None else None,
-        "recorded": recorded,
-    }
-    if sim_noise is not None:
-        settings["sim_noise"] = sim_noise
-    return _digest(
-        [
-            "round-robin match",
-            graph.base_fingerprint([ROUND_ROBIN_ENTRY]),
-            config_a,
-            graph.strategy_fingerprint(config_a),
-            config_b,
-            graph.strategy_fingerprint(config_b),
-            json.dumps(settings, sort_keys=True),
-        ]
-    )
-
-
-def config_names(graph: CodeGraph) -> list[str]:
-    """The round-robin's configs, as `match._CONFIG_NAMES` finds them, from source."""
-    return sorted(n for n in graph.factory_modules if n != "build_default_kernel_strategy")

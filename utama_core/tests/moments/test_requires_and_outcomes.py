@@ -1,11 +1,11 @@
-"""Pure checks (no rsim) of the `requires` conditions in `tools/moments.py`: each fires on the case it guards and not on the one it must allow, over
+"""Pure checks (no rsim) of the `requires` conditions in `tools/debug/moments.py`: each fires on the case it guards and not on the one it must allow, over
 synthetic ticks."""
 
 import dataclasses
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
 from utama_core.entities.referee.referee_command import RefereeCommand
 
 DT = 1 / moments.TICKS_PER_SECOND
@@ -24,7 +24,9 @@ def _tick(t, command, ball, ours):
 
 
 def _probe(**changes):
-    return dataclasses.replace(moments.template("probe", "a note", "NORMAL_START", ["*"]), **changes)
+    """A captured moment, renamed, with no requirements and every rule checked unless `changes` say."""
+    m = moments.load(moments.MOMENTS_DIR / "free_kick_defender_dodges_into_ball.json")
+    return dataclasses.replace(m, **{"name": "probe", "note": "a note", "checks": ["*"], "requires": [], **changes})
 
 
 # --- restart_lasts -------------------------------------------------------------------------------

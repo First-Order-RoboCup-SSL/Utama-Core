@@ -1,9 +1,9 @@
-"""`tools/package_graph.py` on a synthetic `utama_core/` tree: edges, relative imports, skipped tests, the rule."""
+"""`tools/dev/package_graph.py` on a synthetic `utama_core/` tree: edges, relative imports, skipped tests, the rule."""
 
 from collections import Counter
 from pathlib import Path
 
-from tools.package_graph import edge_counts, render_mermaid, scan, violations
+from tools.dev.package_graph import edge_counts, render_mermaid, scan, violations
 
 
 def _write(root: Path, rel: str, text: str) -> None:

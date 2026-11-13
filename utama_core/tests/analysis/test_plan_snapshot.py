@@ -1,4 +1,4 @@
-"""tools/plan_snapshot.py's drawing function, on the kick-off state of
+"""tools/debug/plan_snapshot.py's drawing function, on the kick-off state of
 test_fpp_inside_ball_keep_out.py (no simulator)."""
 
 import math

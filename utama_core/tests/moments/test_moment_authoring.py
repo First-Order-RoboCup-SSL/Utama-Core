@@ -1,15 +1,20 @@
-"""Pure checks (no rsim) of hand-made moments in `tools/moments.py`: the template and the
-validation errors."""
+"""Pure checks (no rsim) of moments in `tools/debug/moments.py`: loading, saving, the validation errors and
+`play --seed`. (Hand-made templates, `tools/debug/moments.py new`, were removed on 2026-11-11: moments are captured
+from replays.)"""
 
 import dataclasses
+import re
 
 import pytest
 
-from tools import moments
+from tools.debug import moments
+
+PROBE = moments.MOMENTS_DIR / "free_kick_defender_dodges_into_ball.json"
 
 
 def _template():
-    return moments.template("probe", "a note", "NORMAL_START", ["keeps_clear"])
+    """A captured moment (seed 2), renamed, checking `keeps_clear` only."""
+    return dataclasses.replace(moments.load(PROBE), name="probe", note="a note", checks=["keeps_clear"])
 
 
 def _with_friendly(m, robots):
@@ -24,22 +29,13 @@ def _replace_robot(robots, rid, **changes):
     return tuple(dataclasses.replace(r, **changes) if r.id == rid else r for r in robots)
 
 
-def test_template_round_trips_through_load(tmp_path):
+def test_a_moment_round_trips_through_save_and_load(tmp_path):
     m = _template()
     path = moments.save(m, tmp_path / "probe.json")
     again = moments.load(path)
     assert moments.to_dict(again) == moments.to_dict(m)
-    assert again.sim_noise["seed"] == 1
     assert sorted(r.id for r in again.scenario.friendly_robots) == list(range(6))
     assert sorted(r.id for r in again.scenario.enemy_robots) == list(range(6))
-
-
-def test_template_is_our_side_on_the_right_facing_left():
-    m = _template()
-    ours = {r.id: r for r in m.scenario.friendly_robots}
-    theirs = {r.id: r for r in m.scenario.enemy_robots}
-    assert ours[0].x > 0 and theirs[0].x < 0
-    assert all(ours[i].x > 0 and theirs[i].x < 0 for i in range(6))
 
 
 def test_existing_moments_still_load():
@@ -64,13 +60,13 @@ def test_each_side_needs_ids_0_to_5_exactly_once():
 
 def test_robots_must_be_on_the_pitch():
     m = _with_friendly(_template(), _replace_robot(_template().scenario.friendly_robots, 2, x=5.0))
-    with pytest.raises(moments.MomentError, match=r"friendly robot 2 at \(5.00, -1.20\) is off the pitch"):
+    with pytest.raises(moments.MomentError, match=r"friendly robot 2 at \(5.00, -?\d+\.\d\d\) is off the pitch"):
         moments.validate(m)
 
 
 def test_the_ball_must_be_on_the_pitch():
     m = dataclasses.replace(_template(), scenario=dataclasses.replace(_template().scenario, ball_y=3.5))
-    with pytest.raises(moments.MomentError, match=r"ball at \(0.00, 3.50\) is off the pitch"):
+    with pytest.raises(moments.MomentError, match=r"ball at \(-?\d+\.\d\d, 3.50\) is off the pitch"):
         moments.validate(m)
 
 
@@ -91,9 +87,9 @@ def test_a_real_rule_name_and_star_are_valid_checks():
 
 def test_unknown_strategy_and_opponent_are_named():
     with pytest.raises(moments.MomentError, match=r"unknown strategy 'nope'"):
-        moments.validate(dataclasses.replace(_template(), strategy="build_nope_kernel_strategy"))
+        moments.validate(dataclasses.replace(_template(), strategy="nope"))
     with pytest.raises(moments.MomentError, match=r"unknown opponent 'nope'"):
-        moments.validate(dataclasses.replace(_template(), opponent="build_nope_kernel_strategy"))
+        moments.validate(dataclasses.replace(_template(), opponent="nope"))
 
 
 def test_seconds_must_be_positive():
@@ -108,7 +104,7 @@ def test_every_problem_is_reported_together():
     assert "unknown check 'nope'" in str(err.value) and "seconds must be positive" in str(err.value)
 
 
-# --- `play --seed`, and the foul listing's restart side ---------------------------------------
+# --- `play --seed` and `--against` ---------------------------------------------------------------
 
 
 def test_with_seed_replaces_only_the_seed_and_does_not_mutate_the_moment():
@@ -118,7 +114,7 @@ def test_with_seed_replaces_only_the_seed_and_does_not_mutate_the_moment():
     assert {k: v for k, v in seeded.sim_noise.items() if k != "seed"} == {
         k: v for k, v in m.sim_noise.items() if k != "seed"
     }
-    assert m.sim_noise["seed"] == 1
+    assert m.sim_noise["seed"] == 2
 
 
 def test_with_seed_needs_noise_to_seed():
@@ -126,153 +122,8 @@ def test_with_seed_needs_noise_to_seed():
         moments.with_seed(dataclasses.replace(_template(), sim_noise=None), 3)
 
 
-@pytest.mark.parametrize(
-    "command, we_are_yellow, side",
-    [
-        ("DIRECT_FREE_YELLOW", True, "ours"),
-        ("BALL_PLACEMENT_YELLOW", True, "ours"),
-        ("DIRECT_FREE_BLUE", True, "theirs"),
-        ("DIRECT_FREE_BLUE", False, "ours"),
-        ("NORMAL_START", True, None),
-        ("STOP", True, None),
-        ("TIMEOUT_YELLOW", True, None),
-    ],
-)
-def test_restart_side_is_ours_theirs_or_neither(command, we_are_yellow, side):
-    from utama_core.entities.referee.referee_command import RefereeCommand
-
-    assert moments.restart_side(RefereeCommand[command], we_are_yellow) == side
-    assert moments.restart_side(None, we_are_yellow) is None
-
-
-def test_our_fouls_names_the_command_active_and_the_restart_side(tmp_path):
-    import json
-
-    def foul(t, side="friendly", rule="keep_out"):
-        return {"rule": rule, "sim_time": t, "side": side, "robot_id": 1, "tactic": "X", "inferred": False}
-
-    results = [
-        {
-            "config_a": "build_a_kernel_strategy",
-            "config_b": "build_b_kernel_strategy",
-            "stats": {"fouls": [foul(1.0), foul(5.0), foul(12.0), foul(20.0), foul(6.0, side="enemy")]},
-        }
-    ]
-    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
-    rows = [
-        {"event": "referee", "sim_time": 0.0, "command": "NORMAL_START"},
-        {"event": "referee", "sim_time": 4.0, "command": "DIRECT_FREE_BLUE"},
-        {"event": "referee", "sim_time": 10.0, "command": "DIRECT_FREE_YELLOW"},
-    ]
-    (tmp_path / "a_vs_b.intentions.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-
-    fouls = moments.our_fouls(tmp_path)
-    assert [(f["sim_time"], f["command"], f["restart"]) for f in fouls] == [
-        (1.0, "NORMAL_START", None),
-        (5.0, "DIRECT_FREE_BLUE", "theirs"),
-        (12.0, "DIRECT_FREE_YELLOW", "ours"),
-        (20.0, "DIRECT_FREE_YELLOW", "ours"),
-    ]
-    kept = moments.without_own_restarts(fouls)
-    assert [f["sim_time"] for f in kept] == [1.0, 5.0]
-
-
-def test_our_fouls_names_the_match_replay_relative_to_the_repo(tmp_path):
-    import json
-
-    row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
-    results = [
-        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
-    ]
-    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
-    (fouls,) = moments.our_fouls(tmp_path)
-    assert fouls["replay"] is None  # no a_vs_b replay in the run dir
-
-    (tmp_path / "a_vs_b.npz").write_bytes(b"")
-    (fouls,) = moments.our_fouls(tmp_path)
-    assert fouls["replay"] == str(tmp_path / "a_vs_b.npz")  # outside the repo: as given
-
-    (tmp_path / "a_vs_b.npz").unlink()
-    (tmp_path / "a_vs_b.pkl").write_bytes(b"")
-    (fouls,) = moments.our_fouls(tmp_path)
-    assert fouls["replay"] == str(tmp_path / "a_vs_b.pkl")
-
-
-def test_repo_relative_paths_drop_the_repo_root():
-    assert moments._repo_relative(moments.REPO_ROOT / "replays" / "t" / "a_vs_b.npz") == "replays/t/a_vs_b.npz"
-
-
-def test_our_fouls_without_a_match_log_has_no_command(tmp_path):
-    import json
-
-    row = {"rule": "keep_out", "sim_time": 3.0, "side": "friendly", "robot_id": 1, "tactic": "X"}
-    results = [
-        {"config_a": "build_a_kernel_strategy", "config_b": "build_b_kernel_strategy", "stats": {"fouls": [row]}}
-    ]
-    (tmp_path / "summary.json").write_text(json.dumps({"results": results}))
-    (fouls,) = moments.our_fouls(tmp_path)
-    assert fouls["command"] is None and fouls["restart"] is None
-    assert moments.without_own_restarts([fouls]) == [fouls]
-
-
-def _foul_row(config_a, rule, restart=None, tactic="X"):
-    return {
-        "config_a": f"build_{config_a}_kernel_strategy",
-        "config_b": "build_b_kernel_strategy",
-        "rule": rule,
-        "tactic": tactic,
-        "restart": restart,
-    }
-
-
-def test_count_fouls_groups_by_the_given_columns_most_common_first():
-    fouls = [
-        _foul_row("a", "keep_out"),
-        _foul_row("b", "crashing"),
-        _foul_row("a", "keep_out"),
-        _foul_row("a", "crashing"),
-        _foul_row("b", "crashing"),
-        _foul_row("b", "crashing"),
-    ]
-    assert moments.count_fouls(fouls, ["strategy", "rule"]) == [
-        (("b", "crashing"), 3),
-        (("a", "keep_out"), 2),
-        (("a", "crashing"), 1),
-    ]
-
-
-def test_count_fouls_names_a_missing_restart_live_and_a_missing_tactic_dash():
-    fouls = [_foul_row("a", "keep_out", restart=None, tactic=None), _foul_row("a", "keep_out", restart="theirs")]
-    assert moments.count_fouls(fouls, ["restart", "tactic"]) == [(("live", "-"), 1), (("theirs", "X"), 1)]
-
-
-def test_count_fouls_ties_are_in_name_order():
-    fouls = [_foul_row("b", "keep_out"), _foul_row("a", "keep_out")]
-    assert [key for key, _ in moments.count_fouls(fouls, ["strategy"])] == [("a",), ("b",)]
-
-
-def test_without_stoppages_drops_out_of_bounds_and_keeps_rules_fouls():
-    fouls = [_foul_row("a", "out_of_bounds"), _foul_row("a", "defense_area_stoppage"), _foul_row("a", "keep_out")]
-    assert [f["rule"] for f in moments.without_stoppages(fouls)] == ["defense_area_stoppage", "keep_out"]
-
-
-def test_print_fouls_by_prints_header_counts_and_total(capsys):
-    moments.print_fouls_by([_foul_row("a", "keep_out"), _foul_row("a", "keep_out")], ["strategy", "rule"])
-    lines = capsys.readouterr().out.splitlines()
-    assert lines[0].split() == ["count", "strategy", "rule"]
-    assert lines[1].split() == ["2", "a", "keep_out"]
-    assert lines[2].split() == ["2", "total"]
-
-
-def test_fouls_json_is_the_foul_list_or_the_by_counts_as_rows():
-    import json
-
-    fouls = [_foul_row("a", "keep_out", restart=None), _foul_row("a", "keep_out"), _foul_row("b", "crashing")]
-    as_list = json.loads(moments.fouls_json(fouls))
-    assert as_list == fouls
-
-    rows = json.loads(moments.fouls_json(fouls, ["strategy", "rule"]))
-    assert rows == [
-        {"strategy": "a", "rule": "keep_out", "count": 2},
-        {"strategy": "b", "rule": "crashing", "count": 1},
-    ]
+def test_against_worktrees_sit_beside_the_repo_in_an_undated_folder():
+    """Until 2026-11-11 `--against` used `moments-work-20261017/against`, a dated folder from one session."""
+    assert moments.AGAINST_DIR.parent == moments.REPO_ROOT.parent
+    assert moments.AGAINST_DIR.name == f"{moments.REPO_ROOT.name}-moments-against"
+    assert not re.search(r"\d{8}", str(moments.AGAINST_DIR.relative_to(moments.REPO_ROOT.parent)))

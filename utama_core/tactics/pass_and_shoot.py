@@ -35,8 +35,8 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import carry_exhausted, carry_origin
-from utama_core.shared.tolerance import Sticky
+from utama_core.geometry.pass_and_score_geometry import carry_exhausted, carry_origin
+from utama_core.geometry.tolerance import Sticky
 from utama_core.tactics._pass_and_score import (
     PassAndScoreMem,
     _pass_exec,
@@ -65,13 +65,13 @@ def assign_passer_receiver(
     over. Keep the previous passer unless the other robot is closer by a
     real margin, not just nominally closer.
 
-    Uses `shared.tolerance.Sticky` (score = negative distance, so "closer"
+    Uses `geometry.tolerance.Sticky` (score = negative distance, so "closer"
     maximizes the score the same way `Sticky` expects everywhere else it's
     used) — confirmed behaviour-identical to the previous hand-rolled
     `distances[prev_receiver] + margin >= distances[prev_passer]` check via
     a seeded-random equivalence probe (500 random distance pairs, 0
     mismatches; see `test_sticky_matches_pass_and_shoot_margin_logic` in
-    `tests/shared/test_tolerance.py`).
+    `tests/geometry/test_tolerance.py`).
     """
     ball_pos = game.ball.p.to_2d()
     distances = {

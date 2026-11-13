@@ -208,7 +208,7 @@ function framesFromColumns(c) {
       return;
     }
     const t0 = frameTs(0);
-    const colour = { Yellow: "#e0a527", Blue: "#3d7fd1" };
+    const colour = { Yellow: "#eab308", Blue: "#2563eb" };
     list.innerHTML = play
       .map((r, i) => {
         const goal = r.ended && r.ended.startsWith("Goal") ? " goal" : "";
@@ -307,7 +307,7 @@ function framesFromColumns(c) {
     if (fieldView) fieldView.draw(frame);
     if (timeline) timeline.draw(frame.ts);
     markPlay(frame.ts);
-    renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true });
+    renderRobotStatusInto("replay-status-entries", frame, { hideFeedback: true, hideFriendly: true });
     renderTacticStatusInto("replay-tactic-entries", tacticStatus, {
       emptyLabel: "no tactic data at this frame",
     });
@@ -481,7 +481,7 @@ function framesFromColumns(c) {
   }
 
   function loadReplayByPath(path, atTime) {
-    // Entry point for other views (Tournament's "view replay" links) via
+    // Entry point for other views (the Strategies tab's "view replay" links) via
     // Dashboard.showReplay(path) — same load, but also syncs the dropdown.
     // The dropdown's options are only populated once loadList()'s fetch
     // resolves, so the value must be set inside that callback, not after

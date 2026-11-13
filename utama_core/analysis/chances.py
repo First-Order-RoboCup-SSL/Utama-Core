@@ -2,7 +2,7 @@
 
 `turnover_breakdown.analyse_match` feeds every replay frame to a `ChanceTracker`, so this
 costs no extra pass over the replay. Its record is under `chances` in each match's ball-loss
-record; `round_robin.py` totals it per strategy (`side_totals`, `rates`) into
+record; `evaluate.py` totals it per strategy (`side_totals`, `rates`) into
 `summary.json`'s `strategies[*].chances`. Unlike the ball-loss breakdown, everything here is
 measured for both sides: it needs positions and possession, not the intentions log.
 

@@ -18,7 +18,7 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tactics.press_and_contain import (
     PressAndContainMem,
     PressAndContainTactic,

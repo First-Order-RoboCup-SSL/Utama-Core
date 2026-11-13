@@ -18,8 +18,8 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.skills.utils.move_utils import move
 
 # Waypoints defined as fractions of the standard field half-dimensions
 # (half_length=4.5, half_width=3.0) so they scale correctly to any field.
@@ -114,7 +114,7 @@ def wandering_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build)
+    return AbstractStrategy(build=_build)
 
 
 __all__ = ["WanderingTactic", "wandering_strategy"]

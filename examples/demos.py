@@ -22,7 +22,7 @@ The panel also holds:
   same demo again;
 - "teleop" (`teleop.py`): drive either robot by keyboard to place robots and the ball.
 
-`planner_ab.py` and `calibrate_robot.py` are not here: they measure, with their own loop and
+`planner_ab.py` and `tools/field/calibrate_robot.py` are not here: they measure, with their own loop and
 terminal prompts, rather than wait on the dashboard.
 """
 
@@ -30,19 +30,18 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import argparse
 import signal
 import traceback
 
-import field_check
 import pass_receive
 import save_and_counter
 import score_goal
-import shooting_drill
 import teleop
 
+from tools.field import field_check, shooting_drill
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import demo as demo_view
 

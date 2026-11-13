@@ -1,7 +1,7 @@
 """Keeps our robots inside the area in play (`field_bounds`, what the camera sees) on camera runs.
 
 A tactic chasing a ball that left the camera's half drove its robot after it, out of sight,
-where nothing tracks it (a 2026-10-22 grSim test of `examples/shooting_drill.py`: the
+where nothing tracks it (a 2026-10-22 grSim test of `tools/field/shooting_drill.py`: the
 attacker 0.9 m past the half-way line). The field check only halts once a robot is already
 0.3 m out. `FencedRobotController` sits under the strategy, like `ProfiledRobotController`, and
 caps each robot's speed towards each edge of the area to what it can still stop from with its body
@@ -12,7 +12,7 @@ robots' poses, nothing of the tactics, so it holds whichever tactic or skill mad
 
 Only edges inside the field are fenced (the half-way line on a half-field run): a robot must
 cross the touch and goal lines to fetch a ball out of play, or a restart never completes
-(`custom_referee/actions.py`, `_clamp_to_field_or_ball`), and the cameras see past them.
+(`referee/actions.py`, `_clamp_to_field_or_ball`), and the cameras see past them.
 
 Keep-out zones (`StrategyRunner(keep_out=...)`) are rectangles no robot may enter, in every mode:
 the speed into each is capped the same way, on the sides a robot could reach before it stops. A

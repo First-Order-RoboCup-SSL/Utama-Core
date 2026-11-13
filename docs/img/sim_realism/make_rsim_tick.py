@@ -28,13 +28,13 @@ NAMES = [
     "_frame_to_observations",
     "vision_rng",
     "utama_core/run/strategy_runner.py",
-    "utama_core/custom_referee/custom_referee.py",
-    "utama_core/team_controller/src/controllers/sim/rsim_controller.py",
-    "utama_core/rsoccer_simulator/src/ssl/envs/standard_ssl.py",
-    "utama_core/rsoccer_simulator/src/Utils/sim_noise.py",
-    "utama_core/rsoccer_simulator/src/Simulators/rsim.py",
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_wrapper.py",
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py",
+    "utama_core/referee/custom_referee.py",
+    "utama_core/team_controller/controllers/sim/rsim_controller.py",
+    "utama_core/simulator/ssl/envs/standard_ssl.py",
+    "utama_core/simulator/utils/sim_noise.py",
+    "utama_core/simulator/simulators/rsim.py",
+    "utama_core/simulator/simulators/robosim/robosim_wrapper.py",
+    "utama_core/simulator/simulators/robosim/robosim_subprocess.py",
     "vendor/rSim/src/robosim",
 ]
 
@@ -58,9 +58,7 @@ d.box(
     "one RobotCommand per robot,\nsent through RSimController",
     kind="decision",
 )
-d.box(
-    24, 22, 36, 14, "CustomReferee", "custom_referee/custom_referee.py\nstepped in process each tick", kind="decision"
-)
+d.box(24, 22, 36, 14, "CustomReferee", "referee/custom_referee.py\nstepped in process each tick", kind="decision")
 d.arrow((18, 45), (18, 29), "frames", lx=-1.0, ha="right")
 d.arrow((30, 29), (30, 45), "referee data", lx=1.0)
 

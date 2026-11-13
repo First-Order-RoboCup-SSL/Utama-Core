@@ -7,7 +7,7 @@ from utama_core.config.settings import BALL_ROLL_DECEL, EXACT_MATH
 from utama_core.entities.data.vector import Vector3D
 from utama_core.entities.data.vision import VisionRobotData
 from utama_core.entities.game import Ball, Robot
-from utama_core.global_utils.math_utils import deg_to_rad, normalise_heading
+from utama_core.geometry.math_utils import deg_to_rad, normalise_heading
 
 # An unseen robot is carried on its velocity this long, then held where it is: one seen a few
 # times a second on the 2026-10-27 field test, carried on, ran off to 10^7 m at 7 m/s.

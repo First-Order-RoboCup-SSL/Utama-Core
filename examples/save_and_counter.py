@@ -21,12 +21,12 @@ What it does:
   - A ball rolling towards a robot's goal (a shot, a clearance) has that robot keeping and the
     other attacking, so nobody leaves the goal to chase a shot. A ball outside the field (or
     unseen) holds both robots until the operator puts it back.
-  - The field, the robot hardware type and the referee rules are `shooting_drill.py`'s
+  - The field, the robot hardware type and the referee rules are `tools/field/shooting_drill.py`'s
     (`FIELD`, `TestRobot`, `RULES`): only goals are detected. After a goal play stops; put the
     ball back and Force Start. Both goals must be in view (`CAMERA_HALF = "full"`).
   - Every mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting. The Live
     tab's Strategy panel can stand either robot still or restart it, while halted. The field
-    check must be all green or amber before Force Start (docs/real_robot_setup.md).
+    check must be all green or amber before Force Start (tutorials/field_day.md).
 """
 
 import sys
@@ -40,7 +40,7 @@ import math
 import time
 from typing import Optional
 
-from shooting_drill import (
+from tools.field.shooting_drill import (
     FIELD,
     KEEP_OUT,
     RADIO_0,
@@ -51,9 +51,7 @@ from shooting_drill import (
     _referee_profile,
     on_field,
 )
-
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.custom_referee import CustomReferee
 from utama_core.dashboard import DashboardServer, attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.dashboard.views import strategy as strategy_view
@@ -63,14 +61,15 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     enemy_goal_line,
     has_ball,
     oriented_towards,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.utils.move_utils import empty_command, move, turn_on_spot
+from utama_core.referee import CustomReferee
+from utama_core.run import StrategyRunner
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.utils.move_utils import empty_command, move, turn_on_spot
 from utama_core.tactics._pass_and_score import FACE_GOAL_RAD
 from utama_core.tactics.goalkeeper import GoalkeeperTactic
 from utama_core.tactics.lead_and_support import LeadAndSupportTactic

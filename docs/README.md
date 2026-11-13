@@ -1,43 +1,15 @@
 # Docs
 
-Every doc in this folder, by kind. New to the repo: the [README](../README.md) first.
+How the code works and why: look things up here. To learn by doing, start with the step-by-step
+pages in [tutorials/](../tutorials/): [first_strategy.md](../tutorials/first_strategy.md) (new members
+start there) and [field_day.md](../tutorials/field_day.md) (a test day with real robots). Docs that
+code comments cite but that were deleted are in git history.
 
-## How to
-
-- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): writing and evaluating strategies and tactics: the tactic-kernel model, referee restarts, lessons from past tactic bugs, round-robins, observability tools. Read before any strategy-layer change.
-- [custom_referee.md](custom_referee.md): the in-process `CustomReferee`: architecture, usage, profiles, and its known gaps.
-- [custom_referee_gui.md](custom_referee_gui.md): the referee operator panel in the dashboard.
-- [referee_integration.md](referee_integration.md): how referee commands reach robots (`RefereeOverride`) and what each command requires.
-- [motion_planning_comparison.md](motion_planning_comparison.md): the motion-planning benchmark and how to read it.
-- [motion_planning_results.md](motion_planning_results.md): its latest full run.
+- [strategy.md](strategy.md): the strategy layer and its evaluation: the tactic-kernel model, referee restarts, lessons from past bugs, the debugging tools.
+- [strategy_design.md](strategy_design.md): why the strategy layer is shaped as it is, and what was deliberately not built.
+- [signals.md](signals.md): every signal recorded about how a strategy plays, and the names of the pitch zones.
+- [referee.md](referee.md): the in-process referee, how its commands reach robots, the operator panel, and its rule-by-rule design decisions.
+- [motion_planning.md](motion_planning.md): the motion-planning benchmark and how to read it.
+- [real_robots.md](real_robots.md): field logs and the tools that read them; grSim, the GameController and ssl-vision.
+- [architecture.md](architecture.md): how the packages depend on each other, and how one tick turns vision, robot and referee data into commands.
 - [tools.md](tools.md): every script and pixi task, by purpose.
-- [visual_guide.md](visual_guide.md): the game drawn on the pitch from real replays (how each strategy plays, one match over time, a restart, the motion planner), what each picture has shown us, and how to draw it.
-- [setup_external.md](setup_external.md): grSim, the official GameController and AutoReferee.
-- [real_robot_setup.md](real_robot_setup.md): a test day with real robots: ssl-vision on its own laptop, WSL networking and USB, the radio, and the checks before a robot moves.
-- [field_logs.md](field_logs.md): real robot game logs: format, record types, calibration analysis, dead-time trimming, and release packaging.
-- [contributing.md](contributing.md): editor setup, commits, pull requests and releases.
-
-## Design rationale
-
-- [tactic_model_design_decisions.md](tactic_model_design_decisions.md): why the strategy layer (engine, tactics, strategies) is shaped the way it is, and what was deliberately not built.
-- [scheduling_math_model.md](scheduling_math_model.md): a mathematical model of tactic scheduling and role allocation, a companion to the above.
-- [custom_referee_design_decisions.md](custom_referee_design_decisions.md): rule-by-rule decisions from auditing `CustomReferee` against the SSL rulebook.
-- [pipeline_method.md](pipeline_method.md): how vision, robot and referee data are refined into one `Game` state, and one tick from state to robot commands.
-- [architecture.md](architecture.md): the one-tick diagram, and the generated package dependency graph with its import-rule check.
-
-## Current results
-
-- [strategies.md](strategies.md): the strategy catalog: every `build_*_kernel_strategy`, its status, and its latest round-robin results.
-- [pitch_zones.md](pitch_zones.md): names for the parts of the pitch (thirds, wings, centre, the box, danger), with a diagram.
-- [signals.md](signals.md): every signal recorded about how a strategy plays, grouped by question, with reference ranges and what an off value means.
-- [signal_report.md](signal_report.md): figures of the main signals for every strategy in the latest full round-robin.
-
-## Open work
-
-- [roadmap.md](roadmap.md): larger open workstreams, and one-line pointers to finished ones.
-- [sim_realism.md](sim_realism.md): how far rsim is from real matches, the realism scorecard, and the plan to close the gap with measured, randomized physics.
-- [in_house_vision.md](in_house_vision.md): our own vision stack for lab days (per-session tag calibration, tags on robots), the experiments that decide it, and the 2026-10-22 test day's vision findings.
-- [field_log_replay.md](field_log_replay.md): design for finding a moment in a field log and rerunning the decision code on its recorded inputs, and the physical setup's own errors (tag yaw and offset, kicker offset, cameras) as per-robot profiles.
-- [testing_gaps.md](testing_gaps.md): kinds of testing gap that let bugs through, numbered (code cites them by number).
-- [investigation_default_vs_lowblock_stalemate.md](investigation_default_vs_lowblock_stalemate.md): why `default` vs `low_block` stays 0-0; partly fixed.
-- [investigation_ball_contact_orientation_divergence.md](investigation_ball_contact_orientation_divergence.md): a robot pinned against the ball rotates away from contact; localized, not fixed.

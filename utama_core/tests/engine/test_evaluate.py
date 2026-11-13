@@ -1,45 +1,31 @@
+import pytest
+
 from tools.evaluation import evaluate
-from utama_core.replay import eval_ledger
+from utama_core.analysis import ratings
 
 
-def test_round_fixtures_pair_candidate_and_champion_on_the_same_opponents_and_seed():
-    fixtures = evaluate.round_fixtures(["c"], "ch", ["o1", "o2"], 1)
-    assert set(fixtures) == {("c", "o1", 1), ("c", "o2", 1), ("c", "ch", 1), ("ch", "o1", 1), ("ch", "o2", 1)}
+def test_every_round_is_every_pair_once_under_its_seed():
+    for k in (1, 2):
+        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o1", "o2"])
+        assert len(fixtures) == 6 and {f[2] for f in fixtures} == {k}
+        assert {frozenset(f[:2]) for f in fixtures} == {
+            frozenset(p) for p in [("c", "ref"), ("c", "o1"), ("c", "o2"), ("ref", "o1"), ("ref", "o2"), ("o1", "o2")]
+        }
 
 
-def test_round_fixtures_swap_sides_in_even_rounds():
-    assert ("o1", "c", 2) in evaluate.round_fixtures(["c"], "ch", ["o1"], 2)
-    assert ("ch", "c", 2) in evaluate.round_fixtures(["c"], "ch", ["o1"], 2)
+def test_candidate_and_reference_meet_each_opponent_with_the_same_colour():
+    for k in (1, 2, 3):
+        fixtures = evaluate.round_fixtures(k, ["c"], "ref", ["o"])
+        c_is_a = ("c", "o", k) in fixtures
+        assert c_is_a == (k % 2 == 1)
+        assert (("ref", "o", k) in fixtures) == c_is_a
 
 
-def test_two_candidates_share_the_champions_fixtures():
-    fixtures = evaluate.round_fixtures(["c1", "c2"], "ch", ["o1"], 1)
-    assert fixtures.count(("ch", "o1", 1)) == 1
-    assert ("c1", "c2", 1) not in fixtures
-
-
-def test_verdict_thresholds_are_inclusive_and_cap_rounds():
-    assert evaluate.verdict(evaluate.PROMOTE, 1, 6) == "better"
-    assert evaluate.verdict(evaluate.DROP, 1, 6) == "worse"
-    assert evaluate.verdict(0.5, 5, 6) is None
-    assert evaluate.verdict(0.5, 6, 6) == "undecided"
-
-
-def test_ledger_round_trip_keeps_the_last_entry_per_fixture_and_skips_torn_lines(tmp_path):
-    path = tmp_path / "ledger.jsonl"
-    base = {"env": "e", "a": "x", "b": "y", "a_fp": "1", "b_fp": "2", "seed": 1}
-    eval_ledger.append([{**base, "fixture": "f", "score_a": 1}, {**base, "env": "other", "fixture": "g"}], path)
-    eval_ledger.append([{**base, "fixture": "f", "score_a": 2}], path)
-    with open(path, "a") as f:
-        f.write('{"env": "e", "fixt')
-    loaded = eval_ledger.load("e", path)
-    assert list(loaded) == ["f"] and loaded["f"]["score_a"] == 2
-
-
-def test_fixture_id_depends_on_seed_and_code():
-    f = eval_ledger.fixture_id
-    assert f("e", "x", "1", "y", "2", 1) != f("e", "x", "1", "y", "2", 2)
-    assert f("e", "x", "1", "y", "2", 1) != f("e", "x", "9", "y", "2", 1)
+def test_the_confirm_stage_plays_fresh_seeds_and_decides_on_them_alone(monkeypatch):
+    monkeypatch.setattr(ratings, "ROUNDS", 3)
+    assert [evaluate.seed_of(k) for k in range(1, 7)] == [1, 2, 3, 101, 102, 103]
+    assert evaluate.stage_seeds(2) == {1, 2}
+    assert evaluate.stage_seeds(5) == {101, 102}
 
 
 def test_per_opponent_compares_only_matches_with_the_same_seed_and_colour():
@@ -75,26 +61,105 @@ def test_paired_differences_use_same_seed_and_colour_and_orient_head_to_head():
     assert h2h == [-3]
 
 
-def test_a_verdict_after_round_k_ignores_later_seeds_already_in_the_ledger():
-    ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "3": {"seed": None}}
-    assert list(evaluate._up_to_round(ledger, 1)) == ["1"]
+def test_a_decision_uses_its_stages_seeds_only():
+    ledger = {"1": {"seed": 1}, "2": {"seed": 2}, "101": {"seed": 101}, "x": {"seed": None}}
+    assert list(evaluate._with_seeds(ledger, {1, 2})) == ["1", "2"]
+    assert list(evaluate._with_seeds(ledger, {101})) == ["101"]
 
 
-def test_pools_are_valid_and_load_cleanly():
+def test_colours_follow_the_seed_not_the_round():
+    # a confirm seed is played in round ROUNDS+1 or later, so a run with another ROUNDS plays it in a
+    # round of the other parity: the store would then hold it in both colours, and the verdict would
+    # count both (test_the_verdict_does_not_depend_on_other_seeds_already_in_the_store)
+    for k in (1, 2, 7, 8):
+        assert ("c", "o", 101) in evaluate.round_fixtures(k, ["c"], "ref", ["o"], seed=101)
+        assert ("o", "c", 102) in evaluate.round_fixtures(k, ["c"], "ref", ["o"], seed=102)
+
+
+def test_the_players_load_and_the_core_is_in_the_catalog():
+    from tools.evaluation.match import _CONFIG_NAMES
+    from tools.evaluation.sim_settings import load_players
+
+    players = load_players()
+    assert players["champion"] in players["core"]
+    assert set(players["core"]) <= set(_CONFIG_NAMES)
+
+
+def test_the_reference_world_and_robots_make_one_valid_sim_noise():
+    from tools.evaluation.sim_settings import reference_noise
+    from utama_core.simulator.utils.sim_noise import SimNoise
+
+    noise = SimNoise.from_dict(reference_noise(seed=3))
+    assert noise.seed == 3
+    assert noise.latency_estimate_s == pytest.approx(0.07)
+
+
+def test_every_reference_setting_names_its_source():
     import json
-    from pathlib import Path
 
-    from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
+    from tools.evaluation.sim_settings import REFERENCE_DIR
 
-    pools_dir = Path(__file__).resolve().parents[3] / "tools" / "evaluation" / "pools"
-    pool_files = list(pools_dir.glob("pool_v*.json"))
-    assert len(pool_files) >= 1  # pool_v1.json
+    for name in ("world", "robots"):
+        data = json.loads((REFERENCE_DIR / f"{name}.json").read_text())
+        assert set(data["sources"]) == set(data["values"]), name
 
-    for path in pool_files:
-        data = json.loads(path.read_text())
-        assert "version" in data and "champion" in data and "opponents" in data
-        assert "held_out" in data and "sim_noise" in data
-        assert len(data["opponents"]) > 0
-        assert len(data["held_out"]) > 0
-        noise = SimNoise.from_dict(data["sim_noise"])
-        assert noise.vanishing >= 0
+
+def test_the_reference_sim_does_not_draw_robot_motor_limits():
+    """Acceleration is the command cap; a per-match draw would be a robot capability as noise."""
+    from tools.evaluation.sim_settings import reference_noise
+    from utama_core.simulator.utils.sim_noise import SimNoise
+
+    assert not SimNoise.from_dict(reference_noise()).motion_limits
+
+
+FPS = {"c": "fc", "o": "fo", "ch": "fch"}
+
+
+def _ledger_row(a, b, stalls, fixture, seed=1, a_fp=None):
+    return {
+        "fixture": fixture,
+        "a": a,
+        "b": b,
+        "a_fp": a_fp or FPS[a],
+        "b_fp": FPS[b],
+        "seed": seed,
+        "stalls": stalls,
+    }
+
+
+def test_stall_coverage_counts_only_matches_where_the_candidate_was_config_a():
+    ledger = {
+        "1": _ledger_row("c", "o", [], "1"),  # checked, no stalls
+        "2": _ledger_row("o", "c", None, "2"),  # candidate as config_b: unchecked
+        "3": _ledger_row("c", "o", None, "3", seed=2),  # reused old line: unknown, unchecked
+        "4": _ledger_row("o", "c", [{"kind": "RESTART_STALL", "sim_time": 5.0}], "4", seed=2),
+    }
+    cov = evaluate.stall_coverage(ledger, FPS, "c")
+    assert (cov["checked"], cov["total"]) == (1, 4)
+    assert cov["stalls"] == []
+
+
+def test_stall_coverage_lists_each_stall_with_its_match_seed_kind_and_time():
+    ledger = {
+        "1": _ledger_row("c", "o", [{"kind": "RESTART_STALL", "sim_time": 5.0, "diagnosis": "ball in goal"}], "1")
+    }
+    cov = evaluate.stall_coverage(ledger, FPS, "c")
+    assert cov["checked"] == 1 and cov["total"] == 1
+    assert cov["stalls"] == [
+        {"a": "c", "b": "o", "seed": 1, "kind": "RESTART_STALL", "sim_time": 5.0, "diagnosis": "ball in goal"}
+    ]
+
+
+def test_stall_coverage_ignores_matches_at_other_code_and_other_players():
+    ledger = {
+        "1": _ledger_row("c", "o", [], "1", a_fp="old"),  # the candidate's code has changed since
+        "2": _ledger_row("ch", "o", [], "2", a_fp="fch"),  # the champion's match, not the candidate's
+    }
+    assert evaluate.stall_coverage(ledger, FPS, "c") == {"checked": 0, "total": 0, "stalls": []}
+
+
+def test_stall_lines_say_none_only_when_checked_and_unknown_when_not():
+    assert evaluate.stall_lines({"checked": 3, "total": 7, "stalls": []}, "candidate") == [
+        "stalls checked in 3 of 7 candidate matches (watchdog covers config_a only): none"
+    ]
+    assert evaluate.stall_lines({"checked": 0, "total": 7, "stalls": []}, "candidate")[0].endswith(": unknown")

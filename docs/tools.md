@@ -3,6 +3,37 @@
 Every script in the repository, by what it is for. Run them from the repository root with
 `pixi run python <path>`; each script's docstring has its full usage and flags.
 
+## Start with these four
+
+New to the repo? You need only these ([first_strategy.md](../tutorials/first_strategy.md) walks through them):
+
+| Command | What it does |
+|---|---|
+| `pixi run main A B` | Watch strategy A (yellow) play strategy B in the simulator |
+| `pixi run test`, `pixi run lint` | Check nothing broke, before every pull request |
+| `pixi run evaluate NAME` | Is strategy NAME better than the champion? Read the verdict and the mean diff |
+| `pixi run dashboard` | http://localhost:8080: the Strategies tab (every strategy, its tactics, verdict, position and shot maps, signals and newest matches; every evaluation run) and recorded replays |
+
+Everything below is for specialists.
+
+## Which tool?
+
+Pick the tool by the question you have.
+
+For the four jobs that chain several of them, follow a skill in `.agents/skills/`: `change-strategy`, `explain-result`,
+`debug-incident`, `field-session`.
+
+| Question | Tool |
+|---|---|
+| Does it break? | `pixi run test` (it includes the regression moments). Stalls: every match records them; `evaluate.py` reports them with how many matches checked them |
+| Is it better? | `tools/evaluation/evaluate.py CANDIDATE`, paired against the champion at the last release. The only verdict |
+| Does everything still run after a shared-code change? | `tools/evaluation/evaluate.py` with no candidate: one round robin of the core and the reference (15 matches); `--all` for the whole catalog, occasionally |
+| Did a shared-code change help? | `tools/evaluation/evaluate.py <champion>`: today's champion, on today's shared code, against itself at the last release |
+| What went wrong in these matches (thrashing, stalls, restart geometry, fouls)? | `tools/debug/find_bugs.py RUN_DIR --strategy NAME`, then the picture tools; `--fouls` lists our side's fouls. It finds bugs, not why a strategy loses |
+| Keep a fixed bug fixed? | A unit test at the cause. `tools/debug/moments.py capture` writes a regression moment, which runs in `pixi run test` |
+| Look closely at one thing? | `tools/debug/repro_from_replay.py`, `tools/debug/replay_trace.py`, the picture tools, `tools/debug/debug_match.py` |
+| Is the simulator realistic? | [Simulator realism](#simulator-realism). Not strategy development |
+
 ## pixi tasks
 
 `pixi run <task>` (defined in `pixi.toml`):
@@ -13,62 +44,54 @@ Every script in the repository, by what it is for. Run them from the repository 
 | `lint` | the whole pre-commit stack (black, ruff, isort) on every file |
 | `precommit-install` / `precommit-uninstall` | install or remove the pre-commit hook |
 | `main` | `main.py`: watch one match between two strategies in rsim (below) |
-| `build-planner` | build the C++ fast-path planner (`utama_core/motion_planning/src/fastpathplanning/cpp`) into `build/fpp` with cmake |
+| `build-planner` | build the C++ fast-path planner (`utama_core/motion_planning/fastpathplanning/cpp`) into `build/fpp` with cmake |
 | `replay [-n NAME] [-p]` | play a legacy pickle replay `replays/NAME.pkl` in the rSoccer viewer (newest if no name; `-p` step by step). Today's `.npz` replays open in the dashboard instead |
-| `runs` | list the tournament runs in `replays/`: start time, commit, matches, stalls, arguments |
-| `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [real_robot_setup.md](real_robot_setup.md)) |
-| `field-check` | the start of a test day in one command (`tools/field_check.py`): vision's cameras, packets per second, field size, ball and lids in view, then `find-robots` with each robot's share of commands answered and its profile; every line "ok" or "!!" ([real_robot_setup.md](real_robot_setup.md#each-test-day)) |
-| `find-robots` | which robots are on the field and the lid each wears (`python -m utama_core.team_controller.src.controllers.real.find_robots`): each radio that answers turns a little on the spot and back, and the pattern that turned is its lid; prints radio, lid, whether its profile was calibrated on that lid, silent radios and stray patterns; saved for the examples, which check it against vision on start and find again when a lid is missing (`shooting_drill.on_field`, `find_robots.confirm`) ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
-| `demos` | every dashboard demo from one command (`examples/demos.py`, `--mode rsim` to rehearse, `--demo` the first): one dashboard stays up and the Live tab's Demo panel switches demo while halted (robots stopped, log saved, radio and vision released, the page reloads by itself), sets the first robot, camera half and rules for the next run, runs the field check, and offers teleop by keyboard ([real_robot_setup.md](real_robot_setup.md#running-the-demos)) |
-| `calibrate` | measure one real robot from the terminal and write its profile (`examples/calibrate_robot.py`, `--radio 0`; finds the robots when not told which): fixed driving moves, then the robot fetches the ball itself for a carry ladder (the fastest it keeps the ball each way) and 10 charged kicks; asks only to roll the ball back; then DONE, its loop delay, speed gain, acceleration, vision noise and kick speed, and its tag offset, kick bend and bias and carry caps written to `utama_core/config/robots/radio_<radio>.json`; `--ball-only` repeats the ball part, `--check` tries the new profile against the committed one in alternating blocks ([real_robot_setup.md](real_robot_setup.md#5-measuring-a-robot)) |
+| `runs` | list the runs in `replays/` (each evaluation round, and older round robins): start time, commit, matches, stalls, arguments |
+| `debug-robots` | keyboard/click teleoperation GUI for real robots over the serial radio (robots chosen by radio ID; [field_day.md](../tutorials/field_day.md)) |
+| `field-check` | the start of a test day in one command (`tools/field/field_check.py`): vision's cameras, packets per second, field size, ball and lids in view, then `find-robots` with each robot's share of commands answered and its profile; every line "ok" or "!!" ([field_day.md](../tutorials/field_day.md#each-test-day)) |
+| `find-robots` | which robots are on the field and the lid each wears (`python -m utama_core.team_controller.controllers.real.find_robots`): each radio that answers turns a little on the spot and back, and the pattern that turned is its lid; prints radio, lid, whether its profile was calibrated on that lid, silent radios and stray patterns; saved for the examples, which check it against vision on start and find again when a lid is missing (`shooting_drill.on_field`, `find_robots.confirm`) ([field_day.md](../tutorials/field_day.md#5-measuring-a-robot)) |
+| `demos` | every dashboard demo from one command (`examples/demos.py`, `--mode rsim` to rehearse, `--demo` the first): one dashboard stays up and the Live tab's Demo panel switches demo while halted (robots stopped, log saved, radio and vision released, the page reloads by itself), sets the first robot, camera half and rules for the next run, runs the field check, and offers teleop by keyboard ([field_day.md](../tutorials/field_day.md#running-the-demos)) |
+| `calibrate` | measure one real robot from the terminal and write its profile (`tools/field/calibrate_robot.py`, `--radio 0`; finds the robots when not told which): fixed driving moves, then the robot fetches the ball itself for a carry ladder (the fastest it keeps the ball each way) and 10 charged kicks; asks only to roll the ball back; then DONE, its loop delay, speed gain, acceleration, vision noise and kick speed, and its tag offset, kick bend and bias and carry caps written to `utama_core/config/robots/radio_<radio>.json`; `--ball-only` repeats the ball part, `--check` tries the new profile against the committed one in alternating blocks ([field_day.md](../tutorials/field_day.md#5-measuring-a-robot)) |
 
 ## Worktrees
 
 | Script | Purpose |
 |---|---|
-| `tools/setup_worktree.sh` | Run inside a git worktree: links `.pixi` to the main checkout's and copies the gitignored compiled `.so` extensions (planner, rsim). Idempotent; one line per action |
+| `tools/dev/setup_worktree.sh` | Run inside a git worktree: links `.pixi` to the main checkout's and copies the gitignored compiled `.so` extensions (planner, rsim). Idempotent; one line per action. Symlink `replays` too, so the worktree shares the match results store; run one evaluation at a time per laptop |
 
 ## Playing matches
 
 | Script | Purpose |
 |---|---|
-| `tools/evaluation/round_robin.py` | The whole-catalog health and stall check: every strategy config against every other, one full match per pair (two halves of 300 s of playing time); writes `replays/tournament_<id>/` with `summary.json`, and adds its matches to the evaluation ledger. `--pair A B` plays one match; `--reuse` replays only matches whose code changed, plus a 5% spot-check of reused ones; `summary.json`'s `reuse.mismatches` lists any that came out different, which means a match no longer replays exactly. `--sim-noise JSON` (inline or a file) plays every match with the same seeded latency, kick speed and direction noise, ball friction, motion limits and vision noise (`SimNoise`, `docs/STRATEGY_DEVELOPMENT.md`). A single strategy is judged with `evaluate.py`, not by its place here |
-| `tools/evaluation/evaluate.py` | One or more candidates against the champion of a fixed reference pool (`tools/evaluation/pools/pool_v1.json`), in rounds under seeded sim noise, until its paired results against the champion say better (P >= 0.99), worse (P <= 0.2) or undecided after 6 rounds; `--held-out` plays the pool's held-out opponents before promoting. Results go to the evaluation ledger `replays/eval/ledger.jsonl` (round-robins add theirs too), reports to `replays/eval/reports/`; no replays kept. The way to judge a strategy (`docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy"). `--explain` (off by default) also writes pictures and a `summary.json` of each candidate against the champion to `replays/eval/explain/` (`tools/evaluation/explain.py`); they explain the verdict, never change it |
-| `tools/evaluation/explain.py` | `explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`: positions (with and without the ball), shots for and against, and fouls by rule, for two strategies from the matches in a run dir (a round-robin's or an `evaluate.py` run's), plus `summary.json` with the numbers behind them; goals stay the verdict. Used by `evaluate.py --explain` |
-| `tools/evaluation/match.py` | Match construction shared by the two above (not run directly) |
-| `dashboard_server.py` | Standalone browser dashboard at http://localhost:8080: replays and tournament results |
+| `tools/evaluation/evaluate.py` | Every match run. `evaluate.py [CANDIDATE ...]`: round 1 a round robin of the core strategies (`--all`: every strategy) and the reference, the champion at the last release played from a `.strategy` file (`--at REF` for another release); with candidates, the same round robin repeats under the next seed, with only the open candidates: a screen on seeds 1-6 that drops a candidate whose mean paired diff against the reference is <= 0, then the survivors on fresh seeds 101-106, better if a one-sided paired t-test gives p <= 0.05, else undecided (`analysis/ratings.py`). Each round uses one sim-noise seed in the reference world and robots; matches 1200 s at most. A match the store holds (`replays/match_results/`, `replay/match_results.py`) is taken from it, never played again: to play everything again, delete the store. Reports stalls with how many matches checked them (the watchdog sees config_a only) and every signal, never a ranking. Writes `replays/eval_<id>/report.json` and `round_<k>/` (replays, `summary.json`, `ball_losses.md`). See `docs/strategy.md`, "Evaluating a strategy" |
+| `tools/evaluation/verdict_sim.py` | How often `evaluate.py`'s rule is right, on simulated results (no matches): better / dropped / undecided rates per effect size, correlation and number of opponents. Rerun after changing the rule or `analysis/ratings.py` |
+| `utama_core/run/sim_setup.py` | Not a script: the one way every tool loads a strategy (a catalog name, a `.strategy` file, or `PATH.py:FUNCTION` from a scratch file) and sets up an rsim match: `sim_referee` (the referee, with the kickoff team) and `sim_runner` (the `StrategyRunner`). `match.py`, `tools/debug/repro_from_replay.py`, `tools/debug/moments.py`, `tools/debug/debug_match.py` and `main.py` all build their referee and runner here, and nothing else does |
+| `tools/dev/build_strategy.py` | `tools/dev/build_strategy.py NAME OUT.strategy [--ref COMMIT]`: pack one strategy and the code it runs on into a file that plays in its own process (`utama_core/bundle/`). `evaluate.py` builds the reference's itself |
+| `tools/evaluation/explain.py` | `explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`: positions (with and without the ball), shots for and against, and fouls by rule, for two strategies from the matches in a run dir (an `evaluate.py` round's, or an older round-robin's), plus `summary.json` with the numbers behind them; goals stay the verdict. |
+| `tools/evaluation/match.py` | Plays one match (`run_match`: the step loop to full time, the score and the stats) for `evaluate.py`, with the set-up from `utama_core/run/sim_setup.py` (not run directly) |
+| `tools/evaluation/sim_settings.py` | Not a script: loads the players and the simulated world and robots (`tools/evaluation/reference/players.json`, `world.json`, `robots.json`) for `evaluate.py`. Kept in `reference/` so a new champion does not rerun every stored match |
+| `utama_core/dashboard/__main__.py` | `pixi run dashboard`: standalone browser dashboard at http://localhost:8080: Strategies tab (`dashboard/views/strategies.py`) and Replay tab |
 
 ## Evaluating strategies
 
-What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md),
+What these measure and how far to trust each: [strategy.md](strategy.md),
 [signals.md](signals.md).
 
 | Script | Purpose |
 |---|---|
-| `tools/signal_report.py` | Figures of a round-robin's strategy signals for [signal_report.md](signal_report.md) |
-| `tools/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for [signal_report.md](signal_report.md#on-the-pitch). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold) |
-| `utama_core/analysis/goal_ledger.py` | `python -m utama_core.analysis.goal_ledger <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
-| `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges for the sim-realism plan ([sim_realism.md](sim_realism.md)): ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
-| `tools/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
-
-### Validation studies
-
-These check how far cheap metrics agree with round-robin results. They do not judge a strategy: use `evaluate.py`.
-
-| Script | Purpose |
-|---|---|
-| `tools/metric_correlation.py` | Which cheap per-match metrics predict results; computes the *offline* signals in [signals.md](signals.md) |
+| `tools/debug/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch. `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold). `--data PATH`: the position and shot maps' numbers as JSON, no figures (the dashboard runs it once per round and keeps `pitch_maps.json` beside the summary) |
+| `utama_core/analysis/goal_sources.py` | `python -m utama_core.analysis.goal_sources <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
+| `tools/dev/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
 
 ## Real matches
 
 | Script | Purpose |
 |---|---|
-| `tools/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted (`--keep-raw` keeps it; downloads cut short are resumed; each conversion's memory is capped by `--max-memory-gb`). Also writes sidecars for measuring physics: the tracker's kicks and visibility, and with `--raw-vision` every raw camera detection; `--backfill-extras` adds them to matches already converted. What a converted match holds and its limits: [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md#real-matches) |
-| `tools/realism_scorecard.py` | Our sim against real Division B matches, component by component: attempts per live minute (open play and set pieces), attempt distance, real xG per attempt, finishing, goal rate and keeper saves per xG band, shot outcomes (keeper, defender, wide, post, crossed with no goal), aim outside the posts and miss distance, ball slow-down, kick speed, keeper depth, keeper and nearest-defender reaction time (`utama_core/analysis/realism/reaction.py`), pass line offset and completion (`passes.py`). Each row: the real value and 95% interval, the sim value, and whether it is inside. `--real` rebuilds the committed reference (`utama_core/analysis/realism/real_2025_2026.json`: the real xG model and rows) from converted logs; `--sim RUN_DIR` scores a round-robin against it. Attempts exclude passes and kicks from beyond 6 m. See [sim_realism.md](sim_realism.md) |
+| `tools/realism/convert_ssl_log.py` | Official RoboCup SSL game logs to replays in our format, so the analyses run on real matches: given logs, or `--corpus 2022-2026` to download and convert every published Division B match, deleting each raw log once converted (`--keep-raw` keeps it; downloads cut short are resumed; each conversion's memory is capped by `--max-memory-gb`). Also writes sidecars for measuring physics: the tracker's kicks and visibility, and with `--raw-vision` every raw camera detection; `--backfill-extras` adds them to matches already converted. What a converted match holds and its limits: [strategy.md](strategy.md#real-matches) |
 
 ## Debugging a match
 
-The four picture tools (`match_timeline.py`, `restart_picture.py`, `plan_trace.py`, `pitch_maps.py`) each take
+The four picture tools (`tools/debug/match_timeline.py`, `tools/debug/restart_picture.py`, `tools/debug/plan_trace.py`, `tools/debug/pitch_maps.py`) each take
 `--findings PATH` (`-` for stdout) and write the problems they flag as JSON lines, one `Finding` per line
 (`utama_core/analysis/findings.py`):
 
@@ -82,52 +105,69 @@ Fields: `tool`, `kind`, `replay` (path or null), `side` (`friendly`, `enemy` or 
 
 | Script | Purpose |
 |---|---|
-| `tools/triage.py` | **Start here.** `RUN_DIR [--strategy NAME] [--matches 3] [--restarts] [--out DIR] [--max-pictures 8] [--workers 2]`: each strategy's N worst matches by goal difference, among those it played as config_a (the side with an intentions log: about half its round-robin matches, every other round in an evaluation), every flagged problem with its numbers (`tactic_thrash`, `stall`, and with `--restarts` the `target_in_keep_out` / `keep_out_short` / `target_in_defense_area` restart flags), the top K drawn with the picture tool for that kind. Writes `OUT/index.md` (read first), `OUT/findings.jsonl` and `OUT/pictures/`; default OUT is `RUN_DIR/triage/`. `--restarts` is slow (about 45 s a match). Read-only. See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Debugging a foul or failure" |
-| `tools/replay_trace.py` | Text trace of a replay window: referee commands, ball, nearest robot per side. `--events` lists the window's kicks (with the nearest robot as kicker), possession changes, referee changes and fouls, one line each; `--json` writes rows or events as JSON. The first thing to run on a stall, a voided restart or a foul |
-| `tools/match_timeline.py` | One match window as swimlanes: `REPLAY.npz T0 T1 [--side friendly\|enemy]`. Referee command band, one lane per robot coloured by its tactic (ticks at switches, strip where it had the ball), distance of each robot to the ball, and goals, fouls and shots on top; prints switches per minute and the longest tactic span per robot. Use it for thrashing and everyone-chasing-the-ball; example in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md). `--findings PATH`: one `tactic_thrash` per robot at or above `FLIP_BACKS_PER_MIN` (2) flip-backs per minute of live play (a tactic held under 1 s, then reverted; raw switch rate is not the signal, most strategies switch 10-25 times a minute by design); `timeline_findings(replay, t0, t1, side)` computes it without drawing |
-| `tools/repro_from_replay.py` | Load a replay's field state at a timestamp into a fresh headless rsim match and tick forward with tracing on. Plays with the replay's own sim noise by default (`--sim-noise none` for noiseless, `--sim-noise PATH` for another). `--summary ROBOT_IDS` prints each listed robot's tactic, position, distance to the ball, referee command and traced target every 0.25 s; `--trace-out` JSONL row kinds are in `--help` |
-| `tools/plan_snapshot.py` | Picture of what the fast-path planner decided for one robot on one tick: `REPLAY.npz --t S --robot ID [--target X Y] [--side enemy]` runs the planner's `_path_to` on the replay's field state and draws the pitch around the robot: every robot with its id and radius, the ball and its keep-out circle, each clearance ring, the target, the carrot returned, and the referee command and distances. `--full-pitch` shows the whole pitch; with no `--target` the robot's position 0.5 s later stands in. Read-only. See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Debugging a foul or failure" |
-| `tools/restart_picture.py` | Picture of where the referee override sends every friendly robot for one restart: `REPLAY.npz --t S [--side enemy]`, or `--all-restarts` for one small panel per restart command in the replay's referee sidecar (at most 8). Runs `RefereeOverride.tick` for the replay's command and draws each robot's commanded target with its role (kicker, placer, keeper), the ball and its 0.8 m keep-out, the placement spot and the other team faded. A robot whose target is inside the keep-out or a defence area it must avoid is flagged in red, with the text box. Read-only. `--findings PATH`: `target_in_keep_out`, `keep_out_short` (the 1 cm stop deadband) and `target_in_defense_area` for every restart in the match, each occurrence, without drawing (`restart_findings(replay, side)`). See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Referee handling" |
-| `tools/plan_trace.py` | The fast-path planner over a time window: `REPLAY.npz --t0 S --t1 S --robot ID [--side enemy] [--target X Y] [--step 0.1] [--lookahead 0.5] [--json]` runs the planner's `_path_to` on every sampled tick and draws one PNG: the robot's path coloured by time with each tick's carrot joined to it, the ball path, the keep-out circle and clearance rings at the end, and time panels for robot-to-ball distance, robot-to-carrot length, speed and the referee command. Without `--target` each tick's target is the robot's position `--lookahead` s later. Robot positions are the replay's, not re-simulated: it shows what the current planner would do from each recorded state. Read-only; `--json` prints the per-tick rows. `--findings PATH` writes one `parked` or `pushed_out` finding per run of at least 1 s (`PARKED_MIN_S`) of short carrot with the target far. See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Debugging a foul or failure" |
-| `tools/moments.py` | Regression moments (`utama_core/tests/moments/`): `fouls RUN_DIR` lists our side's fouls in a round-robin with the restart side (`--skip-own-restart`, `--by strategy,rule` for counts, `--include-stoppages` for out_of_bounds, `--json` for either as JSON; each foul names its match's `replay` .npz relative to the repo root), `capture REPLAY --t S [--out PATH]` writes a moment from a replay, `new NAME --command CMD` writes a hand-made template, `play JSON [--seed N \| --seeds 0-4] [--against REF] [--events] [--strategy FILE.py:FACTORY]` plays one and prints what broke its checks (a seed table, the same moment at another commit, its events, a scratch strategy). See [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md), "Debugging a foul or failure" |
-| `tools/debug_match.py` | One ad hoc match between two strategies for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
+| `tools/debug/find_bugs.py` | **Start here.** `RUN_DIR [--strategy NAME] [--matches 3] [--restarts] [--out DIR] [--max-pictures 8] [--workers 2]`: each strategy's N worst matches by goal difference, among those it played as config_a (the side with an intentions log: about half its matches in a round), every flagged problem with its numbers (`tactic_thrash`, `stall`, and with `--restarts` the `target_in_keep_out` / `keep_out_short` / `target_in_defense_area` restart flags), the top K drawn with the picture tool for that kind. Writes `OUT/index.md` (read first), `OUT/findings.jsonl` and `OUT/pictures/`; default OUT is `RUN_DIR/find_bugs/`. `--restarts` is slow (about 45 s a match). `--fouls` instead lists our side's fouls with the referee command then active and the restart side (`--rule`, `--skip-own-restart`, `--by strategy,rule` for counts, `--include-stoppages` for out_of_bounds, `--json`; until 2026-11-11 `tools/debug/moments.py fouls`). Read-only. See [strategy.md](strategy.md), "Debugging a foul or failure" |
+| `tools/debug/replay_trace.py` | Text trace of a replay window: referee commands, ball, nearest robot per side. `--events` lists the window's kicks (with the nearest robot as kicker), possession changes, referee changes and fouls, one line each; `--json` writes rows or events as JSON. The first thing to run on a stall, a voided restart or a foul |
+| `tools/debug/match_timeline.py` | One match window as swimlanes: `REPLAY.npz T0 T1 [--side friendly\|enemy]`. Referee command band, one lane per robot coloured by its tactic (ticks at switches, strip where it had the ball), distance of each robot to the ball, and goals, fouls and shots on top; prints switches per minute and the longest tactic span per robot. Use it for thrashing and everyone-chasing-the-ball; example in [strategy.md](strategy.md). `--findings PATH`: one `tactic_thrash` per robot at or above `FLIP_BACKS_PER_MIN` (2) flip-backs per minute of live play (a tactic held under 1 s, then reverted; raw switch rate is not the signal, most strategies switch 10-25 times a minute by design); `timeline_findings(replay, t0, t1, side)` computes it without drawing |
+| `tools/debug/repro_from_replay.py` | Load a replay's field state at a timestamp into a fresh headless rsim match and tick forward with tracing on. Plays with the replay's own sim noise by default (`--sim-noise none` for noiseless, `--sim-noise PATH` for another). `--summary ROBOT_IDS` prints each listed robot's tactic, position, distance to the ball, referee command and traced target every 0.25 s; `--trace-out` JSONL row kinds are in `--help` |
+| `tools/debug/plan_snapshot.py` | Picture of what the fast-path planner decided for one robot on one tick: `REPLAY.npz --t S --robot ID [--target X Y] [--side enemy]` runs the planner's `_path_to` on the replay's field state and draws the pitch around the robot: every robot with its id and radius, the ball and its keep-out circle, each clearance ring, the target, the carrot returned, and the referee command and distances. `--full-pitch` shows the whole pitch; with no `--target` the robot's position 0.5 s later stands in. Read-only. See [strategy.md](strategy.md), "Debugging a foul or failure" |
+| `tools/debug/restart_picture.py` | Picture of where the referee override sends every friendly robot for one restart: `REPLAY.npz --t S [--side enemy]`, or `--all-restarts` for one small panel per restart command in the replay's referee sidecar (at most 8). Runs `RefereeOverride.tick` for the replay's command and draws each robot's commanded target with its role (kicker, placer, keeper), the ball and its 0.8 m keep-out, the placement spot and the other team faded. A robot whose target is inside the keep-out or a defence area it must avoid is flagged in red, with the text box. Read-only. `--findings PATH`: `target_in_keep_out`, `keep_out_short` (the 1 cm stop deadband) and `target_in_defense_area` for every restart in the match, each occurrence, without drawing (`restart_findings(replay, side)`). See [strategy.md](strategy.md), "Referee handling" |
+| `tools/debug/plan_trace.py` | The fast-path planner over a time window: `REPLAY.npz --t0 S --t1 S --robot ID [--side enemy] [--target X Y] [--step 0.1] [--lookahead 0.5] [--json]` runs the planner's `_path_to` on every sampled tick and draws one PNG: the robot's path coloured by time with each tick's carrot joined to it, the ball path, the keep-out circle and clearance rings at the end, and time panels for robot-to-ball distance, robot-to-carrot length, speed and the referee command. Without `--target` each tick's target is the robot's position `--lookahead` s later. Robot positions are the replay's, not re-simulated: it shows what the current planner would do from each recorded state. Read-only; `--json` prints the per-tick rows. `--findings PATH` writes one `parked` or `pushed_out` finding per run of at least 1 s (`PARKED_MIN_S`) of short carrot with the target far. See [strategy.md](strategy.md), "Debugging a foul or failure" |
+| `tools/debug/moments.py` | Regression moments (`utama_core/tests/moments/`): `capture REPLAY --t S [--out PATH]` writes a moment from a replay (starting points: `tools/debug/find_bugs.py RUN_DIR --fouls`), `play JSON [--seed N \| --seeds 0-4] [--against REF] [--events] [--strategy FILE.py:FACTORY]` plays one and prints what broke its checks (a seed table, the same moment at another commit, its events, a scratch strategy). See [strategy.md](strategy.md), "Debugging a foul or failure" |
+| `tools/debug/debug_match.py` | One ad hoc match between two strategies for tactic debugging; `--dump-ticks` writes per-tick poses and commanded targets |
 
 Library helpers for the same job (`render_window`, `render_clip`, `MatchLog.trace()`) are
-described in [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md).
+described in [strategy.md](strategy.md).
+
+## Simulator realism
+
+Is the simulator close to the real league, and are its physics settings measured? These tools judge
+the simulator, not a strategy: none of them is part of strategy development. Their inputs are the official logs converted by
+`tools/realism/convert_ssl_log.py` (its kick and visibility sidecars, see [Real matches](#real-matches)) and
+the field logs in `replays/field/`.
+
+| Script | Purpose |
+|---|---|
+| `tools/realism/realism_scorecard.py` | Our sim against real Division B matches, component by component: attempts per live minute (open play and set pieces), attempt distance, real xG per attempt, finishing, goal rate and keeper saves per xG band, shot outcomes (keeper, defender, wide, post, crossed with no goal), aim outside the posts and miss distance, ball slow-down, kick speed, keeper depth, keeper and nearest-defender reaction time (`utama_core/analysis/realism/reaction.py`), pass line offset and completion (`passes.py`). Each row: the real value and 95% interval, the sim value, and whether it is inside. `--real` rebuilds the committed reference (`utama_core/analysis/realism/real_2025_2026.json`: the real xG model and rows) from converted logs; `--sim RUN_DIR` scores a round-robin against it. Attempts exclude passes and kicks from beyond 6 m. |
+| `utama_core/analysis/physics_ranges.py` | `python -m utama_core.analysis.physics_ranges --real <official logs> --sim <run_dir>`: physics parameter ranges: ball deceleration by speed and time since a kick, rolling-segment fits, robot speed, acceleration, braking and turn-rate percentiles per robot, and dropped detections, with spreads between matches, robots and teams |
+| `tools/field/field_physics.py` | Measures the world settings from field logs, only from sessions `tools/field/field_sessions.json` allows, and prints how well runs, days and radios agree. |
+| `tools/field/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/realism/convert_ssl_log.py` |
 
 ## Architecture
 
 | Script | Purpose |
 |---|---|
-| `tools/package_graph.py` | The import graph between `utama_core/` packages, as a Mermaid flowchart with import counts, from `ast` (nothing is imported), plus any violation of the stated import rules (`replay/` never imports `analysis/`). Its output is kept in [architecture.md](architecture.md) |
+| `tools/dev/package_graph.py` | The import graph between `utama_core/` packages, as a Mermaid flowchart with import counts, from `ast` (nothing is imported), plus any violation of the stated import rules (`replay/` never imports `analysis/`). Its output is kept in [architecture.md](architecture.md) |
 
 ## Benchmarks
 
 | Script | Purpose |
 |---|---|
-| `tools/motion_planning_benchmark.py` | The motion planners (`fpp`, `dwa`, `trajsample`) on fixed headless rsim scenarios; `--figures DIR` also writes trajectory and summary PNGs; see [motion_planning_comparison.md](motion_planning_comparison.md) |
+| `tools/motion_planning_benchmark.py` | The motion planners (`fpp`, `dwa`, `trajsample`) on fixed headless rsim scenarios; `--figures DIR` also writes trajectory and summary PNGs; see [motion_planning.md](motion_planning.md) |
 
 ## Demos and external environments
 
 | Script | Purpose |
 |---|---|
-| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `split_shape` vs `high_press` |
+| `main.py` | Watch one match in rsim with the referee and dashboard: `pixi run main [yellow] [blue]`, default `pendulum` vs `wolfpack`. |
 | `examples/demo_custom_referee.py` | Every `CustomReferee` rule in a scripted scenario, in a pygame window; no simulator needed |
 | `examples/demo_referee_gui_rsim.py` | `CustomReferee` with the dashboard's referee tab, over rsim |
 | `examples/demo_referee_feedback_gui.py` | The referee UI's controller-feedback panel with fake feedback, no hardware |
 | `examples/demo_exhibition_road.py` | The Exhibition Road festival demo on the 4 m x 3 m field, over rsim |
 | `examples/demos.py` | `pixi run demos`: shooting drill, pass-receive, save-and-counter and score goal behind one dashboard, switched from the Live tab's Demo panel while halted |
 | `examples/teleop.py` | Drive either robot by keyboard from the Live tab's Teleop panel (after Force Start; stops on key release, Halt, or the page going quiet); also a demo in `pixi run demos` |
-| `examples/calibrate_robot.py` | `pixi run calibrate`: one real robot's profile from the terminal, no dashboard; `--mode rsim --yes` rehearses it |
-| `examples/ball_trials.py` | `pixi run calibrate`'s ball part: fetches the ball itself, carries it at rising speeds each way until it loses it, then kicks, each charged; aimed at a target for `--check` |
-| `examples/shooting_drill.py` | One robot shoots at a goal the other defends (the keeper feeds the ball back, so it loops) on real robots (or `--mode rsim`/`grsim`): field, camera half, IDs and each robot's working hardware in one config block; the Live tab's field check gates the start. Records every camera run as an SSL game log in `replays/field/`; `--calibrate attacker\|defender` plays fixed moves for measuring that robot |
-| `examples/save_and_counter.py` | A 1v1 game where a keeper that saves takes the ball and counterattacks, on real robots (or `--mode rsim`/`grsim`), a goal each: each robot keeps its goal and attacks the other's, reading every tick from the same world whether it attacks or keeps; a keeper's save turns it into the attacker. Field, rules and hardware type from `shooting_drill.py` |
+| `tools/field/calibrate_robot.py` | `pixi run calibrate`: one real robot's profile from the terminal, no dashboard; `--mode rsim --yes` rehearses it |
+| `tools/field/ball_trials.py` | `pixi run calibrate`'s ball part: fetches the ball itself, carries it at rising speeds each way until it loses it, then kicks, each charged; aimed at a target for `--check` |
+| `tools/field/shooting_drill.py` | One robot shoots at a goal the other defends (the keeper feeds the ball back, so it loops) on real robots (or `--mode rsim`/`grsim`): field, camera half, IDs and each robot's working hardware in one config block; the Live tab's field check gates the start. Records every camera run as an SSL game log in `replays/field/`; `--calibrate attacker\|defender` plays fixed moves for measuring that robot |
+| `examples/save_and_counter.py` | A 1v1 game where a keeper that saves takes the ball and counterattacks, on real robots (or `--mode rsim`/`grsim`), a goal each: each robot keeps its goal and attacks the other's, reading every tick from the same world whether it attacks or keeps; a keeper's save turns it into the attacker. Field, rules and hardware type from `tools/field/shooting_drill.py` |
 | `examples/pass_receive.py` | Two robots (one per team, so two colours) pass to each other on real robots (or `--mode rsim`/`grsim`): the robot nearer the ball passes once its partner is still and facing it, the other gets open and receives. The Live tab shows each robot's role |
+| `examples/score_goal.py` | One robot, no opponent, takes the ball and scores, on a real robot (or `--mode rsim`); also a demo in `pixi run demos` |
+| `examples/dribble_and_shoot.py` | `score_goal.py`'s robot dribbles a lap of the field, then scores |
 | `examples/passing_rally.py` | `pass_receive.py`'s pair passing their way along the field in two lanes, turning round `TURN_M` from each end line, for ever (no shots) |
-| `tools/vision_check.py` | Does ssl-vision's multicast reach this machine: sender, packets per second per camera, detections and the field size, in 5 s with no radio or runner. The first check of a test day ([real_robot_setup.md](real_robot_setup.md)). `--guided ball` (or `"blue 2"`): each camera's error on 9 known spots, saved as a baseline |
-| `tools/ssl-vision-lab-field.patch` | Not a script: adds a **Lab Field** preset (our 3 m x 2.25 m field, two cameras) to an ssl-vision checkout; `git apply` it there and rebuild |
-| `tools/robot_calibration.py` | A robot's numbers from a recorded field test (`replays/field/*.log`): loop delay, speed gain and acceleration per axis (the sim's move model fitted to the camera's positions), vision noise at rest and missed detections, kick speed. Writes `<log>.calibration.json`. The same log converts to a replay with `tools/convert_ssl_log.py` |
+| `tools/field/vision_check.py` | Does ssl-vision's multicast reach this machine: sender, packets per second per camera, detections and the field size, in 5 s with no radio or runner. The first check of a test day ([field_day.md](../tutorials/field_day.md)). `--guided ball` (or `"blue 2"`): each camera's error on 9 known spots, saved as a baseline |
+| `tools/field/trim_idle_log.py` | Cuts long HALT/STOP dead time out of a field log (`replays/field/<run>.log.gz`, `--dry-run` first, `--in-place`) ([real_robots.md, "Field logs"](real_robots.md#field-logs)) |
+| `tools/field/package_logs.py` | Small archives to share: a tournament's results without the large `.npz` arrays, or field logs compressed with their calibration files ([real_robots.md, "Field logs"](real_robots.md#field-logs)) |
+| `tools/field/ssl-vision-lab-field.patch` | Not a script: adds a **Lab Field** preset (our 3 m x 2.25 m field, two cameras) to an ssl-vision checkout; `git apply` it there and rebuild |
 | `utama_core/analysis/close_calls.py` | Where two robots came within 0.25 m of each other in field logs (`replays/field/*.log`): how near, how fast they were closing, and the referee command in force; only the robots the run drove, `--tag` per robot. `python -m utama_core.analysis.close_calls replays/field/*real*.log` |
 | `examples/planner_ab.py` | Two robots swap ends head on and cross, again and again, in blocks alternating the planner (fpp, trajsample): contacts, close calls, nearest approach and time per planner; every block a game log. The field A/B of the motion planners |
 | `examples/demo_dribbler_test.py` | One robot dribbling round a rectangle on the Exhibition Road field |
-| `examples/demo_split_shape_match.py` | Visible grSim 6v6 of `split_shape` against itself |
+| `examples/demo_pendulum_match.py` | Visible grSim 6v6 of `pendulum` against itself |

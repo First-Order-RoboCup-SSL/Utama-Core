@@ -22,8 +22,8 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.skills.utils.move_utils import move
 
 
 @dataclass
@@ -77,7 +77,7 @@ def go_to_point_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 def single_robot_go_to_point_strategy(
@@ -143,7 +143,7 @@ def go_to_trajectory_strategy(
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 @dataclass
@@ -199,7 +199,7 @@ class _OscillatingObstacleTactic(BaseTactic[_OscillateMem]):
 def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
     """`obstacle_configs`: list of objects with `center_position`,
     `oscillation_axis`, `amplitude`, `direction_up_or_right`, `speed`
-    (matching `MovingObstacleConfig` in `single_robot_moving_obstacle_test.py`)
+    (matching `MovingObstacleConfig` in `test_single_robot_moving_obstacle.py`)
     — obstacle_id is assigned by list position (0, 1, 2, ...), matching the
     deleted BT strategy's convention."""
     configs = [
@@ -224,7 +224,7 @@ def oscillating_obstacle_strategy(obstacle_configs: list) -> AbstractStrategy:
             ctx=ctx,
         )
 
-    return AbstractStrategy(build_kernel_strategy=_build, exp_ball=False)
+    return AbstractStrategy(build=_build, exp_ball=False)
 
 
 __all__ = [

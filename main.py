@@ -2,60 +2,45 @@
 round-robin matches are.
 
 Run:
-    pixi run main                          # split_shape vs high_press
-    pixi run main tiki_taka counter_flow   # any two names from docs/strategies.md
+    pixi run main                          # pendulum vs wolfpack
+    pixi run main pendulum riptide   # any two names on the dashboard's Strategies tab
+    pixi run main a.strategy wolfpack    # or a .strategy file (tools/dev/build_strategy.py)
     # the rsim window opens; the dashboard is at http://localhost:8080; Ctrl+C to stop
 
 Yellow (the first strategy) starts on the right and kicks off. For many matches with
-results, use `tools/evaluation/round_robin.py`.
+results, use `tools/evaluation/evaluate.py`.
 """
 
 import argparse
 
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.run import StrategyRunner
-from utama_core.strategy import kernel_strategy
-
-N_ROBOTS = 6  # per side: robot 0 keeps goal, robots 1-5 play outfield
-OUTFIELD_ROBOT_IDS = tuple(range(1, N_ROBOTS))
+from utama_core.referee.profiles.profile_loader import load_profile
+from utama_core.run.sim_setup import UnknownStrategy, load_side, sim_referee, sim_runner
 
 
 def _strategy(name: str) -> AbstractStrategy:
-    build = getattr(kernel_strategy, f"build_{name}_kernel_strategy", None)
-    if build is None:
-        raise SystemExit(f"Unknown strategy {name!r}: see docs/strategies.md for the names")
-    return AbstractStrategy(build_kernel_strategy=build(OUTFIELD_ROBOT_IDS))
+    """A strategy by name, a `.strategy` file or `PATH.py:FUNCTION`; otherwise exit with the names there are."""
+    try:
+        return load_side(name)
+    except UnknownStrategy as e:
+        raise SystemExit(f"{e} (the strategies: utama_core/strategy/)") from None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("yellow", nargs="?", default="split_shape")
-    parser.add_argument("blue", nargs="?", default="high_press")
+    parser.add_argument("yellow", nargs="?", default="pendulum")
+    parser.add_argument("blue", nargs="?", default="wolfpack")
     args = parser.parse_args()
+    yellow, blue = _strategy(args.yellow), _strategy(args.blue)  # fail on a bad name before the dashboard starts
 
     profile = load_profile("simulation")
-    referee = CustomReferee(profile, n_robots_yellow=N_ROBOTS, n_robots_blue=N_ROBOTS)
+    referee = sim_referee()
     server = attach_dashboard()
     referee_view.attach(server, referee, profile)
 
-    runner = StrategyRunner(
-        strategy=_strategy(args.yellow),
-        opp_strategy=_strategy(args.blue),
-        my_team_is_yellow=True,
-        my_team_is_right=True,
-        mode="rsim",
-        exp_friendly=N_ROBOTS,
-        exp_enemy=N_ROBOTS,
-        exp_ball=True,
-        referee=referee,
-        referee_initial_command=RefereeCommand.PREPARE_KICKOFF_YELLOW,
-        show_live_status=True,
-    )
+    runner, _ = sim_runner(yellow, blue, referee=referee, show_live_status=True)
     runner.run()
 
 

@@ -36,7 +36,7 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tactics.decoy_and_overload import (
     _ENEMY_BALL_RELEASE_TICKS,
     _FINISH_TIMEOUT_TICKS,
