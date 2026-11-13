@@ -2,8 +2,13 @@
 # tools/dev/setup_worktree.sh — prepare a git worktree of this repo to run tests and tools.
 #
 # Run inside the worktree (not the main checkout). It makes the worktree usable without a
-# fresh `pixi install` or planner build:
-#   - symlinks .pixi to the main checkout's .pixi (the environment);
+# planner or simulator build:
+#   - installs the worktree's own pixi environment (`pixi install`, about 2 min and 120 MB: the
+#     packages are hardlinks into pixi's cache). It can't share the main checkout's: pixi refuses
+#     an environment reached from another directory ("the environment directory has moved",
+#     pixi 0.83), so an older setup's .pixi symlink is replaced;
+#   - links `replays` to the main checkout's, so matches are stored once (the match results
+#     store) and evaluations in different worktrees reuse each other's matches;
 #   - copies the gitignored compiled extensions (_fastpathplanner, _robosim .so files) from
 #     the main checkout. Without them the planner falls back to Python and results differ.
 # Idempotent: re-running changes nothing that is already in place. Prints one line per action.
@@ -19,15 +24,30 @@ if [ "$wt_root" = "$main_root" ]; then
     exit 0
 fi
 
-link="$wt_root/.pixi"
-target="$main_root/.pixi"
+env="$wt_root/.pixi"
+if [ -L "$env" ]; then
+    rm "$env"
+    echo "removed: the .pixi symlink (pixi can't use a shared environment)"
+fi
+if [ -d "$env/envs/default" ]; then
+    echo "ok: .pixi has its own environment"
+else
+    if ! out="$(cd "$wt_root" && pixi install 2>&1)"; then
+        echo "$out"
+        exit 1
+    fi
+    echo "installed: .pixi (the worktree's own environment)"
+fi
+
+link="$wt_root/replays"
+target="$main_root/replays"
 if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
-    echo "ok: .pixi already links to $target"
+    echo "ok: replays links to $target"
 elif [ -e "$link" ]; then
-    echo "skip: $link exists and is not the link to $target (remove it to relink)"
+    echo "skip: $link exists and is not the link to $target"
 else
     ln -s "$target" "$link"
-    echo "linked: .pixi -> $target"
+    echo "linked: replays -> $target"
 fi
 
 for rel in \
