@@ -1,7 +1,7 @@
 """`goalkeep` — position the goalkeeper on the goal line to cover the predicted shot.
 
 Called directly on robot 0 (pinned outside the kernel scheduler — see
-`docs/STRATEGY_DEVELOPMENT.md`'s "Single-writer partition invariant"), not
+`docs/strategy.md`'s "Single-writer partition invariant"), not
 wrapped in a `Tactic`. The keeper's target y-position on the goal line is
 `predict_ball_pos_at_x`'s intercept when available, adjusted to account for
 one or two outfield defenders standing between the ball and goal (so the

@@ -1,4 +1,4 @@
-"""The tutorial's strategy (docs/first_strategy.md) still builds, so a new member's first paste works."""
+"""The tutorial's strategy (tutorials/first_strategy.md) still builds, so a new member's first paste works."""
 
 import re
 from pathlib import Path
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 from utama_core.engine.strategy import Strategy
 
-DOC = Path(__file__).resolve().parents[3] / "docs" / "first_strategy.md"
+DOC = Path(__file__).resolve().parents[3] / "tutorials" / "first_strategy.md"
 
 
 def test_the_tutorial_strategy_builds():

@@ -87,7 +87,7 @@ _LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FOR
 # held continuously for longer than this many sim seconds without
 # auto-advancing back to a live command. A real kickoff/free-kick/ball-
 # placement ceremony resolves in a few seconds; this is a generous margin
-# above that, not a tight tolerance -- see docs/STRATEGY_DEVELOPMENT.md's
+# above that, not a tight tolerance -- see docs/strategy.md's
 # Observability section for the matches this was built to catch.
 _RESTART_STALL_SECONDS = 15.0
 # COMMITTED_FROZEN: the ball has moved less than this many metres...

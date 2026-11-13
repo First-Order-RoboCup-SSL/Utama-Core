@@ -5,7 +5,7 @@ pattern (the kernel only ever reads `game.referee.referee_command`, `game.ts`,
 and `game.ball` off whatever it's given) plus a stub `Tactic` whose
 `is_committed()` always returns `True` — the exact "missing release path"
 shape behind the 42 "match freeze" bug-fix commits this mechanism responds
-to (see `docs/tactic_model_design_decisions.md` §3/§15's "open item").
+to (see `docs/strategy_design.md` §3/§15's "open item").
 
 The deadline overrides `_choose_partition`'s pinning decision only — it does
 not change `Tactic.is_committed()` semantics (still `True` throughout every

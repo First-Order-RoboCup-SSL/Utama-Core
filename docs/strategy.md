@@ -1,10 +1,10 @@
 # Strategy development
 
-New to the repo? Start with [first_strategy.md](first_strategy.md); this page is the reference.
+New to the repo? Start with [first_strategy.md](../tutorials/first_strategy.md); this page is the reference.
 
 Context for work under `utama_core/engine/`, `utama_core/tactics/`, `utama_core/skills/`,
 `utama_core/strategy/`, or `tools/evaluation/`. Assumes you've read the
-root `AGENTS.md`. Design rationale and rejected alternatives: `docs/tactic_model_design_decisions.md`
+root `AGENTS.md`. Design rationale and rejected alternatives: `docs/strategy_design.md`
 — read it before proposing a change to the kernel's shape.
 
 `engine/` is the scheduler/protocol infra; `strategy/` holds the strategies (one module
@@ -337,6 +337,8 @@ flowchart TD
   a "better" can come from shared code changed since: the report adds the candidate against today's
   champion, same opponents, seeds and colours, no extra matches, where the shared code is the same on
   both sides. `evaluate.py <champion>` measures shared-code changes alone.
+- **Seeing it:** `pixi run dashboard`, Strategies tab: each strategy's verdicts, maps, signals beside
+  the average, and its matches to replay; Evaluation runs lists every run.
 - **Promoting** is a decision, not a side effect: change the champion line in `reference/players.json`
   in a pull request; the next release makes it the reference.
 - **Pictures** (`tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`): for a candidate,
@@ -587,8 +589,9 @@ planner, the referee) is failing every strategy at once.
 
     pixi run python -I tools/realism/convert_ssl_log.py --corpus 2022-2026 --jobs 2 --out <dir outside replays/>
 
-Only the converted files are kept: each raw log (up to 370 MB) is deleted once converted, and a
-converted match takes about 35 MB. The published Division B logs for 2022-2026 are 118
+Each raw log (up to 370 MB) is deleted once converted unless `--keep-raw` is given (keep them:
+it moves them to `<raw dir>/<year>/`, and a later conversion needs no download); a converted match
+takes about 35 MB. The published Division B logs for 2022-2026 are 118
 matches.
 
 What a converted match holds, and where it differs from a sim replay (the details are in

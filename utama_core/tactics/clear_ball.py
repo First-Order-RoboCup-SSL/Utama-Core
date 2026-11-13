@@ -297,7 +297,7 @@ class ClearBallTactic(BaseTactic[ClearBallMem]):
         phase: str,
         command: Optional[RobotCommand],
     ) -> None:
-        """Per-tick mechanism trace (see STRATEGY_DEVELOPMENT.md's observability
+        """Per-tick mechanism trace (see strategy.md's observability
         section). `match_log` is None on tournament/CI runs, so this is a no-op
         there and stays in permanently."""
         if ctx.match_log is None:

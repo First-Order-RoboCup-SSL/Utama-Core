@@ -11,17 +11,18 @@ and is stale — all active strategy work happens here, on top of the tactic-ker
 
 ## Work areas
 
-Pick the row for what you are changing and read its doc first. "Doc" is `TODO` where none
+Pick the row for what you are changing and read its doc first. `tutorials/` holds step-by-step
+pages for people (follow them in order); `docs/` holds the reference (look things up). Keep that split. "Doc" is `TODO` where none
 exists yet: say so in your change rather than guessing.
 
 | Area | Paths | Doc | Notes |
 |---|---|---|---|
-| Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/STRATEGY_DEVELOPMENT.md` | Engine changes are rare: a new primitive, not a new strategy |
-| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/STRATEGY_DEVELOPMENT.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
+| Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/strategy.md` | Engine changes are rare: a new primitive, not a new strategy |
+| Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/strategy.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/referee/` | `docs/referee.md` | |
-| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning_comparison.md` | |
+| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning.md` | |
 | Simulation | `utama_core/simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `utama_core/simulator` is the Python env on top of it |
-| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `utama_core/team_controller/README.md` (brief) | |
+| Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `tutorials/field_day.md`, `docs/real_robots.md` | |
 
 ## Glossary
 
@@ -40,7 +41,7 @@ One term per thing; reuse these instead of coining new ones.
   bug, with a check of the right behaviour (`utama_core/tests/moments/*.json`, `tools/debug/moments.py`).
   A cheap end-to-end check, run in `pixi run test`, that a fixed bug stays fixed; the unit test at
   the cause is the real protection. Not a ranking and not a gate on strategies. The workflow and
-  the bugs found so far: `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure".
+  the bugs found so far: `docs/strategy.md`, "Debugging a foul or failure".
 - **Pitch zones** — defensive / middle / attacking third, left wing / centre / right wing, the
   box, danger: defined once, with a diagram, in `docs/signals.md ("Pitch zones")`. Use those names.
 - **Catch rate** — a diagnostic (share of reachable passes received), never a gate (±4–8 pts between runs).
@@ -109,7 +110,7 @@ One term per thing; reuse these instead of coining new ones.
 
 **Before touching `utama_core/engine/`, `utama_core/tactics/`, `utama_core/strategy/`,
 `utama_core/skills/`, or `tools/evaluation/`, read
-[`docs/STRATEGY_DEVELOPMENT.md`](docs/STRATEGY_DEVELOPMENT.md)** — the tactic-kernel model,
+[`docs/strategy.md`](docs/strategy.md)** — the tactic-kernel model,
 referee-restart handling, lessons from past tactic bugs, and the observability tooling
 (`MatchLog.trace()`, `render_window()`, the strategy catalog) all live there, scoped to
 that half of the repo rather than duplicated here for every task.
@@ -121,7 +122,7 @@ after a concrete case forces it — not in anticipation of one. If a change star
 accumulating multiple new named concepts, stop and check whether that was actually asked
 for. This is a deliberate, repeatedly-stated project preference, not an oversight to fix:
 prefer the smallest mechanism that solves the problem actually in front of you. `docs/
-tactic_model_design_decisions.md` documents several concepts explicitly deferred for
+strategy_design.md` documents several concepts explicitly deferred for
 exactly this reason (concurrent-slot priority tuning, `Tactic` min/max robot-count
 declarations) — check there before reintroducing one of them.
 
@@ -168,11 +169,11 @@ need most:
   cause with a test), `field-session` (a test day on real robots and its logs). The docs keep the
   reasons; the skills keep the steps.
 
-- `docs/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
+- `tutorials/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
   simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.
-- `docs/STRATEGY_DEVELOPMENT.md` — tactic-kernel model, referee handling, writing a
+- `docs/strategy.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
-- `docs/tactic_model_design_decisions.md` — kernel/Tactic/Partitioner design rationale.
+- `docs/strategy_design.md` — kernel/Tactic/Partitioner design rationale.
 - `docs/referee.md` — `CustomReferee` architecture/usage; its "Known gaps" section
   tracks genuinely open items (don't assume something is missing without checking there
   first — it may already be resolved and the surrounding doc just stale).

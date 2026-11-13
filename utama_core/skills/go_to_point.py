@@ -6,7 +6,7 @@ is not a parameter: the robot always faces the ball via `face_ball` — a robot
 that needs to hold a specific orientation while stationary (e.g. facing a
 pass target, not the ball) must call `move()` directly with an explicit
 `target_oren` instead. This has bitten more than one tactic (see
-`docs/STRATEGY_DEVELOPMENT.md`'s "Writing a Tactic" section) — grep every
+`docs/strategy.md`'s "Writing a Tactic" section) — grep every
 `go_to_point(` call in a new tactic and check whether orientation actually
 matters at that call site.
 """

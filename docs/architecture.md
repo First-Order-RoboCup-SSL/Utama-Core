@@ -266,5 +266,5 @@ real robots.
 In rsim both teams run in one `StrategyRunner`: each side has its own refiners, strategy and
 motion controller and steps in turn, alternating which goes first. `MatchStats` and the replay
 writer follow one side's frames. The dashboard's vision stream renders the same frames.
-`docs/STRATEGY_DEVELOPMENT.md` covers the strategy layer; `docs/motion_planning_comparison.md`
+`docs/strategy.md` covers the strategy layer; `docs/motion_planning.md`
 the motion controllers.

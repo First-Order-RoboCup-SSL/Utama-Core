@@ -29,7 +29,7 @@ mindmap
 ## Ranking
 
 Strategies are ranked by goals only, through ratings fitted on match margins
-(`tools/evaluation/evaluate.py`; `docs/STRATEGY_DEVELOPMENT.md`, "Evaluating a strategy").
+(`tools/evaluation/evaluate.py`; `docs/strategy.md`, "Evaluating a strategy").
 Signals explain a result; none of them ranks or is a search objective.
 
 Tested and rejected as rankers (2026-10-17, two noisy round-robins of the same 12 strategies with

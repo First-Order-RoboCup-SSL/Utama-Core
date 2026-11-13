@@ -40,8 +40,8 @@ expects).
 
 Known limitations, stated here once rather than re-derived by every caller:
 - **Tactic `mem` is not in the replay.** Every `Tactic`'s internal per-slot
-  state (phase, committed targets, timers — see `docs/STRATEGY_DEVELOPMENT.
-  md`'s "Writing a Tactic") lives only in the live kernel `Strategy`
+  state (phase, committed targets, timers — see `docs/strategy.md`'s
+  "Writing a Tactic") lives only in the live kernel `Strategy`
   process, never serialized to the replay. A repro therefore always starts
   with **fresh tactic state** — the kernel re-partitions robots from
   scratch on the first tick after the scenario is applied, which may not

@@ -1,4 +1,4 @@
-"""Draws control_schemes.png for docs/motion_planning_comparison.md: how move() reaches the three control
+"""Draws control_schemes.png for docs/motion_planning.md: how move() reaches the three control
 schemes (fpp, dwa, trajsample) through get_control_scheme, and what each one hands back.
 
 pixi run python docs/img/motion_planning/make_control_schemes.py

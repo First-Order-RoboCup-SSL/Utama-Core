@@ -12,7 +12,7 @@ changed. Without `--target` each tick's target is the robot's position `--lookah
 stand-in `tools/debug/plan_snapshot.py` uses; the figure says so. `--json` prints the per-sample rows.
 
 Use it when a robot's behaviour near an obstacle or keep-out zone unfolds over time, where one
-`plan_snapshot` tick cannot show it (see docs/STRATEGY_DEVELOPMENT.md, "Debugging a foul or failure").
+`plan_snapshot` tick cannot show it (see docs/strategy.md, "Debugging a foul or failure").
 """
 
 from __future__ import annotations

@@ -16,23 +16,24 @@ strategy layer that decides what every robot does.
 3. `pixi run test` runs the test suite (add `--headless` when calling pytest directly).
 4. `pixi run main` to watch a match in the simulator (Ctrl+C to stop).
 
-**New here? Write your first strategy: [docs/first_strategy.md](docs/first_strategy.md).**
+**New here? Write your first strategy: [tutorials/first_strategy.md](tutorials/first_strategy.md).**
 
 Everything runs in rsim with the in-process referee; grSim, the official GameController and
-real robots are optional ([external setup](docs/real_robot_setup.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision)).
+real robots are optional ([external setup](docs/real_robots.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision)).
 
 ## What are you working on?
 
 | Task | Start here |
 |---|---|
-| Your first strategy | [docs/first_strategy.md](docs/first_strategy.md) |
-| Writing or changing a strategy, tactic or skill | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md) |
+| Your first strategy | [tutorials/first_strategy.md](tutorials/first_strategy.md) |
+| Writing or changing a strategy, tactic or skill | [docs/strategy.md](docs/strategy.md) |
 | Seeing what the robots did, and why | `pixi run dashboard` (every strategy's maps and replays); `tools/debug/find_bugs.py RUN_DIR` for a run's worst problems |
-| Judging whether a strategy is better | [docs/STRATEGY_DEVELOPMENT.md](docs/STRATEGY_DEVELOPMENT.md), [docs/signals.md](docs/signals.md) |
+| Judging whether a strategy is better | [docs/strategy.md](docs/strategy.md), [docs/signals.md](docs/signals.md) |
 | The referee | [docs/referee.md](docs/referee.md) |
-| Motion planning | [docs/motion_planning_comparison.md](docs/motion_planning_comparison.md) |
+| Motion planning | [docs/motion_planning.md](docs/motion_planning.md) |
 | The simulator | [vendor/rSim/FORK_NOTES.md](vendor/rSim/FORK_NOTES.md) |
-| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/real_robot_setup.md, "External tools"](docs/real_robot_setup.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision) |
+| A test day with real robots | [tutorials/field_day.md](tutorials/field_day.md) |
+| Real robots, vision, radio | [utama_core/team_controller/README.md](utama_core/team_controller/README.md), [docs/real_robots.md, "External tools"](docs/real_robots.md#external-tools-grsim-gamecontroller-autoreferee-ssl-vision) |
 | Which script does what | [docs/tools.md](docs/tools.md) |
 | Everything else | [docs/README.md](docs/README.md), the index of every doc |
 

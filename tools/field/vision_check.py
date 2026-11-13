@@ -1,7 +1,7 @@
 # ruff: noqa: E402
 """Does ssl-vision's multicast reach this machine? Listens for a few seconds, with no radio or
 runner, and prints who sent it, packets per second per camera, what was detected and the field
-size ssl-vision announces. The first check on a test day (`docs/real_robot_setup.md`).
+size ssl-vision announces. The first check on a test day (`tutorials/field_day.md`).
 
 Each robot and ball is also listed where each camera puts it (mean over the run) and, when
 several cameras see it, the largest gap between them: cameras whose calibrations agree are a few
@@ -135,7 +135,7 @@ def check(seconds: float) -> None:
     sock = _socket()
     heard = listen(sock, seconds)
     if not heard["senders"]:
-        print(f"Nothing on {MULTICAST_GROUP}:{VISION_PORT} in {seconds:.0f} s: see docs/real_robot_setup.md, 'Vision'.")
+        print(f"Nothing on {MULTICAST_GROUP}:{VISION_PORT} in {seconds:.0f} s: see tutorials/field_day.md, 'Vision'.")
         sys.exit(1)
     print(f"From: {', '.join(sorted(heard['senders']))}")
     per_camera = heard["per_camera"]

@@ -20,7 +20,7 @@ restart was drawn. `--findings -` writes the JSON to stdout and the text to stde
 
 Use it when a restart goes wrong: robots inside the keep-out, a kicker that never reaches the ball, a
 placer or defender parked in the wrong place. Filter on the findings first, open the picture to understand
-them. See docs/STRATEGY_DEVELOPMENT.md, "Referee handling".
+them. See docs/strategy.md, "Referee handling".
 """
 
 from __future__ import annotations

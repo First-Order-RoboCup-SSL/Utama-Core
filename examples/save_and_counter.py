@@ -26,7 +26,7 @@ What it does:
     ball back and Force Start. Both goals must be in view (`CAMERA_HALF = "full"`).
   - Every mode starts in HALT; Ctrl+C sends stop commands to the robots before exiting. The Live
     tab's Strategy panel can stand either robot still or restart it, while halted. The field
-    check must be all green or amber before Force Start (docs/real_robot_setup.md).
+    check must be all green or amber before Force Start (tutorials/field_day.md).
 """
 
 import sys

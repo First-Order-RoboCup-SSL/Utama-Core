@@ -1,4 +1,4 @@
-"""Draws tactic_kernel.png for docs/STRATEGY_DEVELOPMENT.md ("The tactic-kernel model"): the classes that make up
+"""Draws tactic_kernel.png for docs/strategy.md ("The tactic-kernel model"): the classes that make up
 one team's Strategy, who holds or calls whom, and the path a tick takes from StrategyRunner down to the skills.
 
 pixi run python docs/img/strategy/make_tactic_kernel.py

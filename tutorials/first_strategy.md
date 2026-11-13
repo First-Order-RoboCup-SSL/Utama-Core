@@ -212,7 +212,7 @@ You decide what to keep.
 
 ## Where to go next
 
-- [STRATEGY_DEVELOPMENT.md](STRATEGY_DEVELOPMENT.md): how strategies and tactics really work.
+- [strategy.md](../docs/strategy.md): how strategies and tactics really work.
   Read it when you want to write a proper tactic.
 - `utama_core/tactics/`: real tactics to copy from.
 - `utama_core/skills/`: every skill a robot can use.

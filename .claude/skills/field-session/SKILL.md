@@ -5,8 +5,8 @@ description: Run a test day on the real robots, and process what it recorded - c
 
 # A field session
 
-Setup and the meaning of each check: `docs/real_robot_setup.md`. Log format and readers:
-`docs/real_robot_setup.md ("Field logs")`. On the field, time is short: run the one command, read its "!!" lines,
+Setup and the meaning of each check: `tutorials/field_day.md`. Log format and readers:
+`docs/real_robots.md ("Field logs")`. On the field, time is short: run the one command, read its "!!" lines,
 fix only those.
 
 ## At the start

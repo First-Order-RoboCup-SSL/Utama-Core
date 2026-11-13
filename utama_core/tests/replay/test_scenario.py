@@ -1,7 +1,7 @@
 """Tests for `utama_core.replay.scenario` (replay-to-repro reconstruction).
 
 See `utama_core/replay/scenario.py`'s module docstring for why this module
-exists and `docs/STRATEGY_DEVELOPMENT.md`'s Observability section for how it
+exists and `docs/strategy.md`'s Observability section for how it
 fits alongside `MatchLog`/`render_window`/the stall watchdog.
 """
 

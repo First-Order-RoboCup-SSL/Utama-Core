@@ -1,6 +1,6 @@
 """Regression moments: one field state that reproduced a bug, replayed for a few seconds against
 every strategy it concerns, with a check of what our robots must do instead. The workflow (find,
-reproduce, fix the cause with a unit test, keep the moment) is in docs/STRATEGY_DEVELOPMENT.md,
+reproduce, fix the cause with a unit test, keep the moment) is in docs/strategy.md,
 "Debugging a foul or failure".
 
 A moment is a JSON file in `utama_core/tests/moments/` (`test_moments.py` plays each one):

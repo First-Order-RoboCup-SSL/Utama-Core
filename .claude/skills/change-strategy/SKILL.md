@@ -6,7 +6,7 @@ description: Write a new strategy or change an existing one, then test it, evalu
 # Change a strategy
 
 The model behind every step (tactics, partitioners, referee restarts, past tactic bugs) is
-`docs/STRATEGY_DEVELOPMENT.md`; read its "Writing and evaluating a strategy" and "Strategy
+`docs/strategy.md`; read its "Writing and evaluating a strategy" and "Strategy
 branches" sections first. This skill is the order of the steps and the rules that are easy
 to forget.
 

@@ -1,7 +1,7 @@
 """Fingerprints of the code a match runs, so a deterministic rsim result can be reused.
 
 An rsim match is a pure function of the code each side runs, the pairing and the run
-settings (`docs/STRATEGY_DEVELOPMENT.md`, "Determinism"). This module names that code:
+settings (`docs/strategy.md`, "Determinism"). This module names that code:
 
 - `strategy_fingerprint(config)`: one player, a strategy in the catalog or a `.strategy` file:
   every repo module its code imports (function-level imports included, the shared

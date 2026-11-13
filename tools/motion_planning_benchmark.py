@@ -782,7 +782,7 @@ class BenchmarkManager(AbstractTestManager):
         # controller commanded. Suppress `max_speed_mps`/
         # `max_observed_acceleration_mps2` (and therefore `speed_limit_exceeded`)
         # for a short settling window per teleported robot -- the same
-        # estimator-transient caveat docs/motion_planning_comparison.md
+        # estimator-transient caveat docs/motion_planning.md
         # already documents for acceleration applies here too.
         self._settling_until_tick: dict[RobotKey, int] = {}
         # Measured directly (see the comment above): the simulator's
@@ -961,7 +961,7 @@ class BenchmarkManager(AbstractTestManager):
         # A real physical limit (RSIM_PARAMS.MAX_VEL, plus measurement
         # tolerance) is a hard pass/fail gate, unlike acceleration: observed
         # acceleration is reconstructed from filtered simulator velocity and
-        # can include estimator transients (see docs/motion_planning_comparison.md),
+        # can include estimator transients (see docs/motion_planning.md),
         # so it stays diagnostic-only rather than gating `passed`.
         speed_limit_exceeded = self.max_speed_mps > RSIM_PARAMS.MAX_VEL + SPEED_LIMIT_TOLERANCE
         return {

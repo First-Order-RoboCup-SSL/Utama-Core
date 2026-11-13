@@ -8,7 +8,7 @@ description: Take one bad moment in a match (a foul, a stall, a robot thrashing,
 A foul or failure is a symptom. The cause may be the robot's tactic, the shared referee
 override, the motion planner, the referee itself, or the check that flagged it: of the first
 six found this way, two were the referee or the check. The full workflow, with the bugs found
-so far, is `docs/STRATEGY_DEVELOPMENT.md`, "Debugging a foul or failure"; read it for anything
+so far, is `docs/strategy.md`, "Debugging a foul or failure"; read it for anything
 below that is unclear.
 
 Inputs: a replay `REPLAY` (`replays/eval_<id>/round_<k>/<a>_vs_<b>.npz`, or any `.npz`) and a
@@ -48,7 +48,7 @@ the sim negates y and heading.
 
 The fix is not done without a test that fails before and passes after, pinning the exact
 boundary (a tolerance, a tie, a target off the field). Prefer a pure unit test over an rsim
-fixture. Add a row to the bug table in `docs/STRATEGY_DEVELOPMENT.md` if it is a new kind.
+fixture. Add a row to the bug table in `docs/strategy.md` if it is a new kind.
 
 ## 5. Optionally keep a moment
 

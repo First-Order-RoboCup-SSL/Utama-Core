@@ -134,6 +134,12 @@ again afterwards.
 
 - **Last-touch attribution needs contact data for both teams.** Enemy `has_ball` is filled
   by `RobotInfoRefiner` from sim contact physics (`data_processing/refiners/robot_info.py`).
+- **Placement carry mechanics** (real robots; the sim teleports the ball). Single-robot dribble tends to push rather than carry; options
+  are a dedicated slow "get-behind-ball" approach or the two-robot technique most SSL teams use.
+- **Pre-positioning from `next_command`** during `STOP` — an optimisation, not a compliance need.
+- **Operator GUI "suggested next step"** based on the current command, so an operator decides
+  only *when* to advance, not *what*.
+- **`TeamInfo` should be a frozen dataclass**: item 8 under Design decisions.
 
 Resolved (kept here so nobody re-reports them): the old friendly-first, ≤0.15m proximity
 last-touch heuristic and its yellow default (replaced by `infer_last_touch_team`), double touch,
@@ -141,7 +147,8 @@ ball speed, full-episode reset, teams changing ends at half-time,
 `bt_nodes` → `debug_status` rename, auto-advance after goals/timeouts, keep-out during bare
 `STOP`, blue-perspective goal tests, `StrategyRunner` integration tests
 (`tests/run/test_referee_rsim.py`, `test_ball_placement_rsim.py`),
-`force_start_after_goal`.
+`force_start_after_goal`, ball placement before a free kick (`_handle_foul` queues
+`BALL_PLACEMENT_*` and then the free kick).
 
 ## Running
 
@@ -156,7 +163,7 @@ pixi run python examples/demo_referee_gui_rsim.py   # RSim + dashboard referee t
 How referee commands reach robots, and what each command requires. The original py_trees
 integration is gone (BT removed in `087ee4b`, `960662c`, `48affd6`); the current mechanism is
 `RefereeOverride` (`utama_core/engine/referee_override.py`, design: §13 of
-`tactic_model_design_decisions.md`) driving the `*Step` classes in
+`strategy_design.md`) driving the `*Step` classes in
 `utama_core/referee/actions.py`.
 
 ### Data path
@@ -200,18 +207,6 @@ strategy's root, one `Sequence` per command in priority order — `HALT`, `STOP`
 penalty, direct free — each `CheckRefereeCommand(...)` → `*Step`, falling through to the
 strategy tree on `NORMAL_START`/`FORCE_START`. `RefereeOverride` keeps that command→Step
 mapping as a plain class.
-
-### Open
-
-- **Ball placement before a free kick.** The rulebook sequence after ball-out is
-  `STOP → BALL_PLACEMENT_* → DIRECT_FREE_* → NORMAL_START`; `OutOfBoundsRule` still queues
-  `DIRECT_FREE_*` directly (in sim the ball is teleported instead). Depends on reliable
-  `BallPlacementOursStep` carrying.
-- **Placement carry mechanics.** Single-robot dribble tends to push rather than carry; options
-  are a dedicated slow "get-behind-ball" approach or the two-robot technique most SSL teams use.
-- **Pre-positioning from `next_command`** during `STOP` — an optimisation, not a compliance need.
-- **Operator GUI "suggested next step"** based on the current command, so an operator decides
-  only *when* to advance, not *what*.
 
 ## Operator panel
 
@@ -285,7 +280,7 @@ and defender tactics this way.
 | Halt | `HALT` | Emergency / unsafe | Zero velocity |
 | Stop | `STOP` | Between incidents, pre-match | ≤1.5 m/s, stay ≥0.5m from the ball |
 | Normal Start | `NORMAL_START` | Restart formation is in position | Live play |
-| Force Start | `FORCE_START` | Stalled play | Live play from the ball's current position (a tactic barrier reset, see `tactic_model_design_decisions.md` §4) |
+| Force Start | `FORCE_START` | Stalled play | Live play from the ball's current position (a tactic barrier reset, see `strategy_design.md` §4) |
 | Kickoff Y/B | `PREPARE_KICKOFF_*` | Half start, after a goal | Kicker to centre, others to own half |
 | Free Kick Y/B | `DIRECT_FREE_*` | Foul by the other team | Kicker to ball, opponents ≥0.5m |
 | Penalty Y/B *(advanced)* | `PREPARE_PENALTY_*` | Manual override | Kicker at mark, others behind the line |

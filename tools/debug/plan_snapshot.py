@@ -11,7 +11,7 @@ planner is not changed. `--side enemy` plans the other strategy's robot (the rep
 no `--target`, the robot's own position 0.5 s later stands in for it, and the text box says so.
 
 Use it when a robot does something odd near an obstacle or a keep-out zone (see
-docs/STRATEGY_DEVELOPMENT.md, "Debugging a foul or failure"). The picture is one tick: pair it with
+docs/strategy.md, "Debugging a foul or failure"). The picture is one tick: pair it with
 `tools/debug/replay_trace.py` for the timeline.
 """
 

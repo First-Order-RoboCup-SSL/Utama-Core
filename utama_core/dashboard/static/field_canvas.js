@@ -513,7 +513,7 @@ class FieldCanvas {
       }
       // The intended receive point itself, whether or not the receiver has
       // reached it yet — the whole point of tracing this is to see when the
-      // two diverge (the exact silent-aim bug class STRATEGY_DEVELOPMENT.md
+      // two diverge (the exact silent-aim bug class strategy.md
       // warns intercept_point() can produce).
       const tx = toX(passTarget.x), ty = toY(passTarget.y);
       ctx.strokeStyle = FIELD_COLORS.ball;
