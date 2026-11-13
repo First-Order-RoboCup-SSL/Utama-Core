@@ -2,7 +2,8 @@
 
 `tools/motion_planning_benchmark.py` runs `fpp`, `dwa` and `trajsample` through the same
 `StrategyRunner` + headless rsim path and writes raw JSON plus a Markdown table to
-`benchmark_results/` (gitignored). It is a benchmark/regression report, not a replacement for unit tests of
+`benchmark_results/` (gitignored). `--schemes` takes any name in `CONTROL_SCHEME_MAP`, so a new planner
+is benchmarked as soon as it is registered ([first_planner.md](../tutorials/first_planner.md) writes one). It is a benchmark/regression report, not a replacement for unit tests of
 algorithm internals (bang-bang endpoint invariants, FPP collision-kernel equivalence, ...).
 
 ```bash

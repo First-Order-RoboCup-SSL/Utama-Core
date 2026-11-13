@@ -10,7 +10,7 @@ With candidates (strategy names or `.strategy` files): rounds until each is bett
     --all      every strategy in the catalog plays, not only the core
 
 How it works (players, rounds, the verdict, the match results store, the output folder):
-docs/strategy.md, "Evaluating a strategy". For a beginner: tutorials/first_strategy.md, step 8.
+docs/strategy.md, "Evaluating a strategy". For a beginner: tutorials/first_strategy.md, step 9.
 
 Matches play in parallel (CPUs minus one, at most 12). A match the store (replays/match_results/) holds
 is never played again. A match that crashes is reported (`failed` in summary.json and report.json) and

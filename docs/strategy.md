@@ -450,6 +450,8 @@ whoever runs it.
 
 ### Debugging a foul or failure
 
+A worked example for beginners: [debug_a_moment.md](../tutorials/debug_a_moment.md).
+
 A foul or failure seen in a match is a symptom: the cause may be the robot, the shared referee
 override, the planner, the referee itself, or the check that flagged it. Of the first six found
 this way (table below), two were the referee or the check, not the robot. The steps alone, as a
@@ -597,7 +599,8 @@ caught 82-97% of the time, beyond 4 cm under 30%.
 - **The keeper ignores a slow ball rolling through its own box.** `skills/goalkeep.py` fetches a
   ball in the box only below `_RETRIEVE_BALL_SPEED` (0.3 m/s); a ball rolling slower than a shot but
   faster than that, wide of the goal, is watched until it goes out. Seen in the v2.6.0 replays,
-  `pendulum_vs_wolfpack` at 3:52 (wolfpack's keeper). Left open on purpose as a first task.
+  `pendulum_vs_wolfpack` at 3:54 (wolfpack's keeper). Left open on purpose: it is the worked example
+  in [debug_a_moment.md](../tutorials/debug_a_moment.md) and a first task.
 
 ## Reading a round
 

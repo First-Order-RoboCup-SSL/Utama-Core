@@ -20,7 +20,7 @@ exists yet: say so in your change rather than guessing.
 | Strategy / tactics | `utama_core/engine/`, `strategy/`, `tactics/`, `skills/` | `docs/strategy.md` | Engine changes are rare: a new primitive, not a new strategy |
 | Strategy evaluation | `tools/evaluation/`, `utama_core/replay/`, `utama_core/analysis/` | `docs/strategy.md`, `docs/signals.md` | Change evaluation and strategy in separate commits, so results stay comparable |
 | Referee | `utama_core/referee/` | `docs/referee.md` | |
-| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `docs/motion_planning.md` | |
+| Motion planning | `utama_core/motion_planning/`, `tools/motion_planning_benchmark.py` | `tutorials/first_planner.md`, `docs/motion_planning.md` | |
 | Simulation | `utama_core/simulator/`, `vendor/rSim/` | `vendor/rSim/FORK_NOTES.md` | `vendor/rSim` is the C++ physics fork; `utama_core/simulator` is the Python env on top of it |
 | Real robots (radio, vision, controllers) | `utama_core/team_controller/`, `utama_core/data_processing/` | `tutorials/field_day.md`, `docs/real_robots.md` | |
 
@@ -148,8 +148,9 @@ declarations) — check there before reintroducing one of them.
 - **Always pass `--headless`** when running any simulator/integration test:
   `pixi run pytest utama_core/tests/ --headless`. Much faster; there is no reason to run
   with graphics in an agent loop.
-- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (links `.pixi`,
-  copies the compiled planner/simulator `.so` files; without them tests differ).
+- A git worktree for a parallel agent: run `tools/dev/setup_worktree.sh` inside it (its own pixi
+  environment, about 2 min the first time: pixi can't share one across directories; `replays` linked
+  to the main checkout's; the compiled planner/simulator `.so` files copied, without which tests differ).
 - `pixi run test` runs the default suite; `pixi run lint` runs the full pre-commit stack
   (black, ruff, isort) — run both before considering a change done.
 - `--level quick|full` (defined in the root `conftest.py`, not `utama_core/tests/
@@ -186,8 +187,11 @@ need most:
 
 - `.agents/skills/` — step-by-step playbooks over those scripts (see "Skills" below).
 
-- `tutorials/first_strategy.md` — the beginner tutorial (a toy strategy, then evaluation). Keep it short,
-  simple and runnable: `tests/strategy/test_first_strategy_doc.py` builds its code.
+- `tutorials/` — the beginner path: `first_strategy.md` (a toy strategy, then evaluation),
+  `first_tactic.md` (two tactics, a partitioner, a memory, tests), `debug_a_moment.md` (the open
+  keeper bug, from replay to a failing test), `first_planner.md` (a planner scored on the
+  benchmark). Keep them short, simple and runnable:
+  `tests/strategy/test_tutorial_code.py` runs their code.
 - `docs/strategy.md` — tactic-kernel model, referee handling, writing a
   `Tactic`, observability tooling. Read before any strategy-layer change.
 - `docs/strategy_design.md` — kernel/Tactic/Partitioner design rationale.

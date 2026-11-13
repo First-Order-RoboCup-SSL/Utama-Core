@@ -224,6 +224,7 @@ outputs/
 wandb/
 mappo_*/
 *.gif
+!tutorials/img/**/*.gif
 
 # macOS
 .DS_Store 

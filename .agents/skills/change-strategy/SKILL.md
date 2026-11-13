@@ -12,8 +12,8 @@ to forget.
 
 ## 1. Branch
 
-`strategy/<idea>` from `main`. In a git worktree run `tools/dev/setup_worktree.sh`, and symlink
-`replays` from the main checkout so the match results store is shared.
+`strategy/<idea>` from `main`. In a git worktree run `tools/dev/setup_worktree.sh` first (its own
+pixi environment, `replays` shared with the main checkout); then `pixi run` works there as anywhere.
 
 ## 2. Change one thing
 

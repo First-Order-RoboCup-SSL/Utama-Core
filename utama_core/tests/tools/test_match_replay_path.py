@@ -38,3 +38,19 @@ def test_the_replay_lands_in_the_run_dir_beside_the_stats(tmp_path, monkeypatch,
     stats = seen["stats_path"]
     assert replay == run_dir / "pendulum_vs_breakwater.npz"
     assert str(replay.with_suffix("")) + ".stats.json" == stats
+
+
+def test_a_run_dir_given_by_its_real_path_through_a_replays_symlink_stays_in_replays(tmp_path, monkeypatch):
+    # A worktree links replays/ to the main checkout's (tools/dev/setup_worktree.sh). A run_dir
+    # given by its real path once made a relative path that climbed out of the link and landed
+    # the replay outside both checkouts (2026-11-13: ~/replays).
+    real = tmp_path / "main" / "replays"
+    real.mkdir(parents=True)
+    worktree = tmp_path / "a" / "b" / "worktree"
+    worktree.mkdir(parents=True)
+    (worktree / "replays").symlink_to(real)
+    monkeypatch.setattr(match, "REPLAY_BASE_PATH", worktree / "replays")
+
+    name = match.replay_name(real / "trial", "rookie_vs_wolfpack")
+
+    assert (worktree / "replays" / name).resolve() == real / "trial" / "rookie_vs_wolfpack"

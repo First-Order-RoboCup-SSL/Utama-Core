@@ -46,8 +46,10 @@ TICKS_PER_SECOND = 60  # matches rsim's default step rate
 
 def replay_name(run_dir: Path, match_tag: str) -> str:
     """A match's replay name: its path under REPLAY_BASE_PATH, no suffix, so the replay lands in
-    `run_dir` as `<match_tag>.npz`."""
-    return Path(os.path.relpath(Path(run_dir) / match_tag, REPLAY_BASE_PATH)).as_posix()
+    `run_dir` as `<match_tag>.npz`. Both paths are resolved first: a worktree's replays/ is a link
+    to the main checkout's, and a run_dir given by its real path would otherwise climb out of it."""
+    target = (Path(run_dir) / match_tag).resolve()
+    return Path(os.path.relpath(target, Path(REPLAY_BASE_PATH).resolve())).as_posix()
 
 
 # default is excluded from the auto-discovered catalog:
@@ -221,3 +223,25 @@ def run_match(
         a_kicks_off=a_kicks_off,
         stats=_stats_to_dict(stats) if stats is not None else None,
     )
+
+
+def main() -> None:
+    """One headless match with its replay kept, to watch on the dashboard or trace with tools/debug/."""
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(description="Play one headless rsim match and keep its replay.")
+    parser.add_argument("a", help="yellow: a strategy name, a .strategy file or PATH.py:FUNCTION")
+    parser.add_argument("b", help="blue")
+    parser.add_argument("--duration", type=float, default=120.0, help="sim seconds at most (default 120)")
+    parser.add_argument("--out", type=Path, help="folder for replay and stats (default replays/matches/<time>)")
+    args = parser.parse_args()
+
+    run_dir = args.out or REPLAY_BASE_PATH / "matches" / time.strftime("%Y%m%d_%H%M%S")
+    result = run_match(args.a, args.b, duration_seconds=args.duration, run_dir=run_dir)
+    print(f"{result.config_a} {result.score_a} - {result.score_b} {result.config_b}")
+    print(f"replay: {Path(run_dir) / f'{_short_name(args.a)}_vs_{_short_name(args.b)}'}.npz")
+
+
+if __name__ == "__main__":
+    main()
