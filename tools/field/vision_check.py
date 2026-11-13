@@ -135,7 +135,9 @@ def check(seconds: float) -> None:
     sock = _socket()
     heard = listen(sock, seconds)
     if not heard["senders"]:
-        print(f"Nothing on {MULTICAST_GROUP}:{VISION_PORT} in {seconds:.0f} s: see tutorials/field_day.md, 'Vision'.")
+        print(
+            f"Nothing on {MULTICAST_GROUP}:{VISION_PORT} in {seconds:.0f} s: see tutorials/field_day.md, 'On the day', step 2."
+        )
         sys.exit(1)
     print(f"From: {', '.join(sorted(heard['senders']))}")
     per_camera = heard["per_camera"]

@@ -1,280 +1,187 @@
 # A field day with real robots
 
-The procedure for a test day with real robots: ssl-vision on its own Linux laptop sending vision
-over the network, and our stack on a Windows laptop in WSL with the radio dongle. Each part is
-checked on its own before anything drives a robot: vision with `tools/field/vision_check.py`, the radio
-with teleop, then both together in the field check of `tools/field/shooting_drill.py`.
+This page takes you through a test day: from a laptop that sees nothing to robots playing a drill
+on the field, and their logs saved for later. Do "Before the day" once per laptop. Do "On the day"
+in order, every time. Each step checks one thing before the next step needs it.
+
+You need two laptops:
+
+- **The vision laptop** (Linux) runs the cameras and the vision program, which sends where every
+  robot and the ball are over the network.
+- **The robot laptop** (Windows with WSL) runs our code and talks to the robots through a USB
+  radio dongle.
 
 ```
-vision laptop (Linux)                      robot laptop (Windows + WSL)
-  cameras -> ssl-vision  --multicast-->      tools/field/vision_check.py, then the runner
-                         224.5.23.2:10006    radio dongle (USB, passed into WSL) -> robots
+vision laptop (Linux)                         robot laptop (Windows + WSL)
+  cameras -> ssl-vision or TagVision  --->     our code: checks, drills, strategies
+             (224.5.23.2:10006)                radio dongle (USB) -> robots
 ```
 
-## Once per machine
+## Two vision systems
 
-### Vision laptop (Linux)
+You can run either; our code can't tell the difference.
 
-1. Build [ssl-vision](https://github.com/RoboCup-SSL/ssl-vision) (its README). For a FLIR
-   camera install FLIR's **Spinnaker SDK** first: on the
-   [download page](https://www.flir.com/products/spinnaker-sdk) take "Spinnaker SDK, 64-bit"
-   for your Ubuntu (not ARM64 unless the laptop is ARM). Unpack it, install the libraries its
-   README lists, then `sudo sh install_spinnaker.sh`: yes to the udev entry (add your user to
-   `flirimaging`) and to USB-FS 1000 MB. Build ssl-vision with
-   `cmake -B build -DUSE_SPINNAKER=true -DUSE_V4L=true && make -C build`.
-2. Add our field as a preset: `git apply tools/field/ssl-vision-lab-field.patch` in the ssl-vision
-   checkout (copy the file over), then rebuild. Field Configuration gets a **Lab Field** button
-   (3 m x 2.25 m, goal 0.8 m, defense area 1 m x 0.5 m, two cameras). Do not use the Division B
-   button with two cameras: it sets the camera count to 1.
-3. USB webcams (the RER camera is one) need your user in `video`:
-   `sudo usermod -aG video $USER`, then log in again.
+- **ssl-vision**, the league's official program. It finds robots by the coloured dots on their
+  lids. Its colour calibration takes time, and it drifts when the light changes.
+- **TagVision**, our own (repo `First-Order-RoboCup-SSL/tagvision`). It finds robots by black
+  and white ring markers you print, and calibrates from the field lines. It sends exactly what
+  ssl-vision sends.
 
-### Robot laptop (Windows + WSL)
+Pick one for the day. The rest of this page is the same for both.
 
-1. **USB into WSL:** in admin PowerShell, `winget install --exact dorssel.usbipd-win`. The
-   `usbipd` you can run inside WSL is an unrelated Linux tool: always run it in PowerShell.
-2. **Share the radio once, by its hardware ID** (stays the same whatever port it is in, unlike
-   the bus ID): `usbipd list`, note the radio's `VID:PID`, then
+## Before the day (once per laptop)
+
+### The vision laptop
+
+**ssl-vision:**
+
+1. Build [ssl-vision](https://github.com/RoboCup-SSL/ssl-vision) (follow its README). For a FLIR
+   camera, install FLIR's **Spinnaker SDK** first (see [real_robots.md](../docs/real_robots.md#field-day-reference)),
+   then build with `cmake -B build -DUSE_SPINNAKER=true -DUSE_V4L=true && make -C build`.
+2. Add our field: copy `tools/field/ssl-vision-lab-field.patch` into the ssl-vision folder,
+   run `git apply ssl-vision-lab-field.patch` and build again. You get a **Lab Field** button.
+3. For a USB webcam, add yourself to the `video` group: `sudo usermod -aG video $USER`, then log
+   out and in.
+
+**TagVision:** follow its `README.md` (one command, `make setup`), then its
+`docs/setup-guide.md`, which covers cameras, mounting, printing markers and calibration. Try
+its dry run first: it works with no cameras.
+
+### The robot laptop
+
+Run these in **PowerShell as administrator** unless it says WSL:
+
+1. Install the tool that passes USB devices into WSL: `winget install --exact dorssel.usbipd-win`.
+2. Plug in the radio dongle. Run `usbipd list` and note the dongle's `VID:PID`. Then
    `usbipd bind --hardware-id <VID:PID>`.
-3. **WSL on the real network:** in `%USERPROFILE%\.wslconfig`, under `[wsl2]`, add
-   `networkingMode=mirrored`. Without it WSL sits on a private network that never sees the
-   vision laptop's multicast.
-4. **Let vision in:** in admin PowerShell, open UDP 10006 to WSL in the Hyper-V firewall:
+3. Put WSL on the real network: in `%USERPROFILE%\.wslconfig`, under `[wsl2]`, add the line
+   `networkingMode=mirrored`.
+4. Let vision through the firewall:
    ```
    New-NetFirewallHyperVRule -Name SSLVision -DisplayName "SSL Vision multicast" -Direction Inbound -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol UDP -LocalPorts 10006
    ```
-   (`40E0AC32-...` is WSL's fixed ID in that firewall.) Then `wsl --shutdown`.
-5. **Radio permission in WSL:** `sudo usermod -aG dialout $USER`, then `newgrp dialout` in the
-   terminal you run from (or restart WSL).
+   Then `wsl --shutdown`, so steps 3 and 4 take effect.
+5. In WSL: `sudo usermod -aG dialout $USER`, so you may use the radio. Restart WSL.
 
-## Each test day
-
-Once the network, vision and radio below are set up, one command checks them all at the start of
-a session:
-
-```
-pixi run field-check          # radios 0 to 7; --radios 0 1 for fewer
-```
-
-It listens to vision for 2 s (cameras and their packets per second, field size, ball, lids in
-view), then finds the robots (`find-robots`, below): each one's radio, lid, share of its commands
-answered (under 80%: range, interference or a flat battery) and whether its profile was
-calibrated on that lid. Each line starts "ok" or "!!". It cannot see batteries: the robots do not
-report them. The steps below are what to do when a line says "!!".
+## On the day
 
 ### 1. Network
 
-Both laptops on the same network, by Ethernet to one switch or router if possible: many Wi-Fi
-routers drop or throttle multicast. If the robot laptop has two networks (Wi-Fi for internet,
-Ethernet to the switch), our receiver listens on the one Windows uses for internet: use one.
+Connect both laptops to the same switch or router, **by cable** if you can. Wi-Fi, and phone
+hotspots most of all, drop and bunch up the vision packets.
 
 ### 2. Vision
 
-On the vision laptop: `./bin/vision -c 2` (the number of cameras) in the ssl-vision checkout.
-For each camera under **Image Capture**: the capture module (**Spinnaker** for FLIR, **Video 4
-Linux** for a USB webcam), then **Capture Control → Start**. Settings save on a clean exit or
-with **Save Settings**, not on a crash.
+**ssl-vision**, on the vision laptop:
 
-- **USB webcam:** cam idx is the `/dev/video` number of its image; a camera shows up as two
-  nodes and the second is metadata ("Inappropriate ioctl" means the wrong one). Use **MJPEG**:
-  the RER camera's uncompressed YUYV is 5 fps at 1280x960, MJPEG 60-90 fps. Its controls:
-  `v4l2-ctl -d /dev/video0 --list-ctrls`. Let auto white balance settle
-  (`--set-ctrl=white_balance_automatic=1`), then lock it (`=0` and
-  `--set-ctrl=white_balance_temperature=<what it picked>`): colours that drift break the colour
-  calibration. Keep exposure under about 10 ms (`exposure_time_absolute=100`) so the ball is
-  not smeared.
-- **FLIR:** exposure and gain are in its Spinnaker node and change live.
-- Field Configuration: **Lab Field → Apply**, then each camera's calibration, then colours per
-  camera.
-- `./bin/graphicalClient` on the vision laptop shows what ssl-vision sends, before any network.
+1. `./bin/vision -c 2` in the ssl-vision folder (2 is the number of cameras).
+2. For each camera, under **Image Capture**: pick **Spinnaker** (FLIR) or **Video 4 Linux**
+   (webcam), then **Capture Control → Start**.
+3. **Field Configuration → Lab Field → Apply.** Then calibrate each camera, then its colours.
+4. Save with **Save Settings**. A crash loses unsaved settings.
 
-On the robot laptop, in WSL:
+**TagVision**, on the vision laptop: `uv run tagvision run -c config/default.yaml`. Its guide
+says how to calibrate each camera first, and `uv run tagvision listen` shows what it sends.
+
+Then, on the robot laptop in WSL:
 
 ```
 pixi run python tools/field/vision_check.py
 ```
 
-Expect each camera at about its frame rate and the field at 3000 x 2250 mm. Nothing at all
-means the network or the firewall (steps 3-4 above, step 1 here); one camera missing means its
-capture is not running.
-
-After a calibration, check it against known spots: `tools/field/vision_check.py --guided ball`, then
-`--guided "blue 2"` (any robot, facing +x). It asks for the ball or robot on the 9 points
-(corners, edge midpoints, centre) and prints each camera's error there; the results land in
-`replays/field/*_vision_truth_*.json` to compare with the next setup. The pattern points at the
-cause: errors growing towards the edges are the distortion or focal length, the same shift
-everywhere the camera's position, more at one end than the other its tilt or height. The ball
-right but the robot not is the robot height in ssl-vision.
+You should see each camera at about its frame rate and the field at 3000 x 2250 mm. Nothing at
+all: check the network and the firewall. One camera missing: its capture isn't running.
 
 ### 3. Radio
 
-Plug the dongle in, then in admin PowerShell (leave it open: it re-attaches after a replug):
+Plug in the dongle. In PowerShell as administrator, and leave the window open (it reconnects
+the dongle if you unplug it):
 
 ```
 usbipd attach --wsl --hardware-id <VID:PID> --auto-attach
 ```
 
-In WSL `ls /dev/ttyACM*` shows it; the code uses `PORT` in `utama_core/config/settings.py`
-(`/dev/ttyACM0`). Then drive each robot by hand:
+In WSL, `ls /dev/ttyACM*` should show it. Now drive each robot by hand:
 
 ```
 pixi run debug-robots
 ```
 
-Number keys choose the robot by its **radio (firmware) ID**, WASD moves, Q/E turns, Shift is
-fast (0.5 m/s, else 0.1), Space dribbles, B/C kick/chip, Esc stops every robot and quits. Hold
-the robot off the floor for the first presses and check each key moves it the way it says.
-Note each robot's radio ID and the pattern on top (its vision ID): the runner needs both.
+A number key picks a robot by its radio ID. WASD moves, Q/E turns, Space runs the dribbler, B
+kicks, Esc stops every robot and quits. Hold the robot off the floor for the first presses and
+check each key does what it says.
 
-One radio drives every robot, of either colour: robots are addressed by radio ID only, so the
-radio IDs must differ across all robots on it.
+### 4. Check everything at once
 
-### 4. Both together
-
-Set the "Test-day configuration" block of `tools/field/shooting_drill.py`: `FIELD`,
-`CAMERA_HALF` (`"full"` when the cameras cover the whole field), each robot's vision and radio
-ID and working hardware. Then `pixi run python tools/field/shooting_drill.py`, open
-http://localhost:8080 and go through the Live tab's field check
-([referee.md, "Operator panel"](../docs/referee.md#operator-panel)): every row green or
-amber, each robot under its own ID and colour, a ball in each corner inside the area in play,
-and a robot pushed by hand across the cameras' overlap moving smoothly (a jump there means the
-two calibrations disagree). Only then Force Start.
-
-Each run records `replays/field/<time>_<mode>_<name>.log`, a game log of every vision packet,
-the radio both ways, the referee and which code ran. Beside it is a `.npz` replay of the world
-the strategy saw, written when the run closes. Use the Live tab's Note box (Enter writes it into
-the log) to say what a stretch is: "ball placed by hand", "start dribble test", "ignore". Most of
-a test day is setting up, and notes make the useful minutes easy to find later. The runner adds
-a note whenever a robot's row in the Tactics panel changes (its tactic and step, or
-`referee · ball placement · placer` while a restart drives it), so the log also says what each
-robot was trying to do.
-
-#### Running the demos
-
-`pixi run demos` (`--mode rsim` to rehearse) starts the shooting drill behind one dashboard;
-the Live tab's Demo panel switches to pass-receive, save-and-counter, score goal or teleop
-without leaving the page. Halt, pick one, Run: the robots stop, the demo closes (its log saved,
-the radio and vision released), the next one starts, its lids checked as when run alone, and
-the page reloads by itself. A demo that fails to start (a robot not found) shows why under the
-panel; pick again. The Strategy panel still switches tactics within a demo; Ctrl+C ends it.
-Calibration (`pixi run calibrate`) and `planner_ab.py` stay their own commands.
-
-- **Settings** under the list apply from the next Run: *first robot* (the drill's attacker,
-  the shooter, robot A), *camera* (the part of the field in view, `CAMERA_HALF`) and *rules*.
-  They set the examples' config blocks as editing them would, for this process only.
-- **Field check** (real robots): `pixi run field-check` without leaving the page. It stops the
-  demo, checks vision, turns each robot on the spot to find its lid, lists the lines under the
-  panel (a "!!" line in red), then starts the same demo again.
-- **Teleop** (`examples/teleop.py`): drive either robot by keyboard to place robots and the
-  ball. Pick the robot, tick "keys drive", Force Start; W/S A/D Q/E, Shift faster, B kicks, F
-  the dribbler. No rules and no goals; a robot stops when its keys are let go, on Halt, and
-  0.3 s after the page stops sending.
-- The Robots panel shows each robot's share of its commands answered over the last 2 s; under
-  80% (red) the link is poor, often a flat battery, before the robot goes silent.
-
-### 5. Measuring a robot
-
-**Which robot is which.** A robot is its radio ID: the radio board stays with its motors,
-kicker and dribbler, and its profile goes by it. The lid with the pattern is a separate shell
-and can be swapped. After switching robots on, or swapping a lid:
+Switch all robots on and put them on the field, with 15 cm clear around each. Then:
 
 ```
-pixi run find-robots          # radios 0 to 7; --radios 0 1 4 for others
+pixi run field-check
 ```
 
-Each radio that answers turns about 70° on the spot and back (keep 15 cm clear round the
-robots), and the pattern that turned with it is its lid. It prints radio, lid and whether the
-profile was calibrated on that lid (a profile's tag offset is its lid's: calibrate again after a
-swap), and the radios that did not answer and patterns no radio turned. The pairing is saved on
-this machine (`replays/field/robots_found.json`). The robots an example uses are chosen by radio
-(`RADIO_0`, `RADIO_1` in `tools/field/shooting_drill.py`), one per colour, and no vision ID or colour is
-written by hand: on real robots an example starts by watching vision for 0.5 s (nothing moves).
-With each robot's saved lid in view it uses them; otherwise (never run here, a lid missing) it
-finds those robots again first (`find_robots.confirm`). It cannot tell two robots in use that
-swapped lids with each other, as both lids stay in view: run `find-robots` after such a swap.
+It listens to vision for 2 seconds, then turns each robot a little on the spot to see which lid
+it wears. Every line starts with `ok` or `!!`. Fix each `!!` line before going on: the table at
+the bottom of this page has the common causes.
 
-One command measures a robot and writes its profile:
+### 5. Run a drill
 
 ```
-pixi run calibrate                    # finds the robots; the only one, or asks which
-pixi run calibrate --radio 0          # the robot on radio 0
-pixi run calibrate --radio 0 --ball-only   # the ball part again, no driving
-pixi run calibrate --radio 0 --check       # the new profile against the committed one
+pixi run demos
 ```
 
-Without both `--robot colour:id` and `--radio` it looks the robot up: with `--radio`, as the
-examples do; with neither, by `find-robots`.
+Open http://localhost:8080, go to the **Live** tab and go through its field check: every row
+green or amber, each robot under its own ID and colour, the ball seen in every corner. Push a
+robot by hand from one camera's view into the other's: it should move smoothly, not jump. Only
+then press **Force Start**.
 
-No dashboard: it runs in the terminal (`tools/field/calibrate_robot.py`). Once vision sees the robot
-it asks you to put it near the middle of the camera's view facing +x, with 0.8 m clear ahead,
-0.6 m to its left and a ball at rest in view; press Enter. It drives and turns for about 65 s.
-Then the ball part (`tools/field/ball_trials.py`), where **the robot fetches the ball itself**:
+The **Demo** panel switches between the shooting drill, pass-receive, save-and-counter, score
+goal and teleop. To rehearse at home, run `pixi run demos --mode rsim`: the same thing in the
+simulator.
 
-- **Carry ladder**: it carries the ball 0.5 m forward, backward, left and right, and half a turn
-  each way, at rising speeds (0.2 to 1 m/s, 0.5 to 4 rad/s), twice each (`--repeats`), from
-  standing, then stands 0.5 s with it. A direction stops at the first speed that loses the ball
-  (off the robot by 15 cm, or its ball sensor off 0.3 s). The carry runs towards the middle of
-  the field, and the robot lets go and fetches the ball again before each trial.
-- **Kicks**: 10 (`--kicks`) along the field. Every kick comes charged: the kicker holds its
-  charge about 30 s and recharges in about 1 s, so a kick more than 30 s after the last one is
-  preceded by a kick with no ball (the robot lets go of the ball first).
+**Write notes as you go.** Type in the Live tab's **Note** box and press Enter: "ball placed by
+hand", "start dribble test", "ignore this". Most of a test day is setting up; notes make the
+useful minutes easy to find later.
 
-It asks only when the ball is out of view or within 25 cm of the edge, as after most kicks:
-roll the ball back towards the middle and press Enter. Every step is printed as it starts; Ctrl+C
-halts the robot. At the end it prints DONE, analyses the log (loop delay, speed gain and
-acceleration per axis, vision noise at rest, kick speed; written beside the log as
-`.calibration.json`) and **writes the robot's profile**, `utama_core/config/robots/radio_<radio>.json`,
-which every example reads (`load_profile`). Nothing to copy by hand:
+### 6. Measure a robot
 
-- `tag_forward_m`, `tag_left_m`: where its tag sits on it, from its turns on the spot. A lid's tag
-  is a sticker, rarely centred; on real robots vision then reports the robot, not its tag.
-- `kick_bend_deg_per_cm`, `kick_bias_deg`: how far its kicks leave the heading per cm the ball
-  sat off-centre, and with it centred, fitted together. The heading is the tag's, so a tag stuck
-  on turned (yellow 0's reads 3.5° clockwise) shows in the bias: no straight edge needed.
-- `kick_speed`, `kick_spread_deg`: those kicks' median ball speed, and how far they scatter
-  about bias and bend (the fit's rms).
-- `carry_speed`, `carry_turn`: the carry ladder's slowest direction, the fastest speed it kept
-  the ball every time; `move()` holds this robot to them (`RobotParams.CARRY_*` otherwise).
+Do this when a robot is new, has been repaired, or wears a different lid:
 
-rsim keeps its own kick, and kick bend and bias are applied on real robots only, so a rehearsal in
-rsim (`--mode rsim`) does not kick like the robot on the field.
+```
+pixi run calibrate --radio 0
+```
 
-**Kicker charge in play.** On real robots a robot that has not kicked for 25 s fires an empty
-kick, when the ball is neither on it (ball sensor) nor within 30 cm (vision), and never in a HALT
-(`kicker_charge.py`); so does each robot at its first chance after a HALT. 2026-10-28's kicks:
-yellow 0 (radio 0) kicked about 2.2 m/s 1 s or 30 s after its last kick, 1.96 after longer; blue 0
-(radio 1) recharges far slower than 1 s, a median 0.41 m/s within 15 s of its last kick and 1.29
-after 15-30 s. Have the electronics team look at radio 1's charging.
+It tells you where to put the robot and the ball, then drives, turns, carries the ball and
+kicks it, by itself, for a few minutes. At the end it writes the robot's profile,
+`utama_core/config/robots/radio_0.json`. Check it with `git diff`, and commit it if it looks
+right. What each number means: [real_robots.md](../docs/real_robots.md#field-day-reference).
 
-What it could not measure stays as it was; hardware that breaks (`kicker`, `dribbler`, `ir`) is
-set in the file by hand. `--mode rsim --yes` rehearses it in the simulator (its dribbler holds at
-every speed) and writes nothing.
+### 7. After the day
 
-**Is the new profile better?** `git diff` shows what changed. `--check` tries it against the
-committed one, on the field, same session: 4 blocks (`--blocks`) alternating the two, committed
-first, so battery and floor fall on both alike. In each the robot carries the ball every way at
-that profile's caps (`--repeats`, default 2) and kicks 5 times (`--kicks`) at the middle of the far
-end, aimed against that profile's bend and bias. It prints per profile how often each carry kept
-the ball and how far the kicks missed (mean of |miss| ± its standard error). Commit the file if
-the new profile is no worse. Ten kicks a side tell apart only differences of a few degrees; more
-`--kicks` for finer.
+Every run wrote a log to `replays/field/`. **Never delete one.** To share them:
 
-Calibrate every robot, twice per session (early and late): how far the two runs disagree is how
-far to trust them. An older log is measured again with
-`pixi run python tools/field/robot_calibration.py replays/field/<run>.log --tag yellow:0 0 -0.002`
-(`--tag` per robot: its `tag_forward_m`, `tag_left_m`).
+```
+pixi run python tools/field/package_logs.py field --dry-run
+pixi run python tools/field/package_logs.py field
+```
 
+Then write down what broke and what you measured. A coding agent can do the rest (trim the idle
+minutes, register the session, measure from the logs): ask it to follow the `field-session` skill
+(`.agents/skills/field-session/SKILL.md`).
 
-| Symptom | Cause |
+## If something goes wrong
+
+| What you see | What to do |
 |---|---|
-| `usbipd` in WSL talks about `linux-tools` packages | It is the Linux tool; run `usbipd` in PowerShell |
-| `usbipd list` shows "Unknown USB device (device descriptor request failed)", `0000:0002` | Windows cannot read the device: other port, no hub, other cable |
-| No `/dev/video*` after attaching a webcam | `sudo modprobe uvcvideo` |
-| ssl-vision: "unable to obtain instance of camera" / permission | User not in `video` (or `flirimaging`); `newgrp video` |
-| ssl-vision: "Could not set format" on `/dev/video1` | cam idx points at the metadata node: use the other one |
-| `tee: .../usbfs_memory_mb: No such file` | WSL loads USB support only once a device is attached; `/etc/modprobe.d/usbfs.conf` with `options usbcore usbfs_memory_mb=1000` sets it then |
-| Whole image tinted one colour | White balance stuck at an extreme (2800 K): auto, then lock |
-| `vision_check` sees nothing | Different networks, Wi-Fi multicast, `.wslconfig` not mirrored, or the firewall rule missing |
-| Dashboard: "Address already in use" | Another dashboard (`pixi run dashboard`) holds 8080: stop it |
+| `usbipd` in WSL talks about `linux-tools` | That is a different tool: run `usbipd` in PowerShell |
+| `usbipd list` shows "Unknown USB device", `0000:0002` | Try another port or cable, without a hub |
+| No `/dev/video*` after plugging in a webcam | `sudo modprobe uvcvideo` |
+| ssl-vision: "unable to obtain instance of camera" | You are not in the `video` (or `flirimaging`) group: `newgrp video` |
+| ssl-vision: "Could not set format" | Wrong camera number: a webcam shows up twice, use the other one |
+| The whole image is one colour | White balance stuck: set it to auto, let it settle, then lock it |
+| `vision_check` sees nothing | Different networks, Wi-Fi, `.wslconfig` not mirrored, or the firewall rule is missing |
+| `field-check`: a robot answers under 80% | Range, interference or a flat battery |
+| `field-check`: a lid differs from its profile | The lid was swapped: `pixi run calibrate` that robot again |
+| Robots stop with "no vision packets" | Vision over Wi-Fi: use a cable |
+| Dashboard: "Address already in use" | Another dashboard holds port 8080: stop it |
 
-What the field logs hold and the external tools (grSim, GameController, ssl-vision): [docs/real_robots.md](../docs/real_robots.md).
+Everything in more depth (log format, robot profiles, camera settings): [real_robots.md](../docs/real_robots.md).

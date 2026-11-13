@@ -38,7 +38,7 @@ MIN_CAMERA_HZ = 30  # a camera sending fewer packets per second than this is str
 def vision_lines(heard: dict, seconds: float) -> list[str]:
     """`listen`'s result as checklist lines."""
     if not heard["senders"]:
-        return [f"!! vision: nothing on {MULTICAST_GROUP}:{VISION_PORT} (tutorials/field_day.md, 'Vision')"]
+        return [f"!! vision: nothing on {MULTICAST_GROUP}:{VISION_PORT} (tutorials/field_day.md, 'On the day', step 2)"]
     lines = []
     for camera, n in sorted(heard["per_camera"].items()):
         hz = n / seconds

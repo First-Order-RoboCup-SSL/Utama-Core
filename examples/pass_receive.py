@@ -21,7 +21,7 @@ What it does:
     dashboard. Ctrl+C sends stop commands to the robots before exiting. The Live tab's Strategy
     panel can stand either robot still ("still") or restart it ("pass_receive"), while halted.
   - The field check on the Live tab must be all green or amber before Force Start, as in
-    `tools/field/shooting_drill.py` (tutorials/field_day.md, "Each test day").
+    `tools/field/shooting_drill.py` (tutorials/field_day.md, "On the day").
 
 Why two teams: the robots wear different pattern colours (yellow 1, blue 0), and a runner team
 is one colour: there is no way to map a blue pattern into the yellow team. So each robot is its
