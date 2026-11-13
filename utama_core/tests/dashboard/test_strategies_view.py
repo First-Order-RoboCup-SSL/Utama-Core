@@ -127,6 +127,10 @@ def test_matches_are_from_the_strategys_side_with_their_replays_and_reused_ones_
     assert by_opponent["pendulum (last release)"] is None
 
 
+def test_the_frozen_files_matches_are_not_todays_strategys(replays):
+    assert _strategy(view.load_strategies(replays), "pendulum")["matches"] == []
+
+
 def test_signals_are_per_match_beside_the_other_strategies_average(replays):
     sig = _strategy(view.load_strategies(replays), "mirage")["signals"]
     rows = {r["key"]: r for r in sig["rows"]}
@@ -163,3 +167,40 @@ def test_an_older_round_robin_is_one_round_and_finds_side_tagged_replays(tmp_pat
 def test_no_replays_folder_gives_empty_pages(tmp_path):
     assert view.load_runs(tmp_path / "missing") == []
     assert all(not s["matches"] for s in view.load_strategies(tmp_path / "missing")["strategies"])
+
+
+class _Job:
+    def __init__(self, done=False):
+        self.done = done
+
+    def poll(self):
+        return 0 if self.done else None
+
+
+def test_maps_start_once_in_the_background_then_come_back_by_catalog_name(replays, monkeypatch):
+    monkeypatch.setattr(view, "_jobs", {})
+    started = []
+    start = lambda cmd, **kw: started.append(cmd) or _Job()  # noqa: E731
+    round_id = "eval_20261112_100000/round_1"
+    assert view.maps_of(round_id, replays, start)["status"] == "computing"
+    assert view.maps_of(round_id, replays, start)["status"] == "computing"
+    assert len(started) == 1 and "--data" in started[0]
+    _write(
+        replays / round_id / view.MAPS_FILE,
+        {"vmax": {"attack": 0.1}, "strategies": {"high_press": {"shots": {}}, "pendulum@ab12cd34": {"shots": {}}}},
+    )
+    maps = view.maps_of(round_id, replays, start)
+    assert maps["status"] == "ready" and maps["vmax"] == {"attack": 0.1}
+    assert list(maps["strategies"]) == ["wolfpack"]  # renamed; the frozen file left out
+
+
+def test_maps_report_a_failed_job_once_then_retry(replays, monkeypatch):
+    round_dir = (replays / "eval_20261112_100000" / "round_1").resolve()
+    monkeypatch.setattr(view, "_jobs", {round_dir: _Job(done=True)})
+    assert view.maps_of("eval_20261112_100000/round_1", replays, lambda cmd, **kw: _Job())["status"] == "failed"
+    assert view.maps_of("eval_20261112_100000/round_1", replays, lambda cmd, **kw: _Job())["status"] == "computing"
+
+
+def test_maps_never_leave_the_replays_folder(replays):
+    assert view.maps_of("../../etc", replays)["status"] == "missing"
+    assert view.maps_of("eval_20261112_100000/round_9", replays)["status"] == "missing"

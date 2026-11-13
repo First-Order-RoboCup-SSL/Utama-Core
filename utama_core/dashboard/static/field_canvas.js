@@ -9,15 +9,16 @@
 //               tactic_tags: {robotId: "attack" | "defense" | "mixed"} });
 
 const FIELD_COLORS = {
-  pitch: "#242832",
-  line: "#4b5162",
-  yellow: "#e0a527",
-  blue: "#3d7fd1",
-  ball: "#c98a3f",
-  marker: "#e8eaf0",
-  laneOpen: "#5fb87a",
-  laneBlocked: "#c0524a",
-  committed: "#e0a14a",
+  pitch: "#e9f0e8",
+  line: "#a5b3a7",
+  yellow: "#eab308",
+  blue: "#2563eb",
+  ball: "#ea580c",
+  marker: "#1c2230",
+  heading: "#1c2230",
+  laneOpen: "#16a34a",
+  laneBlocked: "#dc2626",
+  committed: "#d97706",
 };
 
 // Ring colour per `TacticTag` value (utama_core/engine/tactic.py) around a
@@ -25,10 +26,10 @@ const FIELD_COLORS = {
 // the body keeps its jersey colour. Purely a display of the tag the robot's
 // current tactic declares; nothing in the scheduler reads it.
 const TACTIC_TAG_COLORS = {
-  attack: "#d9694f",
-  defense: "#4fb3a9",
-  mixed: "#a68fd6",
-  referee: "#c8c8c8", // a restart or HALT drives the robot, not its tactic
+  attack: "#e11d48",
+  defense: "#0d9488",
+  mixed: "#7c3aed",
+  referee: "#9ca3af", // a restart or HALT drives the robot, not its tactic
 };
 
 // Robot body radius, world meters -> px is ROBOT_RADIUS * scale so the drawn
@@ -220,7 +221,7 @@ class FieldCanvas {
           }
           // Heading dash extends past the body edge so it reads as a
           // direction pointer rather than disappearing into the fill.
-          ctx.strokeStyle = FIELD_COLORS.pitch;
+          ctx.strokeStyle = FIELD_COLORS.heading;
           ctx.lineWidth = Math.max(1, r * 0.28);
           // Through toX/toY, so a mirrored view (our goal on the right) mirrors it too.
           const headingM = (r * 1.6) / scale;
@@ -260,7 +261,7 @@ class FieldCanvas {
       // A robot past the area in play by more than the margin has forced HALT on real robots.
       const [x1, y1, x2, y2] = state.field_check.bounds;
       const m = state.field_check.margin;
-      ctx.strokeStyle = "#e06a60";
+      ctx.strokeStyle = "#dc2626";
       ctx.lineWidth = 2;
       for (const bot of [...(robots.friendly || []), ...(robots.enemy || [])]) {
         if (bot.x < x1 - m || bot.x > x2 + m || bot.y < y1 - m || bot.y > y2 + m) {
@@ -314,7 +315,7 @@ class FieldCanvas {
     const [x1, y1, x2, y2] = fieldCheck.bounds;
     const r = rectBounds(x1, y1, x2, y2);
     ctx.save();
-    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.fillStyle = "rgba(28, 34, 48, 0.18)";
     ctx.beginPath();
     ctx.rect(0, 0, CW, CH);
     ctx.rect(r.x + r.w, r.y, -r.w, r.h); // opposite winding cuts the area in play out
@@ -324,8 +325,8 @@ class FieldCanvas {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
     // Keep-out zones (StrategyRunner's keep_out): no robot may enter; one inside forces HALT.
-    ctx.fillStyle = "rgba(224, 106, 96, 0.25)";
-    ctx.strokeStyle = "#e06a60";
+    ctx.fillStyle = "rgba(220, 38, 38, 0.15)";
+    ctx.strokeStyle = "#dc2626";
     for (const [kx1, ky1, kx2, ky2] of fieldCheck.keep_out || []) {
       const k = rectBounds(kx1, ky1, kx2, ky2);
       ctx.fillRect(k.x, k.y, k.w, k.h);

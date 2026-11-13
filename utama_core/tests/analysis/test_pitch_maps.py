@@ -1,6 +1,8 @@
 """`tools/debug/pitch_maps.py` on tiny synthetic replays: the side normalisation, possession and the
 goalkeeper exclusion, and that each figure is written."""
 
+import json
+
 import numpy as np
 import pytest
 
@@ -169,6 +171,18 @@ def test_each_figure_is_written(tmp_path, which):
     else:
         pm.plot_positions(views, order, labels, path, in_possession=which == "positions_attack")
     assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_map_data_is_json_with_both_grids_the_shots_and_one_scale_per_grid():
+    order, _, views = _views()
+    data = json.loads(json.dumps(pm.map_data(views, order)))  # plain JSON all the way down
+    a = data["strategies"]["a"]
+    rows, cols = len(a["attack"]["share"]), len(a["attack"]["share"][0])
+    assert (rows, cols) == (round(2 * pm.W / pm.BIN_M), round(2 * pm.L / pm.BIN_M))
+    assert sum(map(sum, a["attack"]["share"])) == pytest.approx(1.0)
+    assert a["defence"]["means"] == [[1.0, 0.5]]  # robot 1's only sample without the ball
+    assert a["shots"] == {"own": [[2.0, 0.5, True]], "faced": [[-1.0, 0.0, False]]}
+    assert set(data["vmax"]) == {"attack", "defence"} and data["pitch"]["half_length"] == pm.L
 
 
 def test_rule_colours_take_fixed_slots_in_rank_order():

@@ -15,6 +15,9 @@ every panel. Writes:
 - `fouls_map.png`: where the strategy committed its fouls, coloured by rule: the four most
   common rules in the run, then all other rules.
 
+With `--data PATH` it writes the numbers behind the position and shot maps as JSON instead (the
+dashboard's Strategies tab draws them; `map_data`), and no figures.
+
 Possession is `MatchStatsAccumulator`'s notion without its hysteresis: the nearest robot to the
 ball, within `_POSSESSION_RADIUS_M`, while the ball is slower than `_PASS_RELEASE_MPS`. Positions
 are sampled every `STEP` ticks in live play (NORMAL_START, FORCE_START); the goalkeeper is the
@@ -217,6 +220,43 @@ def shot_marks(views: list[MatchView], strategy: str) -> dict:
         "own": [(s["x"], s["y"], s["scored"]) for s in mine if s["own"]],
         "faced": [(s["x"], s["y"], s["scored"]) for s in mine if not s["own"]],
     }
+
+
+def map_data(views: list[MatchView], order: list[str]) -> dict:
+    """The position and shot maps' numbers, for the dashboard: per strategy, both position grids
+    (shares per cell, rows y and columns x, with each robot's mean) and its shots for and against as
+    (x, y, scored). `vmax` is one colour scale per grid kind across all strategies, as in the figures."""
+    out: dict = {
+        "pitch": {
+            "half_length": L,
+            "half_width": W,
+            "box_depth": BOX_D,
+            "box_half_width": BOX_W,
+            "goal_half_width": F.half_goal_width,
+            "goal_depth": GOAL_D,
+            "centre_radius": F.center_circle_radius,
+        },
+        "bin_m": BIN_M,
+        "vmax": {},
+        "strategies": {n: {} for n in order},
+    }
+    for key, in_possession in (("attack", True), ("defence", False)):
+        grids = {n: position_grid(views, n, in_possession) for n in order}
+        nonzero = [g["share"][g["share"] > 0] for g in grids.values()]
+        nonzero = np.concatenate(nonzero) if nonzero else np.empty(0)
+        out["vmax"][key] = float(np.percentile(nonzero, 99)) if nonzero.size else 1.0
+        for n, g in grids.items():
+            out["strategies"][n][key] = {
+                "share": np.round(g["share"], 5).tolist(),
+                "means": [[round(x, 3), round(y, 3)] for x, y in g["means"]],
+            }
+    for n in order:
+        marks = shot_marks(views, n)
+        out["strategies"][n]["shots"] = {
+            side: [[round(float(x), 3), round(float(y), 3), bool(scored)] for x, y, scored in marks[side]]
+            for side in ("own", "faced")
+        }
+    return out
 
 
 def top_rules(views: list[MatchView], k: int = TOP_RULES) -> list[str]:
@@ -486,11 +526,18 @@ def main() -> None:
     parser.add_argument(
         "--findings", metavar="PATH", help="also write the zone shares per strategy as JSON lines (- for stdout)"
     )
+    parser.add_argument("--data", type=Path, metavar="PATH", help="write the maps' numbers as JSON here, no figures")
     args = parser.parse_args()
     summary = json.loads((args.run_dir / "summary.json").read_text())
     order = sorted(summary["strategies"], key=plain_name)
     labels = {n: plain_name(n) for n in order}
     views = run_views(args.run_dir, args.workers)
+    if args.data is not None:
+        played = [n for n in order if any(v.strategy == n for v in views)]
+        tmp = args.data.with_suffix(".tmp")
+        tmp.write_text(json.dumps(map_data(views, played)))
+        tmp.replace(args.data)  # whole or not at all: the dashboard may be reading it
+        return
     args.out.mkdir(parents=True, exist_ok=True)
     attack_png = args.out / "positions_attack.png"
     defence_png = args.out / "positions_defence.png"

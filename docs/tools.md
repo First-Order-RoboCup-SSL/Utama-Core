@@ -12,7 +12,7 @@ New to the repo? You need only these ([first_strategy.md](first_strategy.md) wal
 | `pixi run main A B` | Watch strategy A (yellow) play strategy B in the simulator |
 | `pixi run test`, `pixi run lint` | Check nothing broke, before every pull request |
 | `pixi run evaluate NAME` | Is strategy NAME better than the champion? Read the verdict and the mean diff |
-| `pixi run dashboard` | http://localhost:8080: the Strategies tab (every strategy, its tactics, verdicts, signals and matches; every evaluation run) and recorded replays |
+| `pixi run dashboard` | http://localhost:8080: the Strategies tab (every strategy, its tactics, verdict, position and shot maps, signals and newest matches; every evaluation run) and recorded replays |
 
 Everything below is for specialists.
 
@@ -79,7 +79,7 @@ What these measure and how far to trust each: [STRATEGY_DEVELOPMENT.md](STRATEGY
 
 | Script | Purpose |
 |---|---|
-| `tools/debug/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for the pictures in [visual_guide.md](visual_guide.md). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold) |
+| `tools/debug/pitch_maps.py` | Where each strategy's robots stand, shoots and fouls, drawn on the pitch, for the pictures in [visual_guide.md](visual_guide.md). `--findings PATH`: six descriptive `zone_share` facts per strategy (its in- and out-of-possession samples in each third; no threshold). `--data PATH`: the position and shot maps' numbers as JSON, no figures (the dashboard runs it once per round and keeps `pitch_maps.json` beside the summary) |
 | `utama_core/analysis/goal_sources.py` | `python -m utama_core.analysis.goal_sources <run_dir or replays>`: every goal attributed to the situation that started its play (a restart, or the ball won in open play, by third); per strategy, situations per match × P(goal) = goals per match, scored and conceded. Reads only the replay and its referee file, so it runs on converted official logs too. `--rates` writes the situation rates per team per live minute. See [signals.md](signals.md#where-do-goals-come-from) |
 | `tools/dev/check_strategy_branch.py` | CI check on `strategy/*` pull requests: the branch must not change the evaluation or its opponents |
 

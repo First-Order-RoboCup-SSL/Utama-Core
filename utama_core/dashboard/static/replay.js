@@ -208,7 +208,7 @@ function framesFromColumns(c) {
       return;
     }
     const t0 = frameTs(0);
-    const colour = { Yellow: "#e0a527", Blue: "#3d7fd1" };
+    const colour = { Yellow: "#eab308", Blue: "#2563eb" };
     list.innerHTML = play
       .map((r, i) => {
         const goal = r.ended && r.ended.startsWith("Goal") ? " goal" : "";

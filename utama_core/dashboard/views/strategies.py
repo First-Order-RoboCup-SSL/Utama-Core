@@ -3,6 +3,7 @@ every evaluation run, verdicts first. Reads only what is already on disk; record
 
     GET /strategies       {"champion", "core", "strategies": [...]}  one entry per catalog strategy
     GET /strategies/runs  every run under `replays/`, newest first
+    GET /strategies/maps?round=<run_id>  the round's position and shot maps per strategy
 
 A strategy's entry: its description (the module docstring), file, role (champion / core / reserve,
 `tools/evaluation/reference/players.json`), the tactics it imports, its verdicts (from each
@@ -11,6 +12,9 @@ played, beside the average of the other strategies in that round) and its matche
 replay. Names are shown as the catalog calls them today: a `.strategy` file (`name@commit.strategy`)
 and a pre-rename name both show as the strategy's name, so frozen files never appear as strategies of
 their own. Matches played under an older name or older code keep their date, which is how to tell.
+
+The maps are `tools/debug/pitch_maps.py --data`, run in the background the first time a round's maps
+are asked for and kept beside its summary (`pitch_maps.json`); until then the answer is "computing".
 """
 
 from __future__ import annotations
@@ -18,6 +22,9 @@ from __future__ import annotations
 import ast
 import json
 import re
+import subprocess
+import sys
+import threading
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -49,6 +56,7 @@ SIGNALS = [
 def attach(server: DashboardServer) -> None:
     server.add_route("/strategies", lambda: json.dumps(load_strategies()).encode())
     server.add_route("/strategies/runs", lambda: json.dumps(load_runs()).encode())
+    server.add_route("/strategies/maps", lambda q=None: json.dumps(maps_of((q or {}).get("round", ""))).encode())
 
 
 # --- names ------------------------------------------------------------------------------------
@@ -187,6 +195,8 @@ def _matches_of(name: str, summaries: Iterable[tuple[Path, dict]]) -> list[dict]
             # a match reused from the store is listed under the run that played it
             if name not in (a, b) or a == b or r.get("reused"):
                 continue
+            if is_frozen(r["config_a"] if a == name else r["config_b"]):
+                continue  # the last release's file playing, not today's strategy
             mine, theirs, opponent = (r["score_a"], r["score_b"], b) if a == name else (r["score_b"], r["score_a"], a)
             if is_frozen(r["config_b"] if a == name else r["config_a"]):
                 opponent += " (last release)"
@@ -345,3 +355,42 @@ def load_runs(base: Optional[Path] = None) -> list[dict]:
     for run in runs.values():
         run["rounds"].sort(key=lambda s: s.get("round", 0))
     return sorted(runs.values(), key=lambda r: _newest_first(r["run_id"]), reverse=True)
+
+
+# --- maps -------------------------------------------------------------------------------------
+
+MAPS_FILE = "pitch_maps.json"
+PITCH_MAPS = REPO / "tools" / "debug" / "pitch_maps.py"
+_jobs: dict[Path, subprocess.Popen] = {}
+_jobs_lock = threading.Lock()
+
+
+def maps_of(round_id: str, base: Optional[Path] = None, start=subprocess.Popen) -> dict:
+    """A round's maps by catalog name (frozen files left out), or its status: "computing" while
+    `pitch_maps.py` runs, "failed" if it ended without writing them (asking again retries), "missing"
+    for no such round. `start` runs the command (a test passes a fake)."""
+    base = Path(base or REPLAY_BASE_PATH).resolve()
+    round_dir = (base / round_id).resolve()
+    if base not in round_dir.parents or not (round_dir / "summary.json").exists():
+        return {"status": "missing"}
+    data = _read_json(round_dir / MAPS_FILE)
+    if data is not None:
+        strategies = {display_name(k): v for k, v in data.pop("strategies", {}).items() if not is_frozen(k)}
+        return {"status": "ready", **data, "strategies": strategies}
+    with _jobs_lock:
+        job = _jobs.get(round_dir)
+        if job is not None and job.poll() is not None:
+            del _jobs[round_dir]
+            return {"status": "failed"}
+        if job is None:
+            cmd = [
+                sys.executable,
+                str(PITCH_MAPS),
+                str(round_dir),
+                "--data",
+                str(round_dir / MAPS_FILE),
+                "--workers",
+                "4",
+            ]
+            _jobs[round_dir] = start(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"status": "computing"}
