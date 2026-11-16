@@ -23,7 +23,7 @@ DASHBOARD_PORT = 8080
 
 
 def main() -> None:
-    attach_dashboard(port=DASHBOARD_PORT)
+    attach_dashboard(port=DASHBOARD_PORT, host="127.0.0.1")
     while True:
         time.sleep(3600)
 

@@ -53,7 +53,7 @@ class _StreamClient:
                 return False
 
 
-def attach_dashboard(port: int = 8080) -> "DashboardServer":
+def attach_dashboard(port: int = 8080, host: str = "") -> "DashboardServer":
     """Start the dashboard's HTTP server in a background daemon thread.
 
     Tournament and Replay views are attached automatically — both are
@@ -67,7 +67,7 @@ def attach_dashboard(port: int = 8080) -> "DashboardServer":
     from utama_core.dashboard.views import replay as replay_view
     from utama_core.dashboard.views import tournament as tournament_view
 
-    server = DashboardServer(port)
+    server = DashboardServer(port, host=host)
     server.set_page(build_page())
     tournament_view.attach(server)
     replay_view.attach(server)
@@ -86,9 +86,10 @@ class DashboardServer(threading.Thread):
     (e.g. tournament summaries, replay frame lists).
     """
 
-    def __init__(self, port: int) -> None:
+    def __init__(self, port: int, host: str = "") -> None:
         super().__init__(daemon=True, name="DashboardServer")
         self._port = port
+        self._host = host
 
         self._state_lock = threading.Lock()
         self._latest_state: Dict[str, str] = {}  # channel -> last JSON payload
@@ -162,7 +163,7 @@ class DashboardServer(threading.Thread):
     def start(self) -> None:
         # Bound here, on the caller's thread: a port already taken (another dashboard) raises
         # at once, instead of in the server thread while the match runs on with no dashboard.
-        self._http_server = ThreadingHTTPServer(("", self._port), self._make_handler_class())
+        self._http_server = ThreadingHTTPServer((self._host, self._port), self._make_handler_class())
         super().start()
 
     def run(self) -> None:
