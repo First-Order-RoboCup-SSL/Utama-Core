@@ -12,14 +12,14 @@ from utama_core.config.settings import REPLAY_BASE_PATH
 from utama_core.entities.game import Ball as GameBall
 from utama_core.entities.game import Game, GameFrame
 from utama_core.entities.game import Robot as GameRobot
-from utama_core.global_utils.mapping_utils import map_friendly_enemy_to_colors
-from utama_core.global_utils.math_utils import rad_to_deg
+from utama_core.entities.game.mapping_utils import map_friendly_enemy_to_colors
+from utama_core.geometry.math_utils import rad_to_deg
 from utama_core.replay.entities import ReplayMetadata
-from utama_core.rsoccer_simulator.src.Entities import Ball as RSoccerBall
-from utama_core.rsoccer_simulator.src.Entities import Frame as RSoccerFrame
-from utama_core.rsoccer_simulator.src.Entities import FrameSSL
-from utama_core.rsoccer_simulator.src.Entities import Robot as RSoccerRobot
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
+from utama_core.simulator.entities import Ball as RSoccerBall
+from utama_core.simulator.entities import Frame as RSoccerFrame
+from utama_core.simulator.entities import FrameSSL
+from utama_core.simulator.entities import Robot as RSoccerRobot
+from utama_core.simulator.ssl.envs import SSLStandardEnv
 
 logger = logging.getLogger(__name__)
 

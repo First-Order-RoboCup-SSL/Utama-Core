@@ -1,0 +1,261 @@
+import math
+from typing import Tuple
+
+import numpy as np
+
+from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
+from utama_core.entities.data.command import RobotCommand
+from utama_core.entities.data.vector import Vector2D
+from utama_core.entities.game import Game
+from utama_core.geometry.math_utils import normalise_heading, rotate_vector
+from utama_core.motion_planning.common.motion_controller import MotionController
+
+# Off its target orientation by more than this, a robot turns at least `MotionController.min_turn`.
+_MIN_TURN_FROM_RAD = 0.01
+
+# Crashing is a foul above 1.5 m/s of closing speed. In 12 matches on 2026-11-09 all 33 charges
+# were head-on, both robots closing at 1.2-1.5 m/s from 1.5-2 m apart and neither braking: the
+# path planner steers around robots but does not slow for them. Each robot sheds its own share,
+# so two robots using this meet legally, and one facing an enemy that does not slow is the slower.
+_LEGAL_CLOSING_MPS = 1.3
+_MIN_CONTACT_APPROACH_MPS = 0.5
+_ENEMY_BRAKING_MPS2 = 3.0  # of rsim's 4 m/s²: leaves room for the command delay
+_ENEMY_BRAKING_RANGE_M = 1.2
+
+### TODO: IT IS CONTENTIOUS IF WE EVEN NEED THIS MOVE FUNCTION ANYMORE. POTENTIALLY JUST SEND DIRECTLY TO MOTION CONTROLLER ###
+
+
+def _limit_closing_speed(robot, enemies, velocity: Vector2D) -> Vector2D:
+    """`velocity` with its component towards each nearby enemy capped to what can still brake."""
+    vx, vy = velocity.x, velocity.y
+    for enemy in enemies:
+        dx, dy = enemy.p.x - robot.p.x, enemy.p.y - robot.p.y
+        distance = math.hypot(dx, dy)
+        if not 1e-6 < distance < _ENEMY_BRAKING_RANGE_M:
+            continue
+        ux, uy = dx / distance, dy / distance
+        approach = vx * ux + vy * uy
+        enemy_approach = max(0.0, -(enemy.v.x * ux + enemy.v.y * uy))
+        at_contact = max(_MIN_CONTACT_APPROACH_MPS, _LEGAL_CLOSING_MPS - enemy_approach)
+        limit = at_contact + math.sqrt(_ENEMY_BRAKING_MPS2 * max(0.0, distance - 2.0 * ROBOT_RADIUS))
+        if approach > limit:
+            vx -= (approach - limit) * ux
+            vy -= (approach - limit) * uy
+    return Vector2D(vx, vy) if (vx, vy) != (velocity.x, velocity.y) else velocity
+
+
+def _sprint_velocity(position: Vector2D, target: Vector2D, max_speed: float, max_acceleration: float) -> Vector2D:
+    """Towards `target`, as fast as a robot braking at `max_acceleration` can still stop on it."""
+    offset = target - position
+    distance = offset.mag()
+    if distance == 0.0:
+        return Vector2D(0.0, 0.0)
+    return offset * (min(max_speed, math.sqrt(2.0 * max_acceleration * distance)) / distance)
+
+
+def move(
+    game: Game,
+    motion_controller: MotionController,
+    robot_id: int,
+    target_coords: Vector2D,
+    target_oren: float,
+    dribbling: bool = False,
+    sprint: bool = False,
+) -> RobotCommand:
+    """Calculate the robot command to move towards a target point with a specified orientation.
+    `sprint`: straight at the target, as fast as it can still stop there, instead of along the planner's
+    path, which covers a short hop at about 0.45 m/s. Only for a short, clear step that cannot wait."""
+
+    # From where our robots will be when this command takes effect (`PoseAhead`), and in the
+    # robot's frame as it will be turned by then.
+    ahead = motion_controller.pose_ahead.game(game)
+    robot = ahead.friendly_robots[robot_id]
+
+    global_velocity, angular_vel = motion_controller.calculate(
+        game=ahead,
+        robot_id=robot_id,
+        target_pos=target_coords,
+        target_oren=target_oren,
+    )
+
+    if sprint:
+        global_velocity = _sprint_velocity(
+            robot.p, target_coords, motion_controller.max_speed, motion_controller.max_acceleration
+        )
+    capped_velocity = _limit_closing_speed(robot, ahead.enemy_robots.values(), global_velocity)
+    adjusted = sprint or capped_velocity is not global_velocity
+    global_velocity = capped_velocity
+    forward_vel, left_vel = rotate_vector(global_velocity.x, global_velocity.y, robot.orientation)
+
+    # A turn slower than the robot can make leaves it short of its target orientation for good.
+    min_turn = motion_controller.min_turn
+    off = normalise_heading(target_oren - robot.orientation)
+    if min_turn and abs(off) > _MIN_TURN_FROM_RAD and abs(angular_vel) < min_turn:
+        angular_vel = math.copysign(min_turn, off)
+        adjusted = True
+
+    scale = 1.0
+    if dribbling and robot.has_ball:
+        # Slowed together to what the robot can carry the ball at, so the path keeps its shape: at
+        # full speed (1 m/s, 4 rad/s) the real robots lost the ball within 0.2 s (2026-10-28).
+        speed = math.hypot(forward_vel, left_vel)
+        carry_speed, carry_turn = motion_controller.robot_carry.get(
+            robot_id, (motion_controller.carry_speed, motion_controller.carry_turn)
+        )
+        if carry_speed is not None and speed > carry_speed:
+            scale = carry_speed / speed
+        if carry_turn is not None and abs(angular_vel) * scale > carry_turn:
+            scale = carry_turn / abs(angular_vel)
+        if scale < 1.0:
+            forward_vel, left_vel, angular_vel = forward_vel * scale, left_vel * scale, angular_vel * scale
+            adjusted = True
+    if adjusted:
+        motion_controller.sent(robot_id, global_velocity * scale, angular_vel)
+
+    return RobotCommand(
+        local_forward_vel=forward_vel,
+        local_left_vel=left_vel,
+        angular_vel=angular_vel,
+        kick=0,
+        chip=0,
+        dribble=1 if dribbling else 0,
+    )
+
+
+def face_ball(current: Vector2D, ball: Vector2D) -> float:
+    """Calculate the angle to face the ball from the current position."""
+    return current.angle_to(ball)
+
+
+def turn_on_spot(
+    game: Game,
+    motion_controller: MotionController,
+    robot_id: int,
+    target_oren: float,
+    dribbling: bool = False,
+) -> RobotCommand:
+    """
+    Turns the robot on the spot to face the target orientation.
+    When the robot is in dribbler contact with the ball, pivots around the ball
+    rather than the robot's own center.
+    """
+    PIVOT_RADIUS = ROBOT_RADIUS + BALL_RADIUS  # distance from robot center to ball center at contact
+
+    # Below this clearance to another robot's body, the pivot's lateral push is
+    # treated as physically blocked rather than merely close. A full-length
+    # tournament traced a match where a robot ended up body-to-body with an
+    # enemy while pivoting on the ball: the pivot term always points the same
+    # way regardless of what's there, so it kept commanding a lateral push
+    # straight into the enemy every tick. Box2D's own contact resolution
+    # cancelled the resulting motion each time, and since the geometry never
+    # changed, the identical command (and identical freeze) recurred forever
+    # -- a real deadlock, not a stale-state bug. See lead_and_support.py's
+    # COMMITTED_FROZEN stall in split_shape_vs_switch_of_play_RK.
+    #
+    # `2 * ROBOT_RADIUS` alone (exact body-touching distance, zero margin) was
+    # found live to still deadlock: a decoy_and_overload COMMITTED_FROZEN
+    # traced an enemy parked at 0.1982 m -- 1.8 mm outside that exact cutoff
+    # -- so the guard never fired, yet rsim's real rigid-body contact still
+    # resisted the commanded push at that range (rotation crawled at ~3 deg/s
+    # against a commanded ~190 deg/s), a genuine sustained physical deadlock,
+    # not a one-tick fluke. Extra headroom above contact distance, same style
+    # as `_pass_and_score.py`'s `_MIN_SETUP_CLEARANCE`/`block_shape.py`'s
+    # `_AREA_CLEARANCE`, so a robot sitting just outside exact contact still
+    # counts as blocking.
+    _PIVOT_CLEARANCE_M = 2 * ROBOT_RADIUS + 0.05
+
+    robot = game.friendly_robots[robot_id]
+    ball = game.ball
+
+    # Pivot around the ball when the robot is in dribbler contact (IR or visual proximity).
+    in_contact = robot.has_ball or (ball is not None and robot.p.distance_to(ball.p.to_2d()) < PIVOT_RADIUS)
+
+    # If the pivot's lateral push is blocked (checked below using the
+    # in-place-hold turn's own angular_vel), steer `move()`'s target away
+    # from the blocking enemy instead of holding `robot.p` -- see the
+    # blocked branch below for why holding position doesn't actually yield a
+    # working turn.
+    move_target = robot.p
+    if in_contact:
+        held_turn = move(
+            game=game,
+            motion_controller=motion_controller,
+            robot_id=robot_id,
+            target_coords=robot.p,
+            target_oren=target_oren,
+            dribbling=dribbling,
+        )
+        local_left_vel = -held_turn.angular_vel * PIVOT_RADIUS
+        pivot_push_global = rotate_vector(0.0, local_left_vel, -robot.orientation)
+        # A teammate's body blocks the sweep exactly as an enemy's does (two tactics'
+        # carriers on one ball: high_line_zone_vs_low_block, 2026-09-28).
+        blockers = [r for rid, r in game.friendly_robots.items() if rid != robot_id] + list(game.enemy_robots.values())
+        for enemy in blockers:
+            if enemy is None:
+                continue
+            to_enemy = enemy.p - robot.p
+            distance = to_enemy.mag()
+            if distance >= _PIVOT_CLEARANCE_M or distance == 0:
+                continue
+            if to_enemy.x * pivot_push_global[0] + to_enemy.y * pivot_push_global[1] <= 0:
+                continue
+            # Merely zeroing `local_left_vel` here (an earlier fix attempt)
+            # does NOT produce a working pure in-place spin: rotating around
+            # the ball at `PIVOT_RADIUS` inherently requires the chassis to
+            # sweep an arc through space, and dropping only the model's own
+            # lateral estimate leaves that physical requirement unmet --
+            # rsim's contact solver then has to supply/oppose the sweep
+            # itself, which measured live as ZERO net motion (position and
+            # orientation bit-identical tick over tick, not merely slow) for
+            # the rest of the match, not a working degraded turn. Turning off
+            # the dribbler to free the spin isn't safe either --
+            # `_apply_dribbler_release_kicks` fires a release kick the moment
+            # `dribbler` drops while moving, punting the ball away. Instead,
+            # move `move()`'s own hold-position target away from the
+            # blocking enemy (along the enemy->robot direction, out to
+            # clearance) so the motion controller actually drives the
+            # chassis clear before the pivot resumes, rather than holding
+            # `robot.p` while commanding a sweep the enemy's body prevents.
+            away = robot.p - enemy.p
+            away_dist = away.mag()
+            if away_dist > 1e-6:
+                move_target = robot.p + away * (_PIVOT_CLEARANCE_M / away_dist)
+            break
+
+    turn = move(
+        game=game,
+        motion_controller=motion_controller,
+        robot_id=robot_id,
+        target_coords=move_target,
+        target_oren=target_oren,
+        dribbling=dribbling,
+    )
+
+    if in_contact:
+        local_left_vel = -turn.angular_vel * PIVOT_RADIUS
+        turn = turn._replace(local_left_vel=local_left_vel)
+
+    return turn
+
+
+def kick() -> RobotCommand:
+    """Returns a command to kick the ball."""
+    return RobotCommand(
+        local_forward_vel=0,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=1,
+        chip=0,
+        dribble=0,
+    )
+
+
+def empty_command(dribbler_on: bool = False) -> RobotCommand:
+    return RobotCommand(
+        local_forward_vel=0,
+        local_left_vel=0,
+        angular_vel=0,
+        kick=0,
+        chip=0,
+        dribble=dribbler_on,
+    )

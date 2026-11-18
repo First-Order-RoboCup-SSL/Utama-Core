@@ -1,9 +1,9 @@
 // Match timeline: a window of the match as swimlanes, the dashboard's version of
-// tools/match_timeline.py's figure, in the Replay tab around the viewed frame and in the
+// tools/debug/match_timeline.py's figure, in the Replay tab around the viewed frame and in the
 // Live tab up to now. Top to bottom, on one time axis:
 //   - the referee command band (live play, STOP, kickoff, free kick, penalty, placement, HALT);
 //   - possession: whose ball it is, in the team's colour. In a replay, one span per situation
-//     (a restart going live or a side winning the ball, as goal_ledger counts them); live,
+//     (a restart going live or a side winning the ball, as goal_sources counts them); live,
 //     the side with a robot on the ball;
 //   - one lane per friendly robot: a span per tactic it was in (the Tactic class from the
 //     intention log), a dark tick where it switched, and a light strip where it had the ball;
@@ -17,19 +17,19 @@
 
 (function () {
   const SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"];
-  const OTHER = "#5f636c"; // tactics beyond the seven slots
-  const TEAM = { yellow: "#e0a527", blue: "#3d7fd1" }; // field_canvas.js's robot colours
+  const OTHER = "#9ca3af"; // tactics beyond the seven slots
+  const TEAM = { yellow: "#eab308", blue: "#2563eb" }; // field_canvas.js's robot colours
   const REF_FILL = {
-    "live play": "#2b3a30",
-    STOP: "#5b5f68",
-    HALT: "#b8615a",
-    kickoff: "#3d5a80",
-    "free kick": "#7a5236",
-    penalty: "#6d4560",
-    placement: "#6e6436",
-    other: "#33373f",
+    "live play": "#d7eedd",
+    STOP: "#dde0e5",
+    HALT: "#f6c9c4",
+    kickoff: "#d3e3f8",
+    "free kick": "#f5dfc8",
+    penalty: "#ecd6ea",
+    placement: "#efe7c2",
+    other: "#e7e9ed",
   };
-  const MARKER_FILL = { goal: "#e0c14f", foul: "#d08a4a", stall: "#b8615a", loss: "#8b909b" };
+  const MARKER_FILL = { goal: "#ca8a04", foul: "#ea7a2e", stall: "#c53030", loss: "#9ca3af" };
   const KEEPER = "goalkeeper"; // the label the Live view's tactic status gives the keeper
   const LIVE_KEEP_S = 300;
   const MAX_DIST_M = 3;
@@ -372,7 +372,7 @@
       const group = refGroup(state.command);
       extend(d.referee, group, (state.command || "").replace(/_/g, " ").toLowerCase());
 
-      // possession as goal_ledger reads it: the side with a robot on the ball while the other
+      // possession as goal_sources reads it: the side with a robot on the ball while the other
       // has none keeps it until the other side touches it; nobody holds it outside live play
       const last = d.possession[d.possession.length - 1];
       const ours = friendly.some((r) => r.has_ball);
@@ -486,7 +486,7 @@
       this._view = [t0, t1];
       const w = cssW - GUTTER;
       const x = (t) => GUTTER + ((t - t0) / span) * w;
-      ctx.font = "10px ui-monospace, monospace";
+      ctx.font = "10px system-ui, sans-serif";
       ctx.textBaseline = "middle";
 
       const band = (spans, y, h, fill, label) => {
@@ -498,14 +498,14 @@
           ctx.fillRect(a, y, Math.max(1, b - a - 1), h);
           const text = label && label(s);
           if (text && ctx.measureText(text).width + 6 < b - a) {
-            ctx.fillStyle = "#dfe2e8";
+            ctx.fillStyle = "#1c2230";
             ctx.fillText(text, a + 3, y + h / 2);
           }
         }
       };
       const row = (kind, text, y, h, lane) => {
         this._rows.push({ kind, y0: y, y1: y + h, lane });
-        ctx.fillStyle = "#8b909b";
+        ctx.fillStyle = "#6b7280";
         ctx.fillText(text, 2, y + h / 2);
       };
 
@@ -534,20 +534,20 @@
           (s) => short(s.label)
         );
         // a tick where the robot switched from one tactic to another
-        ctx.fillStyle = "#101114";
+        ctx.fillStyle = "#ffffff";
         let prev = null;
         for (const s of lane.tactics) {
           if (!s.label) continue;
           if (prev && prev !== s.label && s.t0 >= t0 && s.t0 <= t1) ctx.fillRect(x(s.t0) - 1, y, 2, LANE_H - 2);
           prev = s.label;
         }
-        band(lane.ball, y + LANE_H - 5, 3, () => "#f2f2f2");
+        band(lane.ball, y + LANE_H - 5, 3, () => "#1c2230");
         y += LANE_H;
       }
       y += GAP;
 
       row("dist", "ball m", y, DIST_H);
-      ctx.strokeStyle = "#33373f";
+      ctx.strokeStyle = "#e5e7eb";
       ctx.beginPath();
       for (const m of [1, 2]) {
         const gy = y + DIST_H * (1 - m / MAX_DIST_M);
@@ -582,10 +582,10 @@
       row("events", "events", y, EVENT_H);
       for (const m of d.markers) {
         if (m.sim_time < t0 || m.sim_time > t1) continue;
-        ctx.fillStyle = MARKER_FILL[m.kind] || "#8b909b";
+        ctx.fillStyle = MARKER_FILL[m.kind] || "#9ca3af";
         ctx.fillRect(x(m.sim_time) - 1.5, y, 3, EVENT_H);
       }
-      ctx.strokeStyle = "#101114";
+      ctx.strokeStyle = "#ffffff";
       for (const s of d.shots) {
         if (s.t < t0 || s.t > t1) continue;
         ctx.fillStyle = d.team[s.side] || OTHER;
@@ -598,7 +598,7 @@
 
       // axis: a tick every 5 s or 10 s or 30 s, labelled as match time (m:ss)
       const step = span > 180 ? 30 : span > 60 ? 10 : 5;
-      ctx.fillStyle = "#8b909b";
+      ctx.fillStyle = "#6b7280";
       ctx.textAlign = "center";
       for (let s = Math.ceil((t0 - d.origin) / step) * step; d.origin + s <= t1; s += step) {
         const px = x(d.origin + s);
@@ -608,7 +608,7 @@
       ctx.textAlign = "start";
 
       const cx = x(ts);
-      ctx.fillStyle = "#dfe2e8";
+      ctx.fillStyle = "#1c2230";
       ctx.fillRect(cx - 0.5, 0, 1.5, y);
     }
   }

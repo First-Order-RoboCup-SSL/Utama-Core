@@ -1,4 +1,4 @@
-"""Draws architecture.png for docs/custom_referee.md ("## Architecture"): one tick of CustomReferee, from the
+"""Draws architecture.png for docs/referee.md ("## Architecture"): one tick of CustomReferee, from the
 GameFrame through the rule checks and the game state machine to the strategy layer and the simulator.
 
 pixi run python docs/img/custom_referee/make_architecture.py
@@ -25,9 +25,9 @@ NAMES = [
     "MatchStats",
     "_disallowed_goal",
     "_TRANSITION_COOLDOWN",
-    "utama_core/custom_referee/custom_referee.py",
-    "utama_core/custom_referee/state_machine.py",
-    "utama_core/custom_referee/rules",
+    "utama_core/referee/custom_referee.py",
+    "utama_core/referee/state_machine.py",
+    "utama_core/referee/rules",
     "utama_core/entities/game/game_frame.py",
     "utama_core/engine/strategy.py",
     "utama_core/tactics",
@@ -37,7 +37,7 @@ d = Diagram(
     150,
     128,
     "CustomReferee, one tick",
-    "custom_referee/custom_referee.py steps on each GameFrame. The result reaches the strategy through the "
+    "referee/custom_referee.py steps on each GameFrame. The result reaches the strategy through the "
     "same buffer as a real referee.",
     figsize=(14, 12),
 )
@@ -73,7 +73,7 @@ d.box(
     62,
     13,
     "Stopping rules: the first violation wins",
-    "custom_referee/rules/, in priority order: goal, out of bounds, double touch,\n"
+    "referee/rules/, in priority order: goal, out of bounds, double touch,\n"
     "defense area, pushing, keeper held ball, excessive dribbling, no progress,\n"
     "penalty time limit, defense area stoppage (2nd foul: HALT)",
     kind="decision",
@@ -106,7 +106,7 @@ d.box(
     62,
     13,
     "GameStateMachine.step",
-    "custom_referee/state_machine.py\n"
+    "referee/state_machine.py\n"
     "0.3 s cooldown (_TRANSITION_COOLDOWN), then the violation\n"
     "(a stopping foul or goal changes the command), then auto-advance",
     kind="decision",

@@ -5,8 +5,8 @@
 Explains a verdict; it never makes one. Goals (`evaluate.py`'s verdict) are the only ranking;
 these pictures and numbers show how the two strategies played, so a search agent can see WHY a
 candidate won or lost. Each strategy's view is every match it played in the run dir, against any
-opponent (`find_matches`): a match file's stem is `<config_a>_vs_<config_b>` (round-robin) or
-`<config_a>_vs_<config_b>_s<seed>` (an evaluate.py run), and config_a is the friendly side.
+opponent (`find_matches`): a match file's stem is `<config_a>_vs_<config_b>` (an evaluate.py round folder or an old round-robin; evaluate.py runs before
+2026-11-12 added `_s<seed>`), and config_a is the friendly side.
 
 Writes to DIR:
 
@@ -15,9 +15,9 @@ Writes to DIR:
 - `fouls.png`: each strategy's fouls by rule, one fixed colour per rule (`pitch_maps.plot_fouls`);
 - `summary.json`: the numbers behind the pictures per side, and the paired goal difference per
   opponent (same opponent, seed and colour, as `evaluate.py` pairs them), where the run has them.
-- `triage/`: `tools/triage.py` on the candidate's two worst matches as config_a (`index.md` first).
+- `find_bugs/`: `tools/debug/find_bugs.py` on the candidate's two worst matches as config_a (`index.md` first).
 
-Everything is in the attacking frame of `pitch_maps.py` (attacking right). Goals come from the
+Everything is in the attacking frame of `tools/debug/pitch_maps.py` (attacking right). Goals come from the
 replay's final referee state (the score), fouls from the match's `.stats.json`.
 """
 
@@ -40,9 +40,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools import pitch_maps as pm  # noqa: E402
-from tools import signal_report as sr  # noqa: E402
-from tools import triage  # noqa: E402
+from tools.debug import figure_style as sr  # noqa: E402
+from tools.debug import find_bugs  # noqa: E402
+from tools.debug import pitch_maps as pm  # noqa: E402
 from tools.evaluation.match import _short_name  # noqa: E402
 from utama_core.analysis.matches import Match, find_matches  # noqa: E402
 
@@ -193,14 +193,14 @@ def explain(run_dir, candidate: str, champion: str, out_dir, workers: int = 2) -
         "paired": paired_rows(matches, cand, champ),
         "fouls_rules_shown": pm.top_rules(views),
         "notes": (
-            "Matches are those in the run dir; fixtures reused from the ledger have no replay here. "
-            "Positions and fouls exclude the goalkeeper and out-of-bounds (as pitch_maps.py)."
+            "Matches are those in the run dir; a match reused from the store is a link to the run that played it. "
+            "Positions and fouls exclude the goalkeeper and out-of-bounds (as tools/debug/pitch_maps.py)."
         ),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     # The candidate's two worst matches as config_a (the friendly side the intentions log covers), for an agent to
     # start from; evaluate.py's failure guard covers this call too.
-    triage.triage(run_dir, strategies={cand}, matches=2, out=out_dir / "triage", workers=workers)
+    find_bugs.find_bugs(run_dir, strategies={cand}, matches=2, out=out_dir / "find_bugs", workers=workers)
     return summary
 
 

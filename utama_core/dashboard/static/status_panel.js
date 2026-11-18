@@ -93,7 +93,7 @@ function renderTacticStatusInto(containerId, tacticStatus, options) {
       robotId +
       "</span><span>" +
       label.replace(/\s*\(committed\)/, "") +
-      (tagColor ? ' <span style="color:' + tagColor + '; font-size:.65rem;">' + tag + "</span>" : "") +
+      (tagColor && tag !== label ? ' <span style="color:' + tagColor + '; font-size:.65rem;">' + tag + "</span>" : "") +
       "</span>" +
       (committed ? '<span class="muted" style="font-size:.65rem;">committed</span>' : "") +
       "</div>" +

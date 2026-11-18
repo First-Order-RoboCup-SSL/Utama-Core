@@ -7,10 +7,8 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
-from utama_core.team_controller.src.utils import network_manager
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
+from utama_core.team_controller.utils import network_manager
 
 logger = logging.getLogger(__name__)
 

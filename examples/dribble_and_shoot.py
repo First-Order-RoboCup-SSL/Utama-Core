@@ -7,7 +7,7 @@ Run:
     # the dashboard is at http://localhost:8080: press Force Start to play, Halt to freeze
 
 Everything else is `score_goal.py`: the robot set there (`SHOOTER`), the field and camera
-view from `shooting_drill.py`, HALT at start, the field check. The robot fetches the
+view from `tools/field/shooting_drill.py`, HALT at start, the field check. The robot fetches the
 ball and dribbles it corner to corner round a rectangle at 55% of the field (`DribbleTactic`,
 letting go and taking the ball back every 0.8 m, inside the 1 m dribbling rule), and after
 `LAPS` laps shoots at the goal at +x (`LeadAndSupportTactic`). For another go: Halt, put the

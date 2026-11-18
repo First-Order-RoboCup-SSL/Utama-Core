@@ -1,7 +1,7 @@
 """One shared format for the problems the picture tools flag (`--findings PATH` on each tool).
 
 A picture is for understanding a flagged problem, never the only evidence for it: each tool also emits
-its flags as JSON lines, one `Finding` per line, so an agent (or `tools/triage.py`) can filter on the
+its flags as JSON lines, one `Finding` per line, so an agent (or `tools/debug/find_bugs.py`) can filter on the
 JSON and open the picture only to see what it means.
 
     {"tool": "match_timeline", "kind": "tactic_thrash", "replay": "replays/.../a_vs_b.npz", "side": "friendly",

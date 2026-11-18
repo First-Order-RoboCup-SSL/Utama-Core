@@ -1,10 +1,10 @@
-"""`tools/convert_ssl_log.py`'s per-log corpus job: what it downloads, converts and keeps."""
+"""`tools/realism/convert_ssl_log.py`'s per-log corpus job: what it downloads, converts and keeps."""
 
 from __future__ import annotations
 
 import json
 
-from tools import convert_ssl_log
+from tools.realism import convert_ssl_log
 
 
 def _job(tmp_path, keep_raw):
@@ -88,7 +88,7 @@ def test_limit_memory_turns_an_oversized_allocation_into_memory_error():
     import sys
 
     code = (
-        "from tools.convert_ssl_log import limit_memory\n"
+        "from tools.realism.convert_ssl_log import limit_memory\n"
         "limit_memory(1.5)\n"
         "try:\n"
         "    bytearray(2 * 2**30)\n"

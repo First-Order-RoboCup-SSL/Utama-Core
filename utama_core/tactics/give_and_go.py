@@ -39,13 +39,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.config.settings import CONTROL_FREQUENCY
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
+    MIN_OPEN_TEAMMATE_M,
     ball_in_own_defense_area,
     ball_line_receive_point,
     carry_exhausted,
@@ -63,13 +65,14 @@ from utama_core.shared.pass_and_score_geometry import (
     no_shot_reposition_target,
     oriented_towards,
     own_defense_area_exit_point,
+    release_heading,
     score_pass_setup,
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import _pass_exec, move_for_a_shot
 
 _MAX_HOPS_PER_POSSESSION = 6  # safety valve — force a shot attempt rather than passing forever
@@ -83,13 +86,17 @@ _SUGGEST_HANDOFF_TICKS = round(_SUGGEST_HANDOFF_TIME * CONTROL_FREQUENCY)
 # field corner locked a receiver_id and then held the ball motionless for
 # the rest of a 600s match — `is_committed()` returns True whenever
 # receiver_id is not None, so nothing ever reassigns these robots either,
-# and no custom_referee rule catches a legally-dribbling, barely-moving
+# and no referee rule catches a legally-dribbling, barely-moving
 # ball outside a defense area (keeper_held_ball only watches the defense
 # area; excessive_dribbling only watches distance carried, not hold time).
 # Abandoning a hop that's taken too long and forcing the fallback shoot/
 # reposition path (same one used when no pass lane exists at all) breaks
 # the deadlock regardless of which specific geometry caused the receiver to
 # never arrive.
+# How long a carrier waits with the ball for its receiver to get into place before passing to it
+# where it stands. Waited out to `_MAX_HOP_TICKS`, twice over on a first touch, carriers stood still
+# for 9 s after free kicks (high_press_vs_split_shape t=500.6, tournament_20261109_225810).
+_MAX_PASS_WAIT_TICKS = round(1.0 * CONTROL_FREQUENCY)
 _MAX_HOP_TICKS = round(4.0 * CONTROL_FREQUENCY)  # 4s — generous vs. a real catch, short vs. a match
 # An enemy walking onto the direct carrier-receiver line mid-hop makes the
 # pass interceptable, but is a much more urgent signal than "receiver is
@@ -130,6 +137,7 @@ _MAX_FIRST_TOUCH_TICKS = round(8.0 * CONTROL_FREQUENCY)  # 8s — generous vs. r
 # `_MAX_HOPS_PER_POSSESSION` and force the shot rather than repositioning
 # forever.
 _FIRST_TOUCH_FORCE_SHOT_TICKS = round(15.0 * CONTROL_FREQUENCY)  # 15s — well past any real restart window
+_RELOCATE_LANE_CLEARANCE = ROBOT_RADIUS + 0.1
 _RELOCATE_MIN_SEPARATION = 0.9  # metres — a relocating support point must clear the carrier and other supports
 # Retreat standoff from our own area front edge while the ball is in our own
 # half: support robots hold this far off the box line instead of packing it.
@@ -150,7 +158,6 @@ def _best_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int, ...]) 
     return best_id
 
 
-_MIN_SAFE_PASS_DISTANCE = 0.7  # metres — matches score_pass_setup's own min_pass_distance
 _SHOT_SWITCH_MARGIN = 0.15  # metres a new shot gap must beat the aimed-at one by; same as _pass_and_score's
 
 
@@ -174,7 +181,7 @@ def _nearest_safe_receiver(game: Game, carrier_id: int, candidate_ids: tuple[int
     for candidate_id in candidate_ids:
         candidate_pos = game.friendly_robots[candidate_id].p
         dist = carrier_pos.distance_to(candidate_pos)
-        if dist < _MIN_SAFE_PASS_DISTANCE:
+        if dist < MIN_OPEN_TEAMMATE_M:
             continue
         if segment_blocked(carrier_pos, candidate_pos, enemies):
             continue
@@ -201,7 +208,7 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
     team always attacks toward `+x` — for `my_team_is_right=False` (attacking
     `-x`), every candidate this produced sat *behind* the ball, toward this
     team's own goal, not ahead of it. Found live investigating a real "these
-    strategies never shoot" bug (`high_press`/`overload_flow`/
+    strategies never shoot" bug (`wolfpack`/`overload_flow`/
     `score_aware_zone_flow`, 2026-09-05, `docs/roadmap.md`): traced replay
     showed `give_and_go.shot_lane.open=True` 132 times in one match, yet the
     carrier's x-position never advanced past -1.10 toward a goal at -4.5 —
@@ -261,8 +268,13 @@ def _relocate_target(game: Game, robot_id: int, avoid: list[Vector2D]) -> Vector
         # reachable run beats a short lateral shuffle); among similarly
         # advanced options, the one nearest this robot, so the target holds
         # still once reached. `avoid` already keeps support robots apart.
+        # A run nobody can pass to first of all: the lane from the ball counts before the progress.
+        # Wider for a spot further from where the robot stands, so it does not leave a lane it has
+        # for one that only looks a little better.
+        lane = _RELOCATE_LANE_CLEARANCE + (0.1 if point.distance_to(current) > 0.5 else 0.0)
+        lane_open = not segment_blocked(game.ball.p.to_2d(), point, enemy_positions(game), lane)
         progress = point.x * attack_sign
-        key = (progress, -point.distance_to(current))
+        key = (lane_open, progress, -point.distance_to(current))
         if best_progress is None or key > best_progress:
             best, best_progress = point, key
     return best if best is not None else current
@@ -487,8 +499,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # the shoot branch below, which would reintroduce the double-
             # touch bug this whole block exists to prevent. Retry next tick
             # as `_relocate_others` keeps repositioning teammates; give up
-            # and force a solo shot only after `_MAX_HOP_TICKS`, the same
-            # timeout budget the in-flight pass handshake already uses.
+            # and force a solo shot after `_MAX_PASS_WAIT_TICKS`.
             #
             # The give-up is once per possession (`first_touch_hold_spent`):
             # it used to fall through for one tick and then hold again for
@@ -501,7 +512,7 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             # around them (tournament_20261003_102921,
             # clear_danger_vs_overload_flow_RK t=171-192 s).
             mem.hop_ticks += 1
-            if mem.hop_ticks < _MAX_HOP_TICKS:
+            if mem.hop_ticks < _MAX_PASS_WAIT_TICKS:
                 carrier_pos = game.friendly_robots[carrier_id].p
                 goal_x, goal_y1, goal_y2 = enemy_goal_line(game)
                 commands[carrier_id] = move(
@@ -540,7 +551,9 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
                 mem.hop_ticks = 0
                 mem.lane_blocked_ticks = 0
             else:
-                hop_commands, pass_complete, lane_blocked = _pass_exec(game, ctx, carrier_id, mem.receiver_id)
+                hop_commands, pass_complete, lane_blocked = _pass_exec(
+                    game, ctx, carrier_id, mem.receiver_id, kick_now=mem.hop_ticks >= _MAX_PASS_WAIT_TICKS
+                )
                 mem.lane_blocked_ticks = mem.lane_blocked_ticks + 1 if lane_blocked else 0
                 commands.update(hop_commands)
                 self._relocate_others(game, ctx, robot_ids, carrier_id, commands, also_exclude=mem.receiver_id)
@@ -588,12 +601,10 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
 
         # The strafe below carries the ball sideways with no end of its own;
         # past 1.0m that is an excessive-dribbling foul (51 in the 2026-09-23
-        # round-robin). Once the carry is spent, shoot at the goal centre
-        # instead: a blocked shot keeps the ball live, a foul hands it over.
+        # round-robin). Once the carry is spent, kick to an open teammate or
+        # open space instead: a foul hands the ball over.
         carry_spent = carry_exhausted(game, mem.carry_origin)
         blind_shot = carry_spent and best_shot_y is None
-        if blind_shot:
-            best_shot_y = (goal_y1 + goal_y2) / 2.0
         if not carry_spent and (best_shot_y is None or (first_touch_stuck and not force_shot)):
             # No open lane at all — freezing here (the old behaviour) never
             # resolves against a stationary blocker (e.g. a keeper at the
@@ -603,8 +614,10 @@ class GiveAndGoTactic(BaseTactic[GiveAndGoMem]):
             commands[carrier_id] = move_for_a_shot(game, ctx, carrier_id)
         else:
             bend = kick_bend(game, ctx.motion_controller, carrier_id)
-            target_oren = carrier_pos.angle_to(Vector2D(goal_x, best_shot_y)) - bend
-            # A blind shot has no clear line to wait for: it kicks once aimed at the goal centre.
+            # A blind shot has no clear line to the goal: to an open teammate, or at the goal anyway.
+            target_oren = (
+                release_heading(game, carrier_id) if blind_shot else carrier_pos.angle_to(Vector2D(goal_x, best_shot_y))
+            ) - bend
             aimed = (
                 oriented_towards(game, carrier_id, target_oren)
                 if blind_shot

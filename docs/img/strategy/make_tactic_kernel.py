@@ -1,4 +1,4 @@
-"""Draws tactic_kernel.png for docs/STRATEGY_DEVELOPMENT.md ("The tactic-kernel model"): the classes that make up
+"""Draws tactic_kernel.png for docs/strategy.md ("The tactic-kernel model"): the classes that make up
 one team's Strategy, who holds or calls whom, and the path a tick takes from StrategyRunner down to the skills.
 
 pixi run python docs/img/strategy/make_tactic_kernel.py
@@ -32,9 +32,9 @@ NAMES = [
     "utama_core/engine/tactic.py",
     "utama_core/engine/context.py",
     "utama_core/engine/match_log.py",
-    "utama_core/strategy/split_shape.py",
+    "utama_core/strategy/pendulum.py",
     "utama_core/tactics",
-    "utama_core/skills/src",
+    "utama_core/skills",
 ]
 
 d = Diagram(
@@ -104,7 +104,7 @@ d.box(
     46,
     12,
     "Partitioner",
-    "strategy/split_shape.py and similar: splits\nthe free robots over the applicable tactics",
+    "strategy/pendulum.py and similar: splits\nthe free robots over the applicable tactics",
     kind="decision",
 )
 d.main((M, 67.5), (M, 60))
@@ -140,7 +140,7 @@ d.box(
     10,
     46,
     12,
-    "Skills (skills/src/)",
+    "Skills (skills/)",
     "go_to_ball, go_to_point, ... each\nreturns a RobotCommand",
     kind="motion",
 )

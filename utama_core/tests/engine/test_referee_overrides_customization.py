@@ -3,7 +3,7 @@
 `RefereeOverride.overrides` (set via `AbstractStrategy(..., referee_overrides=...)`
 or `Strategy.referee_overrides = ...`) lets a strategy replace the built-in
 `*Step` formation for one specific `RefereeCommand` with its own callable,
-without touching `custom_referee/actions.py` itself. This file covers:
+without touching `referee/actions.py` itself. This file covers:
 
 - a registered override actually runs instead of the built-in Step
   (`test_registered_override_replaces_built_in_step`)
@@ -23,7 +23,7 @@ without touching `custom_referee/actions.py` itself. This file covers:
   `self._goalkeeper_id not in cmd_map` gate
   (`test_goalkeeper_ticks_normally_when_override_omits_it`)
 
-Uses the same `split_shape_runner`/`_set_referee_command` pattern as
+Uses the same `pendulum_runner`/`_set_referee_command` pattern as
 `test_referee_override.py` for the end-to-end cases (a real rsim `Game` via
 `AbstractStrategy`/`StrategyRunner`, since the override integration point —
 `AbstractStrategy.load_motion_controller` assigning `Strategy.referee_overrides`
@@ -51,7 +51,7 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 from .test_referee_override import (  # noqa: F401 (re-used fixture helper)
     _set_referee_command,
@@ -144,6 +144,7 @@ def test_override_for_non_override_command_is_never_called():
     )
 
     game = Mock()
+    game.friendly_robots = game.enemy_robots = {}
     game.my_team_is_yellow = True
     referee = Mock()
     referee.referee_command = RefereeCommand.NORMAL_START
@@ -193,7 +194,7 @@ def override_runner():
         return {1: _SENTINEL_COMMAND}
 
     strategy = AbstractStrategy(
-        build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)),
+        build=builder("pendulum", (1, 2, 3, 4, 5)),
         referee_overrides={RefereeCommand.PREPARE_KICKOFF_YELLOW: kickoff_override},
     )
     runner = StrategyRunner(

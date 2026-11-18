@@ -8,7 +8,7 @@ tactic makes that decision: closest-to-ball leads (dribble toward goal, shoot
 when a lane opens, or pass to the best-scoring support point), every other
 assigned robot continuously re-picks the best open support point on the
 attacking half. Reuses existing skill/geometry primitives
-(`go_to_ball`/`go_to_point`/`move`, and `shared/pass_and_score_geometry`'s
+(`go_to_ball`/`go_to_point`/`move`, and `geometry/pass_and_score_geometry`'s
 shot-finding and pass-scoring functions) — the primitives are fundamental
 motion/geometry, not tactical decisions, so they were kept rather than
 reinvented.
@@ -34,7 +34,7 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.object import TeamType
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     clamp_outside_enemy_defense_area,
     enemy_goal_line,
     enemy_positions,
@@ -47,9 +47,9 @@ from utama_core.shared.pass_and_score_geometry import (
     segment_blocked,
     shot_heading_reachable,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import kick, move, turn_on_spot
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import kick, move, turn_on_spot
 from utama_core.tactics._pass_and_score import move_for_a_shot
 
 _MIN_SUPPORT_SEPARATION = 0.9  # metres — supports must not crowd each other or the leader
@@ -73,7 +73,7 @@ def _candidate_support_points(game: Game, count: int) -> list[Vector2D]:
     # boundary itself, right through the enemy defense area — an outfield
     # robot standing there is an attacker-infringement foul
     # (`DefenseAreaRule`). Found via 20 `defense_area` fouls in one live
-    # match (`overload_press`'s "counter" slot uses this tactic on every
+    # match (`avalanche`'s "counter" slot uses this tactic on every
     # tick it doesn't have the ball). Clamp the deep edge with the same
     # box-avoidance helper `decoy_and_overload.py`'s `_overload_target` uses.
     clamped_edge = clamp_outside_enemy_defense_area(game, Vector2D(x_hi, 0.0)).x

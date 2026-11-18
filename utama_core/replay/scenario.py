@@ -8,16 +8,16 @@ the whole match from t=0 in a fresh headless run just to get back to that
 one tick. `scenario_from_replay()` + `apply_scenario()` skip that: read the
 single nearest frame from the replay, then teleport a freshly-constructed
 `StrategyRunner` (same two strategies, same profile — see
-`repro_from_replay.py`) directly into that field state, so the investigator
+`tools/debug/repro_from_replay.py`) directly into that field state, so the investigator
 can start ticking (with `match_log` tracing on) from just before the stall.
 
 Coordinate frame: `GameFrame.friendly_robots`/`enemy_robots`/`ball` store
 positions in plain pitch-frame metres — the same frame
 `AbstractSimController.teleport_ball`/`teleport_robot` take directly (see
-`utama_core/rsoccer_simulator/src/ssl/ssl_gym_base.py`'s `teleport_ball`/
+`utama_core/simulator/ssl/ssl_gym_base.py`'s `teleport_ball`/
 `teleport_robot`, which do the y-flip into rsim's internal frame themselves;
 callers, including the teleport accuracy test in
-`utama_core/tests/strategy_runner/teleport_position_accuracy_test.py`, pass
+`utama_core/tests/run/test_teleport_position_accuracy.py`, pass
 plain (x, y) metres and get them back unchanged on the next frame). There is
 no additional per-team-color mirroring at the `GameFrame` layer — that only
 exists one level up, in kernel-tactic target *storage* (see
@@ -26,11 +26,11 @@ not `GameFrame` positions). So `scenario_from_replay` can read a frame's
 `p.x`/`p.y`/`orientation` and hand them to `apply_scenario` unchanged; this
 is verified by `apply_scenario` itself reading back the first post-teleport
 `GameFrame` and asserting positions match within a few cm (mirroring
-`teleport_position_accuracy_test.py`'s `POSITION_TOLERANCE`).
+`test_teleport_position_accuracy.py`'s `POSITION_TOLERANCE`).
 
 A replay only ever records one side's perspective (`ReplayWriterConfig`/
 `ColumnarReplayWriterConfig.is_my_perspective`, and
-`tournament.run_match`/`repro_from_replay.py` both always construct the
+`tournament.run_match`/`tools/debug/repro_from_replay.py` both always construct the
 runner with `my_team_is_yellow=True, my_team_is_right=True` — config_a is
 always yellow/friendly, and right in the first half; `scenario_from_replay` turns a
 second-half frame so it is right here too) — so `friendly_robots` in the replay is
@@ -40,8 +40,8 @@ expects).
 
 Known limitations, stated here once rather than re-derived by every caller:
 - **Tactic `mem` is not in the replay.** Every `Tactic`'s internal per-slot
-  state (phase, committed targets, timers — see `docs/STRATEGY_DEVELOPMENT.
-  md`'s "Writing a Tactic") lives only in the live kernel `Strategy`
+  state (phase, committed targets, timers — see `docs/strategy.md`'s
+  "Writing a Tactic") lives only in the live kernel `Strategy`
   process, never serialized to the replay. A repro therefore always starts
   with **fresh tactic state** — the kernel re-partitions robots from
   scratch on the first tick after the scenario is applied, which may not
@@ -96,10 +96,11 @@ from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Game, GameFrame, GameHistory, Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import _load_replay, load_frames_in_range
+from utama_core.strategy.catalog import plain_name
 
 logger = logging.getLogger(__name__)
 
-_POSITION_TOLERANCE_M = 0.15  # mirrors teleport_position_accuracy_test.py's POSITION_TOLERANCE
+_POSITION_TOLERANCE_M = 0.15  # mirrors test_teleport_position_accuracy.py's POSITION_TOLERANCE
 _VERIFY_MAX_TICKS = 10  # see apply_scenario's verify=True docstring for why more than 1 tick is needed
 _SHOWING_WINDOW_S = 0.5  # how far past `t_seconds` `scenario_from_replay(showing=...)` looks
 _CLOCK_EPS_S = 1e-6  # float slack when a frame time sits exactly on a window edge
@@ -133,7 +134,7 @@ class Scenario:
 
     `friendly_robots`/`enemy_robots` follow the replay's own perspective
     (see module docstring): friendly is config_a (yellow/right in every
-    `tournament.run_match`/`repro_from_replay.py` construction), enemy is
+    `tournament.run_match`/`tools/debug/repro_from_replay.py` construction), enemy is
     config_b.
     """
 
@@ -146,7 +147,7 @@ class Scenario:
     enemy_robots: tuple[RobotState, ...]
     referee_command: Optional[RefereeCommand]
     source_replay: Path
-    config_a_name: Optional[str] = None  # e.g. "build_high_line_zone_kernel_strategy" (friendly)
+    config_a_name: Optional[str] = None  # e.g. "high_line_zone" (friendly)
     config_b_name: Optional[str] = None  # enemy
     frame_ts: float = field(default=0.0)  # the actual frame's `ts`, may differ slightly from requested sim_time
 
@@ -154,7 +155,7 @@ class Scenario:
 def _short_name(config_name: str) -> str:
     """Mirror `tournament._short_name` without importing the CLI script as a
     module (it's a root-level script, not a package)."""
-    return config_name.removeprefix("build_").removesuffix("_kernel_strategy")
+    return plain_name(config_name)
 
 
 def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:
@@ -175,7 +176,7 @@ def _robot_states(robots: dict, turn: bool = False) -> tuple[RobotState, ...]:
 
 
 def _frame_origin(replay_path: Path) -> float:
-    """The `ts` of the replay's first frame. Times on the sidecar's and `replay_trace.py`'s
+    """The `ts` of the replay's first frame. Times on the sidecar's and `tools/debug/replay_trace.py`'s
     clock (and the `t_seconds` callers pass, from `fouls` or a StallEvent) count from it, not
     from 0: a frame's `ts` starts at one tick (1/60 s in these replays)."""
     if replay_path.suffix == ".npz":
@@ -318,7 +319,7 @@ def _first_frame_showing(replay_path: Path, t_seconds: float, command: RefereeCo
 def scenario_from_replay(replay_path, t_seconds: float, *, showing: Optional[RefereeCommand] = None) -> Scenario:
     """Read the frame nearest `t_seconds` from `replay_path` and build a
     `Scenario` from it. `t_seconds` counts from the replay's first frame, the clock the sidecar,
-    `fouls` and `replay_trace.py` use (see `_frame_origin`). It merges in the referee command from
+    `fouls` and `tools/debug/replay_trace.py` use (see `_frame_origin`). It merges in the referee command from
     the `.intentions.jsonl` sidecar (frames themselves carry no referee data — see module
     docstring) and the two strategy config names from the tournament directory's `summary.json`,
     when available.
@@ -427,12 +428,12 @@ def _overwrite_current_game_frame(side, scenario: Scenario, *, my_is_friendly: b
 def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     """Teleport `runner`'s ball and every robot into `scenario`'s field
     state, through `runner.sim_controller` (the same public attribute
-    `teleport_position_accuracy_test.py` drives directly).
+    `test_teleport_position_accuracy.py` drives directly).
 
     Friendly robots are teleported as `runner.my_team_is_yellow`'s color,
     enemy robots as the opposite color — matching how the replay was
     recorded (see module docstring: config_a/friendly is always yellow/right
-    in `tournament.run_match`/`repro_from_replay.py`, but `apply_scenario`
+    in `tournament.run_match`/`tools/debug/repro_from_replay.py`, but `apply_scenario`
     itself just follows whatever `runner.my_team_is_yellow` says, so it also
     works for a runner built with the opposite orientation).
 
@@ -455,7 +456,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     a coordinate-frame regression fails loudly instead of silently
     producing a wrong repro. More than one tick is needed in practice, not
     just the "one frame of physics settling"
-    `teleport_position_accuracy_test.py`'s `POSITION_TOLERANCE` was sized
+    `test_teleport_position_accuracy.py`'s `POSITION_TOLERANCE` was sized
     for: a robot/ball teleported far from wherever the runner's initial
     formation placed it (the normal case here — a real match's positions
     are essentially always far from a fresh runner's starting formation,
@@ -465,7 +466,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     robot teleported near the goal line, confirmed against a real replay,
     2026-09-03).
     """
-    from utama_core.custom_referee import CustomReferee
+    from utama_core.referee import CustomReferee
 
     sim_controller = runner.sim_controller
     if sim_controller is None:
@@ -491,7 +492,7 @@ def apply_scenario(runner, scenario: Scenario, *, verify: bool = True) -> None:
     # direction of travel (observed: robot teleported to x=0.68 landed at
     # x=1.35 one tick later — reproduces exactly from the filter's own
     # closed-form update, not noise or a coordinate-frame bug).
-    # `teleport_position_accuracy_test.py` never hits this because it
+    # `test_teleport_position_accuracy.py` never hits this because it
     # teleports inside `reset_field()`, which `StrategyRunner._reset_game()`
     # always follows with `position_refiner.reset()` *and* a full
     # `GameGater`-driven `_load_game()` reload — which is what actually

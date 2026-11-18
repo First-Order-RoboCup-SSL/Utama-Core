@@ -15,7 +15,7 @@ from utama_core.engine.abstract_strategy import AbstractStrategy
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game, GameFrame, GameHistory, Robot
 from utama_core.entities.game.field import FieldBounds
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 
 
 def _turned(robot: Robot, bounds: FieldBounds) -> Robot:

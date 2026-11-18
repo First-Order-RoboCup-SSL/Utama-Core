@@ -40,7 +40,7 @@ NAMES = [
     "utama_core/entities/game/game_frame.py",
     "utama_core/engine/strategy.py",
     "utama_core/motion_planning",
-    "utama_core/team_controller/src/controllers/real/real_robot_controller.py",
+    "utama_core/team_controller/controllers/real/real_robot_controller.py",
 ]
 
 d = Diagram(
@@ -110,7 +110,7 @@ d.box(
     40,
     12,
     "RealRobotController",
-    "team_controller/src/controllers/real/\nserial radio on settings.PORT, 115200 baud",
+    "team_controller/controllers/real/\nserial radio on settings.PORT, 115200 baud",
     kind="output",
     size=10,
 )

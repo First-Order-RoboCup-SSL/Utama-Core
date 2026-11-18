@@ -20,8 +20,8 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.skills.src.man_mark import MARK_STANDOFF, mark_target
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.skills.man_mark import MARK_STANDOFF, mark_target
 from utama_core.tactics.shadow_and_mark import ShadowAndMarkTactic
 
 
@@ -51,7 +51,7 @@ def test_shadow_holding_the_ball_clears_it_instead_of_defending_on_it():
         3: _robot(3, 3.3, 0.0, True, has_ball=True, orientation=math.pi),
         4: _robot(4, 3.3, 0.25, True),
     }
-    enemy = {1: _robot(1, 2.8, 0.0, False)}  # close enough that the ball isn't "loose"
+    enemy = {1: _robot(1, 2.8, 0.8, False)}  # close enough that the ball isn't "loose", off the lane
     zero = Vector3D(0.0, 0.0, 0.0)
     frame = GameFrame(
         ts=0.0,

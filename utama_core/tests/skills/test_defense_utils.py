@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from utama_core.skills.src.utils.defense_utils import (
+from utama_core.skills.utils.defense_utils import (
     DefenseGeometry,
     _defense_geometry,
     calculate_defense_area,

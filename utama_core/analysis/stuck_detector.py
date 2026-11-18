@@ -2,7 +2,7 @@
 robot oscillates instead of making progress, or a restart command stuck in
 effect far longer than any legal restart ceremony takes.
 
-This is a prototype analysis tool, not a live `custom_referee` rule (see
+This is a prototype analysis tool, not a live `referee` rule (see
 `docs/testing_gaps.md` gap #11) — it runs after a match, over a recorded
 `.pkl`/`.npz` replay, and reports candidate windows for a human/agent to
 look at with `render_window()`. It intentionally does not (and should not,
@@ -468,7 +468,7 @@ def find_stuck_windows(
       `RefereeSidecar`) to reconstruct the command per frame; only if
       *that* is also unavailable does this check skip entirely, exactly as
       before — not every replay (a unit-test fixture, a non-refereed
-      `debug_match.py` run) carries referee state or a sidecar.
+      `tools/debug/debug_match.py` run) carries referee state or a sidecar.
     - **Ball possessed.** A window where some robot (either team) has
       `has_ball=True` for at least `possession_fraction` of its frames is a
       robot legitimately holding/shielding the ball, not a stall — this is

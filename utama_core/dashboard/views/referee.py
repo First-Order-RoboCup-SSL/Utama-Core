@@ -1,6 +1,6 @@
 """Referee view — attaches `CustomReferee` state/commands to a `DashboardServer`.
 
-This is the direct successor to `custom_referee/gui.py`'s `_RefereeGUIServer`:
+This is the direct successor to `referee/gui.py`'s `_RefereeGUIServer`:
 same state shape pushed over SSE, same `/command` semantics, but registered
 as one channel/route pair on a shared server instead of owning a private
 HTTP server. `CustomReferee.step()` still calls `notify()` on every tick —
@@ -18,8 +18,8 @@ from utama_core.dashboard.server import DashboardServer
 from utama_core.entities.referee.referee_command import RefereeCommand
 
 if TYPE_CHECKING:
-    from utama_core.custom_referee import CustomReferee
-    from utama_core.custom_referee.profiles.profile_loader import RefereeProfile
+    from utama_core.referee import CustomReferee
+    from utama_core.referee.profiles.profile_loader import RefereeProfile
 
 CHANNEL = "referee"
 

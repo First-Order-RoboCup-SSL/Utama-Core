@@ -1,4 +1,4 @@
-"""tools/plan_trace.py's trace function on synthetic games over time (no replay, no simulator)."""
+"""tools/debug/plan_trace.py's trace function on synthetic games over time (no replay, no simulator)."""
 
 import math
 

@@ -1,0 +1,70 @@
+profile_name: "simulation"
+rules:
+  goal_detection:
+    enabled: true
+    cooldown_seconds: 1.0
+  out_of_bounds:
+    enabled: true
+    free_kick_assigner: "last_touch"
+    aimless_kick: true   # §6.2.3, Division B only
+  defense_area:
+    enabled: true
+    max_defenders: 1
+    attacker_infringement: true
+  keep_out:
+    enabled: true
+    radius_meters: 0.5
+    violation_persistence_frames: 30
+  ball_speed:
+    enabled: true
+    max_speed_mps: 6.5
+  double_touch:
+    enabled: true
+  keeper_held_ball:
+    enabled: true
+    max_hold_seconds: 10.0
+  excessive_dribbling:
+    enabled: true
+    max_dribble_meters: 1.0
+  robot_stop_speed:
+    enabled: true
+    max_speed_mps: 1.5
+    grace_seconds: 2.0
+  pushing:
+    enabled: true
+    min_closing_speed_mps: 0.05
+    similar_force_margin_mps: 0.15
+    persistence_frames: 15
+  crashing:
+    enabled: true
+    fault_speed_threshold_mps: 1.5
+    both_fault_threshold_mps: 0.3
+    retrigger_cooldown_seconds: 2.0
+  defense_area_stoppage:
+    enabled: true
+    min_distance_meters: 0.2
+    grace_seconds: 2.0
+  ball_placement_interference:
+    enabled: true
+    stadium_radius_meters: 0.5
+    grace_seconds: 2.0
+  no_progress:
+    enabled: true
+    max_seconds: 10.0
+  penalty_time_limit:
+    enabled: true
+    max_seconds: 10.0
+game:
+  half_duration_seconds: 300.0
+  kickoff_team: "yellow"
+  force_start_after_goal: false
+  prepare_duration_seconds: 3.0   # seconds in PREPARE_KICKOFF before NORMAL_START is auto-issued
+  kickoff_timeout_seconds: 10.0   # seconds after NORMAL_START before FORCE_START if ball hasn't moved
+  auto_advance:
+    stop_to_next_command: true      # STOP → queued restart when all robots clear
+    prepare_kickoff_to_normal: true # PREPARE_KICKOFF_* → NORMAL_START when kicker in circle
+    prepare_penalty_to_normal: true # PREPARE_PENALTY_* → NORMAL_START when kicker reaches the mark
+    direct_free_to_normal: true     # DIRECT_FREE_* → NORMAL_START when the kick is taken
+    ball_placement_to_next: true    # BALL_PLACEMENT_* → next_command when ball at target
+    normal_start_to_force: true     # NORMAL_START → FORCE_START on kickoff timeout
+    end_of_half: true               # half's playing time up → second half, then POST_GAME

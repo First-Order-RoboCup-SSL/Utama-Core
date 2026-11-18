@@ -1,8 +1,7 @@
 """`utama_core.replay.fingerprint`: which edits change which fingerprints.
 
-Most tests build a small repo in `tmp_path` with the real layout (a `kernel_strategy.py`
-registry, one module per strategy and a shared `pickers.py`, tactic modules, a planner the
-runner imports, `tools/evaluation/match.py`), edit one file, and check exactly the
+Most tests build a small repo in `tmp_path` with the real layout (one module per strategy and
+a shared `pickers.py`, tactic modules, a planner the runner imports, `tools/evaluation/match.py`), edit one file, and check exactly the
 fingerprints that should move do. The rest run against this repo itself."""
 
 from __future__ import annotations
@@ -13,22 +12,9 @@ from pathlib import Path
 import pytest
 
 from utama_core.replay import fingerprint as fp
-from utama_core.replay.fingerprint import (
-    KERNEL_STRATEGY,
-    REPO_ROOT,
-    ROUND_ROBIN_ENTRY,
-    CodeGraph,
-    config_names,
-    match_key,
-)
-
-REGISTRY = '''\
-"""Factories."""
-
-from utama_core.strategy.a import build_a_kernel_strategy
-from utama_core.strategy.b import build_b_kernel_strategy
-from utama_core.strategy.c import build_c_kernel_strategy
-'''
+from utama_core.replay import match_results
+from utama_core.replay.fingerprint import MATCH_ENTRY, REPO_ROOT, CodeGraph
+from utama_core.strategy import catalog
 
 PICKERS = """\
 _MARGIN = 0.05  # used by the shared helper
@@ -45,7 +31,7 @@ from utama_core.strategy.pickers import _shared_helper
 from utama_core.tactics.attack import AttackTactic
 
 
-def build_a_kernel_strategy(ids):
+def a(ids):
     return [AttackTactic(), _shared_helper(1)]
 """
 
@@ -65,7 +51,7 @@ def _b_picker(x):
     return _shared_helper(x) * _ONLY_B
 
 
-def build_b_kernel_strategy(ids):
+def b(ids):
     return [DefendTactic(), _b_picker(2)]
 """
 
@@ -76,14 +62,14 @@ from __future__ import annotations
 from utama_core.tactics.unused import UnusedTactic
 
 
-def build_c_kernel_strategy(ids):
+def c(ids):
     # no helper, no tactic of its own
     return [len(ids)]
 """
 
 FILES = {
     "tools/evaluation/__init__.py": "",
-    "tools/evaluation/match.py": "from utama_core.run.runner import run\nfrom utama_core.strategy import kernel_strategy\n",
+    "tools/evaluation/match.py": "from utama_core.run.runner import run\nfrom utama_core.strategy import catalog\n",
     "utama_core/__init__.py": '__version__ = "1.0.0"\n',
     "utama_core/run/__init__.py": "",
     "utama_core/run/runner.py": "from ..planning import planner\nfrom utama_core.profiles import loader\n\n\ndef run():\n"
@@ -94,7 +80,7 @@ FILES = {
     "utama_core/profiles/loader.py": "def load():\n    return open('sim.yaml').read()\n",
     "utama_core/profiles/sim.yaml": "speed: 1\n",
     "utama_core/strategy/__init__.py": "",
-    "utama_core/strategy/kernel_strategy.py": REGISTRY,
+    "utama_core/strategy/catalog.py": "def names():\n    return []\n",
     "utama_core/strategy/pickers.py": PICKERS,
     "utama_core/strategy/a.py": STRATEGY_A,
     "utama_core/strategy/b.py": STRATEGY_B,
@@ -107,9 +93,9 @@ FILES = {
     "utama_core/skills/aim.py": "def aim():\n    return 0\n",
     "utama_core/tactics/defend.py": "class DefendTactic:\n    pass\n",
     "utama_core/tactics/unused.py": 'class UnusedTactic:\n    pass\n\n\nif __name__ == "__main__":\n    print(1)\n',
-    "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py": "import json\n",
+    "utama_core/simulator/simulators/robosim/robosim_subprocess.py": "import json\n",
 }
-CONFIGS = ["build_a_kernel_strategy", "build_b_kernel_strategy", "build_c_kernel_strategy"]
+CONFIGS = ["a", "b", "c"]
 
 
 @pytest.fixture
@@ -118,7 +104,7 @@ def repo(tmp_path: Path) -> Path:
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-    for pkg in ("utama_core/rsoccer_simulator", "utama_core/rsoccer_simulator/src"):
+    for pkg in ("utama_core/simulator", "utama_core/simulator"):
         (tmp_path / pkg / "__init__.py").write_text("")
     return tmp_path
 
@@ -126,7 +112,7 @@ def repo(tmp_path: Path) -> Path:
 def _fingerprints(root: Path) -> dict[str, str]:
     g = CodeGraph(root)
     out = {c: g.strategy_fingerprint(c) for c in CONFIGS}
-    out["base"] = g.base_fingerprint([ROUND_ROBIN_ENTRY])
+    out["base"] = g.base_fingerprint([MATCH_ENTRY])
     return out
 
 
@@ -140,53 +126,36 @@ def _changed_after(root: Path, rel: str, old: str, new: str) -> set[str]:
     return {k for k in before if before[k] != after[k]}
 
 
-def _short(changed: set[str]) -> set[str]:
-    return {c.removeprefix("build_").removesuffix("_kernel_strategy") for c in changed}
-
-
-KS = "utama_core/strategy/kernel_strategy.py"
 PICKERS_PY = "utama_core/strategy/pickers.py"
 A_PY, B_PY, C_PY = ("utama_core/strategy/a.py", "utama_core/strategy/b.py", "utama_core/strategy/c.py")
 
 
 def test_editing_one_strategy_changes_only_that_config(repo):
-    assert _short(_changed_after(repo, C_PY, "return [len(ids)]", "return [len(ids) + 1]")) == {"c"}
-    assert _short(_changed_after(repo, A_PY, "AttackTactic(), ", "AttackTactic(), 0, ")) == {"a"}
+    assert (_changed_after(repo, C_PY, "return [len(ids)]", "return [len(ids) + 1]")) == {"c"}
+    assert (_changed_after(repo, A_PY, "AttackTactic(), ", "AttackTactic(), 0, ")) == {"a"}
 
 
 def test_editing_a_constant_or_state_in_one_strategy_changes_only_that_config(repo):
-    assert _short(_changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4")) == {"b"}
-    assert _short(_changed_after(repo, B_PY, "_streak = 0", "_streak = 5")) == {"b"}
+    assert (_changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4")) == {"b"}
+    assert (_changed_after(repo, B_PY, "_streak = 0", "_streak = 5")) == {"b"}
 
 
 def test_editing_the_shared_pickers_changes_the_configs_that_import_them(repo):
-    assert _short(_changed_after(repo, PICKERS_PY, "return x + _MARGIN", "return x - _MARGIN")) == {"a", "b"}
-    assert _short(_changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06")) == {"a", "b"}
-
-
-def test_the_registry_is_not_part_of_any_strategy_fingerprint(repo):
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == set()
-
-
-def test_pointing_a_factory_at_another_module_changes_that_config(repo):
-    (repo / "utama_core/strategy/c2.py").write_text(STRATEGY_C)
-    changed = _changed_after(
-        repo, KS, "from utama_core.strategy.c import build_c", "from utama_core.strategy.c2 import build_c"
-    )
-    assert _short(changed) == {"c"}
+    assert (_changed_after(repo, PICKERS_PY, "return x + _MARGIN", "return x - _MARGIN")) == {"a", "b"}
+    assert (_changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06")) == {"a", "b"}
 
 
 def test_editing_a_tactic_changes_exactly_the_configs_that_import_it(repo):
     rel = "utama_core/tactics/attack.py"
-    assert _short(_changed_after(repo, rel, "return kick()", "return kick() + 1")) == {"a"}
+    assert (_changed_after(repo, rel, "return kick()", "return kick() + 1")) == {"a"}
 
 
 def test_a_function_level_import_is_followed(repo):
-    assert _short(_changed_after(repo, "utama_core/skills/aim.py", "return 0", "return 1")) == {"a"}
+    assert (_changed_after(repo, "utama_core/skills/aim.py", "return 0", "return 1")) == {"a"}
 
 
 def test_an_imported_tactic_counts_even_if_the_strategy_never_uses_it(repo):
-    assert _short(_changed_after(repo, "utama_core/tactics/unused.py", "pass", "x = 1")) == {"c"}
+    assert (_changed_after(repo, "utama_core/tactics/unused.py", "pass", "x = 1")) == {"c"}
 
 
 def test_a_tactic_no_strategy_imports_changes_nothing(repo):
@@ -194,51 +163,82 @@ def test_a_tactic_no_strategy_imports_changes_nothing(repo):
     assert _changed_after(repo, "utama_core/tactics/orphan.py", "pass", "x = 1") == set()
 
 
-def test_import_time_effects_move_a_module_into_the_base(repo):
-    # `unused` runs in every match (strategy c imports it, and kernel_strategy imports c): once
-    # its import-time code can reach outside it, it is part of what every match runs.
-    rel = "utama_core/tactics/unused.py"
-    assert _short(
-        _changed_after(repo, rel, "class UnusedTactic:", "import sys\nsys.path.append('x')\n\n\nclass UnusedTactic:")
-    ) == {"base", "c"}
-    assert "utama_core.tactics.unused" in CodeGraph(repo).ambient_modules()
-    assert _short(_changed_after(repo, rel, "pass", "y = 2")) == {"base", "c"}
+def _fixture(
+    g,
+    a,
+    b,
+    *,
+    duration=65.0,
+    sim_noise=None,
+    a_is_right=True,
+    a_kicks_off=True,
+):
+    """The fixture id `match_results` gives a match of `a` (config_a) against `b`."""
+    env = match_results.environment(
+        g,
+        duration_seconds=duration,
+        sim_noise=sim_noise,
+    )
+    seed = sim_noise.get("seed") if sim_noise else None
+    return match_results.fixture_id(
+        env,
+        g.strategy_fingerprint(a)[:16],
+        g.strategy_fingerprint(b)[:16],
+        seed,
+        a_is_right=a_is_right,
+        a_kicks_off=a_kicks_off,
+    )
 
 
-def test_import_time_effects_in_a_strategy_module_move_it_into_the_base(repo):
-    changed = _changed_after(repo, A_PY, "\n\ndef build_a", "\nREGISTRY = {}\nREGISTRY.update(a=1)\n\n\ndef build_a")
-    assert _short(changed) == {"base", "a"}
-    assert "utama_core.strategy.a" in CodeGraph(repo).ambient_modules()
-
-
-def test_a_main_guard_is_not_an_import_time_effect(repo):
-    assert CodeGraph(repo).ambient_modules() == {}
-
-
-def test_editing_shared_infrastructure_changes_the_base_and_every_match_key(repo):
+def test_editing_shared_infrastructure_changes_the_base_and_every_fixture(repo):
     g = CodeGraph(repo)
-    keys = {(a, b): match_key(g, a, b, duration_seconds=65.0) for a in CONFIGS for b in CONFIGS if a < b}
+    fixtures = {(a, b): _fixture(g, a, b) for a in CONFIGS for b in CONFIGS if a < b}
     changed = _changed_after(repo, "utama_core/planning/planner.py", "return 1", "return 2")
     assert changed == {"base"}
     g = CodeGraph(repo)
-    assert all(match_key(g, a, b, duration_seconds=65.0) != k for (a, b), k in keys.items())
+    assert all(_fixture(g, a, b) != k for (a, b), k in fixtures.items())
 
 
-def test_shared_code_importing_kernel_strategy_puts_every_strategy_module_in_the_base(repo):
-    rel = "utama_core/planning/planner.py"
+def _runner_also_imports(repo: Path, module: str) -> None:
+    path = repo / "utama_core/run/runner.py"
+    path.write_text(f"import {module}\n" + path.read_text())
+
+
+def _add(repo: Path, rel: str, text: str) -> None:
     path = repo / rel
-    path.write_text("from utama_core.strategy.kernel_strategy import _shared_helper\n\n\n" + path.read_text())
-    assert _changed_after(repo, B_PY, "_ONLY_B = 3", "_ONLY_B = 4") == {"base", "build_b_kernel_strategy"}
-    assert _changed_after(repo, PICKERS_PY, "_MARGIN = 0.05", "_MARGIN = 0.06") == {
-        "base",
-        "build_a_kernel_strategy",
-        "build_b_kernel_strategy",
-    }
-    assert _changed_after(repo, KS, '"""Factories."""', '"""Factories."""\n_EDITED = 1') == {"base"}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_import_time_effects_stay_with_the_strategy_that_imports_them(repo):
+    # Only the two strategies playing are imported, so nothing else can see them.
+    rel = "utama_core/tactics/unused.py"
+    assert _changed_after(
+        repo, rel, "class UnusedTactic:", "import sys\nsys.path.append('x')\n\n\nclass UnusedTactic:"
+    ) == {"c"}
+
+
+def test_code_behind_the_process_boundary_is_the_players_even_if_the_runner_imports_it(repo):
+    # A skills edit must not replay matches between two `.strategy` files, which carry their own.
+    _runner_also_imports(repo, "utama_core.skills.aim")
+    assert _changed_after(repo, "utama_core/skills/aim.py", "return 0", "return 1") == {"a"}
+
+
+def test_what_the_match_process_runs_itself_stays_in_the_base(repo):
+    _add(repo, "utama_core/engine/__init__.py", "")
+    _add(repo, "utama_core/engine/match_log.py", "LIMIT = 1\n")
+    _runner_also_imports(repo, "utama_core.engine.match_log")
+    assert _changed_after(repo, "utama_core/engine/match_log.py", "LIMIT = 1", "LIMIT = 2") == {"base"}
+
+
+def test_a_compiled_planner_counts_for_the_players_that_load_it_and_not_the_base(repo):
+    _add(repo, "utama_core/skills/_planner.so", "version 1")
+    _runner_also_imports(repo, "utama_core.skills.aim")
+    assert _changed_after(repo, "utama_core/skills/_planner.so", "version 1", "version 2") == {"a"}
 
 
 def test_the_rsim_subprocess_script_and_data_files_are_in_the_base(repo):
-    rel = "utama_core/rsoccer_simulator/src/Simulators/robosim/robosim_subprocess.py"
+    rel = "utama_core/simulator/simulators/robosim/robosim_subprocess.py"
     assert _changed_after(repo, rel, "import json", "import json, struct") == {"base"}
     assert _changed_after(repo, "utama_core/profiles/sim.yaml", "speed: 1", "speed: 2") == {"base"}
 
@@ -267,37 +267,31 @@ def test_a_relative_import_resolves(repo):
     assert "utama_core.planning.planner" in g.closure(["utama_core.run.runner"])
 
 
-def test_match_key_covers_every_setting(repo):
+def test_the_fixture_covers_every_setting(repo):
     g = CodeGraph(repo)
     a, b = CONFIGS[:2]
-    ref = match_key(g, a, b, duration_seconds=65.0)
+    ref = _fixture(g, a, b)
     variants = [
-        match_key(g, b, a, duration_seconds=65.0),
-        match_key(g, a, b, duration_seconds=20.0),
-        match_key(g, a, b, duration_seconds=65.0, a_is_right=False),
-        match_key(g, a, b, duration_seconds=65.0, a_kicks_off=False),
-        match_key(g, a, b, duration_seconds=65.0, control_scheme="dwa"),
-        match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1),
-        match_key(g, a, b, duration_seconds=65.0, recorded=False),
-        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 1}),
-        match_key(g, a, b, duration_seconds=65.0, sim_noise={"seed": 2}),
+        _fixture(g, b, a),
+        _fixture(g, a, b, duration=20.0),
+        _fixture(g, a, b, a_is_right=False),
+        _fixture(g, a, b, a_kicks_off=False),
+        _fixture(g, a, b, sim_noise={"seed": 1}),
+        _fixture(g, a, b, sim_noise={"seed": 2}),
     ]
     assert len({ref, *variants}) == 1 + len(variants)
-    # the fuzz interval only matters when fuzzing is on
-    assert match_key(g, a, b, duration_seconds=65.0, fuzz_interval_s=(1.0, 2.0)) == ref
-    assert match_key(g, a, b, duration_seconds=65.0, fuzz_seed=1, fuzz_interval_s=(1.0, 2.0)) != variants[5]
-    # matches without sim noise keep the keys they had before the setting existed
-    assert match_key(g, a, b, duration_seconds=65.0, sim_noise=None) == ref
+    # the noise seed is per match, the rest of the noise per environment
+    assert _fixture(g, a, b, sim_noise={"seed": 1, "kick_speed_sd": 0.2}) != variants[4]
 
 
 def test_numerics_env_vars_change_the_base(repo, monkeypatch):
     monkeypatch.delenv("UTAMA_EXACT_MATH", raising=False)
-    before = CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY])
+    before = CodeGraph(repo).base_fingerprint([MATCH_ENTRY])
     monkeypatch.setenv("UTAMA_EXACT_MATH", "1")
-    assert CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY]) != before
-    with_exact = CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY])
+    assert CodeGraph(repo).base_fingerprint([MATCH_ENTRY]) != before
+    with_exact = CodeGraph(repo).base_fingerprint([MATCH_ENTRY])
     monkeypatch.setenv("UNRELATED_VAR", "1")
-    assert CodeGraph(repo).base_fingerprint([ROUND_ROBIN_ENTRY]) == with_exact
+    assert CodeGraph(repo).base_fingerprint([MATCH_ENTRY]) == with_exact
 
 
 # --- this repo ----------------------------------------------------------------------------
@@ -308,71 +302,88 @@ def graph() -> CodeGraph:
     return CodeGraph(REPO_ROOT)
 
 
-def test_configs_found_from_source_match_the_round_robin(graph):
-    from tools.evaluation import match
-
-    assert config_names(graph) == sorted(match._CONFIG_NAMES)
-
-
-def test_every_factory_defined_in_the_strategy_package_is_re_exported(graph):
-    """A factory nobody re-exports from `kernel_strategy` is never discovered, so it would silently
-    never play."""
-    import ast
-
-    defined = set()
-    for path in (REPO_ROOT / "utama_core" / "strategy").glob("*.py"):
-        for stmt in ast.parse(path.read_text()).body:
-            if (
-                isinstance(stmt, ast.FunctionDef)
-                and stmt.name.startswith("build_")
-                and stmt.name.endswith("_kernel_strategy")
-            ):
-                defined.add(stmt.name)
-    assert defined == set(graph.factory_modules)
-
-
-def test_every_factory_is_defined_in_its_own_module_named_after_it(graph):
-    for config, module in graph.factory_modules.items():
-        short = config.removeprefix("build_").removesuffix("_kernel_strategy")
-        assert module == f"utama_core.strategy.{short}", (config, module)
+def _players() -> list[str]:
+    return catalog.names()
 
 
 def test_editing_one_real_strategy_does_not_change_another_configs_fingerprint(graph):
     """The point of one module per strategy: a strategy's fingerprint reaches its own module and
     the shared pickers, never a sibling strategy's module."""
-    modules = {c: graph.strategy_modules(c) for c in config_names(graph)}
-    strategy_modules = {m for c in modules for m in (graph.factory_module(c),)}
-    for config, reached in modules.items():
-        assert reached & strategy_modules == {graph.factory_module(config)}, config
-    for pair_a, pair_b in [("tiki_taka", "counter_press"), ("clear_danger", "overload_flow")]:
-        a, b = (f"build_{n}_kernel_strategy" for n in (pair_a, pair_b))
-        assert graph.strategy_fingerprint(a) != graph.strategy_fingerprint(b)
-        assert graph.factory_module(a) not in graph.strategy_modules(b)
+    modules = {c: f"utama_core.strategy.{c}" for c in _players()}
+    for config, module in modules.items():
+        assert graph.strategy_modules(config) & set(modules.values()) == {module}, config
+    assert graph.strategy_fingerprint("weaver") != graph.strategy_fingerprint("riptide")
 
 
-def test_every_tactic_a_factory_builds_is_in_its_closure(graph):
-    """Independent of the static analysis: build every config's `Strategy` and check the
-    module of each tactic object it holds is in that config's fingerprinted modules."""
-    from utama_core.strategy import kernel_strategy
-
-    for config in config_names(graph):
-        strategy = getattr(kernel_strategy, config)((1, 2, 3, 4, 5))(None)
+def test_every_tactic_a_strategy_builds_is_in_its_closure(graph):
+    """Independent of the static analysis: build every `Strategy` and check the module of each
+    tactic object it holds is in that player's fingerprinted modules."""
+    for config in _players():
+        strategy = catalog.builder(config, (1, 2, 3, 4, 5))(None)
         modules = {type(t).__module__ for t in strategy._tactics.values()}
-        allowed = graph.strategy_modules(config) | graph.base_modules([ROUND_ROBIN_ENTRY])
-        assert modules <= allowed, (config, modules - allowed)
+        assert modules <= graph.strategy_modules(config), (config, modules - graph.strategy_modules(config))
 
 
-def test_the_tactics_kernel_strategy_imports_are_outside_the_base(graph):
-    """Otherwise a tactic edit would rerun every match: the per-config split is the point."""
-    base = graph.base_modules([ROUND_ROBIN_ENTRY])
+# Imported by the runner only to reset their per-match state, so a strategy that doesn't import
+# them isn't affected by them, and the one that does has them in its own closure.
+_RUNNER_ONLY_RESETS = {
+    "utama_core.geometry.pass_and_score_geometry",
+    "utama_core.skills.shielding",
+    "utama_core.strategy.pickers",
+}
+
+
+def test_all_code_taken_out_of_the_base_is_in_every_players_fingerprint(graph):
+    """Otherwise an edit there would change a match and no fingerprint at all."""
+    roots = [MATCH_ENTRY, *fp.SUBPROCESS_SCRIPTS]
+    resets = graph.closure(_RUNNER_ONLY_RESETS)
+    taken_out = graph.closure(roots) - graph.base_modules([MATCH_ENTRY]) - resets
+    for config in _players():
+        assert taken_out <= graph.strategy_modules(config), (config, taken_out - graph.strategy_modules(config))
+
+
+# Every place the match process calls into `PLAYER_SIDE`. A new one fails this test: is it behind
+# the boundary (then a `.strategy` file must do it in its own process), or `RUNNER_SIDE`?
+_RUNNER_REACHES_INTO_PLAYER_SIDE = {
+    "tools.evaluation.match": {"utama_core.strategy"},  # the catalog's names
+    "utama_core.run.sim_setup": {"utama_core.engine", "utama_core.strategy"},  # builds the code-named ones (load_side)
+    "utama_core.bundle.strategy_file": {"utama_core.engine"},
+    "utama_core.run.side_runtime": {"utama_core.engine", "utama_core.motion_planning"},
+    "utama_core.run.strategy_runner": {
+        "utama_core.engine",
+        "utama_core.motion_planning",  # builds a controller; a file's process builds its own
+        "utama_core.geometry.pass_and_score_geometry",  # reset
+        "utama_core.skills",  # reset
+        "utama_core.strategy",  # reset
+    },
+    "utama_core.team_controller.controllers.real.real_robot_controller": {"utama_core.skills"},  # real only
+    "utama_core.tests.common.abstract_test_manager": {"utama_core.engine"},  # a type
+}
+
+
+def test_the_match_process_reaches_into_player_side_code_only_where_listed(graph):
+    found: dict[str, set[str]] = {}
+    for module in graph.base_modules([MATCH_ENTRY]):
+        if module in fp.RUNNER_SIDE:
+            continue
+        for target in graph.imports(module):
+            package = next((p for p in fp.PLAYER_SIDE if target == p or target.startswith(p + ".")), None)
+            if package is not None and target not in fp.RUNNER_SIDE:
+                found.setdefault(module, set()).add(package)
+    assert found == _RUNNER_REACHES_INTO_PLAYER_SIDE
+
+
+def test_the_tactics_are_outside_the_base(graph):
+    """Otherwise a tactic edit would rerun every match: the per-player split is the point."""
+    base = graph.base_modules([MATCH_ENTRY])
     for name in ("give_and_go", "press_and_contain", "shadow_and_mark", "switch_of_play", "defense"):
         assert f"utama_core.tactics.{name}" not in base
 
 
 def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
-    base = graph.base_modules([ROUND_ROBIN_ENTRY])
+    base = graph.base_modules([MATCH_ENTRY])
     assert set(fp.SUBPROCESS_SCRIPTS) <= base
-    assert any("custom_referee/profiles/simulation.yaml" in row for row in graph.data_files(base))
+    assert any("referee/profiles/simulation.yaml" in row for row in graph.data_files(base))
 
 
 # Every place the code a match runs reaches outside the import graph, and how each is
@@ -382,51 +393,58 @@ def test_the_base_holds_the_sim_script_and_referee_profiles(graph):
 #     the environment into the sim subprocess -> ENV_PREFIXES covers the numerics ones.
 #   opens files: profile_loader reads profiles/*.yaml -> data_files. The rest write a
 #     match's outputs (match log, stats, replays, a camera run's game log) or read old ones for
-#     analysis, never during play. robot_profile reads config/robots/*.json only when an
+#     analysis, never during play; catalog reads strategy sources to list the names; archive reads
+#     a .strategy file, which is the fingerprint's own input. robot_profile reads config/robots/*.json only when an
 #     example asks for a real robot's profile (`load_profile`), and profiles act on real robots
 #     only, so no match result depends on them.
 #   subprocess: robosim_wrapper starts robosim_subprocess.py in the robosim pixi env ->
 #     SUBPROCESS_SCRIPTS, and environment_pin's robosim env listing and binary hashes.
 #     game_log_writer asks git for the commit it records, only for a camera run's game log
 #     (never in rsim), so no match result depends on it.
-#   getattr on a module by computed name: tools.evaluation.match looks a factory up by name ->
-#     the config names are the fingerprint's own inputs.
+#   dynamic import: catalog.builder imports the strategy module of a name -> that module is the
+#     fingerprint's own input.
 #   module-level state: code in the closure, so already hashed; its values must not carry
 #     from one match to the next in a worker, which the cache's replay spot-check verifies.
 #     possession/shield state: reset in StrategyRunner.__init__; the planner's _PERP_ROTATIONS: a memo of
 #     pure values; robosim_wrapper's idle sims: a fresh native world per start.
 AUDIT = {
     "environment": [
+        "utama_core.bundle.archive",
+        "utama_core.bundle.strategy_file",
         "utama_core.config.settings",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+        "utama_core.simulator.simulators.robosim.robosim_wrapper",
     ],
-    "getattr on a module by computed name": ["tools.evaluation.match"],
+    "dynamic import": ["utama_core.strategy.catalog"],
     "module-level state": [
-        "utama_core.motion_planning.src.fastpathplanning.planner",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
-        "utama_core.shared.pass_and_score_geometry",
-        "utama_core.skills.src.shielding",
+        "utama_core.geometry.pass_and_score_geometry",
+        "utama_core.motion_planning.fastpathplanning.planner",
+        "utama_core.simulator.simulators.robosim.robosim_wrapper",
+        "utama_core.skills.shielding",
         "utama_core.strategy.pickers",
     ],
     "opens files": [
-        "utama_core.custom_referee.profiles.profile_loader",
+        "utama_core.bundle.archive",
+        "utama_core.bundle.strategy_file",
         "utama_core.engine.match_log",
         "utama_core.engine.match_stats",
+        "utama_core.referee.profiles.profile_loader",
         "utama_core.replay.columnar_reader",
         "utama_core.replay.columnar_writer",
         "utama_core.replay.game_log_writer",
         "utama_core.replay.replay_writer",
-        "utama_core.team_controller.src.controllers.common.robot_profile",
+        "utama_core.strategy.catalog",
+        "utama_core.team_controller.controllers.common.robot_profile",
     ],
     "subprocess": [
+        "utama_core.bundle.strategy_file",
         "utama_core.replay.game_log_writer",
-        "utama_core.rsoccer_simulator.src.Simulators.robosim.robosim_wrapper",
+        "utama_core.simulator.simulators.robosim.robosim_wrapper",
     ],
 }
 
 
 def test_every_reach_outside_the_import_graph_is_accounted_for(graph):
-    everything = graph.base_modules([ROUND_ROBIN_ENTRY]) | graph.closure([KERNEL_STRATEGY])
+    everything = graph.base_modules([MATCH_ENTRY]) | {m for c in _players() for m in graph.strategy_modules(c)}
     assert graph.audit(everything) == AUDIT
 
 

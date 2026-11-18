@@ -1,4 +1,4 @@
-"""Draws one_tick.png for docs/pipeline_method.md and the README: one tick of StrategyRunner, from the data
+"""Draws one_tick.png for docs/architecture.md ("Pipeline method") and the README: one tick of StrategyRunner, from the data
 sources to the robots, with the class or module behind each box.
 
 pixi run python docs/img/pipeline/make_one_tick.py
@@ -38,7 +38,7 @@ NAMES = [
     "utama_core/entities/game",
     "utama_core/engine/strategy.py",
     "utama_core/motion_planning",
-    "utama_core/team_controller/src/controllers",
+    "utama_core/team_controller/controllers",
 ]
 
 d = Diagram(
@@ -128,7 +128,7 @@ d.arrow((57.4, 30), (47.6, 30))
 d.note(52.5, 27.6, "targets", style="italic", ha="center", va="top")
 
 # --- output --------------------------------------------------------------------------------------
-d.box(34, 13, 28, 8, "RobotController", "team_controller/src/controllers/", kind="output", size=10)
+d.box(34, 13, 28, 8, "RobotController", "team_controller/controllers/", kind="output", size=10)
 d.arrow((34, 21.8), (34, 17.2), "RobotCommand per robot", lx=1.2)
 for x, w, name in ((12, 13, "rsim"), (27, 13, "grSim"), (54, 16, "Real robots")):
     d.box(x, 3.5, w, 4.5, name, kind="output", size=9.5)

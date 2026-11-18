@@ -33,8 +33,8 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.skills.src.utils.move_utils import empty_command
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
+from utama_core.skills.utils.move_utils import empty_command
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,7 +131,11 @@ def _make_blackboard(game: Game, cmd_map=None):
     bb.game = game
     bb.cmd_map = cmd_map if cmd_map is not None else {}
     bb.motion_controller = SimpleNamespace(
-        calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0), pose_ahead=PoseAhead(0.0), min_turn=None
+        calculate=lambda **kwargs: (Vector2D(0.0, 0.0), 0.0),
+        pose_ahead=PoseAhead(0.0),
+        min_turn=None,
+        kick_bend={},
+        kick_bias={},
     )
     return bb
 
@@ -312,7 +316,7 @@ class TestHaltAndStopStep:
         return cmd_map
 
     def test_halt_writes_to_all_robots(self):
-        from utama_core.custom_referee.actions import HaltStep
+        from utama_core.referee.actions import HaltStep
 
         robots = {0: _robot(0), 1: _robot(1)}
         game = _make_game(friendly_robots=robots, referee=_make_referee_data())
@@ -322,7 +326,7 @@ class TestHaltAndStopStep:
             assert cmd_map[rid] is not None
 
     def test_stop_writes_to_all_robots(self):
-        from utama_core.custom_referee.actions import StopStep
+        from utama_core.referee.actions import StopStep
 
         robots = {0: _robot(0), 1: _robot(1), 2: _robot(2)}
         game = _make_game(friendly_robots=robots, referee=_make_referee_data())
@@ -337,7 +341,7 @@ class TestHaltAndStopStep:
 
 class TestBallPlacementOursStep:
     def test_robot_without_ball_moves_to_ball_first(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -408,7 +412,7 @@ class TestBallPlacementOursStep:
         whatever tick sees the ball still out of bounds (e.g. the one tick
         before that teleport lands).
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -461,7 +465,7 @@ class TestBallPlacementOursStep:
         expected = referee_actions._clamp_to_field_or_ball(approach, game, ball_pos)
         # The placer starts on the designated side, so it routes round the ball to the
         # (clamped) approach point rather than straight at it.
-        from utama_core.global_utils.math_utils import detour_around_circle
+        from utama_core.geometry.math_utils import detour_around_circle
 
         expected = detour_around_circle(Vector2D(4.0, 0.0), expected, ball_pos, referee_actions._BALL_DETOUR_RADIUS_M)
         assert captured[0][1].x == pytest.approx(expected.x)
@@ -477,7 +481,7 @@ class TestBallPlacementOursStep:
         placer choice via `Sticky` across ticks (the instance persists
         across ticks -- constructed once in `RefereeOverride.__init__`).
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured_placer_ids = []
 
@@ -534,7 +538,7 @@ class TestBallPlacementOursStep:
         """The sticky placer choice must still yield to a genuinely closer
         robot -- hysteresis should suppress noise-level flips, not freeze the
         assignment forever."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured_placer_ids = []
 
@@ -588,7 +592,7 @@ class TestBallPlacementOursStep:
         (7 of 441 placements in that run). Teammates now keep off the ball's path to
         the spot, as the other team already must."""
         from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -631,7 +635,7 @@ class TestBallPlacementOursStep:
     def test_robot_with_ball_moves_to_designated_position(self, monkeypatch):
         import math
 
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         move_captured = []
         turn_captured = []
@@ -708,7 +712,7 @@ class TestBallPlacementOursStep:
         must keep driving the placer (move(), not empty_command()) rather
         than starting the release countdown.
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         move_captured = []
 
@@ -768,7 +772,7 @@ class TestBallPlacementOursStep:
         """Companion to the fast-ball case above: once the ball is both
         within BALL_PLACEMENT_DONE_DISTANCE and slow (<= _SETTLED_SPEED_MPS),
         the release countdown must actually start."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **k: ("move", a[2]))
 
@@ -814,7 +818,7 @@ class TestBallPlacementOursStep:
         assert node._release_started_at == 0.0
 
     def test_non_placing_teammate_clears_from_ball(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -862,7 +866,7 @@ class TestBallPlacementOursCarry:
 
     @pytest.fixture(autouse=True)
     def _fresh_possession_state(self):
-        from utama_core.shared.pass_and_score_geometry import reset_possession_state
+        from utama_core.geometry.pass_and_score_geometry import reset_possession_state
 
         reset_possession_state()
         yield
@@ -873,8 +877,8 @@ class TestBallPlacementOursCarry:
         Returns (where it was sent, the command it got)."""
         import dataclasses
 
-        from utama_core.custom_referee import actions as referee_actions
         from utama_core.entities.data.command import RobotCommand
+        from utama_core.referee import actions as referee_actions
 
         sent = {}
 
@@ -905,13 +909,13 @@ class TestBallPlacementOursCarry:
 
     @pytest.mark.parametrize("full_speed", [0.49, 0.51, 1.0])
     def test_the_carry_is_capped_at_carry_speed(self, monkeypatch, full_speed):
-        from utama_core.custom_referee.actions import BallPlacementOursStep as Step
+        from utama_core.referee.actions import BallPlacementOursStep as Step
 
         _, cmd = self._tick(monkeypatch, Step(), 0.0, True, full_speed=full_speed)
         assert cmd.local_forward_vel == pytest.approx(min(full_speed, Step._CARRY_SPEED_MPS))
 
     def test_the_carry_slows_to_stop_at_the_spot(self, monkeypatch):
-        from utama_core.custom_referee.actions import BallPlacementOursStep as Step
+        from utama_core.referee.actions import BallPlacementOursStep as Step
 
         # Still rolling 0.08 m from the spot (not settled): no faster than braking at the carry rate allows.
         _, cmd = self._tick(monkeypatch, Step(), 0.0, True, ball_x=self.DESIGNATED[0] - 0.08, ball_v=0.4)
@@ -934,7 +938,7 @@ class TestBallPlacementOursApproachAroundBall:
 
     def _placer_move(self, monkeypatch, robot_xy, ball_v=(0.0, 0.0)):
         """(target, orientation) the placer at `robot_xy` is sent to."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1011,7 +1015,7 @@ class TestBallPlacementOursApproachAroundBall:
         placer's back to it, heading for a point behind it facing the spot, and never caught.
         Rolling faster than `_SETTLED_SPEED_MPS`, the placer goes to where it will meet the ball,
         ahead on its path, facing back along it."""
-        from utama_core.custom_referee.actions import BallPlacementOursStep as step
+        from utama_core.referee.actions import BallPlacementOursStep as step
 
         assert step._SETTLED_SPEED_MPS == 0.3
         start = (-2.0, -2.0)
@@ -1036,7 +1040,7 @@ class TestBallPlacementOursApproachAroundBall:
         """Field test 2026-10-27: real placers parked 0.10-0.11 m from the ball, ~1 cm short of
         dribbler contact, for 15-20 s. Lined up within _CREEP_RANGE_M of the approach point
         without the ball, the target moves _CREEP_M further along the carry direction."""
-        from utama_core.custom_referee.actions import BallPlacementOursStep as step
+        from utama_core.referee.actions import BallPlacementOursStep as step
 
         at_edge = (self.APPROACH[0] - step._CREEP_RANGE_M, self.APPROACH[1])
         target = self._placer_target(monkeypatch, at_edge)
@@ -1044,7 +1048,7 @@ class TestBallPlacementOursApproachAroundBall:
         assert (target.x, target.y) == pytest.approx((self.APPROACH[0] + step._CREEP_M, self.APPROACH[1]))
 
     def test_placer_short_of_the_creep_range_aims_at_the_approach_point(self, monkeypatch):
-        from utama_core.custom_referee.actions import BallPlacementOursStep as step
+        from utama_core.referee.actions import BallPlacementOursStep as step
 
         target = self._placer_target(monkeypatch, (self.APPROACH[0] - step._CREEP_RANGE_M - 0.001, self.APPROACH[1]))
 
@@ -1058,7 +1062,7 @@ class TestBallPlacementOursApproachAroundBall:
 
 class TestRefereeKeepOutRetreat:
     def test_stop_moves_only_robots_inside_keep_out_radius(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1085,7 +1089,7 @@ class TestRefereeKeepOutRetreat:
         assert cmd_map[1] is not None
 
     def test_stop_clears_robot_from_opponent_defense_area(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1129,7 +1133,7 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(-3.25, 0.0)
 
     def test_direct_free_theirs_clears_robot_from_opponent_defense_area(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1168,12 +1172,12 @@ class TestRefereeKeepOutRetreat:
 
         node.update()
 
-        assert len(captured) == 1
+        assert len(captured) == 2  # the other robot takes the wall
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(-3.25, 0.0)
 
     def test_direct_free_theirs_evicts_excess_defenders_from_own_defense_area(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1217,7 +1221,7 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(3.27, 0.2)
 
     def test_ball_placement_theirs_clears_robot_from_opponent_defense_area(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1261,7 +1265,7 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(-3.25, 0.0)
 
     def test_ball_placement_theirs_clears_encroaching_robot(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1288,7 +1292,7 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(0.8, 0.0)
 
     def test_ball_placement_theirs_clears_robot_from_designated_position(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1333,7 +1337,7 @@ class TestRefereeKeepOutRetreat:
         assert captured[0][1] == Vector2D(1.8, 1.0)
 
     def test_direct_free_theirs_clears_encroaching_robot(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1355,14 +1359,14 @@ class TestRefereeKeepOutRetreat:
 
         node.update()
 
-        assert len(captured) == 1
+        assert len(captured) == 2  # the other robot takes the wall
         assert captured[0][0] == 0
         assert captured[0][1] == Vector2D(0.8, 0.0)
 
 
 class TestPenaltyPositioning:
     def test_prepare_penalty_ours_kicker_stays_on_attacking_half(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1393,7 +1397,7 @@ class TestPenaltyPositioning:
         # decoy_and_overload_vs_score_aware_zone_flow (2026-09-28): the kicker was
         # sent to the mark itself, i.e. onto the placed ball, shoved it away at
         # 1.5 m/s before NORMAL_START, and keep-out voided the penalty.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1424,7 +1428,7 @@ class TestPenaltyPositioning:
         assert (kicker_target - mark).mag() <= KICKER_READY_DISTANCE
 
     def test_prepare_penalty_theirs_support_robots_stay_on_our_half(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1463,7 +1467,7 @@ class TestPenaltyPositioning:
         # decoy_and_overload_vs_low_block (2026-09-28): the line 0.4 m behind the
         # mark put a defender 0.44 m from the ball, KeepOutRule (0.5 m) fired
         # 1 s into every PREPARE_PENALTY, and the penalty was never taken.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1490,7 +1494,7 @@ class TestPenaltyPositioning:
         # decoy_and_overload_vs_low_block (2026-09-28): a defender starting between
         # the mark and its own goal drove straight through the ball to the line
         # behind it, 0.30 m from the ball for 0.5 s -- keep-out voided the penalty.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1524,7 +1528,7 @@ class TestPenaltyPositioning:
         # Mirror of the defender case: a non-kicker of ours left goal-side of the
         # mark drove straight through the placed ball to its line 1 m behind it,
         # knocking the ball off the mark before the kick.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1557,7 +1561,7 @@ class TestPenaltyPositioning:
     def test_prepare_penalty_ours_goalkeeper_stays_on_own_goal_line(self, monkeypatch):
         # PreparePenaltyOursStep must keep the friendly goalkeeper on our own goal line,
         # not displace it into the opponent's half behind the penalty mark.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1590,7 +1594,7 @@ class TestPenaltyPositioning:
     def test_prepare_penalty_line_formation_centered_symmetrically(self, monkeypatch):
         # Penalty support robots on the line behind the mark must be centered
         # symmetrically around y=0.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1623,7 +1627,7 @@ class TestPenaltyPositioning:
     def test_prepare_penalty_theirs_clears_extra_defender_from_own_defense_area(self, monkeypatch):
         # PreparePenaltyTheirsStep must clear any outfield defender beyond the keeper
         # out of own defense area (clear_own_defense_area=True).
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1653,7 +1657,7 @@ class TestPenaltyPositioning:
     def test_prepare_penalty_ours_clears_teammate_from_opp_defense_area(self, monkeypatch):
         # PreparePenaltyOursStep must clear teammates from opponent defense area
         # (clear_opp_defense_area=True).
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1690,7 +1694,7 @@ class TestReachableOnCircle:
         # inside the keep-out circle. _reachable_on_circle must not return the
         # unprojected inside-the-circle point; it must return a point at radius
         # distance from center that is inside the pitch boundaries.
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         game = _make_game(my_team_is_yellow=True, my_team_is_right=False)
         center = Vector2D(1.79, 2.75)  # ball near top sideline (y = 3.0)
@@ -1706,7 +1710,7 @@ class TestReachableOnCircle:
 
 class TestVariableFieldScaling:
     def test_prepare_kickoff_ours_scales_support_positions_with_field_bounds(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1751,7 +1755,7 @@ class TestVariableFieldScaling:
         assert support_target.distance_to(Vector2D(0.0, 0.0)) >= 0.5
 
     def test_prepare_kickoff_ours_uses_own_half_when_defending_left(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1792,7 +1796,7 @@ class TestVariableFieldScaling:
         assert support_target.x < 0.0, "support robot must stay on own half (defending left)"
 
     def test_prepare_penalty_ours_scales_penalty_mark_with_field_bounds(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1834,7 +1838,7 @@ class TestVariableFieldScaling:
 
 class TestPrepareKickoffTheirsStep:
     def test_all_robots_placed_on_own_half_right(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1862,7 +1866,7 @@ class TestPrepareKickoffTheirsStep:
             assert target.x > 0.0, f"Expected positive-x (own half right), got {target}"
 
     def test_all_robots_placed_on_own_half_left(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -1892,7 +1896,7 @@ class TestPrepareKickoffTheirsStep:
             assert target.x < 0.0, f"Expected negative-x (own half left), got {target}"
 
     def test_positions_outside_centre_circle(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1916,7 +1920,7 @@ class TestPrepareKickoffTheirsStep:
             assert dist >= 0.5, f"Target {target} inside centre circle"
 
     def test_scales_with_custom_field_bounds(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -1954,8 +1958,121 @@ class TestPrepareKickoffTheirsStep:
 
 
 class TestDirectFreeOursStep:
+    @staticmethod
+    def _at_the_ball(friendly_robots, enemy_robots=None):
+        """Attacking -x, ball at (1, 0), robot 0 on it from behind."""
+        frame = GameFrame(
+            ts=0.0,
+            my_team_is_yellow=True,
+            my_team_is_right=True,
+            friendly_robots=friendly_robots,
+            enemy_robots=enemy_robots or {},
+            ball=_ball(1.0, 0.0),
+            referee=_make_referee_data(command=RefereeCommand.DIRECT_FREE_YELLOW),
+        )
+        game = Game(
+            past=GameHistory(10),
+            current=frame,
+            field=Field(
+                my_team_is_right=True,
+                field_dims=STANDARD_FIELD_DIMS,
+                field_bounds=STANDARD_FIELD_DIMS.full_field_bounds,
+            ),
+        )
+        from utama_core.referee import actions as referee_actions
+
+        node = referee_actions.DirectFreeOursStep()
+        node.blackboard = _make_blackboard(game, _make_cmd_map(game))
+        return node
+
+    @staticmethod
+    def _taker(orientation=math.pi, has_ball=True):
+        return dataclasses.replace(_robot(0, 1.1, 0.0), orientation=orientation, has_ball=has_ball)
+
+    def test_the_taker_kicks_at_the_goal_with_no_teammate_open(self):
+        node = self._at_the_ball({0: self._taker()})
+        node.update()
+        assert node.blackboard.cmd_map[0].kick == 1
+
+    def test_the_taker_kicks_only_with_the_ball_on_the_kicker(self):
+        node = self._at_the_ball({0: self._taker(has_ball=False)})
+        node.update()
+        assert node.blackboard.cmd_map[0].kick == 0
+
+    def test_the_taker_waits_for_the_teammate_to_face_the_ball_and_it_turns(self, monkeypatch):
+        from utama_core.entities.data.command import RobotCommand
+        from utama_core.referee import actions as referee_actions
+
+        turning = RobotCommand(local_forward_vel=0, local_left_vel=0, angular_vel=2.0, kick=0, chip=0, dribble=0)
+        monkeypatch.setattr(referee_actions, "turn_on_spot", lambda *a, **k: turning)
+        away = dataclasses.replace(_robot(1, -1.0, 0.0), orientation=math.pi)
+        node = self._at_the_ball({0: self._taker(), 1: away})
+        node.update()
+        assert node.blackboard.cmd_map[0].kick == 0
+        assert node.blackboard.cmd_map[1] is turning
+
+    @pytest.mark.parametrize("from_ball, turns", [(0.799, True), (0.751, True), (0.749, False)])
+    def test_a_receiver_on_the_keep_out_edge_turns_instead_of_being_cleared(self, monkeypatch, from_ball, turns):
+        from utama_core.referee import actions as referee_actions
+
+        turning = object()
+        cleared = object()
+        monkeypatch.setattr(referee_actions, "turn_on_spot", lambda *a, **k: turning)
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **k: cleared)
+        away = dataclasses.replace(_robot(1, 1.0 - from_ball, 0.0), orientation=math.pi)
+        node = self._at_the_ball({0: self._taker(), 1: away})
+        node.update()
+        assert node.blackboard.cmd_map[1] is (turning if turns else cleared)
+
+    def test_the_taker_kicks_once_the_teammate_faces_the_ball(self):
+        facing = dataclasses.replace(_robot(1, -1.0, 0.0), orientation=0.17 - 0.01)
+        node = self._at_the_ball({0: self._taker(), 1: facing})
+        node.update()
+        assert node.blackboard.cmd_map[0].kick == 1
+
+    def test_the_kick_target_is_kept_while_lanes_open_and_shut(self):
+        facing = dataclasses.replace(_robot(1, -1.0, 0.0), orientation=0.0)
+        node = self._at_the_ball({0: self._taker(), 1: facing})
+        game = node.blackboard.game
+        assert node._kick_target(game, 0, Vector2D(1.0, 0.0))[0] == 1
+        node._target = (0, Vector2D(1.0, 0.0), None, None, 0.25)
+        assert node._kick_target(game, 0, Vector2D(1.04, 0.0)) == (None, None, 0.25)
+        assert node._kick_target(game, 0, Vector2D(1.06, 0.0))[0] == 1
+
+    def test_with_nobody_in_range_the_nearest_teammate_comes_and_the_taker_waits(self, monkeypatch):
+        from utama_core.referee import actions as referee_actions
+
+        monkeypatch.setattr(referee_actions, "move", lambda *a, **k: ("move", a[2], a[3]))
+        far = dataclasses.replace(_robot(1, -3.0, 2.5), orientation=0.0)
+        node = self._at_the_ball({0: self._taker(), 1: far})
+        node.update()
+        receiver, spot, _ = node._kick_target(node.blackboard.game, 0, Vector2D(1.0, 0.0))
+        assert receiver == 1 and abs(spot.distance_to(Vector2D(1.0, 0.0)) - 2.0) < 1e-6
+        assert node.blackboard.cmd_map[1] == ("move", 1, spot)
+        assert node.blackboard.cmd_map[0].kick == 0
+
+    def test_the_kick_follows_the_chosen_teammate_where_it_stands_now(self):
+        ball = Vector2D(1.0, 0.0)
+        node = self._at_the_ball({0: self._taker(), 1: _robot(1, -1.0, 1.0)})
+        node._target = (0, ball, 1, None, 0.25)
+        assert node._kick_target(node.blackboard.game, 0, ball)[2] == pytest.approx(ball.angle_to(Vector2D(-1.0, 1.0)))
+
+    def test_the_kick_follows_a_called_teammate_only_once_it_has_arrived(self):
+        ball = Vector2D(1.0, 0.0)
+        for off_spot, expected in ((0.11, 0.25), (0.09, math.pi)):  # arrived within 0.1 m
+            node = self._at_the_ball({0: self._taker(), 1: _robot(1, -1.0 + off_spot, 0.0)})
+            node._target = (0, ball, 1, Vector2D(-1.0, 0.0), 0.25)
+            assert node._kick_target(node.blackboard.game, 0, ball)[2] == pytest.approx(expected)
+
+    def test_the_taker_kicks_when_the_called_teammate_has_arrived(self):
+        arrived = dataclasses.replace(_robot(1, -1.0, 0.0), orientation=0.0)
+        node = self._at_the_ball({0: self._taker(), 1: arrived})
+        node._target = (0, Vector2D(1.0, 0.0), 1, Vector2D(-1.0, 0.0), math.pi)
+        node.update()
+        assert node.blackboard.cmd_map[0].kick == 1
+
     def test_kicker_is_closest_robot_to_ball(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2025,7 +2142,7 @@ class TestDirectFreeOursStep:
         enemy id=1 southeast of the ball so `_kick_target_enemy` picks the
         same kick direction traced live.
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2079,7 +2196,7 @@ class TestDirectFreeOursStep:
         kick placed 0.25 m inside the goal line back onto the line, where the first touch
         put it out: 90 of 478 free kicks, tournament_20260927_223257."""
         from utama_core.config.physical_constants import BALL_RADIUS, ROBOT_RADIUS
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2121,7 +2238,7 @@ class TestDirectFreeOursStep:
         assert closest >= ROBOT_RADIUS + BALL_RADIUS + 0.05  # 5 cm between robot and ball (2026-10-27)
 
     def test_kicker_moves_toward_ball(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2166,7 +2283,7 @@ class TestDirectFreeOursStep:
         assert target.distance_to(ball_pos) < robot_start.distance_to(ball_pos)
 
     def test_non_kicker_robots_get_stop_command(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
 
@@ -2194,7 +2311,7 @@ class TestDirectFreeOursStep:
         assert cmd_map[2] != ("move", 2)
 
     def test_writes_command_for_every_robot(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
 
@@ -2223,7 +2340,7 @@ class TestDirectFreeOursStep:
         reuse the same instance across ticks (it does — constructed once in
         `RefereeOverride.__init__`) and hold its choice via `Sticky`.
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured_kicker_ids = []
 
@@ -2260,7 +2377,7 @@ class TestDirectFreeOursStep:
         """The sticky kicker choice must still yield to a genuinely closer
         robot — hysteresis should suppress noise-level flips, not freeze the
         assignment forever."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured_kicker_ids = []
 
@@ -2292,7 +2409,7 @@ class TestDirectFreeOursStep:
         assert captured_kicker_ids[-1] == 3
 
     def test_direct_free_ours_clears_non_kicker_from_opponent_defense_area(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2301,6 +2418,7 @@ class TestDirectFreeOursStep:
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
+        monkeypatch.setattr(referee_actions, "restart_support", lambda *a: None)
 
         # Robot 1 is kicker near ball at (1.0, 0.0); Robot 0 is inside opp defense area at (-4.3, 0.0)
         robots = {0: _robot(0, -4.3, 0.0), 1: _robot(1, 1.2, 0.0)}
@@ -2335,7 +2453,7 @@ class TestDirectFreeOursStep:
         assert r0_moves[0][1] == Vector2D(-3.25, 0.0)
 
     def test_direct_free_ours_clears_non_kicker_from_ball_keep_out(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2344,6 +2462,7 @@ class TestDirectFreeOursStep:
             return ("move", robot_id)
 
         monkeypatch.setattr(referee_actions, "move", fake_move)
+        monkeypatch.setattr(referee_actions, "restart_support", lambda *a: None)
 
         # Ball at (1.0, 0.0). Robot 1 is kicker at (1.1, 0.0). Robot 0 is non-kicker at (1.3, 0.0) inside 0.8m keep-out.
         robots = {0: _robot(0, 1.3, 0.0), 1: _robot(1, 1.1, 0.0)}
@@ -2384,7 +2503,7 @@ class TestDirectFreeOursStep:
 
 class TestDirectFreeTheirsStep:
     def test_robot_outside_keep_out_stays_put(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
 
@@ -2401,8 +2520,8 @@ class TestDirectFreeTheirsStep:
         assert cmd_map[0] is not None
         assert cmd_map[0] != ("move", 0)
 
-    def test_multiple_robots_only_encroaching_ones_move(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+    def test_encroaching_robot_clears_and_the_nearest_other_takes_the_wall(self, monkeypatch):
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2427,12 +2546,12 @@ class TestDirectFreeTheirsStep:
         node.update()
 
         moved_ids = [rid for rid, _ in captured]
-        assert moved_ids == [0]
+        assert moved_ids == [0, 1]
         assert cmd_map[1] is not None
         assert cmd_map[2] is not None
 
     def test_encroaching_robot_projected_to_keep_out_boundary(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2461,7 +2580,7 @@ class TestDirectFreeTheirsStep:
         Before the fix, dx * dx + dy * dy < 1e-4 treated it as already at target and
         issued empty_command(False), leaving it stranded at 0.795 m inside the keep-out.
         """
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2488,7 +2607,7 @@ class TestDirectFreeTheirsStep:
         """A free kick 1 m in front of the opponent box (inner edge x = -3.5 here):
         straight out from the ball is (-3.3, 0), where the planner's box margin
         stopped the robot 0.48 m from the ball, a Defender Too Close foul."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
         monkeypatch.setattr(
@@ -2511,7 +2630,7 @@ class TestDirectFreeTheirsStep:
         """Ball at (4.0, 2.5): straight out from it the robot's spot is off the pitch, and
         clamped back on (x <= 4.4) it was 0.48 m from the ball, so the robot never left
         (moment placement_in_corner_traps_defender)."""
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
         monkeypatch.setattr(
@@ -2531,7 +2650,7 @@ class TestDirectFreeTheirsStep:
         assert referee_actions._clamp_to_field(target, game) == target
 
     def test_all_robots_get_commands(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         monkeypatch.setattr(referee_actions, "move", lambda *a, **kw: ("move",))
 
@@ -2549,7 +2668,7 @@ class TestDirectFreeTheirsStep:
             assert v is not None
 
     def test_clear_to_legal_positions_touchline_clamping_preserves_keep_out(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = []
 
@@ -2581,7 +2700,7 @@ class TestDetourAroundCircle:
     """`detour_around_circle`: robots crossing the ball's keep-out circle go round it."""
 
     def _detour(self, start, target):
-        from utama_core.global_utils.math_utils import detour_around_circle
+        from utama_core.geometry.math_utils import detour_around_circle
 
         return detour_around_circle(Vector2D(*start), Vector2D(*target), Vector2D(0.0, 0.0), 0.8)
 
@@ -2614,8 +2733,8 @@ class TestBallPlacementTheirsStep:
         import dataclasses
 
         from utama_core.config.referee_constants import BALL_KEEP_OUT_DISTANCE
-        from utama_core.custom_referee import actions as referee_actions
-        from utama_core.global_utils.math_utils import distance_point_to_segment
+        from utama_core.geometry.math_utils import distance_point_to_segment
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -2650,7 +2769,7 @@ class TestClearingTargetsKeepOffRobots:
     START = (4.70, -0.68)
 
     def _stop_target(self, monkeypatch, keeper=KEEPER):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         captured = {}
 
@@ -2687,7 +2806,7 @@ class TestClearingTargetsKeepOffRobots:
         return game, captured[1]
 
     def test_a_robot_cleared_from_the_ball_is_not_sent_onto_another_robot(self, monkeypatch):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         game, target = self._stop_target(monkeypatch)
         assert target.distance_to(Vector2D(*self.KEEPER)) >= referee_actions._ROBOT_SPACING_M
@@ -2701,7 +2820,7 @@ class TestClearingTargetsKeepOffRobots:
 
     @pytest.mark.parametrize("gap", [-0.001, 0.001])
     def test_robot_spacing_boundary(self, gap):
-        from utama_core.custom_referee import actions as referee_actions
+        from utama_core.referee import actions as referee_actions
 
         game = _make_game(friendly_robots={0: _robot(0, 0.0, 0.0), 1: _robot(1, 3.0, 0.0)})
         point = Vector2D(referee_actions._ROBOT_SPACING_M + gap, 0.0)

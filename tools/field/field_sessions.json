@@ -1,0 +1,32 @@
+{
+  "note": "Every field session, and which measurements it may be used for. tools/field/field_physics.py reads only what is allowed here. Stop rule: a number enters the sim only if it repeats across runs, or its spread is deliberately used as the range.",
+  "source_archive": "replays/field_logs_20261102_211613.tar.gz (untrimmed, local only; do not delete). Trimmed logs: release v2.5.0, field_logs_20261102_233700.tar.gz.",
+  "measurements": ["loop_delay", "ball_roll", "ball_noise", "robot_noise"],
+  "sessions": {
+    "20261021": {
+      "setup": "Logged as mode=real but synthetic: zero noise, 4 cameras.",
+      "use": [],
+      "why": "Not real data."
+    },
+    "20261022": {
+      "setup": "Real logs mixed with 7 grSim logs. Cameras disagree by about 71 mm.",
+      "use": ["ball_noise"],
+      "why": "Camera disagreement rules out anything from motion."
+    },
+    "20261027": {
+      "setup": "One calibration run, vision about 44 Hz with about 20 ms processing.",
+      "use": ["loop_delay", "ball_roll", "ball_noise", "robot_noise"],
+      "why": "Usable as a second day to check agreement, but thin: 79 ms and 1.8 m/s^2 sideways came from this one run."
+    },
+    "20261028": {
+      "setup": "2 radios, 7 usable calibration runs, wired vision, cameras within about 11 mm.",
+      "use": ["loop_delay", "ball_roll", "ball_noise", "robot_noise"],
+      "why": "The main reference."
+    },
+    "20261029": {
+      "setup": "Vision over a 2.4 GHz phone hotspot: frames bunched, delays up to about 145 ms.",
+      "use": ["ball_noise", "robot_noise"],
+      "why": "Timing and anything fitted from motion are corrupted by the link."
+    }
+  }
+}

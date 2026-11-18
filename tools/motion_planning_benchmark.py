@@ -46,11 +46,12 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.global_utils.git_utils import git_revision
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.control_schemes import CONTROL_SCHEME_MAP
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.replay.git_utils import git_revision
 from utama_core.run import StrategyRunner
-from utama_core.skills.src.utils.move_utils import move
-from utama_core.team_controller.src.controllers import AbstractSimController
+from utama_core.skills.utils.move_utils import move
+from utama_core.team_controller.controllers import AbstractSimController
 from utama_core.tests.common.abstract_test_manager import (
     AbstractTestManager,
     TestingStatus,
@@ -59,7 +60,9 @@ from utama_core.tests.common.abstract_test_manager import (
 Point = tuple[float, float]
 RobotKey = tuple[str, int]
 TargetTrajectory = Callable[[float], Point]
-SCHEMES = ("fpp", "dwa", "trajsample")
+SCHEMES = ("fpp", "dwa", "trajsample")  # run by default
+# Any registered scheme can be named with --schemes (a new planner: tutorials/first_planner.md).
+ALL_SCHEMES = SCHEMES + tuple(name for name in CONTROL_SCHEME_MAP if name not in SCHEMES)
 COLLISION_DISTANCE = 2.0 * ROBOT_RADIUS
 STOPPED_SPEED = 0.05
 SPEED_LIMIT_TOLERANCE = 0.15
@@ -666,7 +669,7 @@ def _go_to_targets_strategy(
             ctx=TickContext(motion_controller=motion_controller),
         )
 
-    return AbstractStrategy(build_kernel_strategy=build, exp_ball=False)
+    return AbstractStrategy(build=build, exp_ball=False)
 
 
 class _ControllerTimer:
@@ -782,7 +785,7 @@ class BenchmarkManager(AbstractTestManager):
         # controller commanded. Suppress `max_speed_mps`/
         # `max_observed_acceleration_mps2` (and therefore `speed_limit_exceeded`)
         # for a short settling window per teleported robot -- the same
-        # estimator-transient caveat docs/motion_planning_comparison.md
+        # estimator-transient caveat docs/motion_planning.md
         # already documents for acceleration applies here too.
         self._settling_until_tick: dict[RobotKey, int] = {}
         # Measured directly (see the comment above): the simulator's
@@ -961,7 +964,7 @@ class BenchmarkManager(AbstractTestManager):
         # A real physical limit (RSIM_PARAMS.MAX_VEL, plus measurement
         # tolerance) is a hard pass/fail gate, unlike acceleration: observed
         # acceleration is reconstructed from filtered simulator velocity and
-        # can include estimator transients (see docs/motion_planning_comparison.md),
+        # can include estimator transients (see docs/motion_planning.md),
         # so it stays diagnostic-only rather than gating `passed`.
         speed_limit_exceeded = self.max_speed_mps > RSIM_PARAMS.MAX_VEL + SPEED_LIMIT_TOLERANCE
         return {
@@ -1198,11 +1201,11 @@ def markdown_report(payload: dict) -> str:
 
 
 # --- Figures (`--figures DIR`) -------------------------------------------------------------
-# Style copied from tools/signal_report.py. matplotlib is imported only when figures are written,
+# Style copied from tools/debug/figure_style.py. matplotlib is imported only when figures are written,
 # so a default run neither loads it nor changes its output.
 INK, INK_2, INK_3, SURFACE, GRID = "#0b0b0b", "#52514e", "#8a8984", "#fcfcfb", "#e4e3df"
 # Categorical slots in fixed order. A scheme keeps the same slot in every figure; slots are never cycled.
-# There are only three schemes, so no figure needs more than the first three slots.
+# The default schemes take the first three slots; any other registered scheme the next free one.
 SLOTS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6")
 FIGURE_DPI = 130
 MOVING_MIN_DISPLACEMENT_M = 0.05  # a robot that never leaves this radius of its start is an obstacle
@@ -1246,7 +1249,7 @@ def _pyplot():
 
 
 def _colour(scheme: str) -> str:
-    return SLOTS[SCHEMES.index(scheme)]
+    return SLOTS[ALL_SCHEMES.index(scheme)]
 
 
 def _moving_labels(trace: dict) -> set[str]:
@@ -1465,7 +1468,7 @@ def write_figures(payload: dict, traces: dict[tuple[str, str], dict], out_dir: P
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--schemes", nargs="+", choices=SCHEMES, default=list(SCHEMES))
+    parser.add_argument("--schemes", nargs="+", choices=ALL_SCHEMES, default=list(SCHEMES))
     parser.add_argument("--scenarios", nargs="+", choices=tuple(SCENARIOS), default=list(SCENARIOS))
     parser.add_argument("--repeats", type=int, default=1, help="Runs per scheme/scenario cell (default: 1).")
     parser.add_argument(

@@ -1,16 +1,20 @@
+import dataclasses
 import math
 from unittest.mock import MagicMock
 
 import pytest
 
+from utama_core.config.enums import Mode
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.motion_planning.src.common.pose_ahead import PoseAhead
-from utama_core.shared.pass_and_score_geometry import enemy_defense_area_hold_point
-from utama_core.skills.src.go_to_ball import (
+from utama_core.geometry.pass_and_score_geometry import enemy_defense_area_hold_point
+from utama_core.motion_planning.common.pose_ahead import PoseAhead
+from utama_core.skills.go_to_ball import (
     _APPROACH_OVERSHOOT_M,
     _DRIBBLE_OVERSHOOT_M,
+    _RACE_ENEMY_RANGE_M,
+    _RACE_ROBOT_RANGE_M,
     _target_past_ball,
     go_to_ball,
 )
@@ -123,7 +127,7 @@ def test_chases_ball_directly_when_ball_is_not_in_enemy_defense_area():
 @pytest.mark.parametrize("robot_xy", [(0.0, 0.0), (2.0, 1.0), (1.0, -1.5)])
 def test_approaches_facing_the_ball(monkeypatch, robot_xy):
     """The kicker and dribbler are on the front: the robot faces the ball on its way in."""
-    from utama_core.skills.src import go_to_ball as module
+    from utama_core.skills import go_to_ball as module
 
     captured = {}
     monkeypatch.setattr(module, "move", lambda **kwargs: captured.update(kwargs))
@@ -132,3 +136,38 @@ def test_approaches_facing_the_ball(monkeypatch, robot_xy):
     go_to_ball(game=game, motion_controller=_motion_controller(), robot_id=1, shield=False)
 
     assert captured["target_oren"] == pytest.approx(math.atan2(0.0 - robot_xy[1], 1.0 - robot_xy[0]))
+
+
+def _race_sprints(robot_x: float, enemy_x: float, monkeypatch, mode=Mode.RSIM, enemy_has_ball=False) -> bool:
+    from utama_core.skills import go_to_ball as module
+
+    enemy = _robot(0, enemy_x, 0.0, False)
+    enemy = dataclasses.replace(enemy, has_ball=enemy_has_ball)
+    game = _game({0: _robot(0, robot_x, 0.0, True)}, {0: enemy}, (0.0, 0.0))
+    captured = {}
+    monkeypatch.setattr(module, "move", lambda **kwargs: captured.update(kwargs))
+    motion_controller = _motion_controller()
+    motion_controller.mode = mode
+    go_to_ball(game=game, motion_controller=motion_controller, robot_id=0, shield=False)
+    return captured.get("sprint", False)
+
+
+@pytest.mark.parametrize(
+    "robot_x, enemy_x, sprints",
+    [
+        (-_RACE_ROBOT_RANGE_M + 0.01, _RACE_ENEMY_RANGE_M - 0.01, True),
+        (-_RACE_ROBOT_RANGE_M - 0.01, _RACE_ENEMY_RANGE_M - 0.01, False),
+        (-_RACE_ROBOT_RANGE_M + 0.01, _RACE_ENEMY_RANGE_M + 0.01, False),
+    ],
+)
+def test_sprints_only_at_a_ball_an_enemy_is_near(monkeypatch, robot_x, enemy_x, sprints):
+    assert _race_sprints(robot_x, enemy_x, monkeypatch) is sprints
+
+
+def test_sprints_at_a_ball_an_enemy_holds(monkeypatch):
+    assert _race_sprints(-0.5, 0.11, monkeypatch, enemy_has_ball=True) is True
+
+
+@pytest.mark.parametrize("mode, sprints", [(Mode.RSIM, True), (Mode.GRSIM, True), (Mode.REAL, False)])
+def test_sprints_for_a_contested_ball_only_in_simulation(monkeypatch, mode, sprints):
+    assert _race_sprints(-0.5, 0.3, monkeypatch, mode=mode) is sprints

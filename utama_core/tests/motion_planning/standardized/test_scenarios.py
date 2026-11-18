@@ -171,7 +171,7 @@ SCENARIOS = (
         # trajectory, per the fix's own roadmap entry), not a hard veto this
         # simpler shape reproduces standalone. The exact boundary condition
         # (`first_collision_numba`'s escape grace) is pinned deterministically
-        # by a dedicated unit test instead (see trajsampling_correctness_test.py);
+        # by a dedicated unit test instead (see test_trajsampling_correctness.py);
         # this scenario keeps the realistic "start already overlapping" case
         # in the black-box regression suite going forward.
         friendly_starts=((0.10, 0.0),),

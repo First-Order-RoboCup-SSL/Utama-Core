@@ -22,8 +22,6 @@ import argparse
 import math
 import time
 
-from utama_core.custom_referee import CustomReferee
-from utama_core.custom_referee.profiles.profile_loader import load_profile
 from utama_core.dashboard import attach_dashboard
 from utama_core.dashboard.views import referee as referee_view
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -31,6 +29,8 @@ from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee import CustomReferee
+from utama_core.referee.profiles.profile_loader import load_profile
 
 
 def _robot(

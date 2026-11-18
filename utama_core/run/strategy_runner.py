@@ -26,7 +26,6 @@ from utama_core.config.settings import (
     ROBOT_FEEDBACK_CONNECTION_TIMEOUT_SECONDS,
     TIMESTEP,
 )
-from utama_core.custom_referee import CustomReferee
 from utama_core.data_processing.receivers import RefereeMessageReceiver, VisionReceiver
 from utama_core.data_processing.refiners import (
     PositionRefiner,
@@ -41,25 +40,23 @@ from utama_core.entities.data.command import RobotCommand, RobotResponse
 from utama_core.entities.data.raw_vision import RawVisionData
 from utama_core.entities.game import Game, GameFrame, GameHistory
 from utama_core.entities.game.field import Field, FieldBounds
-from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.global_utils.mapping_utils import (
+from utama_core.entities.game.mapping_utils import (
     map_colors_to_friendly_enemy,
     map_friendly_enemy_to_colors,
     map_left_right_to_colors,
 )
-from utama_core.global_utils.math_utils import assert_valid_bounding_box
-from utama_core.motion_planning.src.common.control_schemes import get_control_scheme
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.geometry.math_utils import assert_valid_bounding_box
+from utama_core.geometry.pass_and_score_geometry import reset_possession_state
+from utama_core.motion_planning.common.control_schemes import get_control_scheme
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.referee import CustomReferee
 from utama_core.replay.columnar_writer import (
     ColumnarReplayWriter,
     ColumnarReplayWriterConfig,
 )
 from utama_core.replay.game_log_writer import GameLogWriter, code_version
 from utama_core.replay.replay_writer import ReplayWriter, ReplayWriterConfig
-from utama_core.rsoccer_simulator.src.ssl.envs import SSLStandardEnv
-from utama_core.rsoccer_simulator.src.Utils.gaussian_noise import RsimGaussianNoise
-from utama_core.rsoccer_simulator.src.Utils.real_kick import RealKick, RealKicks
-from utama_core.rsoccer_simulator.src.Utils.sim_noise import SimNoise
 from utama_core.run import GameGater
 from utama_core.run.field_check import LOOP_STALL_S, FieldCheck
 from utama_core.run.field_fence import FencedRobotController, inner_edges
@@ -75,10 +72,12 @@ from utama_core.run.sim_recovery import (  # noqa: F401; noqa: F401 (re-exported
 )
 from utama_core.run.vision_stream import GameFrameRenderer, RSimVisionStreamServer
 from utama_core.run.vision_stream_status import VisionStreamStatusMixin
-from utama_core.shared.pass_and_score_geometry import reset_possession_state
-from utama_core.skills.src.shielding import reset_shield_state
+from utama_core.simulator.ssl.envs import SSLStandardEnv
+from utama_core.simulator.utils.gaussian_noise import RsimGaussianNoise
+from utama_core.simulator.utils.sim_noise import SimNoise
+from utama_core.skills.shielding import reset_shield_state
 from utama_core.strategy.pickers import reset_closer_to_ball_state
-from utama_core.team_controller.src.controllers import (
+from utama_core.team_controller.controllers import (
     AbstractSimController,
     GRSimController,
     GRSimRobotController,
@@ -87,7 +86,7 @@ from utama_core.team_controller.src.controllers import (
     RSimPVPManager,
     RSimRobotController,
 )
-from utama_core.team_controller.src.controllers.common.robot_profile import (
+from utama_core.team_controller.controllers.common.robot_profile import (
     ProfiledRobotController,
     RobotProfile,
 )
@@ -246,7 +245,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         field_bounds (FieldBounds): Bounds of the subset of the full field being used. Defaults to None (ie full field).
         keep_out (Sequence[FieldBounds]): Rectangles no robot may enter (vision coordinates): each
             robot's speed into them is capped (`field_fence.py`), and on a camera run one inside
-            forces HALT (`field_check.py`). Defaults to none.
+            forces HALT (`tools/field/field_check.py`). Defaults to none.
         fence_field_lines (bool): On camera runs, fence the touch and goal lines as well as the edges
             of `field_bounds` inside the field; off by default, as a robot fetching a ball out of play
             must cross them. On for a run that never needs to (calibration).
@@ -282,7 +281,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             Defaults to 0.
         sim_noise (SimNoise, optional): When running in rsim, seeded latency, kick and ball physics, motion limits
             and vision noise
-            (`utama_core/rsoccer_simulator/src/Utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
+            (`utama_core/simulator/utils/sim_noise.py`); replaces `rsim_noise` and `rsim_vanishing`.
             Recorded in a columnar replay. Defaults to None (off).
         filtering (bool, optional): Turn on Kalman smoothing and vanished-robot imputation. Defaults to True.
         referee (RefereeSource, optional): Referee source.  Pass a ``CustomReferee``
@@ -407,7 +406,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
         self._vision_stream_renderer: Optional[GameFrameRenderer] = None
 
         if isinstance(self.referee, CustomReferee):
-            from utama_core.custom_referee.geometry import RefereeGeometry
+            from utama_core.referee.geometry import RefereeGeometry
 
             self.referee.override_geometry(RefereeGeometry.from_field_dims(self.full_field_dims))
 
@@ -995,7 +994,6 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
                 vanishing=rsim_vanishing,
                 sim_noise=sim_noise,
             )
-            rsim_env.real_kicks = self._real_kicks(sim_noise)
 
             if self.opp:
                 self.opp.strategy.load_rsim_env(rsim_env)
@@ -1094,7 +1092,7 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
 
     def resume_after_auto_halt(self) -> bool:
         """Force Start once the field check passes again after a HALT it forced, for a run nobody
-        resumes from the dashboard (`examples/calibrate_robot.py`). True when it resumed."""
+        resumes from the dashboard (`tools/field/calibrate_robot.py`). True when it resumed."""
         if self._auto_halt is None or self._prev_custom_ref_command != RefereeCommand.HALT:
             return False
         if self.field_check.halt_reason(self._field_check_rows) is not None:
@@ -1363,22 +1361,14 @@ class StrategyRunner(SimRecoveryMixin, VisionStreamStatusMixin, LiveStatusMixin)
             self.opp.strategy.load_robot_controller(opp_robot_controller)
             self.opp.strategy.load_motion_controller(self._motion_controller(self.opp, opp_profiles))
 
-    def _real_kicks(self, sim_noise: Optional[SimNoise]) -> Optional[RealKicks]:
-        """rsim's kicks for the robots given profiles that measured their kick (a rehearsal); None
-        when none did, as in the evaluation's matches."""
-        kicks = {
-            (f"team_{colour}", rid): kick
-            for colour, profiles in (("yellow", self.yellow_robot_profiles), ("blue", self.blue_robot_profiles))
-            for rid, profile in profiles.items()
-            if (kick := RealKick.of(profile)) is not None
-        }
-        return RealKicks(kicks, seed=sim_noise.seed if sim_noise is not None else 0) if kicks else None
-
     def _motion_controller(self, team, profiles: dict[int, RobotProfile]) -> MotionController:
-        """`team`'s motion controller, with its profiled robots' kick bends, biases (real robots and
-        rsim, which kicks them so) and carry caps (`RobotProfile`)."""
+        """`team`'s motion controller, with its profiled robots' kick bends and biases (real robots
+        only: the sims keep their own kick) and carry caps (`RobotProfile`, every mode)."""
         controller = team.motion_controller(self.mode, self.rsim_env)
-        if self.mode in (Mode.REAL, Mode.RSIM):
+        sim_noise = getattr(self.rsim_env, "sim_noise", None)
+        if self.mode == Mode.RSIM and sim_noise is not None:  # commands are delayed: compensate as real robots do
+            controller.pose_ahead.latency_s = sim_noise.latency_estimate_s
+        if self.mode == Mode.REAL:
             controller.kick_bend = {
                 rid: math.radians(p.kick_bend_deg_per_cm) * 100.0
                 for rid, p in profiles.items()

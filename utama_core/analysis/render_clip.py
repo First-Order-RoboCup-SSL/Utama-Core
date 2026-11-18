@@ -58,16 +58,17 @@ from utama_core.entities.game import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.replay_player import load_frames_in_range
 
-# Matches FIELD_COLORS in utama_core/dashboard/static/field_canvas.js.
-_PITCH = (0x24, 0x28, 0x32)
-_LINE = (0x4B, 0x51, 0x62)
-_YELLOW = (0xE0, 0xA5, 0x27)
-_BLUE = (0x3D, 0x7F, 0xD1)
-_BALL = (0xC9, 0x8A, 0x3F)
-_MARKER = (0xE8, 0xEA, 0xF0)
-_BACKGROUND = (0x14, 0x16, 0x1C)
-_HEADER = (0x1A, 0x1C, 0x24)
-_CLOCK = (0x8A, 0x8F, 0x9C)
+# The light dashboard's colours: FIELD_COLORS in utama_core/dashboard/static/field_canvas.js and
+# --bg, --surface-2, --muted in style.css.
+_PITCH = (0xE9, 0xF0, 0xE8)
+_LINE = (0xA5, 0xB3, 0xA7)
+_YELLOW = (0xEA, 0xB3, 0x08)
+_BLUE = (0x25, 0x63, 0xEB)
+_BALL = (0xEA, 0x58, 0x0C)
+_MARKER = (0x1C, 0x22, 0x30)
+_BACKGROUND = (0xF5, 0xF6, 0xF8)
+_HEADER = (0xF0, 0xF2, 0xF5)
+_CLOCK = (0x6B, 0x72, 0x80)
 
 _ROBOT_RADIUS_M = 0.09
 
@@ -305,7 +306,7 @@ class _FrameDrawer:
         pygame.draw.circle(surf, fill, (cx, cy), r)
         heading_len = r * 1.6
         heading_end = (cx + heading_len * math.cos(bot.orientation), cy - heading_len * math.sin(bot.orientation))
-        pygame.draw.line(surf, _PITCH, (cx, cy), heading_end, max(1, int(r * 0.28)))
+        pygame.draw.line(surf, _MARKER, (cx, cy), heading_end, max(1, int(r * 0.28)))
         label = self.font_id.render(str(bot.id), True, fill)
         surf.blit(label, (cx - label.get_width() / 2, cy - r - 17))
 

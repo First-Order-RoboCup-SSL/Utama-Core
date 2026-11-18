@@ -1,6 +1,6 @@
 """Tests for the official-log converter's sidecars (`replay/ssl_log.py`): the tracker's kicks,
 visibility and angular velocity, raw camera detections, and adding them to a replay converted
-before they existed (`tools/convert_ssl_log.py --backfill-extras`)."""
+before they existed (`tools/realism/convert_ssl_log.py --backfill-extras`)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import struct
 import numpy as np
 import pytest
 
-from tools import convert_ssl_log
+from tools.realism import convert_ssl_log
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.ssl_log import (
@@ -24,16 +24,14 @@ from utama_core.replay.ssl_log import (
     _VisionRows,
     convert_log,
 )
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
-from utama_core.team_controller.src.generated_code.ssl_vision_detection_tracked_pb2 import (
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
+from utama_core.team_controller.generated_code.ssl_vision_detection_tracked_pb2 import (
     KickedBall,
 )
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_tracked_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_tracked_pb2 import (
     TrackerWrapperPacket,
 )
 

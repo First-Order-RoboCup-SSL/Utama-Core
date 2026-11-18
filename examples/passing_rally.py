@@ -19,7 +19,7 @@ What it does:
     the ball back and Force Start. The Live tab shows each robot's role (pass, receive,
     get_open) under its tactic.
   - Robots and the readiness checks are `pass_receive.py`'s ("Test-day
-    configuration" there); the field and the referee rules are `shooting_drill.py`'s.
+    configuration" there); the field and the referee rules are `tools/field/shooting_drill.py`'s.
 """
 
 import sys
@@ -49,8 +49,8 @@ from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.game.robot import Robot
+from utama_core.geometry.pass_and_score_geometry import clamp_to_field
 from utama_core.run import StrategyRunner
-from utama_core.shared.pass_and_score_geometry import clamp_to_field
 
 # ---------------------------------------------------------------------------
 # Test-day configuration (the robots and the pass distance are pass_receive.py's)

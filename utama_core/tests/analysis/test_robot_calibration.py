@@ -25,13 +25,11 @@ from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
 from utama_core.replay.game_log_writer import RADIO_OUT, GameLogWriter
 from utama_core.replay.ssl_log import REFEREE, read_records, referee_data
-from utama_core.team_controller.src.controllers.real.real_robot_controller import (
+from utama_core.team_controller.controllers.real.real_robot_controller import (
     RealRobotController,
 )
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 

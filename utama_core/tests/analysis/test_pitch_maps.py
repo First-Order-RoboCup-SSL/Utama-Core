@@ -1,10 +1,12 @@
-"""`tools/pitch_maps.py` on tiny synthetic replays: the side normalisation, possession and the
+"""`tools/debug/pitch_maps.py` on tiny synthetic replays: the side normalisation, possession and the
 goalkeeper exclusion, and that each figure is written."""
+
+import json
 
 import numpy as np
 import pytest
 
-from tools import pitch_maps as pm
+from tools.debug import pitch_maps as pm
 from utama_core.engine.match_stats import _POSSESSION_RADIUS_M
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.replay.columnar_reader import ColumnarReplay
@@ -139,7 +141,7 @@ def test_position_grid_shares_sum_to_one_and_means_are_per_robot():
 
 
 def _views():
-    names = ["build_a_kernel_strategy", "build_b_kernel_strategy"]
+    names = ["a", "b"]
     shots = [{"x": 2.0, "y": 0.5, "scored": True, "own": True}, {"x": -1.0, "y": 0.0, "scored": False, "own": False}]
     fouls = [{"x": 1.0, "y": -1.0, "rule": "crashing"}, {"x": -2.0, "y": 1.0, "rule": "double_touch"}]
     views = []
@@ -171,20 +173,32 @@ def test_each_figure_is_written(tmp_path, which):
     assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_map_data_is_json_with_both_grids_the_shots_and_one_scale_per_grid():
+    order, _, views = _views()
+    data = json.loads(json.dumps(pm.map_data(views, order)))  # plain JSON all the way down
+    a = data["strategies"]["a"]
+    rows, cols = len(a["attack"]["share"]), len(a["attack"]["share"][0])
+    assert (rows, cols) == (round(2 * pm.W / pm.BIN_M), round(2 * pm.L / pm.BIN_M))
+    assert sum(map(sum, a["attack"]["share"])) == pytest.approx(1.0)
+    assert a["defence"]["means"] == [[1.0, 0.5]]  # robot 1's only sample without the ball
+    assert a["shots"] == {"own": [[2.0, 0.5, True]], "faced": [[-1.0, 0.0, False]]}
+    assert set(data["vmax"]) == {"attack", "defence"} and data["pitch"]["half_length"] == pm.L
+
+
 def test_rule_colours_take_fixed_slots_in_rank_order():
     assert pm.rule_colours(["crashing", "double_touch"]) == {"crashing": pm.sr.SLOTS[0], "double_touch": pm.sr.SLOTS[1]}
 
 
 def test_zone_findings_are_six_descriptive_shares_per_strategy_in_the_pitch_zone_names():
-    # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/pitch_zones.md).
+    # Common frame: the strategy attacks +x, thirds at x = -1.5 and +1.5 m (docs/signals.md ("Pitch zones")).
     view = pm.MatchView(
-        strategy="build_a_kernel_strategy",
+        strategy="a",
         pos_x=np.array([-2.0, 0.0, 2.0, 2.5]),
         pos_y=np.zeros(4),
         pos_in=np.array([True, True, True, False]),  # three in possession, one out
         pos_robot=np.array([1, 2, 3, 1]),
     )
-    findings = pm.zone_findings([view], ["build_a_kernel_strategy"], {"in possession": "a.png"})
+    findings = pm.zone_findings([view], ["a"], {"in possession": "a.png"})
 
     assert len(findings) == 6
     assert all(f.kind == "zone_share" and f.threshold is None and f.replay is None for f in findings)

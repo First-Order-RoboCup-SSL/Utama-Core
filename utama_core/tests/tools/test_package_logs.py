@@ -1,9 +1,9 @@
-"""Tests for tools/package_logs.py: tournament and field logs packaging."""
+"""Tests for tools/field/package_logs.py: tournament and field logs packaging."""
 
 import tarfile
 from pathlib import Path
 
-from tools.package_logs import (
+from tools.field.package_logs import (
     collect_field_files,
     collect_tournament_files,
     compress_log_file,

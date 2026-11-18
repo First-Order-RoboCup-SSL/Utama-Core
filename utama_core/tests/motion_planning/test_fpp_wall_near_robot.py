@@ -13,10 +13,10 @@ import pytest
 
 from utama_core.config.field_params import FieldDimensions
 from utama_core.entities.data.vector import Vector2D
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
-# The lab field: 3 m x 2.25 m (`examples/shooting_drill.py`'s FIELD).
+# The lab field: 3 m x 2.25 m (`tools/field/shooting_drill.py`'s FIELD).
 _LAB = FieldDimensions(
     full_field_half_length=1.5,
     full_field_half_width=1.125,

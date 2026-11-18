@@ -10,7 +10,7 @@ Is one planner safer than the other on our robots? The same drill under each, in
 blocks (A B A B ...) so a battery running down or the floor changing over the session falls on
 both alike. In a block both robots run one planner (`--schemes`, default fpp then trajsample).
 
-The robots are `pass_receive.py`'s pair (one per colour), on `shooting_drill.py`'s field. Each
+The robots are `pass_receive.py`'s pair (one per colour), on `tools/field/shooting_drill.py`'s field. Each
 leg, both drive to a new spot at once, facing where they go, across each other's way: head on
 (`HEAD_ON`), back, then crossing on the diagonals (`CROSS`), back, and so on. A leg ends once
 both stand on their spots (within `ARRIVED_M`), or after `LEG_TIMEOUT_S`. Per leg it records how
@@ -36,7 +36,8 @@ import time
 from typing import Optional
 
 from pass_receive import ROBOT_A, ROBOT_B
-from shooting_drill import (
+
+from tools.field.shooting_drill import (
     CAMERA_HALF,
     FIELD,
     KEEP_OUT,
@@ -45,7 +46,6 @@ from shooting_drill import (
     no_rules_referee,
     on_field,
 )
-
 from utama_core.config.physical_constants import ROBOT_RADIUS
 from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
@@ -54,7 +54,7 @@ from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.run import StrategyRunner
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.skills.utils.move_utils import move
 
 # (robot A's spot, robot B's spot) per leg, in turn; the first is where they start.
 START = (Vector2D(-0.8, 0.0), Vector2D(0.8, 0.0))

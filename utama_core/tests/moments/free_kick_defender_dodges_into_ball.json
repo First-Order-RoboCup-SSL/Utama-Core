@@ -6,7 +6,7 @@
     "t": 254.65
   },
   "strategy": "all",
-  "opponent": "build_split_shape_kernel_strategy",
+  "opponent": "pendulum",
   "seconds": 2.0,
   "checks": [
     "keeps_clear"

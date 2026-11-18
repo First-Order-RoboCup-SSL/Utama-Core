@@ -1,11 +1,11 @@
-"""Tests for `utama_core.skills.src.shielding`, extracted out of `go_to_ball.py`."""
+"""Tests for `utama_core.skills.shielding`, extracted out of `go_to_ball.py`."""
 
 import pytest
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.entities.data.vector import Vector2D, Vector3D
 from utama_core.entities.game import Ball, Field, Game, GameFrame, GameHistory, Robot
-from utama_core.skills.src.shielding import (
+from utama_core.skills.shielding import (
     _RELEASE_RANGE,
     COMMIT_RANGE,
     CONTEST_RANGE,

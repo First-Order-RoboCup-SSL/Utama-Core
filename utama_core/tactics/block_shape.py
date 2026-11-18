@@ -23,7 +23,7 @@ continuous shape, not an action):
   sense as a "slow the carrier down" standoff, which is meaningless once there is
   no carrier at all; without this a loose ball near (but wide of) our own box just
   sits there with the first defender parked on an axis nobody is threatening.
-  Found live: a `clear_danger` vs `low_block`-shaped match pinned 28 seconds this
+  Found live: a `firebreak` vs `low_block`-shaped match pinned 28 seconds this
   way (see `tactics/defense.py`'s matching fix for the sibling case in
   `DefenseTactic`).
 - **screen** (everyone else): holds the line at `_SCREEN_OFFSET` in front of our
@@ -46,12 +46,12 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_own_defense_area,
     ball_is_loose,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
 
 # Depth of our own defense area (standard SSL penalty box front edge).
 _DEFENSE_AREA_DEPTH = 1.3

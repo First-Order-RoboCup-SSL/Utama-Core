@@ -2,7 +2,7 @@
 centre and how far its heading is off the robot's forward direction.
 
 Reads an SSL game log written on real robots (`StrategyRunner(game_log_path=...)`): the turns
-and straight drives of an `examples/calibrate_robot.py` run, which writes the offset into the
+and straight drives of an `tools/field/calibrate_robot.py` run, which writes the offset into the
 robot's profile.
 
 - **Tag offset**: a robot turning on the spot turns about its own centre, so its tag traces a

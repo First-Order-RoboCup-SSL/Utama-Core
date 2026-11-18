@@ -4,10 +4,10 @@ from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 from utama_core.config.settings import MULTICAST_GROUP, VISION_PORT
 from utama_core.entities.data.raw_vision import RawBallData, RawRobotData, RawVisionData
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
-from utama_core.team_controller.src.utils import network_manager
+from utama_core.team_controller.utils import network_manager
 
 logger = logging.getLogger(__name__)
 

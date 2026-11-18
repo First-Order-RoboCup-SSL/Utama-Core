@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.engine.match_stats import MatchStatsAccumulator
 from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.data.vector import Vector2D, Vector3D
@@ -16,6 +15,7 @@ from utama_core.entities.game.robot import Robot
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
+from utama_core.referee.rules.base_rule import RuleViolation
 
 
 def _robot(rid: int, x: float, y: float, is_friendly: bool) -> Robot:
@@ -799,3 +799,18 @@ def test_motion_planning_collision_and_clearance_tracking(tmp_path):
     assert data["opponent_overlap_ticks"] == 0
     assert data["opponent_overlap_incidents"] == 0
     assert data["worst_clearance_m"] == pytest.approx(-0.08, abs=1e-3)
+
+
+@pytest.mark.parametrize("receiver_x, counted", [(0.49, 0), (0.5, 1)])
+def test_a_handoff_between_adjacent_teammates_is_not_a_pass(receiver_x, counted):
+    acc = MatchStatsAccumulator()
+    friendly1 = {1: _robot(1, 0.0, 0.0, True), 3: _robot(3, 5.0, 5.0, True)}
+    friendly2 = {1: _robot(1, 5.0, 5.0, True), 3: _robot(3, receiver_x, 0.0, True)}
+    enemy = {2: _robot(2, -5.0, -5.0, False)}
+
+    acc.record_tick(_poss_frame((0.0, 0.0), (0.0, 0.0), friendly1, enemy))
+    acc.record_tick(_poss_frame((receiver_x, 0.0), (0.0, 0.0), friendly2, enemy))
+
+    stats = acc.finalize()
+    assert stats.completed_passes == counted
+    assert len(stats.pass_distances_m) == counted

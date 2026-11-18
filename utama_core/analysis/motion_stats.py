@@ -13,6 +13,7 @@ from typing import Dict, Union
 import numpy as np
 
 from utama_core.config.physical_constants import ROBOT_RADIUS
+from utama_core.strategy.catalog import plain_name
 
 
 def _count_incidents(d_pairs: np.ndarray) -> int:
@@ -196,8 +197,8 @@ def enrich_tournament_directory(tournament_dir: Union[str, Path]) -> None:
                 summary = json.load(f)
 
             for result in summary.get("results", []):
-                cfg_a = result["config_a"].removeprefix("build_").removesuffix("_kernel_strategy")
-                cfg_b = result["config_b"].removeprefix("build_").removesuffix("_kernel_strategy")
+                cfg_a = plain_name(result["config_a"])
+                cfg_b = plain_name(result["config_b"])
                 tag = f"{cfg_a}_vs_{cfg_b}"
                 if tag in stats_updates:
                     m = stats_updates[tag]

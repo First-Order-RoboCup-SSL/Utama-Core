@@ -23,7 +23,7 @@ from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.game_history import GameHistory
 from utama_core.entities.game.robot import Robot
 from utama_core.entities.referee.referee_command import RefereeCommand
-from utama_core.motion_planning.src.fastpathplanning.planner import FastPathPlanner
+from utama_core.motion_planning.fastpathplanning.planner import FastPathPlanner
 
 _BALL = (2.25, 0.0)
 

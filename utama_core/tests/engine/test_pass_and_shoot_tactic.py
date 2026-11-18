@@ -22,7 +22,7 @@ from utama_core.entities.game import Field, Game, GameHistory
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.game.robot import Robot
-from utama_core.motion_planning.src.common.motion_controller import MotionController
+from utama_core.motion_planning.common.motion_controller import MotionController
 from utama_core.tactics._pass_and_score import PassAndScoreMem, run_setup_phase
 from utama_core.tactics.pass_and_shoot import (
     _LANE_BLOCKED_ABANDON_TICKS,

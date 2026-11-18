@@ -5,12 +5,9 @@ import math
 import pytest
 
 from utama_core.entities.data.vector import Vector2D
-from utama_core.motion_planning.src.common.motion_controller import MotionController
-from utama_core.motion_planning.src.common.pose_ahead import (
-    PoseAhead,
-    control_latency_s,
-)
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.motion_planning.common.motion_controller import MotionController
+from utama_core.motion_planning.common.pose_ahead import PoseAhead, control_latency_s
+from utama_core.skills.utils.move_utils import move
 from utama_core.tests.fixtures.game_builder import build_game, make_ball, make_robot
 
 LATENCY = 0.08

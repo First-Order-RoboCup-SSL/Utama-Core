@@ -13,14 +13,14 @@ from __future__ import annotations
 import pytest
 
 from utama_core.engine.abstract_strategy import AbstractStrategy
-from utama_core.strategy.kernel_strategy import build_default_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 
 @pytest.fixture
 def kernel_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
+    strategy = AbstractStrategy(build=builder("default", (1, 2)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -65,7 +65,7 @@ def test_kernel_strategy_is_built_by_load_motion_controller_alone():
     """Direct unit-level check (no rsim, no full runner) that `AbstractStrategy`
     doesn't need `load_game` at all to build its `Strategy` — only
     `load_motion_controller`, called with a bare stand-in object."""
-    strategy = AbstractStrategy(build_kernel_strategy=build_default_kernel_strategy((1, 2)))
+    strategy = AbstractStrategy(build=builder("default", (1, 2)))
     assert strategy._kernel_strategy is None
 
     strategy.load_motion_controller(motion_controller=object())

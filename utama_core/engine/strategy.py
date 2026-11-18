@@ -24,7 +24,7 @@ otherwise have to write a trivial one-group `Partitioner` themselves.
 
 Referee restarts (kickoff/ball-placement/free-kick/penalty) are handled
 before any tactic ticks at all, not by a tactic: `engine.referee_override`
-reuses the `custom_referee/actions.py` Step classes (keep-out-distance
+reuses the `referee/actions.py` Step classes (keep-out-distance
 geometry, formation positions) to take over every outfield robot's command
 for the duration of the restart. See `_OVERRIDE_COMMANDS` there and
 `referee_reset.py` for how this fits with the barrier-reset/pause tiers.
@@ -37,6 +37,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from utama_core.engine.ball_release import BallRelease
+from utama_core.engine.ball_roles import BallRoles
 from utama_core.engine.context import TickContext
 from utama_core.engine.match_log import MatchLog
 from utama_core.engine.referee_override import (
@@ -177,6 +179,8 @@ class Strategy:
         self._their_restart: Optional[tuple[RefereeCommand, float, float]] = None
         self._pending_barrier_reset: Optional[dict[TacticId, frozenset[RobotId]]] = None
         self._referee_override = RefereeOverride(overrides=referee_overrides)
+        self._ball_release = BallRelease()
+        self._ball_roles = BallRoles()
         # Robots the referee, not a tactic, drives this tick, with their job (see `referee_control`).
         self._referee_control: dict[RobotId, str] = {}
 
@@ -191,8 +195,8 @@ class Strategy:
 
         # Optional structured intention/trace log — assigned post-construction
         # by `StrategyRunner` (see its `match_log_path` param), not threaded
-        # through every `build_*_kernel_strategy` factory's constructor
-        # signature, since none of them currently take anything beyond
+        # through every strategy's `build` signature, since none of them
+        # currently take anything beyond
         # `motion_controller`. `None` disables it entirely. The setter below
         # also pushes it into `self._ctx.match_log`, the one instance shared
         # by every tactic/skill invoked this tick, so assigning it here is
@@ -210,7 +214,7 @@ class Strategy:
 
         Assigned post-construction the same way `match_log` is — `AbstractStrategy.__init__`
         runs before `load_motion_controller` builds the kernel `Strategy` via each
-        `build_kernel_strategy(motion_controller)` factory, none of which know about
+        `build(motion_controller)` factory, none of which know about
         `referee_overrides`, so `AbstractStrategy.load_motion_controller` sets this right
         after construction instead of threading a new constructor kwarg through every
         existing factory.
@@ -231,7 +235,7 @@ class Strategy:
 
         Assigned post-construction the same way `match_log`/`referee_overrides`
         are — `AbstractStrategy` knows `goalkeeper_id` independently of
-        whichever `build_kernel_strategy` factory built this `Strategy`, so
+        whichever `build` factory built this `Strategy`, so
         this is the one place a caller needs to touch, not a constructor
         param threaded through every factory.
 
@@ -349,7 +353,15 @@ class Strategy:
 
     def tick(self, game: Game) -> dict[RobotId, RobotCommand]:
         self._tick_count += 1
+        self._ctx.ball_claims.clear()
+        self._ctx.expected_receivers.clear()
         commands = self._tick(game)
+        if self._referee_control:  # a restart or HALT drives the robots: nothing to release
+            self._ball_release.reset()
+            self._ball_roles.reset()
+        else:
+            commands = self._ball_release.apply(game, self._ctx, commands)
+            commands = self._ball_roles.apply(game, self._ctx, commands, self._outfield_robot_ids)
         if self.match_log is not None:
             self.match_log.clear_untraced(self._tick_count, getattr(game, "ts", 0.0))
         return commands

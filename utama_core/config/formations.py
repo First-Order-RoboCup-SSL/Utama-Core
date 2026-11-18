@@ -6,7 +6,7 @@ import numpy as np
 
 from utama_core.config.field_params import FieldBounds
 from utama_core.config.physical_constants import MAX_ROBOTS, ROBOT_RADIUS
-from utama_core.global_utils.math_utils import normalise_heading
+from utama_core.geometry.math_utils import normalise_heading
 
 
 class FormationEntry(NamedTuple):

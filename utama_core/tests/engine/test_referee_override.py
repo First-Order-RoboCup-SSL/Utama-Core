@@ -35,14 +35,14 @@ from utama_core.entities.data.referee import RefereeData
 from utama_core.entities.game.team_info import TeamInfo
 from utama_core.entities.referee.referee_command import RefereeCommand
 from utama_core.entities.referee.stage import Stage
-from utama_core.strategy.kernel_strategy import build_split_shape_kernel_strategy
+from utama_core.strategy.catalog import builder
 
 
 @pytest.fixture
-def split_shape_runner():
+def pendulum_runner():
     from utama_core.run.strategy_runner import StrategyRunner
 
-    strategy = AbstractStrategy(build_kernel_strategy=build_split_shape_kernel_strategy((1, 2, 3, 4, 5)))
+    strategy = AbstractStrategy(build=builder("pendulum", (1, 2, 3, 4, 5)))
     runner = StrategyRunner(
         strategy=strategy,
         my_team_is_yellow=True,
@@ -92,22 +92,22 @@ def _set_referee_command(runner, command: RefereeCommand, designated_position=No
 _CLEAR_OF_BALL = 0.2
 
 
-def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_runner):
+def test_their_ball_placement_clears_our_robots_from_keep_out_zone(pendulum_runner):
     """During the opponent's ball placement, a robot starting inside the
     keep-out zone around the ball moves outside it — a plain tactic tick has
     no notion of this rule and would just leave it there or drive it closer."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
-    split_shape_runner.step_once()  # let the teleport land in game state
+    pendulum_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
+    pendulum_runner.step_once()  # let the teleport land in game state
 
     designated = (1.5, 0.0)
-    _set_referee_command(split_shape_runner, RefereeCommand.BALL_PLACEMENT_BLUE, designated_position=designated)
+    _set_referee_command(pendulum_runner, RefereeCommand.BALL_PLACEMENT_BLUE, designated_position=designated)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     ball = game.ball.p
     for robot_id, robot in game.friendly_robots.items():
@@ -117,21 +117,21 @@ def test_their_ball_placement_clears_our_robots_from_keep_out_zone(split_shape_r
         assert dist_to_spot >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to designated spot"
 
 
-def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runner):
+def test_their_kickoff_clears_our_robots_outside_center_circle(pendulum_runner):
     """A robot starting at the centre spot for the opponent's kickoff moves
     outside the keep-out radius."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     # Inside the keep-out radius but clear of the ball: a robot teleported onto
     # the ball knocks it off the spot, and where it stops then decides the test.
-    split_shape_runner.sim_controller.teleport_robot(True, 1, _CLEAR_OF_BALL, 0.0, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, _CLEAR_OF_BALL, 0.0, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     ball = game.ball.p
     assert math.hypot(ball.x, ball.y) < 0.05, "ball left the centre spot"
@@ -140,25 +140,25 @@ def test_their_kickoff_clears_our_robots_outside_center_circle(split_shape_runne
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} inside centre keep-out zone"
 
 
-def test_override_ends_and_tactics_resume_on_normal_start(split_shape_runner):
+def test_override_ends_and_tactics_resume_on_normal_start(pendulum_runner):
     """Once NORMAL_START arrives after a restart, tactics tick again (mem was
     reset by the barrier transition on the way in) instead of the override
     continuing to hold every robot in place forever. Our own kick-off: after
     the opponent's, the hold lasts until their kicker moves the ball (5.4)."""
-    strategy = split_shape_runner.my.strategy
+    strategy = pendulum_runner.my.strategy
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_KICKOFF_YELLOW)
     for _ in range(50):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.NORMAL_START)
-    split_shape_runner.step_once()
+    _set_referee_command(pendulum_runner, RefereeCommand.NORMAL_START)
+    pendulum_runner.step_once()
 
     partition = strategy._kernel_strategy.active_partition
     assert partition, "tactics never resumed after the restart ended"
 
 
-def test_back_to_back_restarts_dispatch_a_fresh_step_each_time(split_shape_runner):
+def test_back_to_back_restarts_dispatch_a_fresh_step_each_time(pendulum_runner):
     """A second restart arriving without an intervening NORMAL_START (e.g. a
     kickoff foul immediately becoming a ball placement) must dispatch to the
     *new* command's Step, not keep re-running the first command's Step just
@@ -174,23 +174,23 @@ def test_back_to_back_restarts_dispatch_a_fresh_step_each_time(split_shape_runne
     for "did the override switch commands," even though the switch itself is
     correct and instant.
     """
-    game = split_shape_runner.my.game
-    strategy = split_shape_runner.my.strategy._kernel_strategy
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    strategy = pendulum_runner.my.strategy._kernel_strategy
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
-    split_shape_runner.step_once()
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_KICKOFF_BLUE)
+    pendulum_runner.step_once()
     kickoff_commands = strategy.tick(game)
 
     # No NORMAL_START in between — straight into a second, different restart.
-    _set_referee_command(split_shape_runner, RefereeCommand.BALL_PLACEMENT_BLUE, designated_position=(1.0, 1.0))
-    split_shape_runner.step_once()
+    _set_referee_command(pendulum_runner, RefereeCommand.BALL_PLACEMENT_BLUE, designated_position=(1.0, 1.0))
+    pendulum_runner.step_once()
     placement_commands = strategy.tick(game)
 
     assert kickoff_commands != placement_commands, "override did not re-dispatch for the second restart command"
 
 
-def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
+def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(pendulum_runner):
     """STOP is an override command now, not a pure freeze (see
     `referee_override.py`'s module docstring): a robot already inside the
     ball keep-out radius at the moment STOP is entered must actively move
@@ -198,17 +198,17 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
     `CustomReferee`'s own STOP-to-queued-restart auto-advance requires every
     robot to clear `BALL_KEEP_OUT_DISTANCE` first, which a frozen encroaching
     robot can never satisfy."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.STOP)
+    _set_referee_command(pendulum_runner, RefereeCommand.STOP)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     ball = game.ball.p
     for robot_id, robot in game.friendly_robots.items():
@@ -216,23 +216,23 @@ def test_stop_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_run
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball during STOP"
 
 
-def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_runner):
+def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(pendulum_runner):
     """TIMEOUT_YELLOW/BLUE is also an override command, routed to `StopStep`
     exactly like STOP (see `referee_override.py`'s module docstring). It was
     once wired into neither `is_paused` nor `is_override_command`, so a
     timeout left tactics ticking and issuing ordinary motion commands
     straight through it."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, ball_x + _CLEAR_OF_BALL, ball_y, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.TIMEOUT_YELLOW)
+    _set_referee_command(pendulum_runner, RefereeCommand.TIMEOUT_YELLOW)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     ball = game.ball.p
     for robot_id, robot in game.friendly_robots.items():
@@ -240,20 +240,20 @@ def test_timeout_clears_an_encroaching_robot_from_the_keep_out_zone(split_shape_
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball during TIMEOUT"
 
 
-def test_goalkeeper_stops_during_halt(split_shape_runner):
+def test_goalkeeper_stops_during_halt(pendulum_runner):
     """The goalkeeper must stop issuing motion commands during HALT, same as
     the outfield pool (`Strategy.tick()`'s `is_paused` check) — it must not
     keep chasing the ball just because it's ticked outside `Strategy`."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.HALT)
+    _set_referee_command(pendulum_runner, RefereeCommand.HALT)
     for _ in range(30):  # let residual velocity from before HALT decay first
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     gk_pos_before = (game.friendly_robots[0].p.x, game.friendly_robots[0].p.y)
     for _ in range(20):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
     gk_pos_after = (game.friendly_robots[0].p.x, game.friendly_robots[0].p.y)
 
     dist_moved = math.hypot(gk_pos_after[0] - gk_pos_before[0], gk_pos_after[1] - gk_pos_before[1])
@@ -267,28 +267,28 @@ def test_goalkeeper_stops_during_halt(split_shape_runner):
 # ---------------------------------------------------------------------------
 
 
-def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runner):
+def test_their_penalty_clears_our_robots_from_the_penalty_area(pendulum_runner):
     """During the opponent's penalty, PreparePenaltyTheirsStep's own two-part
     formation is actually reached: our goalkeeper moves to our goal line
     centre, and a non-keeper robot moves onto the behind-the-line formation
     in our own half — not just "moved somewhere far away" (there is no
     ball-keep-out-distance rule here at all; it's a fixed formation)."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     # Robot 0 (goalkeeper) and robot 1 both start on the wrong side of the
     # field entirely, so a passing test demonstrates the override actually
     # repositioned them rather than them already sitting somewhere plausible
     # — but close enough to their targets to cover the distance within the
     # 200-tick (~3.3s) budget this file's other tests use.
-    split_shape_runner.sim_controller.teleport_robot(True, 0, 2.0, 0.0, 0.0)
-    split_shape_runner.sim_controller.teleport_robot(True, 1, 0.5, 2.0, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 0, 2.0, 0.0, 0.0)
+    pendulum_runner.sim_controller.teleport_robot(True, 1, 0.5, 2.0, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     field = game.field
     # PreparePenaltyTheirsStep: our_goal_x = +half_length when my_team_is_right
@@ -306,28 +306,28 @@ def test_their_penalty_clears_our_robots_from_the_penalty_area(split_shape_runne
     assert dist_to_line < 0.5, f"robot 1 did not reach the behind-the-line formation: dist_x={dist_to_line:.3f}m"
 
 
-def test_their_penalty_defenders_never_enter_the_keep_out_circle(split_shape_runner):
+def test_their_penalty_defenders_never_enter_the_keep_out_circle(pendulum_runner):
     """RR#6 low_block_vs_three_slot (2026-09-28, t=38.6): with the ball on the
     opponent's mark, four of our robots stood goal-side of it and had to reach
     the line 1 m behind. Robot 5 cut to 0.38 m from the ball and KeepOutRule
     (0.5 m) voided the penalty. Start positions are the recorded ones."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     mark = (2.25, 0.0)
-    split_shape_runner.sim_controller.teleport_ball(*mark)
+    pendulum_runner.sim_controller.teleport_ball(*mark)
     recorded = {0: (4.39, 0.04), 2: (3.39, 0.81), 3: (3.04, 1.01), 4: (3.64, 1.71), 5: (2.81, 0.96)}
     for robot_id, (x, y) in recorded.items():
-        split_shape_runner.sim_controller.teleport_robot(True, robot_id, x, y, math.pi)
-    split_shape_runner.sim_controller.teleport_robot(False, 1, 3.24, 1.63, 0.0)
-    split_shape_runner.sim_controller.teleport_robot(False, 2, 3.09, -1.49, 0.0)
-    split_shape_runner.step_once()
+        pendulum_runner.sim_controller.teleport_robot(True, robot_id, x, y, math.pi)
+    pendulum_runner.sim_controller.teleport_robot(False, 1, 3.24, 1.63, 0.0)
+    pendulum_runner.sim_controller.teleport_robot(False, 2, 3.09, -1.49, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_PENALTY_BLUE)
 
     closest = {}
     for _ in range(300):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
         ball = game.ball.p
         for robot_id, robot in game.friendly_robots.items():
             d = math.hypot(robot.p.x - ball.x, robot.p.y - ball.y)
@@ -336,25 +336,25 @@ def test_their_penalty_defenders_never_enter_the_keep_out_circle(split_shape_run
     assert min(closest.values()) >= 0.5, f"closest approach to the ball per robot: {closest}"
 
 
-def test_our_penalty_moves_kicker_to_the_penalty_mark(split_shape_runner):
+def test_our_penalty_moves_kicker_to_the_penalty_mark(pendulum_runner):
     """During our own penalty, the (non-goalkeeper) kicker drives to the
     opponent's penalty mark — PreparePenaltyOursStep's actual target, not
     just "moved somewhere"."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     # Robot 1 starts far from the opponent's penalty mark.
-    split_shape_runner.sim_controller.teleport_robot(True, 1, -1.0, 2.0, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, -1.0, 2.0, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.PREPARE_PENALTY_YELLOW)
+    _set_referee_command(pendulum_runner, RefereeCommand.PREPARE_PENALTY_YELLOW)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     field = game.field
     # PreparePenaltyOursStep: opp_goal_x = +half_length if NOT my_team_is_right
-    # else -half_length. split_shape_runner has my_team_is_right=True, so the
+    # else -half_length. pendulum_runner has my_team_is_right=True, so the
     # opponent's goal (and penalty mark) is on the NEGATIVE-x side.
     penalty_x = -0.5 * field.full_field_half_length
     non_goalkeeper_ids = [rid for rid in game.friendly_robots if rid != 0]
@@ -364,21 +364,21 @@ def test_our_penalty_moves_kicker_to_the_penalty_mark(split_shape_runner):
     assert dist_to_mark < 0.3, f"kicker (robot {kicker_id}) did not reach the penalty mark: dist={dist_to_mark:.3f}m"
 
 
-def test_their_direct_free_clears_our_robots_from_ball_keep_out_zone(split_shape_runner):
+def test_their_direct_free_clears_our_robots_from_ball_keep_out_zone(pendulum_runner):
     """During the opponent's direct free kick, a robot starting on the ball
     clears the keep-out radius — same observable contract as ball placement's
     "theirs" test above, different command family."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x, ball_y, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, ball_x, ball_y, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.DIRECT_FREE_BLUE)
+    _set_referee_command(pendulum_runner, RefereeCommand.DIRECT_FREE_BLUE)
 
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
 
     ball = game.ball.p
     for robot_id, robot in game.friendly_robots.items():
@@ -386,29 +386,27 @@ def test_their_direct_free_clears_our_robots_from_ball_keep_out_zone(split_shape
         assert dist_to_ball >= BALL_KEEP_OUT_DISTANCE - 0.05, f"robot {robot_id} too close to ball"
 
 
-def test_our_direct_free_moves_kicker_to_the_ball(split_shape_runner):
+def test_our_direct_free_moves_kicker_to_the_ball(pendulum_runner):
     """During our own direct free kick, the closest robot to the ball drives
     to an approach position near it (DirectFreeOursStep) — the same contract
     `_ApproachBallManager` verifies on the BT-replacement ball-placement path,
     for a different command family."""
-    game = split_shape_runner.my.game
-    split_shape_runner.step_once()
+    game = pendulum_runner.my.game
+    pendulum_runner.step_once()
 
     ball_x, ball_y = game.ball.p.x, game.ball.p.y
-    split_shape_runner.sim_controller.teleport_robot(True, 1, ball_x + 1.5, ball_y, 0.0)
-    split_shape_runner.step_once()
+    pendulum_runner.sim_controller.teleport_robot(True, 1, ball_x + 1.5, ball_y, 0.0)
+    pendulum_runner.step_once()
 
-    _set_referee_command(split_shape_runner, RefereeCommand.DIRECT_FREE_YELLOW)
+    _set_referee_command(pendulum_runner, RefereeCommand.DIRECT_FREE_YELLOW)
 
+    dist_to_ball = math.inf
     for _ in range(200):
-        split_shape_runner.step_once()
+        pendulum_runner.step_once()
+        ball = game.ball.p
+        for robot in game.friendly_robots.values():
+            dist_to_ball = min(dist_to_ball, math.hypot(robot.p.x - ball.x, robot.p.y - ball.y))
 
-    ball = game.ball.p
-    kicker = min(
-        game.friendly_robots.values(),
-        key=lambda robot: math.hypot(robot.p.x - ball.x, robot.p.y - ball.y),
-    )
-    dist_to_ball = math.hypot(kicker.p.x - ball.x, kicker.p.y - ball.y)
     assert (
         dist_to_ball < 0.3
     ), f"no robot approached the ball for our direct free kick: closest dist={dist_to_ball:.3f}m"

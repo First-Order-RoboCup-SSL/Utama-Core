@@ -40,7 +40,7 @@ flip-flopping it would repeatedly redirect the runner mid-run.
 Reuses `_pass_and_score`'s `_pass_exec`/`_score_goal` for the two legs of the
 relay and the final shot (generic two-robot ball transfer / shot-taking, same
 reuse rationale every other attack tactic here gives), and
-`shared/pass_and_score_geometry` for the weak-side read and shot check. What's
+`geometry/pass_and_score_geometry` for the weak-side read and shot check. What's
 new is only the weak-side decision, the pivot/runner positioning, and the
 3-leg phase sequence layered on top.
 
@@ -64,7 +64,7 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     at_target,
     ball_line_receive_point,
     enemy_goal_line,
@@ -73,9 +73,9 @@ from utama_core.shared.pass_and_score_geometry import (
     has_ball,
     segment_blocked,
 )
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.utils.move_utils import move
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.utils.move_utils import move
 from utama_core.tactics._pass_and_score import _pass_exec, _score_goal
 
 # Guidance point 3: a naive "count enemies on each half of the field" read
@@ -140,7 +140,7 @@ _ARRIVAL_POSITION_TOLERANCE = 0.15  # metres — tighter than the original 0.25 
 # Widening `_ARRIVAL_SPEED_THRESHOLD` (above) was not sufficient on its own:
 # a robot converged on a static target still never truly settles under this
 # codebase's PID translation controller (`TwoDPID._calculate` in
-# `motion_planning/src/pid/pid.py` — proportional-only near the target, no
+# `motion_planning/pid/pid.py` — proportional-only near the target, no
 # terminal deadband above its 3mm snap-to-zero), so speed keeps oscillating
 # in a small band straddling the threshold indefinitely rather than
 # converging below it. Live-traced on `shadow_switch_vs_zone_fluid`
@@ -457,7 +457,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
         # "Known open bugs") has hand-written a one-off print of exactly this
         # tuple in a throwaway trace script. Recording it here instead means
         # any future investigation can get it back for free via
-        # `debug_match.py --match-log <path>` + `load_jsonl`, with zero
+        # `tools/debug/debug_match.py --match-log <path>` + `load_jsonl`, with zero
         # runtime cost when match_log is unset (the default for every normal
         # run/test/tournament).
         if ctx.match_log is not None:
@@ -494,7 +494,7 @@ class SwitchOfPlayTactic(BaseTactic[SwitchOfPlayMem]):
             # open, otherwise carry it toward one (`_score_goal`), so "assess"
             # never advancing past itself is fine. It used to hold the ball
             # where it stood, which held it forever: at its own corner free
-            # kicks overload_press's lone switch robot stopped 0.13 m from the
+            # kicks avalanche's lone switch robot stopped 0.13 m from the
             # ball (inside the visual has_ball box, short of contact) for 10 s
             # until no_progress, with the overload slot committed and waiting
             # (tournament_20261005_170958: vs split_shape t=479, vs three_slot

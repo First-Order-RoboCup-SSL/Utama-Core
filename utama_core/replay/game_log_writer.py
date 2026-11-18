@@ -4,7 +4,7 @@ Our replays hold the filtered world; measuring the real robots needs what went i
 before any filter: every vision packet as received (raw detections with ssl-vision's
 `t_capture`), the referee's state, and the radio's bytes both ways. `GameLogWriter` writes
 them in the league's game-log format (`ssl_log.py`), so the tools for official logs read a
-field test unchanged: `tools/convert_ssl_log.py` turns it into a replay, and its raw-vision
+field test unchanged: `tools/realism/convert_ssl_log.py` turns it into a replay, and its raw-vision
 sidecar gives our camera's noise. Records:
 
 - `VISION_2014`: each `SSL_WrapperPacket`, byte for byte.
@@ -37,9 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 from utama_core.entities.data.referee import RefereeData
-from utama_core.team_controller.src.generated_code.ssl_gc_referee_message_pb2 import (
-    Referee,
-)
+from utama_core.team_controller.generated_code.ssl_gc_referee_message_pb2 import Referee
 
 # The league's format, as `ssl_log` reads it (not imported from there: the runner would pull
 # in the whole reader).

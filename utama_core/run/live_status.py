@@ -6,7 +6,7 @@ import time
 from rich.text import Text
 
 from utama_core.config.settings import FPS_PRINT_INTERVAL
-from utama_core.custom_referee import CustomReferee
+from utama_core.referee import CustomReferee
 from utama_core.run.referee_source import OfficialReferee
 
 

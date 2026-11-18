@@ -25,7 +25,7 @@ the ball moving just enough to dodge the 0.05m stillness tolerance every
 time, so the ball genuinely never "freezes" even though nothing useful is
 happening — see `_maybe_record_no_progress_possession`'s docstring for the
 live match this was found in). All three are pure observations recorded
-for post-match reporting (see `round_robin.py`'s "STALLS" section) —
+for post-match reporting (see `evaluate.py`'s "STALLS" section) —
 nothing here reads back into or alters gameplay.
 
 `turnovers`/`completed_passes`/`attacking_third_entries` (friendly-side) and
@@ -53,6 +53,8 @@ genuinely useful passes from one racking up short, pointless ones, so this
 gives post-match tooling that signal directly from `MatchStats` without a
 replay re-trace. See `MatchStats.pass_distances_m`'s docstring for the exact
 definitions and `_record_pass_quality` for where they're computed.
+
+`tools/metric_correlation.py`, cited below, was deleted on 2026-11-12; it is in git history.
 """
 
 from __future__ import annotations
@@ -65,11 +67,11 @@ from typing import Dict, List, Optional, Union
 
 from utama_core.config.field_params import STANDARD_FIELD_DIMS
 from utama_core.config.physical_constants import ROBOT_RADIUS
-from utama_core.custom_referee.rules.base_rule import RuleViolation
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game.ball import Ball
 from utama_core.entities.game.game_frame import GameFrame
 from utama_core.entities.referee.referee_command import RefereeCommand
+from utama_core.referee.rules.base_rule import RuleViolation
 
 # Pitch is bucketed into thirds along x, from the recording side's own goal
 # (defensive) to the opponent's goal (attacking), independent of which
@@ -85,7 +87,7 @@ _LIVE_PLAY_COMMANDS = frozenset({RefereeCommand.NORMAL_START, RefereeCommand.FOR
 # held continuously for longer than this many sim seconds without
 # auto-advancing back to a live command. A real kickoff/free-kick/ball-
 # placement ceremony resolves in a few seconds; this is a generous margin
-# above that, not a tight tolerance -- see docs/STRATEGY_DEVELOPMENT.md's
+# above that, not a tight tolerance -- see docs/strategy.md's
 # Observability section for the matches this was built to catch.
 _RESTART_STALL_SECONDS = 15.0
 # COMMITTED_FROZEN: the ball has moved less than this many metres...
@@ -299,7 +301,7 @@ class MatchStats:
     # the GiveAndGoTactic bug would have shown up as here.
     #
     # Kept as plain per-pass lists, not pre-aggregated into a mean/median --
-    # post-match tooling (`round_robin.py`, `tools/metric_correlation.py`,
+    # post-match tooling (`evaluate.py`, `tools/metric_correlation.py`,
     # dashboards) can compute whatever summary statistic it wants from the
     # raw distribution; deciding that here would throw away information
     # (e.g. a bimodal distribution -- mostly fine passes plus a handful of
@@ -430,6 +432,7 @@ _POSSESSION_RADIUS_M = 2 * ROBOT_RADIUS + 0.05
 # tools/metric_correlation.py's `_PASS_RELEASE_MPS`, which itself matches
 # this file's own `_SHOT_LOCK_RELEASE_MPS`).
 _PASS_RELEASE_MPS = 1.0
+_MIN_PASS_M = 0.5  # 90% of avalanche's "148 passes" per match were shorter (2026-11-09)
 # Hysteresis band around the attacking-third boundary (half_length +
 # _SHOT_ATTACKING_THIRD_M) so oscillation on that line doesn't double-count
 # entries. Matches tools/metric_correlation.py's `_ENTRY_HYSTERESIS_M`.
@@ -915,12 +918,18 @@ class MatchStatsAccumulator:
                 # holder's -- this is the passer->receiver vector a
                 # completed pass measures distance/progress over.
                 previous_position = self._poss_robot_position
+                # Two teammates side by side trading "nearest robot" is not a pass.
+                is_pass = (
+                    previous_position is None or previous_position.distance_to(nearest_robot_position) >= _MIN_PASS_M
+                )
                 if self._poss_side == nearest_side == "friendly":
-                    self._completed_passes += 1
-                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "friendly")
+                    if is_pass:
+                        self._completed_passes += 1
+                        self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "friendly")
                 elif self._poss_side == nearest_side == "enemy":
-                    self._enemy_completed_passes += 1
-                    self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "enemy")
+                    if is_pass:
+                        self._enemy_completed_passes += 1
+                        self._record_pass_quality(previous_position, nearest_robot_position, own_goal_sign, "enemy")
                 elif self._poss_side == "friendly" and nearest_side != "friendly":
                     self._turnovers += 1
                 elif self._poss_side == "enemy" and nearest_side != "enemy":

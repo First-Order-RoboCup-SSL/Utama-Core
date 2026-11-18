@@ -31,17 +31,17 @@ from utama_core.engine.context import TickContext
 from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_own_defense_area,
     has_ball,
     own_defense_area_exit_point,
 )
-from utama_core.shared.tolerance import Sticky
-from utama_core.skills.src.block import block_attacker
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.kick_upfield import kick_upfield
-from utama_core.skills.src.man_mark import man_mark
+from utama_core.geometry.tolerance import Sticky
+from utama_core.skills.block import block_attacker
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.kick_upfield import kick_upfield
+from utama_core.skills.man_mark import man_mark
 
 _PRESS_ENTER_RANGE = 1.4  # metres — ball must be within this of an enemy to start pressing
 _PRESS_EXIT_RANGE = 1.7  # metres — enemy must clear past this to release pressing
@@ -55,7 +55,7 @@ _PRESS_RANGE = 1.5  # metres — nominal midpoint kept for backward compatibilit
 # then away, then back, several times a second, until the unstable contact
 # knocked the ball out of bounds — mirrors the same "sticky edge" fix
 # `friendly_closer_to_ball`-consuming pickers already needed, see
-# `counter_flow.py`'s `_counter_flow_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
+# `riptide.py`'s `_riptide_picker`/`high_line_zone.py`'s `_high_line_zone_picker`).
 # Require the *opposite* classification to hold for this many consecutive
 # ticks before actually switching mode.
 _LOOSE_BALL_HYSTERESIS_TICKS = 15  # 0.25s at 60Hz — enough to reject single-tick flicker, short enough to react promptly once a contest genuinely resolves
@@ -180,6 +180,7 @@ class PressAndContainTactic(BaseTactic[PressAndContainMem]):
             )
         marker_ids = tuple(rid for rid in robot_ids if rid != presser_id)
         mem.presser_id = presser_id
+        ctx.ball_claims.add(presser_id)
 
         if ctx.match_log is not None:
             ctx.match_log.trace_if_changed(

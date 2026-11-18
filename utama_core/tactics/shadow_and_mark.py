@@ -40,17 +40,17 @@ from utama_core.engine.tactic import BaseTactic, RobotId, TacticTag
 from utama_core.entities.data.command import RobotCommand
 from utama_core.entities.data.vector import Vector2D
 from utama_core.entities.game import Game
-from utama_core.shared.pass_and_score_geometry import (
+from utama_core.geometry.pass_and_score_geometry import (
     ball_in_own_defense_area,
     ball_is_loose,
     has_ball,
     own_defense_area_exit_point,
 )
-from utama_core.skills.src.defend_parameter import defend_parameter
-from utama_core.skills.src.go_to_ball import go_to_ball
-from utama_core.skills.src.go_to_point import go_to_point
-from utama_core.skills.src.kick_upfield import kick_upfield
-from utama_core.skills.src.man_mark import mark_target
+from utama_core.skills.defend_parameter import defend_parameter
+from utama_core.skills.go_to_ball import go_to_ball
+from utama_core.skills.go_to_point import go_to_point
+from utama_core.skills.kick_upfield import kick_upfield
+from utama_core.skills.man_mark import mark_target
 
 _LOOSE_BALL_CLAIM_RANGE = 1.5  # metres — matches ball_is_loose's own contest range
 

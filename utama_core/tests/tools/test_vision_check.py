@@ -1,4 +1,4 @@
-"""The guided check of `tools/vision_check.py`: the spots it asks for and which ball it takes."""
+"""The guided check of `tools/field/vision_check.py`: the spots it asks for and which ball it takes."""
 
 import importlib.util
 import select
@@ -6,12 +6,12 @@ import socket
 import time
 from pathlib import Path
 
-from utama_core.team_controller.src.generated_code.ssl_vision_wrapper_pb2 import (
+from utama_core.team_controller.generated_code.ssl_vision_wrapper_pb2 import (
     SSL_WrapperPacket,
 )
 
 spec = importlib.util.spec_from_file_location(
-    "vision_check", Path(__file__).resolve().parents[3] / "tools" / "vision_check.py"
+    "vision_check", Path(__file__).resolve().parents[3] / "tools" / "field" / "vision_check.py"
 )
 vision_check = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vision_check)
