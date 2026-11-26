@@ -160,9 +160,17 @@ def test_signals_are_per_match_beside_the_other_strategies_average(replays):
     assert rows["fouls"]["value"] is None  # not in this round's table
 
 
-def test_a_run_groups_its_rounds_and_its_report_without_the_bulky_stalls(replays):
+@pytest.mark.parametrize("run_id", ["eval_20261112_100000", "eval/20261112_100000"])
+def test_a_run_groups_its_rounds_and_its_report_without_the_bulky_stalls(replays, run_id):
+    original_id = "eval_20261112_100000"
+    if run_id != original_id:
+        target = replays / run_id
+        target.parent.mkdir()
+        (replays / original_id).rename(target)
+        for path in (target / "report.json", target / "round_1" / "summary.json"):
+            path.write_text(path.read_text().replace(original_id, run_id))
     (run,) = view.load_runs(replays)
-    assert run["run_id"] == "eval_20261112_100000" and run["reference"] == "pendulum"
+    assert run["run_id"] == run_id and run["reference"] == "pendulum"
     assert run["report"]["candidates"]["mirage"]["verdict"] == "dropped"
     assert "stalls" not in run["report"]["candidates"]["mirage"]
     results = run["rounds"][0]["results"]

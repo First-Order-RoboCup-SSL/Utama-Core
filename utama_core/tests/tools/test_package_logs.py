@@ -2,14 +2,35 @@
 
 import tarfile
 from pathlib import Path
+from zipfile import ZipFile
 
 from tools.field.package_logs import (
     collect_field_files,
     collect_tournament_files,
     compress_log_file,
     find_latest_tournament,
+    package_replays,
     package_to_tar_gz,
 )
+
+
+def test_package_replays_keeps_run_paths_and_makes_reused_files_portable(tmp_path):
+    base = tmp_path / "replays"
+    old = base / "eval_20261112_100000" / "round_1" / "match.npz"
+    new = base / "eval" / "20261125_182608" / "round_1" / "match.npz"
+    cached = base / "match_results" / "env" / "fixture.json"
+    for path in (old, new, cached):
+        path.parent.mkdir(parents=True)
+    old.write_bytes(b"replay")
+    new.symlink_to(old)
+    cached.write_text("{}")
+    outside = tmp_path / "outside.npz"
+    outside.write_bytes(b"external")
+    new.with_name("external.npz").symlink_to(outside)
+
+    with ZipFile(package_replays(tmp_path / "replays.zip", base)) as archive:
+        assert set(archive.namelist()) == {p.relative_to(base).as_posix() for p in (old, new, cached)}
+        assert archive.read(new.relative_to(base).as_posix()) == b"replay"
 
 
 def test_collect_tournament_files_skips_npz_and_collects_metadata(tmp_path):

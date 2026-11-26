@@ -183,7 +183,7 @@ def run_match(
         extra_kwargs["match_log_path"] = str(run_dir / f"{match_tag}.intentions.jsonl")
         extra_kwargs["stats_path"] = str(run_dir / f"{match_tag}.stats.json")
         # The writer puts a replay at REPLAY_BASE_PATH / replay_name: name it so the .npz lands in
-        # run_dir beside the match's other files, however deep run_dir is (eval_<id>/round_<k>/).
+        # run_dir beside the match's other files, however deep run_dir is (eval/<id>/round_<k>/).
         extra_kwargs["replay_writer_config"] = ColumnarReplayWriterConfig(
             replay_name=replay_name(run_dir, match_tag), overwrite_existing=True
         )

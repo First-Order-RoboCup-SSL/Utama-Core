@@ -10,6 +10,7 @@ Modes:
 Usage:
     pixi run python tools/field/package_logs.py tournament [DIR_OR_ID] [--out OUT] [--with-intentions] [--dry-run]
     pixi run python tools/field/package_logs.py field [DIR] [--out OUT] [--compress-in-place] [--dry-run]
+    pixi run python tools/field/package_logs.py replays --out OUT.zip
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import tarfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
+from zipfile import ZIP_DEFLATED, ZipFile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def find_latest_tournament(replays_dir: Path) -> Optional[Path]:
     """The most recent run directory in replays_dir: an evaluate.py round or an older round-robin."""
     runs = sorted(
-        [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*")],
+        [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*"), *replays_dir.glob("eval/*/round_*")],
         key=lambda p: re.sub(r"^\D*", "", p.relative_to(replays_dir).as_posix()),
     )
     return runs[-1] if runs else None
@@ -201,6 +203,30 @@ def package_field(
     return out_path
 
 
+def package_replays(out: Path, replays_dir: Path = REPO_ROOT / "replays") -> Path:
+    """Export the evaluation history with portable replay files and cached results."""
+    replays_dir = replays_dir.resolve()
+    runs = {
+        *replays_dir.glob("tournament_*"),
+        *replays_dir.glob("eval_*"),
+        *(round_dir.parent for round_dir in replays_dir.glob("eval/*/round_*")),
+    }
+    files = [file for run in sorted(runs) if run.is_dir() for file in sorted(run.rglob("*"))]
+    files.extend(sorted((replays_dir / "match_results").glob("*/*.json")))
+    files.append(replays_dir / "README.md")
+    # Write the contents of reused replay links so the ZIP is portable.
+    out = out.resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with ZipFile(out, "w", compression=ZIP_DEFLATED) as archive:
+        for file in files:
+            if not file.is_file() or ".tmp" in file.name:
+                continue
+            resolved = file.resolve()
+            if resolved != out and resolved.is_relative_to(replays_dir):
+                archive.write(file, file.relative_to(replays_dir))
+    return out
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Package tournament results and field logs into shareable archives.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -220,6 +246,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     f_parser.add_argument("--include-replays", action="store_true", help="Also include .npz and .pkl replays.")
     f_parser.add_argument("--dry-run", action="store_true", help="List files without creating archive.")
 
+    r_parser = subparsers.add_parser("replays", help="Export simulation runs and cached match results as a ZIP.")
+    r_parser.add_argument("--out", type=Path, required=True, help="Output ZIP archive path.")
+
     args = parser.parse_args(argv)
 
     if args.command == "tournament":
@@ -237,6 +266,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             include_replays=args.include_replays,
             dry_run=args.dry_run,
         )
+    elif args.command == "replays":
+        print(f"Wrote {package_replays(args.out)}")
 
 
 if __name__ == "__main__":

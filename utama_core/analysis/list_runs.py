@@ -21,7 +21,7 @@ def _started(run: str) -> str:
 
 def run_rows(replays_dir: Path) -> list[dict]:
     rows = []
-    runs = [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*")]
+    runs = [*replays_dir.glob("tournament_*"), *replays_dir.glob("eval_*/round_*"), *replays_dir.glob("eval/*/round_*")]
     for run_dir in sorted(runs, key=lambda p: _started(p.relative_to(replays_dir).as_posix())):
         if not run_dir.is_dir():
             continue

@@ -8,6 +8,8 @@ version. `tests/replay/test_match_results.py` covers the store itself.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -77,12 +79,34 @@ def rig(tmp_path, monkeypatch):
         rig.played.clear()
         rig.kwargs.clear()
         evaluate.main(["--players", str(players), *argv])
-        (run_dir,) = sorted(tmp_path.glob("eval_*"))[-1:]
+        (run_dir,) = sorted((tmp_path / "eval").glob("20*"))[-1:]
         return run_dir
 
     rig.run = run
     rig.store = match_results.open_store(tmp_path)
     return rig
+
+
+def test_console_shows_scores_and_saves_worker_warnings(rig, capfd):
+    warning = "repeated tactic warning"
+
+    def emit_warning():
+        subprocess.run([sys.executable, "-c", f"import sys; print({warning!r}, file=sys.stderr)"], check=True)
+
+    rig.on_play = emit_warning
+    run_dir = rig.run()
+    output = capfd.readouterr()
+    assert "Round 1: 0/3 processed (0 reused), 3 left to play" in output.out
+    assert "[Match 1/3] Starting  a vs b" in output.out
+    assert "3/3 processed, 0 left" in output.out
+    assert "1 - 0" in output.out
+    assert warning not in output.err
+    assert (run_dir / "round_1" / "a_vs_b.stderr.log").read_text().strip() == warning
+
+    rig.run()
+    reused_output = capfd.readouterr().out
+    assert "Round 1: 3/3 processed (3 reused), 0 left to play" in reused_output
+    assert "Starting" not in reused_output
 
 
 def test_with_no_candidate_one_round_plays_every_pair_of_the_core(rig):

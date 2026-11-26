@@ -7,7 +7,7 @@ every evaluation run, verdicts first. Reads only what is already on disk; record
 
 A strategy's entry: its description (the module docstring), file, role (champion / core / reserve,
 `tools/evaluation/reference/players.json`), the tactics it imports, its verdicts (from each
-`eval_*/report.json` it was a candidate in), how it plays (per-match signals in the newest round it
+`eval/*/report.json` it was a candidate in), how it plays (per-match signals in the newest round it
 played, beside the average of the other strategies in that round) and its matches, each with its
 replay. Names are shown as the catalog calls them today: a `.strategy` file (`name@commit.strategy`)
 and a pre-rename name both show as the strategy's name, so frozen files never appear as strategies of
@@ -102,8 +102,12 @@ def _read_json(path: Path) -> Optional[dict]:
 
 
 def _summary_paths(base: Path) -> list[Path]:
-    # older round robins: <run>/summary.json; evaluate.py: eval_<id>/round_<k>/summary.json
-    return [*base.glob("*/summary.json"), *base.glob("eval_*/round_*/summary.json")]
+    # Older runs and current evaluations both appear in the dashboard.
+    return [
+        *base.glob("*/summary.json"),
+        *base.glob("eval_*/round_*/summary.json"),
+        *base.glob("eval/*/round_*/summary.json"),
+    ]
 
 
 def _summaries(base: Path) -> list[tuple[Path, dict]]:
@@ -139,8 +143,9 @@ def _replay_path(base: Path, run_dir: Path, result: dict) -> Optional[str]:
 
 
 def _reports(base: Path) -> list[dict]:
-    reports = [r for p in base.glob("eval_*/report.json") if (r := _read_json(p)) is not None]
-    return sorted(reports, key=lambda r: r.get("run_id", ""), reverse=True)
+    paths = [*base.glob("eval_*/report.json"), *base.glob("eval/*/report.json")]
+    reports = [r for p in paths if (r := _read_json(p)) is not None]
+    return sorted(reports, key=lambda r: _newest_first(r.get("run_id", "")), reverse=True)
 
 
 # --- one strategy -----------------------------------------------------------------------------
@@ -351,9 +356,8 @@ def load_runs(base: Optional[Path] = None) -> list[dict]:
             r["stalled"] = _stalled(r)
             r.pop("stats", None)
         run_dir = path.parent.parent if path.parent.name.startswith("round_") else path.parent
-        run = runs.setdefault(
-            run_dir.name, {"run_id": run_dir.name, "date": run_date(run_dir.name), "report": None, "rounds": []}
-        )
+        run_id = run_dir.relative_to(base).as_posix()
+        run = runs.setdefault(run_id, {"run_id": run_id, "date": run_date(run_id), "report": None, "rounds": []})
         run["rounds"].append(summary)
     for report in _reports(base):
         run = runs.get(report.get("run_id"))

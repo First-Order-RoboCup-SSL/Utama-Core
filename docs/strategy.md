@@ -251,8 +251,7 @@ change to one strategy only its matches play. What counts as "runs" is
 and the shared code and environment (referee, runner, simulator build, packages, CPU). Editing
 `pickers.py` reruns every strategy that imports it, which is most of them; changing shared code reruns
 everything, correctly. The store does not check itself: if a fingerprint misses a dependency, delete
-the store, or one environment's folder inside it, to play everything again. Each round prints
-"N matches, X from the match results store, M to play" first; read it.
+the store, or one environment's folder inside it, to play everything again. Each round starts by showing how many matches were reused and how many remain. Match scores update that progress as games finish.
 
 **What counts as better.** The verdict is `evaluate.py`'s: goal difference per match, paired against
 the champion at the last release. W-D-L and every other signal are diagnostics.
@@ -328,7 +327,7 @@ flowchart TD
 - **Stalls** are reported, never judged on. The watchdog watches config_a only
   (`run/strategy_runner.py` records stats for config_a), so the report says in how many matches each
   strategy was checked; "unknown" means none was.
-- **Output.** `replays/eval_<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
+- **Output.** `replays/eval/<id>/report.json` (verdicts, per-opponent tables, round 1's signals) and
   per round `round_<k>/`: each played match's replay, intention log and stats as `<a>_vs_<b>.*`,
   `summary.json` and `ball_losses.md`, the layout `tools/debug/find_bugs.py`, `tools/debug/pitch_maps.py` and `goal_sources`
   read. A match taken from the store is linked in (symlinks) from the run that played it, so a
@@ -347,7 +346,7 @@ flowchart TD
 - **Pictures** (`tools/evaluation/explain.py RUN_DIR CANDIDATE CHAMPION --out DIR`): for a candidate,
   where both strategies' robots stand with and without the ball, their shots for and against,
   their fouls by rule, and a `summary.json` of the numbers behind them, written to DIR. They explain a verdict and never make one. Example
-  (`explain.py replays/eval_<id>/round_1 pendulum breakwater --out ...`):
+  (`explain.py replays/eval/<id>/round_1 pendulum breakwater --out ...`):
   ![Where two strategies' robots stand, with and without the ball](img/explain/positions.png)
 - **Cost.** A round is 15 matches (five core and the reference, plus one per extra candidate pair) of
   up to 1200 s, roughly 20 min on 12 workers, when nothing is stored. Once stored, editing one strategy
@@ -376,7 +375,7 @@ reaches `main` by pull request:
    directly.
 4. Write, test and evaluate it as above, and put the verdict in the pull request.
    `git add` new files before `pixi run lint`: it checks tracked files only. Before waiting on
-   an evaluation, read the "X from the match results store, M to play" line it prints: M much larger
+   an evaluation, read the reused and remaining counts it prints; a remaining count much larger
    than your own matches means the store is stale (shared code changed since it was filled).
    Let it run anyway: the other strategies' matches run `main`'s code, so they refill the store for everyone.
 5. Open a draft pull request into `main` with the evaluation result. An agent never merges: a person reviews and merges.
@@ -605,7 +604,7 @@ caught 82-97% of the time, beyond 4 cm under 30%.
 ## Reading a round
 
 Every `evaluate.py` run prints round 1's sections and writes each round's data to
-`replays/eval_<id>/round_<k>/summary.json` (older round-robins: `replays/tournament_<id>/`). [`docs/signals.md`](signals.md) lists every signal it records
+`replays/eval/<id>/round_<k>/summary.json` (older round-robins: `replays/tournament_<id>/`). [`docs/signals.md`](signals.md) lists every signal it records
 (and the offline ones), grouped by the question each answers: is something broken, does it
 create chances, keep and move the ball, defend, take restarts. Each comes with where to find
 it, a reference range from the latest run and what an off value usually means. Look

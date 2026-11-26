@@ -14,7 +14,7 @@ docs/strategy.md, "Evaluating a strategy". For a beginner: tutorials/first_strat
 
 Matches play in parallel (CPUs minus one, at most 12). A match the store (replays/match_results/) holds
 is never played again. A match that crashes is reported (`failed` in summary.json and report.json) and
-left out of the verdict; the next run plays it again. Writes replays/eval_<UTC time>/.
+left out of the verdict; the next run plays it again. Writes replays/eval/<UTC time>/.
 """
 
 from __future__ import annotations
@@ -39,6 +39,9 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+if __name__ == "__main__" and not {"-h", "--help"}.intersection(sys.argv[1:]):
+    print("Starting evaluation. Loading simulator and strategies...", flush=True)
 
 from tools.evaluation.match import (  # noqa: E402
     _CONFIG_NAMES,
@@ -168,11 +171,23 @@ def tag(a: str, b: str) -> str:
 
 def play_and_record(
     config_a: str, config_b: str, *, a_fp: str, b_fp: str, env: str, seed: Optional[int], source: str,
-    run_dir: Path, **run_kwargs,
+    run_dir: Path, progress: str, **run_kwargs,
 ) -> dict:  # fmt: skip
     """Play one match into `run_dir` and return its stored record (`match_results.record`), with its
     replay analysed. `run_kwargs` go to `match.run_match`."""
-    result = run_match(config_a, config_b, run_dir=run_dir, **run_kwargs)
+    print(f"  {progress} Starting  {_short_name(config_a)} vs {_short_name(config_b)}", flush=True)
+    log_path = run_dir / f"{tag(config_a, config_b)}.stderr.log"
+    # The frozen strategy runs in a subprocess and inherits the worker's stderr.
+    with log_path.open("w") as log:
+        stderr_fd = os.dup(2)
+        try:
+            os.dup2(log.fileno(), 2)
+            result = run_match(config_a, config_b, run_dir=run_dir, **run_kwargs)
+        finally:
+            os.dup2(stderr_fd, 2)
+            os.close(stderr_fd)
+            if not log_path.stat().st_size:
+                log_path.unlink()
     restarts = losses = replay = None
     npz = Path(run_dir) / f"{tag(config_a, config_b)}.npz"
     if npz.exists():  # no replay: crashed before it was written
@@ -234,6 +249,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("candidates", nargs="*")
     parser.add_argument("--at", metavar="REF")
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--verbose", action="store_true", help="Print detailed match diagnostics and tables.")
     parser.add_argument("--players", type=Path, help=argparse.SUPPRESS)  # tests: another players.json
     return parser
 
@@ -247,6 +263,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     reference = at_ref(resolve_names([champion_at(ref, setup["champion"])])[0], ref)
     today = resolve_names([setup["champion"]])[0]  # today's champion, on today's shared code
     candidates = [c for c in resolve_names(args.candidates) if c != reference]
+    print("Checking for cached match results...", flush=True)
 
     noise = SimNoise.from_dict(reference_noise()).to_dict()
     noise.pop("seed", None)
@@ -264,7 +281,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     candidates, core, reserve = ([n for n in group if n not in dupes] for group in (candidates, core, reserve))
     fps = {n: fp for n, fp in fps.items() if n not in dupes}
 
-    run_id = datetime.now(timezone.utc).strftime("eval_%Y%m%d_%H%M%S")
+    run_id = datetime.now(timezone.utc).strftime("eval/%Y%m%d_%H%M%S")
     while True:  # claim the folder: two runs (two worktrees) may start in the same second
         try:
             (Path(REPLAY_BASE_PATH) / run_id).mkdir(parents=True)
@@ -273,6 +290,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             run_id += "b"
     run_dir = Path(REPLAY_BASE_PATH) / run_id
     print(f"Reference {_short_name(reference)}; core {', '.join(_short_name(n) for n in core)}; environment {env}")
+    print(f"Run output: {run_dir}", flush=True)
 
     def still_current(a: str, b: str) -> bool:
         """Store a played match only if the code it ran is still the code on disk."""
@@ -299,6 +317,12 @@ def main(argv: Optional[list[str]] = None) -> None:
             opponents_so_far |= set(opponents)
             seed = seed_of(k)
             fixtures = round_fixtures(k, open_ if k > 1 else candidates, reference, opponents, seed)
+            total = len(fixtures)
+            match_numbers = {(a, b): number for number, (a, b, _) in enumerate(fixtures, start=1)}
+
+            def match_label(a: str, b: str) -> str:
+                return f"[Match {match_numbers[a, b]:>{len(str(total))}}/{total}]"
+
             round_dir = run_dir / f"round_{k}"
             round_dir.mkdir(parents=True, exist_ok=True)
             recs: dict[tuple[str, str], tuple[dict, bool]] = {}
@@ -312,30 +336,47 @@ def main(argv: Optional[list[str]] = None) -> None:
                     link_replay(rec, round_dir, a, b)
             reused += len(recs)
             print(
-                f"\nRound {k}: {len(fixtures)} matches, {len(recs)} from the match results store, {len(todo)} to play"
+                f"\nRound {k}: {len(recs)}/{total} processed ({len(recs)} reused), {len(todo)} left to play",
+                flush=True,
             )
+            for (a, b), (rec, _) in recs.items():
+                print(
+                    f"  {match_label(a, b)} {_short_name(a):<24} {rec['score_a']} - {rec['score_b']} "
+                    f"{_short_name(b)} (reused)",
+                    flush=True,
+                )
+
+            remaining = len(todo)
 
             def finish(a: str, b: str, rec: dict) -> None:
-                nonlocal played
+                nonlocal played, remaining
                 played += 1
+                remaining -= 1
                 recs[(a, b)] = (rec, False)
                 if still_current(a, b):
                     store.put(rec)
                 else:
                     print(f"  {tag(a, b)} not stored: its code changed while the run played", flush=True)
                 print(
-                    f"  round {k}: {_short_name(a):<24} {rec['score_a']} - {rec['score_b']} {_short_name(b)}",
+                    f"  {match_label(a, b)} {_short_name(a):<24} {rec['score_a']} - {rec['score_b']} "
+                    f"{_short_name(b)}  |  {total - remaining}/{total} processed, {remaining} left",
                     flush=True,
                 )
 
             def fail(a: str, b: str, err: BaseException) -> None:
                 """A match that crashed: reported, not stored, missing from the verdict's pairs."""
-                print(f"  round {k}: {tag(a, b)} CRASHED: {err!r}", flush=True)
+                nonlocal remaining
+                remaining -= 1
+                print(
+                    f"  {match_label(a, b)} {tag(a, b)} CRASHED: {err!r}"
+                    f"  |  {total - remaining}/{total} processed, {remaining} left",
+                    flush=True,
+                )
                 failed.append({"round": k, "config_a": a, "config_b": b, "error": repr(err)})
 
             def submit(a: str, b: str, seed: int) -> tuple:
                 kw = dict(a_fp=fps[a], b_fp=fps[b], env=env, seed=seed, source=run_id, run_dir=round_dir)
-                kw.update(run_kwargs, sim_noise=SimNoise.from_dict({**noise, "seed": seed}))
+                kw.update(run_kwargs, sim_noise=SimNoise.from_dict({**noise, "seed": seed}), progress=match_label(a, b))
                 return a, b, kw
 
             if executor is None:
@@ -389,7 +430,8 @@ def main(argv: Optional[list[str]] = None) -> None:
             executor.shutdown(cancel_futures=True)
 
     health = rounds[0]
-    print_signals(health, f"{run_id}/round_1")
+    if args.verbose:
+        print_signals(health, f"{run_id}/round_1")
     ledger = store.load(env, fps=fps)
     if candidates:
         print(f"\nVerdicts against {_short_name(reference)} ({played} matches played, {reused} from the store):")
@@ -405,14 +447,18 @@ def main(argv: Optional[list[str]] = None) -> None:
         if today in fps and today not in (c, reference):  # not the same code as the reference
             test = ratings.paired_test(paired(upto, fps, c, today, sorted(opponents_so_far - {today}))[0])
             r["vs_todays_champion"] = {"name": today, **_test_dict(test)}
-            print(f"    against today's {_short_name(today)} (same shared code): {_test_line(test)}")
+            if args.verbose:
+                print(f"    against today's {_short_name(today)} (same shared code): {_test_line(test)}")
         r["stalls"] = stall_coverage(upto, fps, c)
-        print(f"    {'opponent':<26} {'candidate GD':>12} {'reference GD':>12} {'matches':>8} (same seed and colour)")
-        for o, row in r["per_opponent"].items():
-            name = o if o == "head-to-head" else _short_name(o)
-            print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
-        for line in stall_lines(r["stalls"], "candidate"):
-            print(f"    {line}")
+        if args.verbose:
+            print(
+                f"    {'opponent':<26} {'candidate GD':>12} {'reference GD':>12} {'matches':>8} (same seed and colour)"
+            )
+            for o, row in r["per_opponent"].items():
+                name = o if o == "head-to-head" else _short_name(o)
+                print(f"    {name:<26} {row['candidate']:>+12} {row['champion']:>+12} {row['matches']:>8}")
+            for line in stall_lines(r["stalls"], "candidate"):
+                print(f"    {line}")
 
     if failed:
         print(f"\n{len(failed)} match(es) crashed (summary.json 'failed'); their pairs are missing from the verdicts.")

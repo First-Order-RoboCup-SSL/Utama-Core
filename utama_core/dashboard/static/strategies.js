@@ -14,6 +14,7 @@
   const expandedRun = {}; // run_id -> bool; the newest starts open
   const expandedRound = {}; // "run_id:k" -> bool
 
+  const isEvaluation = (run) => run.run_id.startsWith("eval/") || run.run_id.startsWith("eval_");
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const pct = (x) => Math.round((x || 0) * 100) + "%";
@@ -296,7 +297,7 @@
       <div class="panel run-card">
         ${header}
         <div class="stack run-body">
-          ${run.run_id.startsWith("eval_") ? `<div>${renderVerdictCards(run)}</div>` : ""}
+          ${isEvaluation(run) ? `<div>${renderVerdictCards(run)}</div>` : ""}
           ${run.rounds[0] ? renderHealth(run.rounds[0]) : ""}
           <div>${rounds}</div>
         </div>
@@ -305,8 +306,8 @@
 
   function renderRunsPage() {
     if (!runs) return '<div class="muted" style="padding:14px;">Loading…</div>';
-    const current = runs.filter((r) => r.run_id.startsWith("eval_"));
-    const archive = runs.filter((r) => !r.run_id.startsWith("eval_"));
+    const current = runs.filter(isEvaluation);
+    const archive = runs.filter((r) => !isEvaluation(r));
     const empty = current.length ? "" : '<div class="muted" style="padding:6px 2px;">No runs yet: <code>pixi run evaluate NAME</code></div>';
     const older = archive.length
       ? `<div class="archive-header">${showArchive ? "▾" : "▸"} Older round robins (${archive.length}): older code, not comparable</div>` +
@@ -401,7 +402,7 @@
       .then((r) => r.json())
       .then((d) => {
         runs = d;
-        const first = runs.find((r) => r.run_id.startsWith("eval_")) || runs[0];
+        const first = runs.find(isEvaluation) || runs[0];
         if (first && !Object.keys(expandedRun).length) expandedRun[first.run_id] = true;
         render();
       })

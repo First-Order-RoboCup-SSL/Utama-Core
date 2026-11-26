@@ -104,7 +104,7 @@ def record(
 ) -> dict:
     """The stored record of one played match. `result` is a `match.MatchResult` as a dict; `restarts`
     and `losses` are the replay analyses (None when the replay was not kept to analyse). `replay` is
-    where its files are, a stem relative to the replay base directory (`eval_<id>/round_<k>/a_vs_b`),
+    where its files are, a stem relative to the replay base directory (`eval/<id>/round_<k>/a_vs_b`),
     so a later run that reuses the match can link them into its own round folder."""
     stats = result.get("stats") or {}
     shots = stats.get("shots") or {}
